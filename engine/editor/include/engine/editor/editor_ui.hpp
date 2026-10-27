@@ -48,6 +48,8 @@ private:
 
     void dock_space();
     void history_shortcuts();
+    // Opens a scene asset of the project (a path relative to its assets folder), asking about unsaved changes first.
+    void open_scene_asset(const std::string& relative);
     void editor_shortcuts();
     void menu_bar();
     void project_panel();

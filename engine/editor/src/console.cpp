@@ -59,6 +59,16 @@ void Console::push_locked(core::LogLevel level, std::string_view category, std::
         ++dropped_;
     }
     entries_.push_back(ConsoleEntry{next_sequence_++, level, sanitize_utf8(category), sanitize_utf8(message)});
+    if (mirror_ != nullptr) {
+        const ConsoleEntry& entry = entries_.back();
+        core::LogRecord record{level, entry.category, entry.message, {}};
+        mirror_->write(record);
+    }
+}
+
+void Console::set_mirror(std::shared_ptr<core::LogSink> sink) {
+    std::lock_guard lock(mutex_);
+    mirror_ = std::move(sink);
 }
 
 std::vector<ConsoleEntry> Console::snapshot() const {

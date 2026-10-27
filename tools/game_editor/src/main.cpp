@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -46,7 +47,23 @@ constexpr int kExitUsage = 2;
 constexpr int kExitFailed = 1;
 constexpr float kFontPixelSize = 18.0f;
 
+// Appends every log line to a file, flushed per line, so a script that drives the editor can read what happened.
+class FileLogSink final : public core::LogSink {
+public:
+    explicit FileLogSink(const std::string& path) : file_(path, std::ios::app | std::ios::binary) {}
+    void write(const core::LogRecord& record) override {
+        if (file_.is_open()) {
+            file_ << '[' << core::to_string(record.level) << "] " << record.category << ": " << record.message << '\n';
+            file_.flush();
+        }
+    }
+
+private:
+    std::ofstream file_;
+};
+
 struct Options {
+    std::string log_file;  // when set, every log line is also appended here
     rhi::Backend backend = rhi::Backend::Dx12;
     std::string project;
     std::string workspace = "editor-workspace.json";
@@ -58,7 +75,7 @@ struct Options {
 
 void print_usage() {
     std::puts("Usage: game_editor [--backend dx12|vulkan] [--project <folder>] [--workspace <file>] [--font <file>]");
-    std::puts("                   [--frames <n>] [--debug-layers]");
+    std::puts("                   [--frames <n>] [--debug-layers] [--log <file>]");
     std::puts("");
     std::puts("Opens the game editor in a native window. --frames stops after n frames (for smoke runs).");
     std::puts("Exit codes: 0 closed normally, 1 failed to start or lost the device, 2 invalid command line.");
@@ -82,6 +99,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             } else {
                 return false;
             }
+        } else if (arg == "--log" && has_value) {
+            options.log_file = argv[++i];
         } else if (arg == "--project" && has_value) {
             options.project = argv[++i];
         } else if (arg == "--workspace" && has_value) {
@@ -163,6 +182,11 @@ int main(int argc, char** argv) {
 
     auto console = std::make_shared<editor::Console>();
     core::add_log_sink(console);
+    std::shared_ptr<FileLogSink> file_log;
+    if (!options.log_file.empty()) {
+        file_log = std::make_shared<FileLogSink>(options.log_file);
+        console->set_mirror(file_log);  // every console entry, however it was added
+    }
     auto workspace_file = core::Path::from_utf8(options.workspace);
     if (!workspace_file.ok()) {
         core::log_message(core::LogLevel::Error, "editor", "the workspace path is not valid UTF-8");
@@ -395,5 +419,6 @@ int main(int argc, char** argv) {
     device.reset();
     static_cast<void>(platform->destroy_window(window));
     core::remove_log_sink(console);
+    console->set_mirror(nullptr);
     return exit_code;
 }

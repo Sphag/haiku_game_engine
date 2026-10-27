@@ -36,6 +36,10 @@ public:
     void write(const core::LogRecord& record) override;
     void add(core::LogLevel level, std::string_view category, std::string_view message);
 
+    // Every entry added from now on is also written to `sink`, whichever path added it (a log record or add()). The editor uses it for
+    // --log, so a script that drives the window can read what the editor did. Pass null to stop.
+    void set_mirror(std::shared_ptr<core::LogSink> sink);
+
     // The retained entries, oldest first.
     [[nodiscard]] std::vector<ConsoleEntry> snapshot() const;
     void clear();
@@ -54,6 +58,7 @@ private:
     std::deque<ConsoleEntry> entries_;
     std::uint64_t next_sequence_ = 1;
     std::uint64_t dropped_ = 0;
+    std::shared_ptr<core::LogSink> mirror_;
 };
 
 }  // namespace engine::editor

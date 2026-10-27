@@ -236,7 +236,7 @@ void EditorUi::default_layout(unsigned int dock_id) {
     // Left column for the project and workspace; the centre for the viewport; a strip at the bottom for the console and errors.
     ImGuiID left = 0;
     ImGuiID right = 0;
-    ImGui::DockBuilderSplitNode(dock_id, ImGuiDir_Left, 0.22f, &left, &right);
+    ImGui::DockBuilderSplitNode(dock_id, ImGuiDir_Left, 0.30f, &left, &right);
     ImGuiID bottom = 0;
     ImGuiID center = 0;
     ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.30f, &bottom, &center);
@@ -265,6 +265,14 @@ void EditorUi::menu_bar() {
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("New scene")) {
             request(PendingAction::NewScene);
+        }
+        if (ImGui::BeginMenu("Open scene", model_.project().scan() != nullptr)) {
+            for (const assets::AssetRecord* record : model_.project().scan()->registry.records()) {
+                if (record->source_path.str().ends_with(".scene") && ImGui::MenuItem(record->source_path.str().c_str())) {
+                    open_scene_asset(record->source_path.str());
+                }
+            }
+            ImGui::EndMenu();
         }
         if (ImGui::MenuItem("Save scene", "Ctrl+S")) {
             static_cast<void>(save_scene());
@@ -876,6 +884,22 @@ bool EditorUi::save_scene() {
     return scene_status_.empty();
 }
 
+void EditorUi::open_scene_asset(const std::string& relative) {
+    // The path is absolute so the scene's file is unambiguous whatever the working folder is.
+    const auto& info = model_.project().info();
+    if (!info) {
+        return;
+    }
+    const auto assets_root = info->root.join(std::string(kProjectAssetsFolder));
+    const auto file = assets_root.ok() ? assets_root.value().join(relative) : assets_root;
+    if (!file.ok()) {
+        scene_status_ = "the scene path is not valid";
+        return;
+    }
+    copy_text(scene_text_, file.value().str());
+    request(PendingAction::OpenScene);
+}
+
 void EditorUi::open_scene() {
     if (auto path = scene_file(scene_text_.data(), scene_status_)) {
         report(model_.scene().open(*path), scene_status_);
@@ -976,7 +1000,16 @@ void EditorUi::hierarchy_panel() {
             ImGui::PushID(row.guid.to_string().c_str());
             const float indent = kHierarchyIndent * static_cast<float>(row.depth);
             ImGui::Indent(indent);
-            const std::string label = short_guid(row.guid) + (row.prefab_instance ? " [prefab]" : "");
+            // Entities have no name field, so a row says what the entity is: its components (without the engine. prefix), then its GUID.
+            std::string kinds;
+            for (const std::string& type : scene.scene().component_types(row.guid)) {
+                if (!kinds.empty()) {
+                    kinds += ", ";
+                }
+                kinds += type.starts_with("engine.") ? type.substr(7) : type;
+            }
+            const std::string label = (row.prefab_instance ? "[prefab] " : "") + (kinds.empty() ? std::string("entity") : kinds) + "  " +
+                                      short_guid(row.guid);
             if (ImGui::Selectable(label.c_str(), selected && *selected == row.guid)) {
                 scene.select(row.guid);
             }
@@ -1293,6 +1326,10 @@ void EditorUi::assets_body() {
         const bool is_selected = selected != nullptr && selected->source == entry->source;
         if (ImGui::Selectable(label.c_str(), is_selected) && entry->registered()) {
             assets.select(entry->asset->guid.to_string());
+        }
+        // A double click on a scene opens it, as in other editors.
+        if (entry->registered() && entry->source.ends_with(".scene") && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            open_scene_asset(entry->source);
         }
         // A registered asset drags its GUID to an inspector field or the viewport.
         if (entry->registered() && ImGui::BeginDragDropSource()) {
