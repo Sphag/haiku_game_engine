@@ -85,7 +85,8 @@ bool has_component(const scene::Scene& scene, const core::Guid& entity, const ch
 }  // namespace
 
 core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics::PhysicsWorld& physics, script::ScriptRunner& runner,
-                                                    const ScriptSource& read_script, std::vector<std::string>& errors) {
+                                                    const ScriptSource& read_script, std::vector<std::string>& errors,
+                                                    audio::AudioEngine* audio, const AudioPath& resolve_audio) {
     SceneBindings bindings;
     for (const core::Guid& guid : scene.entity_guids()) {
         const auto handle = scene.handle(guid);
@@ -101,8 +102,29 @@ core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics
             }
             if (to_motion(body.motion) == physics::BodyMotion::Dynamic) {
                 bindings.dynamic_bodies.emplace_back(guid, *handle);
+            } else if (to_motion(body.motion) == physics::BodyMotion::Kinematic) {
+                bindings.kinematic_bodies.emplace_back(guid, *handle);
             }
             ++bindings.bodies;
+        }
+        if (audio != nullptr && resolve_audio && has_component(scene, guid, kAudioEmitterId) &&
+            read<bool>(scene, guid, kAudioEmitterId, "play_on_start", true)) {
+            const core::Guid clip_guid = read<core::Guid>(scene, guid, kAudioEmitterId, "clip", core::Guid{});
+            const auto path = clip_guid.is_nil() ? std::nullopt : resolve_audio(clip_guid);
+            if (!path) {
+                errors.push_back("audio emitter " + guid.to_string() + ": its clip has no file");
+            } else if (auto clip = audio->load_clip(*path); !clip.ok()) {
+                errors.push_back("audio emitter " + guid.to_string() + ": " + clip.error().message);
+            } else {
+                audio::VoiceDesc voice;
+                voice.volume = read<float>(scene, guid, kAudioEmitterId, "volume", 1.0f);
+                voice.loop = read<bool>(scene, guid, kAudioEmitterId, "looping", false);
+                voice.spatial = read<bool>(scene, guid, kAudioEmitterId, "spatial", true);
+                voice.position = transform->position;
+                if (audio->play(clip.value(), voice).ok()) {
+                    ++bindings.voices;
+                }
+            }
         }
         if (has_component(scene, guid, kScriptId)) {
             const bool enabled = read<bool>(scene, guid, kScriptId, "enabled", true);
@@ -138,6 +160,14 @@ void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const Scene
             static_cast<void>(scene.set_transform(guid, next));
         }
     }
+    // A kinematic body follows its entity: the scene's pose (moved by a script or the scene graph) becomes the body's target.
+    for (const auto& [guid, entity] : bindings.kinematic_bodies) {
+        if (const scene::Transform* current = scene.transform(guid)) {
+            physics.move_kinematic(entity, current->position,
+                                   glm::quat(static_cast<float>(current->rotation.w), static_cast<float>(current->rotation.x),
+                                             static_cast<float>(current->rotation.y), static_cast<float>(current->rotation.z)));
+        }
+    }
     // A script writes its entity's transform in place. Applying it again through the scene marks the node dirty, so the world matrices
     // follow. An entity inside a prefab instance takes its transform from the prefab and is skipped by the scene, which is its rule.
     for (const core::Guid& guid : bindings.scripted) {
@@ -149,7 +179,7 @@ void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const Scene
 }
 
 core::Result<std::unique_ptr<GameWorld>, std::string> GameWorld::create(scene::Scene& scene, ScriptSource read_script,
-                                                                  const script::ScriptServices& extra) {
+                                                                  const script::ScriptServices& extra, AudioPath resolve_audio) {
     std::unique_ptr<GameWorld> world(new GameWorld());
     world->scene_ = &scene;
 
@@ -168,13 +198,14 @@ core::Result<std::unique_ptr<GameWorld>, std::string> GameWorld::create(scene::S
     world->runner_ = std::make_unique<script::ScriptRunner>(*world->scripts_, scene.registry());
 
     std::vector<std::string> bind_errors;
-    auto bound = bind_scene(scene, *world->physics_, *world->runner_, read_script, bind_errors);
+    auto bound = bind_scene(scene, *world->physics_, *world->runner_, read_script, bind_errors, world->audio_.get(), resolve_audio);
     if (!bound.ok()) {
         return core::failure(bound.error());
     }
     world->bindings_ = std::move(bound.value());
     world->errors_ = std::move(bind_errors);
     world->stats_.bodies = world->bindings_.bodies;
+    world->stats_.voices = world->bindings_.voices;
     return core::success(std::move(world));
 }
 

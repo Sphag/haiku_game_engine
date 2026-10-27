@@ -34,7 +34,8 @@ and artifacts, and marks what is still open. Read it before relying on any featu
 ### Windows
 
 - Windows 10 or 11, x64. DirectX 12 and the Vulkan backend need a GPU driver for the device under test.
-- Visual Studio 2022 (MSVC 14.38, verified) with the "Desktop development with C++" workload and the
+- Visual Studio 2022 or newer (MSVC 14.51 from Visual Studio 18 verified 2026-10-27, 14.38 earlier; always build from the same
+  Visual Studio that configured the tree) with the "Desktop development with C++" workload and the
   "C++ ATL for latest v143 build tools" component. Configure from an x64 developer environment
   (`vcvars64.bat`).
 - Windows SDK (provides `<windows.h>` and the D3D12 headers used by the build).

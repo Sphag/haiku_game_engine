@@ -88,6 +88,23 @@ void EditorModel::load_project_prefabs() {
     }
 }
 
+gameplay::AudioPath EditorModel::audio_resolver() const {
+    // An audio emitter's clip is a file inside the open project's assets folder, which the audio engine decodes directly.
+    return [this](const core::Guid& guid) -> std::optional<core::Path> {
+        const assets::ProjectScan* scan = project_.scan();
+        const assets::AssetRecord* record = scan != nullptr ? scan->registry.find(guid) : nullptr;
+        if (record == nullptr || !project_.info()) {
+            return std::nullopt;
+        }
+        const auto root = project_.info()->root.join(std::string(kProjectAssetsFolder));
+        const auto path = root.ok() ? root.value().join(record->source_path.str()) : root;
+        if (!path.ok()) {
+            return std::nullopt;
+        }
+        return path.value();
+    };
+}
+
 gameplay::ScriptSource EditorModel::script_reader() const {
     // Script assets are read from the project's assets folder, so Play runs the file as it is on disk, saved or not in any other tool.
     return [this](const core::Guid& guid) -> core::Result<std::string, std::string> {
@@ -328,7 +345,7 @@ bool EditorModel::play() {
     if (play_ != nullptr) {
         return false;
     }
-    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets(), script_reader());
+    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets(), script_reader(), audio_resolver());
     if (!created.ok()) {
         note(core::LogLevel::Error, "cannot play the scene: " + created.error());
         return false;

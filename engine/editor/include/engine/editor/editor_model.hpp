@@ -159,6 +159,8 @@ private:
     void load_project_prefabs();
     // Reads a script asset's text from the open project, for Play.
     [[nodiscard]] gameplay::ScriptSource script_reader() const;
+    // Maps an audio asset to its file in the open project, for audio emitters in Play.
+    [[nodiscard]] gameplay::AudioPath audio_resolver() const;
     // Points the asset browser at the open project, or closes it when none is open.
     void open_asset_browser();
     // Rescans the project and refreshes the browser and the scene's known assets.

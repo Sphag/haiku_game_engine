@@ -41,7 +41,8 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
                                                                            const scene::PrefabLibrary& prefabs,
                                                                            const scene::SceneDocument& document,
                                                                            const std::unordered_set<core::Guid>& known_assets,
-                                                                           gameplay::ScriptSource read_script) {
+                                                                           gameplay::ScriptSource read_script,
+                                                                           gameplay::AudioPath resolve_audio) {
     std::unique_ptr<PlaySession> session(new PlaySession());
 
     session->scene_ = std::make_unique<scene::Scene>(catalog, prefabs);
@@ -68,7 +69,8 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
     session->runner_ = std::make_unique<script::ScriptRunner>(*session->scripts_, session->scene_->registry());
 
     // The scene's rigid bodies and scripts start with it. A script that fails to load is reported and does not stop Play.
-    auto bound = gameplay::bind_scene(*session->scene_, *session->physics_, *session->runner_, read_script, session->errors_);
+    auto bound = gameplay::bind_scene(*session->scene_, *session->physics_, *session->runner_, read_script, session->errors_,
+                                          session->audio_.get(), resolve_audio);
     if (!bound.ok()) {
         return core::failure(bound.error());
     }

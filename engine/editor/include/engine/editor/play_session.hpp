@@ -57,7 +57,8 @@ public:
                                                                                        const scene::PrefabLibrary& prefabs,
                                                                                        const scene::SceneDocument& document,
                                                                                        const std::unordered_set<core::Guid>& known_assets,
-                                                                                       gameplay::ScriptSource read_script = {});
+                                                                                       gameplay::ScriptSource read_script = {},
+                                                                                       gameplay::AudioPath resolve_audio = {});
 
     // Sessions alive in the process. Stop must bring it back to zero, so tests can check that no session outlives its Stop.
     [[nodiscard]] static std::size_t live_count() noexcept;

@@ -141,7 +141,14 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
     };
     engine::script::ScriptServices services;
     services.assets = &loaded.scan.registry;
-    auto created = engine::gameplay::GameWorld::create(*loaded.scene, read_script, services);
+    const auto resolve_audio = [&loaded](const Guid& guid) -> std::optional<Path> {
+        const auto* found = loaded.scan.registry.find(guid);
+        if (found == nullptr) {
+            return std::nullopt;
+        }
+        return path_of(kShowcase + "/assets/" + found->source_path.str());
+    };
+    auto created = engine::gameplay::GameWorld::create(*loaded.scene, read_script, services, resolve_audio);
     REQUIRE(created.ok());
     auto world = std::move(created).value();
     for (const std::string& error : world->take_errors()) {
@@ -170,6 +177,20 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
         FAIL_CHECK("script error: " << error);
     }
     CHECK(world->stats().fixed_steps > 100);
+    CHECK(world->stats().voices == 1);  // the campfire's looping clip starts with the scene
+
+    // The platform is kinematic and its script turns it in the fixed step, so physics must have followed the scene's pose.
+    bool platform_turned = false;
+    for (const Guid& guid : loaded.scene->entity_guids()) {
+        const auto motion = loaded.scene->field(guid, engine::gameplay::kRigidBodyId, "motion");
+        const auto handle = loaded.scene->handle(guid);
+        if (motion && std::get<std::int32_t>(*motion) == 1 && handle) {
+            const auto pose = world->physics().step_transform(*handle);
+            REQUIRE(pose.has_value());
+            platform_turned = std::abs(pose->rotation.w) < 0.99f;
+        }
+    }
+    CHECK(platform_turned);
     // The ball dropped from 6 m onto the ground and settled above it instead of falling through.
     const double end_height = loaded.scene->transform(ball_guid)->position.y;
     CHECK(end_height < start_height - 3.0);

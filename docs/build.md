@@ -10,7 +10,7 @@ third-party sources live in `third_party/` and are checked against
 |---|---|---|
 | CMake | 3.31.6 (Linux), 4.3.4 (Windows) | Requires 3.28 or newer. |
 | Ninja | system install | Used by the `Ninja Multi-Config` generator. |
-| MSVC | 14.38.33130 (VS 2022 Community) | Run configure from an x64 developer environment (`vcvars64.bat`). |
+| MSVC | 14.51 (Visual Studio 18 Community) verified 2026-10-27; 14.38 (VS 2022) verified earlier | Run configure and build from the x64 developer environment of the **same** Visual Studio that configured the tree (`vcvars64.bat`). Mixing them (VS 2022 headers with a 14.51 tree) fails to link DXC with unresolved `__std_*` symbols. |
 | Clang | 10.0.0 with libstdc++ 9 | Linux default compiler (`linux-dev`, `linux-asan`). |
 | GCC | 9.4.0 | Linux GCC preset (`linux-gcc`). |
 

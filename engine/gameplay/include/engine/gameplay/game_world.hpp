@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,7 +34,13 @@ namespace engine::gameplay {
 using ScriptSource = std::function<core::Result<std::string, std::string>(const core::Guid&)>;
 
 // What binding a scene to its systems produced: the dynamic bodies whose poses are written back, and the entities that carry a script.
+// Maps an audio asset to a file the audio engine can decode. The editor resolves it inside the project; a host without files returns nothing,
+// and its audio emitters are reported and stay silent.
+using AudioPath = std::function<std::optional<core::Path>(const core::Guid&)>;
+
 struct SceneBindings {
+    std::vector<std::pair<core::Guid, ecs::EntityHandle>> kinematic_bodies;  // follow their entity: its pose becomes the body's target each frame
+    std::size_t voices = 0;                                                  // audio emitters that started playing
     std::vector<std::pair<core::Guid, ecs::EntityHandle>> dynamic_bodies;  // scene GUID and body entity of each dynamic body
     std::vector<core::Guid> scripted;  // scene GUIDs of entities that carry an attached script
     std::size_t bodies = 0;
@@ -43,7 +50,8 @@ struct SceneBindings {
 // does not compile is added to `errors` and the others still run; a body the physics world refuses fails the call. The same function serves
 // GameWorld and the editor's Play session, so a scene behaves the same in both.
 [[nodiscard]] core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics::PhysicsWorld& physics, script::ScriptRunner& runner,
-                                                                 const ScriptSource& read_script, std::vector<std::string>& errors);
+                                                                 const ScriptSource& read_script, std::vector<std::string>& errors,
+                                                                 audio::AudioEngine* audio = nullptr, const AudioPath& resolve_audio = {});
 
 // Writes each dynamic body's pose to its entity and re-applies the transform of every scripted entity, so the scene graph marks them
 // dirty (scripts write transforms in place), then updates the scene's world matrices.
@@ -54,6 +62,7 @@ struct GameWorldStats {
     std::size_t scripts = 0;           // attached instances
     std::size_t scripts_running = 0;
     std::size_t scripts_faulted = 0;
+    std::size_t voices = 0;            // audio emitters playing from the start
     std::uint64_t fixed_steps = 0;
     double seconds = 0.0;              // simulated time
 };
@@ -65,7 +74,8 @@ public:
     // `extra` supplies the services the host owns and the world does not: input actions, the asset registry. Everything else (the entity
     // registry, physics, audio) the world binds itself.
     [[nodiscard]] static core::Result<std::unique_ptr<GameWorld>, std::string> create(scene::Scene& scene, ScriptSource read_script,
-                                                                                    const script::ScriptServices& extra = {});
+                                                                                    const script::ScriptServices& extra = {},
+                                                                                    AudioPath resolve_audio = {});
     ~GameWorld();
 
     GameWorld(const GameWorld&) = delete;
