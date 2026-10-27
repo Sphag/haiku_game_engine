@@ -576,6 +576,16 @@ void render_showcase_on(engine::rhi::Backend backend) {
     auto again = renderer.value()->render(*loaded.scene, &animators, 1.0 / 60.0);
     REQUIRE(again.ok());
     CHECK(again.value().items > 0);
+
+    // The editor sizes the picture to its panel: a larger target needs a larger cluster grid, a smaller one a smaller grid.
+    for (const auto& [width, height] : {std::pair<std::uint32_t, std::uint32_t>{1856, 871}, {320, 200}}) {
+        REQUIRE(renderer.value()->resize(width, height).ok());
+        auto resized = renderer.value()->render(*loaded.scene, &animators, 1.0 / 60.0);
+        REQUIRE(resized.ok());
+        CHECK(resized.value().items > 0);
+        CHECK(renderer.value()->image().width == width);
+        CHECK(renderer.value()->image().height == height);
+    }
 }
 
 }  // namespace

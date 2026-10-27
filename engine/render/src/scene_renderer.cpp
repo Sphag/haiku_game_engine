@@ -3768,6 +3768,44 @@ RhiStatus SceneRenderer::resize(std::uint32_t width, std::uint32_t height) {
     if (const RhiStatus built = build_targets(); !built.ok()) {
         return built;
     }
+    // The cluster counts follow the target size, so the lighting buffer is built again and both sets that read it are pointed at it.
+    {
+        const LightingSettings& lighting = desc_.lighting;
+        const std::uint64_t tiles_x = (width + lighting.tile_px - 1) / lighting.tile_px;
+        const std::uint64_t tiles_y = (height + lighting.tile_px - 1) / lighting.tile_px;
+        const std::uint64_t clusters = tiles_x * tiles_y * lighting.slices;
+        lighting_layout_offsets_.index_base = lighting_layout_offsets_.count_base + 4 * clusters;
+        lighting_layout_offsets_.bytes = lighting_layout_offsets_.index_base + 4 * clusters * lighting.max_lights_per_cluster;
+        const std::uint64_t bytes = lighting_layout_offsets_.bytes;
+        RhiStatus lighting_status = core::success();
+        destroy_into(device_, lighting_upload_, lighting_status);
+        destroy_into(device_, lighting_buffer_, lighting_status);
+        if (!lighting_status.ok()) {
+            return lighting_status;
+        }
+        RhiResult<BufferHandle> buffer =
+            device_.create_buffer(buffer_desc(bytes, BufferUsage::ShaderResource | BufferUsage::CopyDestination, "lighting"));
+        if (!buffer.ok()) {
+            return core::failure(buffer.error());
+        }
+        lighting_buffer_ = std::move(buffer).value();
+        buffer = device_.create_buffer(buffer_desc(bytes, BufferUsage::CopySource | BufferUsage::CpuWrite, "lighting upload"));
+        if (!buffer.ok()) {
+            return core::failure(buffer.error());
+        }
+        lighting_upload_ = std::move(buffer).value();
+        if (const RhiStatus zeroed = upload_buffer_bytes(lighting_buffer_, bytes, std::vector<std::uint8_t>(bytes, 0)); !zeroed.ok()) {
+            return zeroed;
+        }
+        if (const RhiStatus written = device_.write_buffer(lighting_set_, 0, 0, lighting_buffer_); !written.ok()) {
+            return written;
+        }
+        if (shadow_lighting_set_.valid()) {
+            if (const RhiStatus written = device_.write_buffer(shadow_lighting_set_, 0, 0, lighting_buffer_); !written.ok()) {
+                return written;
+            }
+        }
+    }
     if (fog_) {
         if (const RhiStatus built = build_fog(); !built.ok()) {
             return built;

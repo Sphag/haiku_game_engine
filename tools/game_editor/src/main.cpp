@@ -14,9 +14,12 @@
 #include "engine/editor/editor_ui.hpp"
 #include "engine/editor/imgui_input.hpp"
 #include "engine/editor/imgui_renderer.hpp"
+#include "engine/gameplay/animation_binding.hpp"
+#include "engine/runtime/game_renderer.hpp"
 #include "engine/platform/platform.hpp"
 #include "engine/rhi/device.hpp"
 
+#include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 #include <array>
@@ -25,6 +28,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -307,6 +311,24 @@ int main(int argc, char** argv) {
     editor::EditorUi ui(model);
     ui.apply_saved_layout();
 
+    // The scene view: the game's renderer draws the scene into the Viewport panel's area. Without the game shaders beside the editor it
+    // stays off, and the panel keeps its grid and markers.
+    std::unique_ptr<runtime::GameRenderer> scene_renderer;
+    {
+        auto created = runtime::GameRenderer::create(*device, options.backend, options.shader_dir, 64, 64, model.asset_reader());
+        if (created.ok()) {
+            scene_renderer = std::move(created).value();
+        } else {
+            console->add(core::LogLevel::Warning, "viewport", "the scene view is off: " + created.error());
+        }
+    }
+    animation::AnimatorSet edit_animators;   // the machines of the scene being edited (Play has its own)
+    std::map<core::Guid, std::string> edit_animator_names;
+    std::size_t bound_entities = static_cast<std::size_t>(-1);
+    bool bound_playing = false;
+    std::uint64_t scene_frame = 0;
+    const std::array<std::uint8_t, 3> panel_fill{46, 46, 46};
+
     rhi::FenceHandle fence;
     if (auto created = device->create_fence(0); created.ok()) {
         fence = std::move(created).value();
@@ -384,6 +406,61 @@ int main(int argc, char** argv) {
         ui.build();
         ImGui::Render();
 
+        // The scene: Edit draws the scene being edited from the editor's camera; Play draws the running copy from its own camera.
+        bool scene_drawn = false;
+        std::uint32_t view_x = 0;
+        std::uint32_t view_y = 0;
+        if (scene_renderer != nullptr && ui.scene_view()) {
+            const auto& view = *ui.scene_view();
+            const auto width = static_cast<std::uint32_t>(view.width) / 64 * 64;
+            const auto height = static_cast<std::uint32_t>(view.height);
+            if (width >= 64 && height >= 32 && view.x >= 0.0f && view.y >= 0.0f) {
+                editor::PlaySession* play = model.play_session();
+                const bool playing = play != nullptr;
+                scene::Scene& drawn_scene = playing ? play->scene() : model.scene().render_scene();
+                if (playing != bound_playing) {
+                    scene_renderer->reset_scene();   // another scene: pools, terrain, and animator names belong to the one before
+                    bound_entities = static_cast<std::size_t>(-1);
+                    bound_playing = playing;
+                }
+                if (drawn_scene.size() != bound_entities || scene_frame % 120 == 0) {
+                    if (!playing && drawn_scene.size() != bound_entities) {
+                        edit_animators = animation::AnimatorSet{};
+                        edit_animator_names = gameplay::bind_animators(drawn_scene, model.asset_reader(), edit_animators).names;
+                    }
+                    const auto& names = playing ? play->animator_names() : edit_animator_names;
+                    for (const std::string& problem : scene_renderer->bind_scene(drawn_scene, names, playing)) {
+                        console->add(core::LogLevel::Warning, "viewport", problem);
+                    }
+                    bound_entities = drawn_scene.size();
+                }
+                ++scene_frame;
+                runtime::RenderView render_view;
+                if (!playing) {
+                    const editor::EditorCamera& camera = model.viewport().camera();
+                    render::Camera eye;
+                    eye.position = camera.position();
+                    eye.orientation = glm::normalize(glm::quat_cast(glm::dmat3(camera.right(), camera.up(), -camera.forward())));
+                    eye.fov_y_radians = camera.fov_y;
+                    eye.near_plane = 0.1;
+                    eye.far_plane = 2000.0;
+                    render_view.camera = eye;
+                    render_view.default_light = true;
+                }
+                if (scene_renderer->resize(width, height).ok()) {
+                    auto drew = scene_renderer->render(drawn_scene, playing ? &play->animators() : &edit_animators, static_cast<double>(delta), render_view);
+                    if (drew.ok()) {
+                        scene_drawn = true;
+                        view_x = static_cast<std::uint32_t>(view.x);
+                        view_y = static_cast<std::uint32_t>(view.y);
+                    } else {
+                        console->add(core::LogLevel::Warning, "viewport", drew.error());
+                    }
+                }
+            }
+        }
+        ui.set_scene_rendered(scene_drawn);
+
         auto back = swapchain->acquire_back_buffer();
         if (!back.ok()) {
             core::log_message(core::LogLevel::Error, "editor", "cannot acquire a back buffer: " + back.error().message);
@@ -394,6 +471,18 @@ int main(int argc, char** argv) {
             continue;  // the surface is empty; the next frame tries again
         }
         const rhi::TextureHandle target = *back.value();
+        if (scene_drawn) {
+            // The picture goes into the back buffer first, with the panel color around it; the UI is drawn over it without a clear.
+            runtime::PresentOptions placement;
+            placement.x = view_x;
+            placement.y = view_y;
+            placement.fill = panel_fill;
+            placement.overlay = false;
+            if (auto placed = scene_renderer->present(target, info.framebuffer_size.width, info.framebuffer_size.height, placement); !placed.ok()) {
+                console->add(core::LogLevel::Warning, "viewport", placed.error());
+                scene_drawn = false;
+            }
+        }
         auto list_result = device->create_command_list(rhi::QueueType::Graphics);
         if (!list_result.ok()) {
             exit_code = kExitFailed;
@@ -402,7 +491,8 @@ int main(int argc, char** argv) {
         std::unique_ptr<rhi::CommandList> list = std::move(list_result).value();
         // The frame's list is a single submission. Its fence is waited on before the next frame, so per-frame buffers can be reused.
         static_cast<void>(list->transition(target, rhi::ResourceState::Present, rhi::ResourceState::RenderTarget));
-        if (auto drawn = renderer->record(*list, target, *ImGui::GetDrawData(), clear); !drawn.ok()) {
+        if (auto drawn = renderer->record(*list, target, *ImGui::GetDrawData(),
+                                        scene_drawn ? std::optional<std::array<float, 4>>() : std::optional<std::array<float, 4>>(clear)); !drawn.ok()) {
             core::log_message(core::LogLevel::Error, "editor", "the UI could not be drawn: " + drawn.error().message);
             exit_code = kExitFailed;
             break;

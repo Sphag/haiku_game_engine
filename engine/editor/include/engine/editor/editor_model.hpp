@@ -149,6 +149,9 @@ public:
         return workspace_file_;
     }
 
+    // An asset's importer payload from the open project (a model is imported on the way): animators in Play, and the scene view.
+    [[nodiscard]] gameplay::AssetReader asset_reader() const;
+
 private:
     void note(core::LogLevel level, std::string_view message);
     // Logs the script and physics failures a play session has raised since the last call.
@@ -163,8 +166,6 @@ private:
     [[nodiscard]] gameplay::ScriptSource script_reader() const;
     // Maps an audio asset to its file in the open project, for audio emitters in Play.
     [[nodiscard]] gameplay::AudioPath audio_resolver() const;
-    // An asset's importer payload from the open project (a model is imported on the way), for animators in Play.
-    [[nodiscard]] gameplay::AssetReader asset_reader() const;
     // Points the asset browser at the open project, or closes it when none is open.
     void open_asset_browser();
     // Rescans the project and refreshes the browser and the scene's known assets.

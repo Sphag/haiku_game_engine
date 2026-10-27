@@ -58,6 +58,11 @@ public:
     [[nodiscard]] scene::PrefabLibrary& prefabs() noexcept {
         return prefabs_;
     }
+    // The same scene, writable, for the renderer, which refreshes dirty transforms through the scene graph while it extracts a frame. Edits go
+    // through the commands of this class, never through this reference.
+    [[nodiscard]] scene::Scene& render_scene() noexcept {
+        return scene_;
+    }
     [[nodiscard]] const scene::Scene& scene() const noexcept {
         return scene_;
     }

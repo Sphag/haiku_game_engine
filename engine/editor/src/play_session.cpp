@@ -78,9 +78,11 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
     session->bindings_ = std::move(bound.value());
 
     // The scene's animators: the state machines scripts steer by name. A problem is reported and does not stop Play.
-    for (std::string& problem : gameplay::bind_animators(*session->scene_, read_asset, session->animators_).problems) {
+    gameplay::AnimatorBinding animators = gameplay::bind_animators(*session->scene_, read_asset, session->animators_);
+    for (std::string& problem : animators.problems) {
         session->errors_.push_back(std::move(problem));
     }
+    session->animator_names_ = std::move(animators.names);
 
     return core::success(std::move(session));
 }

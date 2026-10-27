@@ -179,6 +179,7 @@ void EditorUi::editor_shortcuts() {
 }
 
 void EditorUi::build() {
+    scene_view_.reset();
     if (exit_requested_) {
         exit_requested_ = false;
         request(PendingAction::Exit);
@@ -197,13 +198,14 @@ void EditorUi::dock_space() {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
-    constexpr ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+    const ImGuiWindowFlags host_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
                                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                             ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("EditorHost", nullptr, host_flags);
+    // With the scene drawn behind the UI the host is see-through, so the picture shows in the Viewport panel (the panels draw their own).
+    ImGui::Begin("EditorHost", nullptr, scene_rendered_ ? host_flags | ImGuiWindowFlags_NoBackground : host_flags);
     ImGui::PopStyleVar(3);
 
     menu_bar();
@@ -581,7 +583,7 @@ void EditorUi::errors_panel() {
 }
 
 // The grid, the entity markers, and the gizmo, drawn over the viewport's surface. The positions come from the model's camera.
-static void draw_viewport_scene(EditorModel& model, ImDrawList* draw, ImVec2 origin, ImVec2 size) {
+static void draw_viewport_scene(EditorModel& model, ImDrawList* draw, ImVec2 origin, ImVec2 size, bool scene_rendered) {
     const EditorViewport& viewport = model.viewport();
     const ViewportSurface surface{size.x, size.y, model.dpi_scale()};
     const glm::dmat4 view_projection = viewport.camera().view_projection(surface);
@@ -601,13 +603,15 @@ static void draw_viewport_scene(EditorModel& model, ImDrawList* draw, ImVec2 ori
         }
     };
 
-    draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(28, 30, 34, 255));
+    if (!scene_rendered) {
+        draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(28, 30, 34, 255));
+    }
 
     // A 20 metre grid on the ground plane, centred on the camera target so the view always shows ground near the orbit point.
     const glm::dvec3 target = viewport.camera().target;
     const double cx = std::round(target.x);
     const double cz = std::round(target.z);
-    for (int i = -10; i <= 10; ++i) {
+    for (int i = scene_rendered ? 1 : -10; i <= (scene_rendered ? 0 : 10); ++i) {
         const ImU32 colour = i == 0 ? IM_COL32(120, 120, 130, 255) : IM_COL32(64, 66, 74, 255);
         segment(glm::dvec3(cx + i, 0.0, cz - 10.0), glm::dvec3(cx + i, 0.0, cz + 10.0), colour, 1.0f);
         segment(glm::dvec3(cx - 10.0, 0.0, cz + i), glm::dvec3(cx + 10.0, 0.0, cz + i), colour, 1.0f);
@@ -625,6 +629,15 @@ static void draw_viewport_scene(EditorModel& model, ImDrawList* draw, ImVec2 ori
             continue;
         }
         const bool is_selected = selected && *selected == row.guid;
+        if (scene_rendered) {
+            // The picture shows what has a mesh; the marker is for what does not (a light, a camera, an emitter) and for the selection.
+            const auto types = model.scene().scene().component_types(row.guid);
+            const bool drawn = std::find(types.begin(), types.end(), gameplay::kMeshRendererId) != types.end() ||
+                               std::find(types.begin(), types.end(), gameplay::kTerrainId) != types.end();
+            if (drawn && !is_selected) {
+                continue;
+            }
+        }
         draw->AddRectFilled(ImVec2(at->x - 3.0f * dpi, at->y - 3.0f * dpi), ImVec2(at->x + 3.0f * dpi, at->y + 3.0f * dpi),
                             IM_COL32(200, 200, 210, 255));
         if (is_selected) {
@@ -792,7 +805,7 @@ void EditorUi::viewport_panel() {
         return;
     }
     bool open = true;
-    if (ImGui::Begin(panel_title(Panel::Viewport), &open)) {
+    if (ImGui::Begin(panel_title(Panel::Viewport), &open, scene_rendered_ ? ImGuiWindowFlags_NoBackground : ImGuiWindowFlags_None)) {
         // Play controls (US-065). Play starts a runtime world from the scene; Stop discards it and the scene is shown as it was.
         const PlayState play_state = model_.play_state();
         const bool in_edit = play_state == PlayState::Edit;
@@ -913,7 +926,8 @@ void EditorUi::viewport_panel() {
 
         ImDrawList* draw = ImGui::GetWindowDrawList();
         draw->PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true);
-        draw_viewport_scene(model_, draw, origin, size);
+        scene_view_ = SceneViewRect{origin.x, origin.y, size.x, size.y};
+        draw_viewport_scene(model_, draw, origin, size, scene_rendered_);
         const std::string_view mode_name = viewport.mode() == GizmoMode::Translate ? "Move" : viewport.mode() == GizmoMode::Rotate ? "Rotate" : "Scale";
         const std::string_view space_name = viewport.space() == GizmoSpace::Local ? "Local" : "World";
         const std::string label = std::string(mode_name) + " | " + std::string(space_name) + (snap.enabled ? " | snap on" : "");

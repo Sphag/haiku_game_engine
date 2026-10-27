@@ -16,11 +16,13 @@
 #include "engine/core/guid.hpp"
 #include "engine/gameplay/animation_binding.hpp"
 #include "engine/core/result.hpp"
+#include "engine/render/camera.hpp"
 #include "engine/render/scene_image.hpp"
 #include "engine/rhi/device.hpp"
 #include "engine/scene/scene.hpp"
 #include "engine/ui/surface.hpp"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -44,6 +46,21 @@ struct RenderStats {
     bool camera = false;           // a primary camera was found
 };
 
+// How a frame is viewed. By default the scene's primary camera is the view. The editor gives its own camera, and asks for a light when the
+// scene has none, so an unlit scene is not drawn black.
+struct RenderView {
+    std::optional<render::Camera> camera;
+    bool default_light = false;
+};
+
+// Where and how present() puts the picture in the back buffer.
+struct PresentOptions {
+    std::uint32_t x = 0;                                // the picture's top-left corner in the back buffer
+    std::uint32_t y = 0;
+    std::optional<std::array<std::uint8_t, 3>> fill;    // RGB the whole back buffer is filled with first (the editor's panel color)
+    bool overlay = true;                                // blend the UI overlay over the picture
+};
+
 class GameRenderer {
 public:
     // `width` must be a multiple of 64 (the readback rows stay tight). Shaders are read from `shader_dir` as scene_*.dxil or scene_*.spv.
@@ -56,12 +73,23 @@ public:
 
     // Reads the scene's assets once: uploads terrain and creates the pool of every particle emitter. `animator_names` says which entity
     // owns which machine of the animator set (bind_animators returns it), so a skinned mesh finds its pose. Problems are returned as
-    // text and do not stop the others.
-    [[nodiscard]] std::vector<std::string> bind_scene(scene::Scene& scene, const std::map<core::Guid, std::string>& animator_names);
+    // text and do not stop the others. Calling it again is cheap and loads only what is new. Particle pools are entities added to the scene, so
+    // a host that must not change the scene (the editor in Edit) passes `particles` false.
+    [[nodiscard]] std::vector<std::string> bind_scene(scene::Scene& scene, const std::map<core::Guid, std::string>& animator_names,
+                                                     bool particles = true);
 
     // Renders the scene from its primary camera. `dt` advances the particles. A scene with no camera draws from a default view.
     [[nodiscard]] core::Result<RenderStats, std::string> render(scene::Scene& scene, animation::AnimatorSet* animators = nullptr,
-                                                               double dt = 1.0 / 60.0);
+                                                               double dt = 1.0 / 60.0, const RenderView& view = {});
+
+    // Forgets what bind_scene attached to the previous scene (terrain, particle pools, animator names). Models, textures, and materials stay
+    // cached. Call it before binding a different scene, as the editor does when Play starts or stops.
+    void reset_scene();
+
+    // Changes the picture's size. `width` must be a multiple of 64.
+    [[nodiscard]] core::Result<core::Unit, std::string> resize(std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] std::uint32_t width() const noexcept;
+    [[nodiscard]] std::uint32_t height() const noexcept;
 
     [[nodiscard]] const render::SceneImage& image() const;
 
@@ -71,7 +99,7 @@ public:
     // Copies the last image into `back_buffer` (in the Present state), at the top-left, with the sky behind it, and leaves it in Present.
     // The swapchain format must be B8G8R8A8Unorm. The call waits for the copy, so the staging buffer can be reused.
     [[nodiscard]] core::Result<core::Unit, std::string> present(rhi::TextureHandle back_buffer, std::uint32_t buffer_width,
-                                                              std::uint32_t buffer_height);
+                                                              std::uint32_t buffer_height, const PresentOptions& options = {});
 
 private:
     GameRenderer();

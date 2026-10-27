@@ -118,10 +118,10 @@ gameplay::AssetReader EditorModel::asset_reader() const {
         if (!bytes.ok()) {
             return std::nullopt;
         }
-        if (record->importer != "model") {
+        if (record->importer != "model" && record->importer != "texture") {
             return std::move(bytes.value());
         }
-        const auto importer = converter::make_model_importer();
+        const auto importer = record->importer == "texture" ? converter::make_texture_importer() : converter::make_model_importer();
         auto settings = importer->canonical_settings(record->importer_settings);
         if (!settings.ok()) {
             return std::nullopt;

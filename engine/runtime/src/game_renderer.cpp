@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -328,6 +327,9 @@ const CachedModel& GameRenderer::Impl::model(const core::Guid& asset, std::vecto
 }
 
 void GameRenderer::Impl::load_terrain(scene::Scene& scene, const core::Guid& entity, std::vector<std::string>& problems) {
+    if (terrains.count(entity) != 0) {
+        return;
+    }
     if (!terrain_shaders) {
         problems.push_back("terrain " + entity.to_string() + ": the terrain shaders are not in the shaders folder");
         return;
@@ -464,7 +466,8 @@ const render::SceneImage& GameRenderer::image() const {
     return impl_->renderer->image();
 }
 
-std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std::map<core::Guid, std::string>& animator_names) {
+std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std::map<core::Guid, std::string>& animator_names,
+                                                  bool particles) {
     std::vector<std::string> problems;
     impl_->animator_names = animator_names;
     for (const core::Guid& guid : scene.entity_guids()) {
@@ -478,7 +481,8 @@ std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std
                 static_cast<void>(impl_->instance_material(material, &problems));
             }
         }
-        if (has_component(scene, guid, gameplay::kParticleEmitterId)) {
+        if (particles && has_component(scene, guid, gameplay::kParticleEmitterId) &&
+            std::none_of(impl_->pools.begin(), impl_->pools.end(), [&guid](const Pool& existing) { return existing.emitter == guid; })) {
             Pool pool;
             pool.emitter = guid;
             const std::uint32_t wanted = read<std::uint32_t>(scene, guid, gameplay::kParticleEmitterId, "max_particles", 64u);
@@ -499,7 +503,37 @@ std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std
     return problems;
 }
 
-core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene, animation::AnimatorSet* animators, double dt) {
+void GameRenderer::reset_scene() {
+    impl_->terrains.clear();
+    impl_->animator_names.clear();
+    impl_->pools.clear();
+}
+
+core::Result<core::Unit, std::string> GameRenderer::resize(std::uint32_t width, std::uint32_t height) {
+    if (width == 0 || height == 0 || width % 64 != 0) {
+        return core::failure(std::string("the render width must be a positive multiple of 64"));
+    }
+    if (width == impl_->width && height == impl_->height) {
+        return core::success();
+    }
+    if (auto resized = impl_->renderer->resize(width, height); !resized.ok()) {
+        return core::failure("cannot resize the scene renderer: " + describe(resized.error()));
+    }
+    impl_->width = width;
+    impl_->height = height;
+    return core::success();
+}
+
+std::uint32_t GameRenderer::width() const noexcept {
+    return impl_->width;
+}
+
+std::uint32_t GameRenderer::height() const noexcept {
+    return impl_->height;
+}
+
+core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene, animation::AnimatorSet* animators, double dt,
+                                                           const RenderView& view) {
     RenderStats stats;
     render::Camera camera;
     camera.aspect = static_cast<double>(impl_->width) / static_cast<double>(impl_->height);
@@ -570,7 +604,7 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
         }
         const glm::dquat rotation = glm::normalize(glm::quat_cast(axes));
 
-        if (!stats.camera && has_component(scene, guid, gameplay::kCameraId) && read<bool>(scene, guid, gameplay::kCameraId, "primary", true)) {
+        if (!view.camera && !stats.camera && has_component(scene, guid, gameplay::kCameraId) && read<bool>(scene, guid, gameplay::kCameraId, "primary", true)) {
             camera.position = position;
             camera.orientation = rotation;
             camera.fov_y_radians = read<float>(scene, guid, gameplay::kCameraId, "vertical_fov_degrees", 60.0f) * kPi / 180.0;
@@ -682,6 +716,21 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
         }
     }
 
+    if (view.camera) {
+        camera = *view.camera;
+        camera.aspect = static_cast<double>(impl_->width) / static_cast<double>(impl_->height);
+        stats.camera = true;
+    }
+    if (lights.empty() && view.default_light) {
+        // A scene with no light is drawn with one from above and behind the viewer, so an object is not black.
+        render::Light sun;
+        sun.id = 1;
+        sun.type = render::LightType::Directional;
+        sun.direction = glm::normalize(glm::vec3(-0.4f, -0.8f, -0.45f));
+        sun.intensity = 1.1f;
+        lights.push_back(sun);
+        stats.lights = 1;
+    }
     if (!camera.is_valid()) {
         return core::failure(std::string("the primary camera is not valid (check its field of view and clip planes)"));
     }
@@ -708,7 +757,7 @@ void GameRenderer::set_overlay(const ui::Surface& surface) {
 }
 
 core::Result<core::Unit, std::string> GameRenderer::present(rhi::TextureHandle back_buffer, std::uint32_t buffer_width,
-                                                           std::uint32_t buffer_height) {
+                                                           std::uint32_t buffer_height, const PresentOptions& options) {
     const render::SceneImage& image = impl_->renderer->image();
     const std::uint64_t pitch = rhi::copy_row_pitch(buffer_width, rhi::Format::B8G8R8A8Unorm);
     const std::uint64_t bytes = pitch * (buffer_height - 1) + static_cast<std::uint64_t>(buffer_width) * 4;
@@ -727,10 +776,21 @@ core::Result<core::Unit, std::string> GameRenderer::present(rhi::TextureHandle b
 
     // The image is RGBA8 and the back buffer BGRA8, so the red and blue channels swap on the way. Pixels outside the image stay black.
     std::vector<std::uint8_t> packed(bytes, 0);
-    const std::uint32_t copy_w = std::min(image.width, buffer_width);
-    const std::uint32_t copy_h = std::min(image.height, buffer_height);
+    if (options.fill) {
+        for (std::uint32_t y = 0; y < buffer_height; ++y) {
+            std::uint8_t* row = packed.data() + y * pitch;
+            for (std::uint32_t x = 0; x < buffer_width; ++x) {
+                row[x * 4 + 0] = (*options.fill)[2];
+                row[x * 4 + 1] = (*options.fill)[1];
+                row[x * 4 + 2] = (*options.fill)[0];
+                row[x * 4 + 3] = 255;
+            }
+        }
+    }
+    const std::uint32_t copy_w = options.x >= buffer_width ? 0 : std::min(image.width, buffer_width - options.x);
+    const std::uint32_t copy_h = options.y >= buffer_height ? 0 : std::min(image.height, buffer_height - options.y);
     for (std::uint32_t y = 0; y < copy_h; ++y) {
-        std::uint8_t* row = packed.data() + y * pitch;
+        std::uint8_t* row = packed.data() + (y + options.y) * pitch + static_cast<std::size_t>(options.x) * 4;
         for (std::uint32_t x = 0; x < copy_w; ++x) {
             const std::size_t index = image.index(x, y);
             const auto& texel = image.color[index];
@@ -743,7 +803,7 @@ core::Result<core::Unit, std::string> GameRenderer::present(rhi::TextureHandle b
         }
     }
     // The UI over the picture: source-over blend of the overlay's straight-alpha pixels.
-    if (!impl_->overlay.empty()) {
+    if (options.overlay && !impl_->overlay.empty()) {
         const std::uint32_t overlay_w = std::min(impl_->overlay_width, buffer_width);
         const std::uint32_t overlay_h = std::min(impl_->overlay_height, buffer_height);
         for (std::uint32_t y = 0; y < overlay_h; ++y) {

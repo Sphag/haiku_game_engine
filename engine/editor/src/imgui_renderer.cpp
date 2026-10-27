@@ -234,7 +234,7 @@ RhiStatus ImGuiRenderer::ensure_capacity(std::uint32_t vertex_count) {
 }
 
 RhiStatus ImGuiRenderer::record(CommandList& list, rhi::TextureHandle target, const ImDrawData& draw_data,
-                                const std::array<float, 4>& clear_color) {
+                                const std::optional<std::array<float, 4>>& clear_color) {
     if (!font_.valid()) {
         return rhi::fail<core::Unit>(rhi::RhiErrorCode::InvalidState, "imgui: the font atlas must be uploaded before a frame is recorded");
     }

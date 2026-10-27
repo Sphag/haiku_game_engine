@@ -107,7 +107,7 @@ std::vector<std::uint8_t> render_and_read(engine::rhi::Device& device, ImGuiRend
                                           engine::rhi::FenceHandle fence, std::uint64_t value) {
     auto list = take(device.create_command_list(QueueType::Graphics));
     require_ok(list->transition(target, before, ResourceState::RenderTarget));
-    require_ok(renderer.record(*list, target, *ImGui::GetDrawData(), {0.0f, 0.0f, 0.0f, 1.0f}));
+    require_ok(renderer.record(*list, target, *ImGui::GetDrawData(), std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
     require_ok(list->transition(target, ResourceState::RenderTarget, ResourceState::CopySource));
     require_ok(list->copy_texture_to_buffer(target, readback, 0));
     require_ok(list->close());

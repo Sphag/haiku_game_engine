@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -109,6 +110,10 @@ public:
     [[nodiscard]] animation::AnimatorSet& animators() noexcept {
         return animators_;
     }
+    // Which entity owns which machine of animators(), for a renderer that skins by the pose.
+    [[nodiscard]] const std::map<core::Guid, std::string>& animator_names() const noexcept {
+        return animator_names_;
+    }
 
 private:
     PlaySession();
@@ -123,6 +128,7 @@ private:
     animation::AnimatorSet animators_;
     std::unique_ptr<script::ScriptEngine> scripts_;
     std::unique_ptr<script::ScriptRunner> runner_;
+    std::map<core::Guid, std::string> animator_names_;
     gameplay::SceneBindings bindings_;  // the bodies and scripts the scene's components produced
     std::vector<std::string> errors_;
     double accumulator_ = 0.0;

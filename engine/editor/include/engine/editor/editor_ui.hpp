@@ -69,6 +69,25 @@ private:
     void open_asset_action(bool rename, const std::string& guid, const std::string& target);
     void hierarchy_panel();
     void inspector_panel();
+
+public:
+    // Where the Viewport panel's picture goes, in framebuffer pixels, as of the last frame built. Empty when the panel is hidden.
+    struct SceneViewRect {
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+    [[nodiscard]] const std::optional<SceneViewRect>& scene_view() const noexcept {
+        return scene_view_;
+    }
+    // Tells the panel that the host draws the scene into its area, so the panel leaves its background and grid out and shows only the
+    // gizmo and the markers of entities with no mesh of their own (lights, cameras, emitters).
+    void set_scene_rendered(bool rendered) noexcept {
+        scene_rendered_ = rendered;
+    }
+
+private:
     // Opens the system folder chooser and opens the project it returns.
     void browse_and_open_project();
     void new_project_dialog();
@@ -119,6 +138,8 @@ private:
     std::string entity_name_key_;            // which entity entity_name_text_ belongs to
     std::array<char, 64> picker_filter_{};   // the filter of the open asset or component picker
     std::string picker_key_;                 // which picker is open
+    std::optional<SceneViewRect> scene_view_;
+    bool scene_rendered_ = false;
     bool new_project_open_ = false;          // the New project dialog was asked for
     std::string new_project_status_;         // why the last Create failed
     int level_filter_ = 0;                   // Console: 0 all, 1 info and up, 2 warnings and up, 3 errors only

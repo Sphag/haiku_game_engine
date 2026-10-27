@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 struct ImDrawData;
 
@@ -56,10 +57,10 @@ public:
     // replaces the first.
     [[nodiscard]] rhi::RhiStatus upload_font_atlas(const std::uint8_t* pixels, std::uint32_t width, std::uint32_t height);
 
-    // Records one render pass over `target`, which must be in RenderTarget state. The target is cleared to `clear_color`, then
+    // Records one render pass over `target`, which must be in RenderTarget state. The target is cleared to `clear_color` when one is given (without one its contents stay, so the UI draws over a picture already there), then
     // the draw data is drawn over it. The caller submits the list.
     [[nodiscard]] rhi::RhiStatus record(rhi::CommandList& list, rhi::TextureHandle target, const ImDrawData& draw_data,
-                                        const std::array<float, 4>& clear_color);
+                                        const std::optional<std::array<float, 4>>& clear_color);
 
     // Vertices drawn by the last record(). Tests use it to check the expansion.
     [[nodiscard]] std::uint32_t last_vertex_count() const noexcept {
