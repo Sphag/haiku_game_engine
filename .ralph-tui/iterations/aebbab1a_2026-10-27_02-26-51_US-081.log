@@ -1,0 +1,66 @@
+# Iteration 1254 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:26:51.679Z
+- **Ended At**: 2026-10-26T23:27:38.164Z
+- **Duration**: 46s
+- **Input Tokens**: 98
+- **Output Tokens**: 6546
+- **Total Tokens**: 6644
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and which docs already exist.
+[94m[Bash][0m Inspect repo root, git state, and docs $ ls benchmarks tools 2>/dev/null
+The repo has no git and a 6,443-line progress log. I'll read the latest entries and the existing README and acceptance doc.
+[94m[Bash][0m Read progress tail and README $ cat README.md | head -150
+[94m[Bash][0m Check docs sizes and PRD US-081 section $ grep -n "US-081" -A3 tasks/*.md | head -60
+The log shows many earlier passes that changed nothing and stopped at the same blockers. Before deciding anything, I'll check whether any remaining item is now runnable. The Windows Vulkan editor suite is one, and I'll check the Windows-run procedure in memory and whether a newer GCC exists.
+[94m[Bash][0m Read Windows gate memory, check GCC versions, GPU, running builds $ cmd.exe /c "tasklist" 2>/dev/null | grep -iE "cmake|ninja|engine_|cl.exe|link.exe" | head
+No GCC 11+ and no `/dev/dri`, so those stay blocked. No Windows build is running. The one runnable gap is the Windows Vulkan editor suite. I'll confirm the current wording in the acceptance doc and check that the Windows binary is current.
+[94m[Bash][0m Read acceptance open items and binary/report state $ ls tests | head -30
+The Windows Vulkan editor suite is the one runnable gap. I'll check how the DX12 editor run was invoked so the Vulkan run matches it.
+[94m[Bash][0m Inspect earlier Windows editor DX12 log and temp batches $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -iE "us08|gate|\.bat$" | head -20
+[94m[Bash][0m Find the Windows editor suite batch used earlier $ ps -eo pid,args | grep -E "\.bat" | grep -v grep | head -3
+The DX12 run used a plain `engine_tests.exe --suite editor` invocation. The Vulkan run also needs the pinned validation layer, so I'll read that memory note.
+[94m[Bash][0m Read Vulkan layer memory and prior Vulkan GPU log head $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -iE "gpu_vk|vulkan|vk" | head
+[94m[Bash][0m Read prior Vulkan gate batch and check layer staging $ ps -eo pid,args | grep -E "us081|engine_tests" | grep -v grep | head -3
+The layer is staged and no batch is running. I'll launch the Windows Vulkan editor suite with the pinned layer.
+[94m[Bash][0m Run Windows Vulkan editor suite via batch $ tail -n 8 $T/us081_editor_vk.log
+The Vulkan editor suite passed. Before recording it, I'll check the log for validation errors, since a pass alone doesn't rule them out.
+[94m[Bash][0m Scan Vulkan editor log for validation errors and save it $ cp $T/us081_editor_vk.log /mnt/d/dev/haiku_game_engine/artifacts/reports/us081/win-editor-vulkan.log...
+No validation errors, and the log is saved to the artifacts folder. I'll update the acceptance row and the open-items list to match.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "DX12 passed: 107 cases, 1588 assertions (`artifact..." → "DX12 passed: 107 cases, 1588 assertions (`artifact..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "the Windows Vulkan editor suite, real sample-game ..." → "real sample-game packages per OS, LICENSE decision..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: the Windows Vulkan editor suite, real sample-game packages per OS, LICENSE decision.</tool_use_error>][0m
+The open-items list never named the Vulkan editor suite, so only the gate row needed changing. Now I'll log this pass in the progress file.
+[94m[Bash][0m Append US-081 progress entry $ no other gate re-run. - Still open (hardware or decisions): native Linux Vulkan GPU (no `/dev/dri`),...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. The remaining acceptance items need hardware or decisions that this machine does not have.
+
+**This pass**
+- Ran the Windows Vulkan editor suite on the RTX 5080 with the pinned 1.4.363 validation layer. It passed: 107 test cases, 1587 assertions, no validation or VUID lines. The log is in `artifacts/reports/us081/win-editor-vulkan.log`.
+- Updated the editor row in `docs/acceptance.md` to record that result.
+- Appended an entry to `.ralph-tui/progress.md`.
+- No source changes, and I did not re-run the other gates.
+
+**Still open**
+- Native Linux Vulkan GPU report: there is no `/dev/dri` device here.
+- Full acceptance benchmark (`engine_bench --suite acceptance`) on DX12, Vulkan, or Linux Vulkan.
+- Visual editor smoke tests with screenshots on Windows and Linux.
+- `linux-gcc`: only GCC 9 is installed, and Jolt needs GCC 11 or newer.
+- FSR 2: the vendored tree lacks its generated shader permutations.
+- A standalone package built from a real sample game on each OS. The Linux clean-directory package test passes, but there is no Windows package run and no real sample game.
+- LICENSE: the repo has no license file, and choosing one is your decision.
+
+The README already covers the required sections. The earlier passes that only re-checked these blockers added no evidence, so I did not repeat that. Once a GCC 11+ compiler, a native Linux Vulkan device, or a license choice is available, those items can move.

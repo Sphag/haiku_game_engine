@@ -1,0 +1,40 @@
+# Iteration 441 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T03:02:10.822Z
+- **Ended At**: 2026-10-25T03:02:27.660Z
+- **Duration**: 16s
+- **Input Tokens**: 26
+- **Output Tokens**: 2402
+- **Total Tokens**: 2428
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-056 is already implemented, since the codebase patterns describe its lifecycle code.
+[94m[Bash][0m Inspect repo layout and progress log $ grep -n "US-056" -r .ralph-tui/progress.md | head
+The log shows US-056 already implemented and re-verified several times, with only the `linux-gcc` gate open. I'll check whether anything changed since the last verification and whether a GCC 11+ toolchain is now present.
+[94m[Bash][0m Check file changes since last log and available compilers $ echo done
+[94m[Bash][0m Append status re-check entry to progress log $ no GCC 11+, no container runtime, so `linux-gcc*` cannot run here. - Status call: US-056 stays **Par...
+US-056 is not complete, so I'm not emitting the completion signal. The lifecycle work was already in the tree from an earlier pass, and I made no code changes this time.
+
+**What I checked**
+- The lifecycle is implemented in `engine/script/src/script_runner.cpp`, with 15 lifecycle tests in `tests/src/script_lifecycle_tests.cpp`. The progress log records these as passing.
+- Earlier entries record these gates as passing: Linux `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, `linux-asan`, and `linux-sanitize`, plus the Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`.
+- Nothing under the script, physics, render, or lifecycle-test paths has changed since the last verification.
+- The host still has only GCC 9.4 and Clang 10, with no container runtime. That is too old for Jolt, which needs GCC 11+.
+
+**What's open**
+- The `linux-gcc` gate (`cmake --preset linux-gcc`, its build, and `ctest --preset linux-gcc-unit`) and its CI job. These cannot run on this machine. They need a GCC 11+ toolchain.
+- `engine_bench --suite acceptance` has no harness yet (US-074), so it is not run.
+- GUI checks are not applicable: there is no runtime window or editor yet.
+
+I appended a short status entry to `.ralph-tui/progress.md`. It records that US-056 stays Partial and that the only open item is the GCC gate. Once a GCC 11+ toolchain is available, running the three `linux-gcc` commands above will settle the story.

@@ -1,0 +1,40 @@
+# Iteration 716 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:19:29.681Z
+- **Ended At**: 2026-10-26T02:19:41.995Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1675
+- **Total Tokens**: 1693
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and benchmark sources $ tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src && git status 2>&1 | head -5
+[94m[Bash][0m Confirm US-076 artifacts and source timestamps $ ls -d artifacts/bench/us076-* && stat -c '%y %n' tools/benchmark/src/render_stress.cpp && grep -n "k...
+US-076 is not complete, so I'm not signalling COMPLETE. Everything I can do without your decision is done, and the blocker is the same as in the last several passes.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail.** The start route has 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms, and 0% of frames meet 16.7 ms. The cause is placement: instances are spread uniformly over 8192 m, so the route start sees about 330 items. Fixing it means changing the workload, which requires bumping `kWorkloadVersion` and regenerating `workload_expected.json`. The contract forbids reducing the workload, so I have not changed it. Do you approve a placement change? If not, should this story close as "measured, failing the contract"?
+2. **full_1080 is unsupported.** FSR 2's generated permutation headers are missing, so only the native_1080 profile runs. "Both profiles" cannot be met until the FSR 2 vendoring route is chosen.
+
+**Still not run:**
+- Native Linux Vulkan GPU: WSL has no Vulkan device.
+- linux-gcc: GCC 9.4 cannot build Jolt.
+
+**Done and verified (per the progress log):**
+- Forced mesh-shader-off fallback works. The driver checks `geometry_path()` before attaching meshlets. Both backends report `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with indirect draws active.
+- Eight `artifacts/bench/us076-*` reports exist: indexed, indirect, and meshlets on DX12 and Vulkan, plus meshlets with mesh shaders off. Screenshots and counters are included. All eight postdate the last driver edit (04:15:43), which I confirmed on disk.
+- Windows gates: validate, win-dev, win-debug build, win-unit (29/29), and `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases) all pass.
+- Linux gates: ValidateVendor, linux-dev, linux-debug build, and linux-unit (30/30) pass.
+
+I haven't rerun anything in this pass; the results above come from the earlier runs on the unchanged tree. Once you decide on placement and the profile route, the next step is either a workload change plus reruns, or recording the story as measured-failing.

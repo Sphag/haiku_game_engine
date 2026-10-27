@@ -1,0 +1,79 @@
+# Iteration 21 Log
+
+## Metadata
+
+- **Task ID**: US-021
+- **Task Title**: Texture Conversion
+- **Description**: As a material author, I want prepared GPU textures so that the runtime can load resources quickly.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T10:06:13.445Z
+- **Ended At**: 2026-10-22T10:16:26.493Z
+- **Duration**: 10m 13s
+- **Input Tokens**: 132
+- **Output Tokens**: 8907
+- **Total Tokens**: 9039
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD sections this story depends on.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+The progress log is large and texture work already appears to exist in `tools/asset_converter`. I'll check the story headings and the existing code.
+[94m[Bash][0m Find story sections and texture-related files $ ls tasks
+The log has a US-021 entry from a previous iteration. I'll read it in full, check `prd.json`, then verify the work against the acceptance criteria rather than trust the log.
+[94m[Bash][0m Read US-021 log entry and its prd.json status $ sed -n 1,60p tasks/prd.json | head -5
+The previous entry says all gates passed. I'll re-run the Linux gates here rather than rely on that log, starting with vendor validation and the configure/build/test chain.
+[94m[Bash][0m Run Linux vendor validation, configure, build, and unit tests $ tail -8 /tmp/ctest.log
+Vendor validation, configure, build (0 warnings), and all 17 unit/integration tests pass. Next I'll confirm the texture tests are actually in that run, then check the GCC and ASan presets.
+[94m[Bash][0m List tests and presets and texture test cases $ grep -o '"name": "[^"]*"' CMakePresets.json | tr '\n' ' '
+The texture tests are in the unit/integration run. Now I'll check the PRD's texture-related requirements and non-goals against the implementation.
+[94m[Bash][0m Grep PRD for texture and performance requirements $ grep -n -i "texture\|BC7\|BC5\|mip\|sRGB\|normal map\|non-goal\|Performance Contract" tasks/prd-open...
+[94m[Bash][0m Read PRD non-goals and performance contract $ grep -n -i "compress\|texture\|bc\b\|asset.*cook\|Functional Requirements" tasks/prd-open-world-engi...
+The performance contract applies to runtime, not the converter. I'll check the Functional Requirements section and the texture doc for any asset-format rule I'd be missing.
+[94m[Bash][0m Read texture functional requirements and texture import doc $ sed -n 1,200p docs/texture-import.md | head -120
+The implementation matches the story's requirements. Since the converter decodes untrusted input and allocates memory, I'll also re-run the GCC and ASan/UBSan gates, which the previous entry reported.
+[94m[Bash][0m Run Linux GCC and ASan/UBSan presets $ grep -c "runtime error\|ERROR: AddressSanitizer" /tmp/asan.log
+GCC and ASan/UBSan both pass with no warnings or sanitizer reports. Last, I'll see whether the Windows toolchain is reachable from this WSL shell so the Windows gates can be run rather than only logged.
+[94m[Bash][0m Check whether Windows toolchain is reachable from WSL $ ls build | head
+The Windows tools are reachable. I'll locate `vcvars64.bat` and run the Windows gates through a batch file, as the previous run did.
+[94m[Bash][0m Locate vcvars64 and Windows preset binary dirs $ cd /mnt/d/dev/haiku_game_engine && grep -n '"win-dev"\|"win-debug"\|"win-unit"' -A6 CMakePresets.jso...
+[94m[Bash][0m Run Windows quality gates through vcvars batch $ tail -5 /tmp/gates/win.log
+All Windows gates pass: vendor validation, configure, debug build with no `warning C`, and 17/17 unit tests. I'll confirm the `prd.json` status and then record this re-verification in the progress log.
+[94m[Bash][0m Check US-021 passes flag and bench harness presence $ grep -rn "engine_bench" CMakeLists.txt tools engine 2>/dev/null | head -3
+[94m[Bash][0m Append re-verification entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF' ## 2026-10-22 - US-021 (re-verification, no code changes) - Fo...
+[94m[Bash][0m Read US-021 passes flag from prd.json $ print([ (s['id'],s.get('passes')) for s in d['userStories'] if s['id']=='US-021'])"
+`prd.json` still has `passes: false` for US-021, though the earlier log says it was set. Since I've verified the gates, I'll set it to true.
+[94m[Bash][0m Locate passes line for US-021 $ exit}' tasks/prd.json
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m edit: "      "priority": 21,
+      "passes": false,
+     ..." → "      "priority": 21,
+      "passes": true,
+      ..."
+[94m[Bash][0m Confirm prd.json still parses with US-021 passing $ print([s['passes'] for s in d['userStories'] if s['id']=='US-021'])"
+US-021 (Texture Conversion) was already implemented in an earlier iteration. I re-verified it against the acceptance criteria and every local gate, and all of them pass. I didn't change any code.
+
+**Quality gates (re-run now)**
+- **Windows/MSVC** (`win-dev`, via `vcvars64.bat`): `ValidateVendor`, configure, and `win-debug` build all pass with no `warning C`. `win-unit` ctest passes 17/17.
+- **Linux/Clang** (`linux-dev`): `ValidateVendor`, configure, and `linux-debug` build pass with no warnings. `linux-unit` ctest passes 17/17.
+- **Linux/GCC**: `linux-gcc` configure, `linux-gcc-debug` build, and `linux-gcc-unit` ctest pass 17/17 with no warnings.
+- **Linux ASan/UBSan**: `linux-asan` configure and build pass. `linux-sanitize` ctest passes 17/17 with no sanitizer reports. I ran this because the converter decodes untrusted files and allocates memory.
+
+**Acceptance criteria**
+- Mip rules differ by usage. Color is averaged in linear light, so black and white gives 188. Normals are averaged as vectors and renormalized. Linear data is averaged as stored.
+- The cooked `OWTX` payload uses BC7 for color and linear data and BC5 for normals. `format: rgba8` is the explicit fallback. The reader checks counts against the file size before allocating.
+- The 16 texture test cases cover odd sizes, sRGB, renormalization, corrupt and truncated files, and every mip's size. They run as integration tests inside the 17 CTest entries.
+
+**Not run or not applicable**
+- `engine_bench --suite acceptance`: no `engine_bench` target exists yet, so the benchmark gate can't run.
+- GitHub CI: the work isn't pushed, so the CI jobs haven't run.
+- GPU and GUI checks: none apply to this story.
+
+**Changes made**
+- `tasks/prd.json`: US-021 `passes` set to `true`. It was `false` even though the earlier log said it was set.
+- `.ralph-tui/progress.md`: appended a re-verification entry.
+
+<promise>COMPLETE</promise>

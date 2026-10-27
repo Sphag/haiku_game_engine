@@ -1,0 +1,35 @@
+# Iteration 406 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:38:23.117Z
+- **Ended At**: 2026-10-25T00:38:41.196Z
+- **Duration**: 18s
+- **Input Tokens**: 30
+- **Output Tokens**: 2291
+- **Total Tokens**: 2321
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-055 already exists in the tree and what the progress log says.
+[94m[Bash][0m $ ls && tail -60 .ralph-tui/progress.md && ls engine/script 2>/dev/null && find engine/script -type f ...
+The progress log already has several US-055 entries marked Partial, with the `linux-gcc` gate as the only open item. I'll check whether anything changed since the last entry and whether a GCC 11+ toolchain is now present.
+[94m[Bash][0m $ grep -n "^\(## \|- Status\)" .ralph-tui/progress.md | grep -i "us-055" | head -3
+Nothing in the tree has changed since the last entry, and the toolchain is the same. Before I stop, I'll check whether GCC 11+ can be installed here, since that is the only open gate.
+[94m[Bash][0m Check sudo access and GCC 11+ apt availability $ apt-cache policy g++-11 g++-12 2>/dev/null | head -6
+US-055 is still **Partial**, so I'm not signalling COMPLETE. The story's code is in place and the last recorded gates passed, but the `linux-gcc` gate cannot run on this machine.
+
+- **Tree and toolchain:** no file under `engine/`, `tests/`, `cmake/`, `docs/`, or the root CMake files has changed since the last progress entry. The host still has only g++-9.4 and clang++-10. Jolt needs GCC 11+ and the local GCC 9.4 cannot build it.
+- **Installing GCC 11+:** `apt` offers `g++-11` from the Ubuntu archive, but `sudo` needs a password in this session, so I can't install it. Someone with sudo access, or the CI `linux-gcc` job, needs to run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit --output-on-failure --no-tests=error`.
+- **Gates this turn:** I did not rerun the Linux or Windows gates, because nothing changed since the last recorded pass. The last entries record `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` as passing on Linux, and the Windows gates as passing on the same source.
+- **Progress log:** I did not add another "status re-check" entry. The log already has several identical ones, and a new one would not change the status.
+
+Still open for US-055: the `linux-gcc` gate, the `linux-asan`/`linux-sanitize` run recorded as passing in an earlier pass, and the `engine_bench` run, which the progress log does not show as done. The final gate result needs a GCC 11+ host or the CI job.

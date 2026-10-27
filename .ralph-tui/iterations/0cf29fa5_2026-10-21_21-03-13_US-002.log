@@ -1,0 +1,147 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-002
+- **Task Title**: Library Dependency Sources
+- **Description**: As a developer, I want all dependencies delivered with the repository so that I can build offline.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T18:03:13.185Z
+- **Ended At**: 2026-10-21T18:27:51.701Z
+- **Duration**: 24m 38s
+- **Input Tokens**: 342
+- **Output Tokens**: 85410
+- **Total Tokens**: 85752
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m List repo root, vendor dirs, and progress log $ wc -l tasks/prd-open-world-engine.md
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The repo already has a `third_party/manifest.json` and vendor directories, so some of this may exist. I'll check the PRD's structure and the current vendor state.
+[94m[Bash][0m Outline PRD headings and read build files $ cat .gitignore
+Next I'll read the quality gates, the US-002 story, and the constraint sections the story points to.
+[94m[Bash][0m Read quality gates and US-001 to US-004 stories $ sed -n '22,116p' tasks/prd-open-world-engine.md
+[94m[Bash][0m Read functional reqs, non-goals, technical considerations $ sed -n '732,915p' tasks/prd-open-world-engine.md
+The catalog is large: about a dozen libraries plus transitive sources, pinned and validated. Next I'll check what's already vendored, whether the manifest is populated, and whether this sandbox has network access.
+[94m[Bash][0m Read validator, manifest head, and vendor file counts $ done
+[94m[Bash][0m Inspect tools, docs, tests, manifest and network/tool availability $ cmake --version | head -1
+Substantial prior work exists: a `tools/vendor/vendor.py`, a 16-entry manifest with a validator, and docs. The manifest has no populated dependency list, and some catalog items look missing. Network access works. Next I'll look at the vendor tool and the manifest's current entries.
+[94m[Bash][0m Read the existing vendor tool script $ cat tools/vendor/vendor.py
+[94m[Bash][0m Summarize manifest entries and read build docs tail $ python3 -c " import json d=json.load(open('/mnt/d/dev/haiku_game_engine/tasks/prd.json')) print(type...
+The prior work covers 16 entries. The docs list what's still missing: DXC with SPIRV, Vulkan-Loader, Vulkan-ValidationLayers, FSR 2, and the font and asset items. Also, meshoptimizer isn't in the catalog at all. Before adding anything, I'll check that the current tree validates and builds.
+[94m[Bash][0m Run validator, Linux configure, build and unit tests $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -8)
+Configure, build, and the Linux unit tests already pass, and validation takes about 27 seconds. The remaining work is the uncovered catalog entries. I'll pin their upstream revisions and check the sizes of the heavy ones (DXC and the validation layers have large transitive trees).
+[94m[Bash][0m Resolve upstream HEAD and latest tags for dependencies $ done
+Upstream HEADs are reachable. I'll pick pins from release tags where they exist. Next I'll probe DXC's submodule layout and Vulkan-ValidationLayers' `known_good.json`, since that file pins its transitive dependencies.
+[94m[Bash][0m Probe DirectXShaderCompiler tree and submodules $ git rev-parse HEAD
+DXC has about 18k files, with its build dependencies (SPIRV-Headers, SPIRV-Tools, DirectX-Headers, googletest) as submodules. I need the gitlink SHAs and a breakdown of the tree to decide what to vendor. Validation time also scales with file count, so I'll keep the set tight.
+[94m[Bash][0m Inspect DXC submodule pins and directory file counts $ git ls-tree -r HEAD --name-only | grep -i 'SPIRV\|dxil\|DXC' | awk -F/ '{print $1"/"$2}' | sort | un...
+DXC's test and docs trees are large and not needed for the shader toolchain, so I'll vendor a bounded subset. Its submodule pins are fixed by the DXC tag. Next I'll look at the VVL and Loader release tags and VVL's `known_good.json`, which pins the transitive graph.
+[94m[Bash][0m Check Vulkan tags and read VVL known_good.json $ curl -sL https://raw.githubusercontent.com/KhronosGroup/Vulkan-ValidationLayers/$T/scripts/known_goo...
+The VVL pins fit one consistent Vulkan 1.4.363 set. VVL's known-good list gives Vulkan-Utility-Libraries, SPIRV-Headers, SPIRV-Tools, mimalloc, and glslang as build dependencies. Next I'll confirm which of those VVL actually needs, and check the loader, glslang's external layout, meshoptimizer, and FSR 2 trees.
+[94m[Bash][0m Blobless-clone Vulkan, glslang, meshopt, FSR2 to inspect layouts $ git -C fsr2 ls-tree -r HEAD --name-only | awk -F/ '{print $1"/"$2"/"$3}' | sort | uniq -c | sort -rn...
+Two issues came up. FSR 2 ships prebuilt binaries under `tools/sc`, which I must exclude. VVL's generators read `registry/vk.xml` from Vulkan-Headers, so the Headers entry has to include `registry/`. Next I'll size the remaining trees.
+[94m[Bash][0m Count files per directory across candidate repos $ 
+Before I settle the scope, I need to check what VVL actually links against (glslang, SPIRV-Tools, Utility-Libraries, mimalloc) and what DXC's external dependencies require at build time.
+[94m[Bash][0m Grep VVL and loader build for external dependencies $ git -C loader ls-tree -r HEAD --name-only scripts | head -40 | tr '\n' ' '
+VVL's build needs Vulkan-Headers, Vulkan-Utility-Libraries, SPIRV-Headers, and SPIRV-Tools. Glslang, googletest, and Vulkan-Profiles appear only under `tests`, so I'll leave them out. Next I'll confirm which DXC subdirectories its top-level CMake references, so the subset I vendor is complete for configure.
+[94m[Bash][0m Inspect DXC CMake subdirectory references $ git ls-tree HEAD resources utils projects | awk '{print $4}' | tr '\n' ' '
+DXC's external SPIRV and DirectX-Headers locations are injected through variables (`DXC_SPIRV_HEADERS_DIR`, `DXC_SPIRV_TOOLS_DIR`), so shared roots can serve it. I'll read the conditional blocks to see which directories are required and which are test-only.
+[94m[Bash][0m Read DXC conditional subdirectory logic $ git show HEAD:projects/CMakeLists.txt | head -30
+I now have the DXC rules. The top-level build references `utils/*`, `tools/*`, `projects/CMakeLists.txt`, and `external/`, so the vendored subset must keep those, minus test-only trees. Next I'll check the DirectX-Headers and font options, and the remaining include paths.
+[94m[Bash][0m Probe DirectX-Headers, SPIRV, Vulkan-Utility, Roboto layouts $ rm -rf rb && git clone -q --filter=blob:none --no-checkout https://github.com/googlefonts/roboto-2 r...
+I have enough to pin the set. The plan:
+
+- **Add:** meshoptimizer, Vulkan-Loader, Vulkan-Utility-Libraries, Vulkan-ValidationLayers, SPIRV-Headers, SPIRV-Tools, DirectX-Headers, DirectXShaderCompiler (bounded subset), FSR 2 (source only, no binaries), and Roboto as the licensed Cyrillic font.
+- **Bump:** Vulkan-Headers to 1.4.363 and include `registry/`, because the generators need `vk.xml`.
+- **Shared roots:** SPIRV-Headers/SPIRV-Tools use VVL's pins once, and DXC points at them. DXC's own gitlinks differ, which I'll flag for US-003.
+- **Test-only, not vendored:** glslang, googletest, Vulkan-Profiles, and mimalloc (optional). Fonts and sounds are asset-level; I'll call that out.
+
+I'll update the vendor tool's catalog first.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: "    {"name": "Compilers and standard libraries", "..." → "    {"name": "Compilers and standard libraries", "..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: "    {
+        "name": "Vulkan-Headers", "version":..." → "    {
+        "name": "Vulkan-Headers", "version":..."
+Next I'll append the new catalog entries after Assimp.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: "        "exclude": ["contrib/draco/*", "contrib/gt..." → "        "exclude": ["contrib/draco/*", "contrib/gt..."
+Now I'll run the vendor tool for only the new and changed entries, which leaves the existing vendored trees untouched.
+[94m[Bash][0m Download and vendor the new catalog entries $ rm -rf /tmp/vendor-dl && mkdir -p /tmp/vendor-dl && time python3 -I tools/vendor/vendor.py --downloa...
+All 11 entries vendored: about 5,400 files in total, with DXC at 3,977. The validator will now check every file. Before that, I'll check that the license claims match the license files that were actually fetched, and look at what SPIRV-Tools' `external/` contains.
+[94m[Bash][0m Verify license texts and SPIRV-Tools external layout $ du -sh /mnt/d/dev/haiku_game_engine/third_party/* | sort -h | tail -8
+The license claims check out. A few entries need more precise license strings: Vulkan-Loader and VVL carry per-file exceptions, and DXC is NCSA. I'll also confirm that SPIRV-Tools' unconditional `add_subdirectory(tools)` (line 358) is guarded, since I excluded `tools/`.
+[94m[Bash][0m Check SPIRV-Tools tools/ subdirectory guard $ grep -n "add_subdirectory(test\|add_subdirectory(utils\|add_subdirectory(examples\|add_subdirectory(...
+The SPIRV-Tools top-level `add_subdirectory(tools)`, `test`, and `examples` calls aren't obviously guarded, so I'll read that block to see whether a missing `tools/` breaks configure.
+[94m[Bash][0m Read SPIRV-Tools guarded subdirectory block $ sed -n '318,365p' third_party/spirv_tools/CMakeLists.txt
+SPIRV-Tools calls `add_subdirectory` unconditionally for `tools`, `test`, and `examples`. CMake fails if those directories are missing, so I need to see what their top-level CMake files gate on before choosing what to vendor.
+[94m[Bash][0m Inspect SPIRV-Tools tools/test/examples CMake gating $ git -C st2 ls-tree -r HEAD --name-only examples | wc -l
+Three findings from that:
+- `tools/` is guarded inside its own CMake, but its directory must exist (26 files, including emacs).
+- `test/CMakeLists.txt` returns early when `SPIRV_SKIP_TESTS` is on, which DXC's executables-skip setting enables. So only that one file is needed.
+- `examples/` is 3 files and is required unconditionally.
+
+I'll update the SPIRV-Tools entry to match, and make the license strings precise.
+[94m[Bash][0m Widen SPIRV-Tools vendoring and refresh licence strings $ find third_party/spirv_tools -type f | wc -l
+The vendor tool's note is just my own edit from the script above, so I'm keeping it. Next I'll run the standalone validator over the full manifest and time it, since the file count has more than tripled.
+[94m[Bash][0m Run vendor validation over the expanded manifest $ find third_party -type f | wc -l
+Validation passes with 26 dependencies and 8,462 files, and it's a real hash check, not a cache. The cost is about 95 seconds on this drive, so I'll note it in the report. Next I'll regenerate the build doc's vendored table from the manifest, so the doc can't drift from the source of truth.
+[94m[Bash][0m Regenerate vendored-dependency section of build docs $ echo "docs ok"
+The build doc now mirrors the manifest. Next I'll check the detection requirement. I'll deliberately corrupt the Roboto entry three ways (modified file, missing file, unlisted file), run the validator to confirm it fails on all three, then restore the original state.
+[94m[Bash][0m Tamper with a vendored font to test validation, then restore $ cmp /tmp/rb_LICENSE.bak "$R/LICENSE" && cmp /tmp/rb_ttf.bak "$R/src/hinted/Roboto-Regular.ttf" && ls...
+The validator caught all three tampering cases and exited 1. The Roboto files are restored byte-for-byte. Next I'll run the Linux gates on the expanded manifest: configure, build, and unit tests.
+[94m[Bash][0m Run Linux configure, build, and unit tests $ echo "ctest exit ${PIPESTATUS[0]}"
+Linux configure, build, and the unit tests all pass with the expanded manifest. The Windows gates are still open. The build doc says MSVC was used on this machine before, so I'll check whether Visual Studio and the Windows CMake are reachable from WSL.
+[94m[Bash][0m Check for Windows MSVC toolchain reachable from WSL $ ls "/mnt/c/Program Files/Git/bin/git.exe" 2>&1 | head -1
+Visual Studio and Windows CMake are both installed and reachable through `cmd.exe`. I'll find the VS installation with `vswhere` and check that ninja and CMake are on the developer PATH, then run the Windows gates in the same order as Linux.
+[94m[Bash][0m Locate VS install and check cmake/ninja on PATH $ cmd.exe /c "where cmake & where ninja" 2>&1 | tr -d '\r' | head
+VS 2022/18 with vcvars, Windows CMake, and Ninja are all reachable. I'll run the Windows gate chain now, in the order the story lists it.
+[94m[Bash][0m Run Windows quality gates via MSVC developer environment $ echo "exit ${PIPESTATUS[0]}"
+The quoting went through `cmd.exe` wrong. I'll put the gate chain in a small `.bat` file outside the repo and call it from there.
+[94m[Bash][0m Run Windows gates from a helper batch outside the repo $ echo "exit ${PIPESTATUS[0]}"
+All Windows gates pass: validation, `win-dev` configure, `win-debug` build, and all 8 `win-unit` tests. Before wrapping up, I want to check one more acceptance point. Several vendored CMake trees may contain `FetchContent`, `file(DOWNLOAD)`, or download scripts, which later configures could reach. I'll find them so they are documented or excluded.
+[94m[Bash][0m Find CMake fetch sites and download scripts in vendor tree $ find . -name "*.py" | xargs grep -ln "urllib\|requests\.\|git clone\|update_deps\|urlopen" 2>/dev/nu...
+Most hits are optional paths: Assimp's USD importer and DXC's VCS/SVN version helpers. The VVL layers CMake and DXC's `clang/runtime` lines need a closer look to see whether they download anything.
+[94m[Bash][0m Read the matched fetch-related lines in vendored CMake $ 25,30p' dxc/cmake/modules/VersionFromVCS.cmake
+Two items need documenting: VVL's Tracy `FetchContent` is gated behind `VVL_ENABLE_TRACY`, and DXC's `compiler-rt` ExternalProject needs a source tree that wasn't vendored. The `update_deps.py` maintainer scripts in the Loader, VVL, and VUL trees are downloaders that CMake never runs. I'll exclude them so the vendored trees carry no download path. First I'll check how DXC gates `compiler-rt`.
+[94m[Bash][0m Check DXC compiler-rt gating and vendored runtime files $ ls dxc/tools/clang/runtime
+DXC's `compiler-rt` is gated on `EXISTS projects/compiler-rt`, which is not vendored, so it stays disabled. I'll add the `update_deps.py` exclusions to the three trees and re-vendor them. Their archives are already cached, so this is fast.
+[94m[Bash][0m Exclude download scripts and re-vendor three Vulkan trees $ ls third_party/vulkan_loader/scripts | head -3
+The `update_deps.py` scripts are gone, and the Vulkan trees re-vendored cleanly. I'll record the remaining configure-time switches in the build doc: Tracy's FetchContent must stay off, and DXC's `compiler-rt` is inert.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "- Vulkan-ValidationLayers: configure with `USE_MIM..." → "- Vulkan-ValidationLayers: configure with `USE_MIM..."
+Docs are updated. Since I changed the manifest after the last full run, I'll re-run the complete gates on both platforms, starting with Linux.
+[94m[Bash][0m Re-run full Linux quality gates $ echo "ctest exit ${PIPESTATUS[0]}"
+[94m[Bash][0m Re-run full Windows quality gates $ echo "exit ${PIPESTATUS[0]}"
+Both platforms pass on the final state. Last step is the progress log. The Edit tool requires reading the file first, so I'll read it and then append.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "*Add reusable patterns discovered during developme..."
+The progress log is written. I'll remove my scratch clones and helper files, which all live outside the repo.
+[94m[Bash][0m Remove scratch files outside the repo and confirm tree $ rm -rf /tmp/probe /tmp/vendor-dl /tmp/rb_*.bak /tmp/tamper.log /tmp/lin_*.log /mnt/d/dev/_gate && cd...
+US-002 is complete. All 26 catalog entries are vendored in `third_party/` with pinned revisions, and the validator passes. Both platforms' quality gates pass on the final state.
+
+**Gates (final state)**
+- **Linux (WSL, clang):** `cmake -P cmake/ValidateVendor.cmake`, `linux-dev` configure, `linux-debug` build, and `linux-unit` (8/8) all pass.
+- **Windows (MSVC 2022/18 via `vcvars64`):** the validator, `win-dev` configure, `win-debug` build, and `win-unit` (8/8) all pass. I ran these through `cmd.exe` from WSL.
+- **Not run:** `linux-asan`, `linux-gcc`, GPU/GUI, and benchmarks. They are not required here. No runtime, memory, ECS, jobs, streaming, Lua, or physics code changed, and CI (US-004) isn't established yet.
+
+**What changed**
+- **Manifest and vendor tool:** `third_party/manifest.json` now lists 26 entries and 8,459 files. `tools/vendor/vendor.py` gained the new catalog specs, and I added Python 3 as a system tool exception.
+- **New entries:** meshoptimizer, Vulkan-Loader, Vulkan-Utility-Libraries, Vulkan-ValidationLayers, SPIRV-Headers, SPIRV-Tools, DirectX-Headers, DirectXShaderCompiler (bounded subset), FidelityFX FSR 2 (source only), and Roboto Regular as the Cyrillic font.
+- **Bumped:** Vulkan-Headers went from 1.3.296 to 1.4.363, and now includes `registry/`, which the generators read at build time.
+- **Docs:** `docs/build.md` has the vendored table regenerated from the manifest, plus the scope decisions and configure-time switches.
+- **Progress log:** `.ralph-tui/progress.md` has the US-002 entry and reusable patterns.
+
+**Verification of the acceptance criteria**
+- I tampered with a vendored font in three ways (modified, missing, and unlisted), and the validator failed on each. I then restored the files byte-for-byte.
+- Prohibited names and the system ABI list are enforced by the validator and recorded in the manifest.
+
+**Choices you may want to revisit**
+- **SPIRV pins:** I used one shared SPIRV-Headers and SPIRV-Tools pin (the Vulkan-ValidationLayers known-good revisions). DXC's own gitlinks differ. US-003 must verify the DXC build against the shared pins, or split them into separate roots.
+- **Excluded on purpose:** glslang, googletest, and Vulkan-Profiles (test-only); mimalloc (optional in VVL); DXC tests, unittests, examples, docs, and `projects/dxilconv`; prebuilt FSR 2 binaries; and `update_deps.py` download scripts.
+- **Assets:** the format fixtures and sample sounds from the catalog are assets, not libraries. I deferred them to US-075's asset selection instead of picking sources now.
+
+**Cost to know about**
+- Validation hashes every file, and on `/mnt/d` under WSL it takes about 1.5 minutes per configure. Native Windows should be faster. I didn't weaken the check to speed it up.

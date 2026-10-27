@@ -1,0 +1,39 @@
+# Iteration 41 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:34:57.946Z
+- **Ended At**: 2026-10-24T00:35:16.442Z
+- **Duration**: 18s
+- **Input Tokens**: 24
+- **Output Tokens**: 3257
+- **Total Tokens**: 3281
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the FSR 2 state, since the memory notes say FSR cannot link yet.
+[94m[Bash][0m Read progress log and repo layout $ ls vendor 2>/dev/null | head -50
+[94m[Bash][0m Read FSR2 and Windows gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+The last log entry marks US-046 blocked on the missing FSR 2 permutation headers. I'll confirm that's still true before deciding what to do.
+[94m[Bash][0m Check FSR2 permutation headers and changes since log $ grep -n "US-046" -A3 tasks/*.md | head -40
+US-046 is still blocked, so I have stopped and not signalled completion.
+
+**Blocker:** the vendored FSR 2 tree has no `*_permutations.h` files. `third_party/fsr2` contains only `LICENSE.txt` and `src/`, and the build (`engine/rhi/CMakeLists.txt`) correctly leaves FSR 2 out. Both backends therefore return `Unsupported` from `create_upscaler`. Nothing in the tree has changed since the last progress entry, so that entry still describes the state accurately.
+
+**Why I did not go further:** the missing files are the compiled shader bytes and tables that FSR 2 needs to run. Stubbing them would hide the failure until pipeline creation. Without them, the in-scene pieces (fixed profile sizes, UI composed after upscaling, reactive mask, GPU upscale test) cannot be verified. Switching the full profile to 1280×720 without a working upscaler would only degrade the image. The vendoring route is your call, so I'm asking rather than picking one.
+
+**Decision needed:**
+1. **Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs.** This is the faster route. It needs a documented exception to the rule against vendoring prebuilt tools. The generator is Windows-only, so the committed generated headers would be what Linux builds from.
+2. **Regenerate the blobs with the engine's pinned DXC through a first-party step.** It is more work and produces different bytes, but it needs no prebuilt tool and runs on both OSes.
+
+My recommendation is route 1, because it is quicker to a working FSR 2 build. The exception would be limited to the generator, and the generated headers would be committed and hash-pinned. Route 2 is the better long-term choice if you want the generation reproducible without a Windows binary.
+
+Once you pick a route, the remaining work is: vendor the headers, fix the two Linux/clang compile problems in the FSR sources (`_countof` in `ffx_fsr2.cpp`, `std::wstring_convert` in `vk/ffx_fsr2_vk.cpp`), wire `SceneRenderer` to the profile sizes and UI-after-upscale composition, add the reactive mask and a GPU upscale test, and run the Windows and Linux gates. I can start that as soon as you choose.

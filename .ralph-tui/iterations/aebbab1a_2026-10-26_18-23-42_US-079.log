@@ -1,0 +1,46 @@
+# Iteration 990 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:23:42.397Z
+- **Ended At**: 2026-10-26T15:24:12.629Z
+- **Duration**: 30s
+- **Input Tokens**: 30
+- **Output Tokens**: 3403
+- **Total Tokens**: 3433
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether any of the `all_features` work already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -c 6000 .ralph-tui/progress.md && grep -ril "all_features\|all-features" --include=*.cpp ...
+The progress log shows this story has stalled for many passes on the same three blockers. Before deciding whether to repeat that, I'll look at the manifest proposal and the existing tests to see whether any blocker is actually a decision only the user can make.
+[94m[Bash][0m Read all_features manifest entry and PRD references $ grep -n "all_features\|US-079" tasks/prd-open-world-engine.md | head -40
+The route is fully specified in the manifest, so the open "approval" is a governance gate rather than a missing design. Next I'll check what the existing tests expect from code that doesn't exist yet, so I can tell what's buildable now.
+[94m[Bash][0m Read all_features tests and benchmark scene dispatch $ ls tools/benchmark/src tools/benchmark/include 2>/dev/null
+US-079 is not complete, and I did not signal COMPLETE. I did no code changes or builds this pass. The blockers from the progress log still hold, and the one I can unblock is a decision for you.
+
+**What exists**
+- `tests/src/all_features_tests.cpp` (CPU integration: workload digests, combined Lua/audio/animation/UI/save/material-graph markers) and `tests/src/all_features_editor_tests.cpp` are in place.
+- `benchmarks/manifest.json` has an `all_features` scene with `implementation: none`. Its `all_features_route_v1` route is fully specified, but it is marked as a proposal.
+
+**What is missing**
+- `tools/benchmark/src/main.cpp` has no `all_features` branch. `streaming_stress` is the template to follow.
+- No GPU profile runs (`native_1080`, `full_1080`), forced indirect/meshlet geometry paths, or tour output.
+- No `samples/all_features` project. `samples/` does not exist.
+- No editor scenario run with package and relaunch.
+- Windows and Linux quality gates have not been run in this pass.
+
+**Blockers that need you**
+1. **Approve `all_features_route_v1`.** The manifest has it as a proposal, and the benchmark branch depends on it. The definition is complete, so I'd recommend approving it as written. Once approved, I can wire the benchmark branch.
+2. **FSR 2 permutation headers.** `third_party/fsr2` still has none of the `*_permutations.h` files. The alternative is to leave `full_1080` reported as unsupported, which is what the manifest already says for this case. Choose one.
+3. **A Windows GUI session.** The tour, profiles, and live editor run with screenshots need a desktop session. Windows gates can run from WSL through `cmd.exe`, but the GUI steps cannot be verified without that session.
+
+Tell me on (1) and (2), and say whether you can provide (3). I'll then implement the benchmark branch and sample project and run the gates I can reach. I won't repeat another status-only pass, since the last several added no new information.

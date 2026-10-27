@@ -1,0 +1,40 @@
+# Iteration 684 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:10:47.317Z
+- **Ended At**: 2026-10-26T02:11:02.731Z
+- **Duration**: 15s
+- **Input Tokens**: 20
+- **Output Tokens**: 1910
+- **Total Tokens**: 1930
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for US-076.
+[94m[Bash][0m Inspect progress log and benchmark tool files $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --...
+[94m[Bash][0m Check US-076 artifact and source timestamps $ ls artifacts/bench/us076-dx12-meshlets-nomesh 2>/dev/null
+US-076 is not complete, so I'm not emitting the completion signal. Nothing changed in this pass: the source and manifest are as the last recorded run left them, and I did not rerun the gates or the benchmark.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` route starts at 312,068 triangles against a 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing this changes the workload itself, so it means bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`. I did not make that change, because the benchmark contract is fixed and the change would alter what the numbers measure. Please say whether to approve a placement change.
+2. **Whether a failing run closes the story as measured.** The acceptance criteria can't pass on the current placement, so I need your call on whether to close it with the failing results recorded.
+
+**Blocked by missing pieces:**
+3. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated shader permutation tables, so only `native_1080` runs. This needs a vendoring route from you.
+4. **Native Linux Vulkan GPU and `linux-gcc` have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Done and on disk:**
+- The eight `us076-*` benchmark directories exist under `artifacts/bench/`. They cover DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders disabled. Each has a `report.json` and screenshots.
+- The newest reports postdate the last `render_stress.cpp` edit (04:15:43). Each run exits 1 on the frame budget and triangle floor.
+- The mesh-shader guard in `tools/benchmark/src/render_stress.cpp` now also checks `geometry_path() == Meshlets` before attaching meshlets.
+
+Once you decide on items 1 and 2, I can apply the placement change, regenerate the expected workload, and rerun the Windows and Linux gates.

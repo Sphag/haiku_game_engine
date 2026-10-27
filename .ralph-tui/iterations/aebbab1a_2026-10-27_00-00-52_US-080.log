@@ -1,0 +1,38 @@
+# Iteration 1086 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:00:52.024Z
+- **Ended At**: 2026-10-26T21:01:09.346Z
+- **Duration**: 17s
+- **Input Tokens**: 24
+- **Output Tokens**: 2486
+- **Total Tokens**: 2510
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress log and benchmark directory state $ grep -n "US-079\|US-080" .ralph-tui/progress.md | head
+[94m[Bash][0m Verify Linux GPU, FSR2, manifest, and compiler blockers $ g++ --version | head -1
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. I checked the blockers again this pass and changed nothing.
+
+**Blocked on this host:**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so the Linux/Vulkan acceptance run, the Linux Vulkan GPU suite, and the Linux visual smoke test cannot run here.
+- **FSR 2 permutations:** `third_party/fsr2` still has none of the generated `*_permutations.h` files, so `full_1080` is unsupported. Choosing a vendoring route is your decision.
+- **linux-gcc:** the host has GCC 9.4 and clang 10. The `linux-gcc*` presets need GCC 11+ or clang 14+.
+
+**Unfinished on the engine side:**
+- **Frame budget:** `render_stress` at native 1080p on DX12 missed the 16.7 ms p99 on repeats 2 and 3 in the last run. The readback fix cut CPU p50 from 29.7 ms to about 15 ms, but the remaining CPU cost is still unprofiled. Per the PRD, this has to be fixed in the code, not by changing the contract.
+- **Residency:** not measured. The RHI has no memory-budget query yet, so the 12 GiB GPU and 16 GiB host limits cannot be checked.
+- **Workloads:** the physics, streaming, and `all_features` entries in `benchmarks/manifest.json` are still `implementation: none`.
+
+Until the Linux Vulkan device, FSR permutations, and missing workloads exist, the three-repeat acceptance reports for all three OS/backend combinations cannot be produced. I appended a status entry to `.ralph-tui/progress.md` recording this. The next useful step is the render_stress CPU profile on the Windows Release build, once you're ready for that run.

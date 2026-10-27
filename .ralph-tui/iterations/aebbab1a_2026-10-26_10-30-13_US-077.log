@@ -1,0 +1,64 @@
+# Iteration 843 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T07:30:13.378Z
+- **Ended At**: 2026-10-26T07:38:07.498Z
+- **Duration**: 7m 54s
+- **Input Tokens**: 36
+- **Output Tokens**: 3013
+- **Total Tokens**: 3049
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the physics stress benchmark already exists.
+[94m[Bash][0m Check progress log and benchmark tool files $ git status 2>&1 | head -3
+The log shows 51 prior status checks with no code change. The open blocker is the linux-gcc job, which needs GCC 11+ and this machine only has GCC 9. I'll re-run the local Linux gates once to confirm the current tree still matches, rather than repeat the earlier analysis.
+[94m[Bash][0m Re-run Linux validate, configure, build, unit tests $ which g++-11 g++-12 g++-13 clang++-14 2>/dev/null
+
+[91m[Error: Exit code 1
+validate=0
+dev=0
+build=0
+0
+integration    =  88.48 sec*proc (29 tests)
+unit           =  23.22 sec*proc (1 test)
+
+Total Test time (real) = 111.86 sec
+clang++-10
+g++-9
+gcc-9
+gcc-ar
+gcc-ar-9
+gcc-nm
+gcc-nm-9
+gcc-ranlib
+gcc-ranlib-9][0m
+The tail shows ctest ran, but the exit code is ambiguous. I'll check the ctest result directly.
+[94m[Bash][0m Run linux-unit ctest and capture its exit status $ grep -E "tests passed|Failed|\*\*\*" /tmp/unit.log | tail -3
+Local Linux gates still pass. I'll record this pass in the progress log, without a COMPLETE signal.
+[94m[Bash][0m Append status entry to progress log $ Jolt needs GCC 11+ and installing it needs root. Not reported as passed. - `linux-sanitize` was last...
+US-077 is not complete, so I am not signalling COMPLETE. The benchmark code is in place, and the Linux gates I could run here pass. The blocker is the Linux/GCC gate, which this machine cannot run.
+
+**Passing on Linux, re-run in this pass:**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+- `cmake --preset linux-dev` exits 0.
+- `cmake --build --preset linux-debug` exits 0 with no warnings.
+- `ctest --preset linux-unit --no-tests=error` passes 30 of 30.
+
+**Still open:**
+- **Linux/GCC CI job:** only g++-9 and clang++-10 are installed. Jolt needs GCC 11 or newer, and installing a newer compiler needs root, which I don't have. This gate is unverified, not passed.
+- **`linux-sanitize`:** it was 30 of 30 at the previous check, but I did not re-run it in this pass.
+- **Windows gates:** the earlier Windows results (batch `us077`) still describe the current tree, but I did not re-run them here. My notes say the Windows gates pass.
+
+**Acceptance criteria 1–3** are implemented in `tools/benchmark/src/physics_stress.cpp`: the scene builds the bodies, constraints, and characters, reports active and sleeping bodies, and detects lost timesteps, NaN transforms, and out-of-bounds bodies. I did not re-read the file in this pass.
+
+I appended a status entry to `.ralph-tui/progress.md`. It is the 52nd status check with no code change, which suggests the loop is stuck on the toolchain blocker. Someone with root or a GCC 11+ CI runner needs to run the `linux-gcc` jobs before this story can close.

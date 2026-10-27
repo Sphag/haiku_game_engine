@@ -1,0 +1,34 @@
+# Iteration 710 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:18:00.738Z
+- **Ended At**: 2026-10-26T02:18:11.457Z
+- **Duration**: 10s
+- **Input Tokens**: 18
+- **Output Tokens**: 1603
+- **Total Tokens**: 1621
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and benchmark tree $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Check source and artifact timestamps $ date
+US-076 is not complete, and I did not signal COMPLETE. The blockers need your decision, and nothing in the tree has changed since the last recorded pass.
+
+I checked the timestamps. `tools/benchmark/src/render_stress.cpp` was last edited at 04:15:43, and all eight `artifacts/bench/us076-*` reports were written after that. So the recorded results still describe the current code. I did not rerun the benchmarks or the Windows and Linux gates in this pass.
+
+**Blocked on you:**
+
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` scene places 312,068 of the 2,000,000 triangles the contract requires. p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this changes the workload, so it needs `kWorkloadVersion` bumped and `benchmarks/workload_expected.json` regenerated. The contract reserves that for your decision. Please decide whether to approve the placement change, or to close US-076 as measured with the failing result.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` shader tables, so the upscale profile cannot run. This is the open FSR decision recorded in the memory notes.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not been run.** Native Linux Vulkan needs a run on the native Linux side, not WSL. `linux-gcc` cannot build Jolt on the local GCC 9.4.
+
+Once you decide on item 1, I can make the workload change and rerun the Windows and Linux gates.

@@ -1,0 +1,258 @@
+# Iteration 177 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T09:58:59.917Z
+- **Ended At**: 2026-10-24T10:30:19.778Z
+- **Duration**: 31m 19s
+- **Input Tokens**: 584
+- **Output Tokens**: 151317
+- **Total Tokens**: 151901
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether any US-052 work already exists, then read the PRD and progress log.
+[94m[Bash][0m Inspect repo layout and US-052 references $ ls engine | head -50
+[94m[Bash][0m Search repo for Jolt references $ grep -ril "jolt" --include=*.txt --include=*.cmake --include=*.json --include=*.hpp --include=*.cpp ...
+The Docs tools aren't relevant to this story. Next I'll read the US-052 PRD section and the recent progress log.
+[94m[Bash][0m Read US-052 PRD section and progress header $ sed -n 1,60p .ralph-tui/progress.md
+[94m[Bash][0m Read recent progress log entries $ tail -n 120 .ralph-tui/progress.md
+Jolt is vendored under `third_party/jolt`. Next I'll check how it is wired into CMake, whether a physics module exists, and what the runtime scene and world layers look like.
+[94m[Bash][0m Survey engine modules and Jolt integration $ ls third_party | head -40
+[94m[Bash][0m Read Jolt manifest entry, runtime/world CMake, root CMake $ ls third_party/jolt/Jolt | head -80
+Jolt is vendored but not wired into any CMake target. Next I'll read the runtime lifecycle, the ECS handle types, the Jolt build file, and the existing unit test layout.
+[94m[Bash][0m Read runtime lifecycle and ECS headers $ cat engine/runtime/src/lifecycle.cpp | head -80
+[94m[Bash][0m Read Jolt CMake and vendored source layout $ ls third_party/jolt/Jolt/Core | head -5
+Jolt is vendored in full but nothing compiles it yet. Before deciding how to wire it, I need the PRD's physics requirements, the fixed-timestep contract, and how the vendor validator checks files.
+[94m[Bash][0m Grep PRD for physics and timestep requirements $ grep -n -i "physics\|jolt\|fixed\|catch-up\|60 Hz\|FR-18\|interpolat" tasks/prd-open-world-engine.md...
+[94m[Bash][0m Read vendor validator and performance contract $ cat engine/core/include/engine/core/performance_contract.hpp | head -120
+The PRD names `engine/physics/` as the Jolt adapter module. I'll read the PRD's top-level requirements, non-goals, and technical considerations, then the ECS entity API.
+[94m[Bash][0m Read PRD goals, gates, and technical considerations $ sed -n 780,830p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read ECS entity handles and scene module $ ls engine/scene/include/engine/scene engine/scene/src 2>/dev/null
+The ECS handles and world ids fit the stable-entity requirement. Next I'll read the non-goals, the Windows gate memory, Jolt's CMake tail, and the existing test layout.
+[94m[Bash][0m Read non-goals, technical considerations, and Windows gate memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+[94m[Bash][0m Read Jolt.cmake remaining source list and options $ sed -n 150,400p third_party/jolt/Jolt/Jolt.cmake | grep -v "^\s*\${JOLT_PHYSICS_ROOT}/.*\.h$" | head...
+Next I need Jolt's build options, its compile definitions, and the vendored file count, so I can decide how to compile it.
+[94m[Bash][0m Inspect Jolt build options and arch defines $ grep -n "USE_SSE4_1\|USE_AVX2\|__SSE4_1__\|JPH_USE_SSE4\|define JPH_USE" third_party/jolt/Jolt/Core/...
+Jolt's ISA macros default from the compiler flags, so the adapter and Jolt must build with matching settings. Next I'll read the project's target helpers and the Jolt tail.
+[94m[Bash][0m Read Jolt compile options and engine target helpers $ cat cmake/EngineTargets.cmake | head -150
+Jolt's own `Jolt.cmake` can be included directly, since the tree already vendors it. I still need the compile options it sets, the presets, and how the tests are registered.
+[94m[Bash][0m Check Jolt flags, presets, and test registration $ sed -n 1,80p tests/CMakeLists.txt
+[94m[Bash][0m Read Jolt architecture flag selection $ grep -n "#error" third_party/jolt/Jolt/Core/Core.h | head
+I have the Jolt build picture now. The adapter has to agree with the origin model from US-050, so I'll read the origin contract and an existing world test to match style.
+[94m[Bash][0m Read origin contract, test style, and test CMake wiring $ grep -n "world_\|engine_world\|add_test\|catch_discover\|engine_tests" tests/CMakeLists.txt | head -...
+The origin contract settles the coordinate model: Jolt holds float positions relative to the origin, and the adapter is an `OriginSubscriber` that shifts them. Next I'll check the core `Result`/`Status`/log/assert APIs and the existing build directories.
+[94m[Bash][0m Read Status, Result, and log APIs and build dirs $ ls artifacts | head
+Next I'll check the remaining pieces the adapter needs: Jolt's `RegisterTypes`, the logger's levels, how glm and threads are linked, and the test tag convention.
+[94m[Bash][0m Check Jolt RegisterTypes, core CMake, log levels, tags $ cat engine/world/include/engine/world/streaming.hpp | head -5 >/dev/null
+Jolt's `RegisterTypes` and the vendored file list are complete, glm and threads come through `engine_core`, and the logger is available. Before writing the adapter I'll confirm the exact Jolt signatures I plan to use, plus the origin delta sign and the core `Result` helpers.
+[94m[Bash][0m Check Jolt signatures, origin delta sign, Result helpers $ grep -n "" engine/core/include/engine/core/result.hpp | sed -n 1,40p | grep -n "ok\|err\|struct\|tem...
+I have the Jolt signatures I need. The origin delta is `to - from`, so `rebase_local` is the correct way to shift Jolt's positions. Last check: how ECS code builds `Success`/`Failure` results, so the new API matches.
+[94m[Bash][0m Read Result helpers and usage patterns $ grep -n "CreateBody\b" third_party/jolt/Jolt/Physics/Body/BodyInterface.h | head -2
+I have what I need to write the adapter. My plan:
+
+- **Module:** `engine/physics/` builds Jolt through its vendored `Jolt/Jolt.cmake`, with SSE4.2 and asserts enabled so the Jolt and engine ABIs match. Jolt types stay out of the public header (pimpl).
+- **Timestep:** a fixed 1/60 s step with an accumulator, a pause that discards elapsed time, and a catch-up cap of 4 steps per update, with dropped time counted.
+- **Transforms:** the last two steps are kept in double world space, so `render_transform` interpolates them and origin rebases never touch them.
+- **Callbacks:** contact and activation events are pushed under a mutex from Jolt's workers and drained on the owning thread.
+- **Closure:** `close()` removes and destroys all bodies, and an origin subscriber that outlives its world becomes a no-op.
+
+I'll start with the public header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m "#pragma once
+
+// Physics adapter (US-052). A PhysicsWorld owns one Jolt physics system for one runtime scene. Simulation advances in fixed steps of
+// 1/60 s, and a body's render transform interpolate... (6752 chars)"
+The public header is in place. Now the implementation. It keeps all Jolt calls, the callback queue, and the origin link in one translation unit, behind the `detail::PhysicsState` pimpl.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m "#include "engine/physics/physics_world.hpp"
+
+#include "engine/core/assert.hpp"
+#include "engine/core/log.hpp"
+
+#include <Jolt/Jolt.h>
+
+#include <Jolt/Core/Factory.h>
+#include <Jolt/Core/IssueReporting... (21727 chars)"
+The adapter is written. Before compiling I see one structural bug: `PhysicsState` is defined inside the anonymous namespace, but the header declares `detail::PhysicsState`, so they are different types. I'll close the anonymous namespace before the struct and reopen it for the helpers that use it. I'll also drop the stray forward declaration and the duplicated finiteness lambda.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "struct PhysicsState;
+
+// Forwards each origin shif..." → "// Forwards each origin shift to its world."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "struct PhysicsState {
+    explicit PhysicsState(co..." → "}  // namespace
+
+struct PhysicsState {
+    explici..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "// Process-wide Jolt setup, run once on the first ..." → "namespace {
+
+// Process-wide Jolt setup, run once ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "core::Result<std::unique_ptr<PhysicsWorld>, Physic..." → "core::Result<std::unique_ptr<PhysicsWorld>, Physic..."
+Now the build wiring. The physics module compiles Jolt through its own vendored `Jolt.cmake`, keeping the vendor warning policy, and the engine target stays first-party.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/CMakeLists.txt[0m "# Physics adapter (US-052): one Jolt world per runtime scene, a fixed 60 Hz step, interpolated render transforms, and a queue for
+# contact and activation callbacks. Jolt is built from the vendored so... (1074 chars)"
+Next I'll register the module in the root build and the test executable.
+[94m[Bash][0m Register physics module and test file in CMake $ python3 - <<'EOF' import re p='CMakeLists.txt' s=open(p).read() assert s.count('add_subdirectory(eng...
+Next the tests. I'll check how existing tests write approximate comparisons and how they build ECS entities, so the new file matches.
+[94m[Bash][0m Check Catch2 approx style and ECS test usage $ grep -n "class WorldOrigin\|subscribe\|update(" tests/src/world_origin_tests.cpp | head -5
+The conventions are clear: Catch2 `WithinAbs`, `[unit]` tags, and `World` for entities. Now the test file. It exercises pause, the catch-up limit, closure, handle identity, callbacks with and without worker threads, and origin rebasing, all without a renderer.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_world_tests.cpp[0m "// Physics adapter (US-052) on the CPU: a Jolt world per scene, the fixed 60 Hz step, pause, the catch-up limit, interpolated render
+// transforms, stable entity handles, the callback queue, origin re... (16385 chars)"
+The test file is written. Reviewing it, I see three problems. There's a stray `origin_subscriber()` call in the origin test, the contact test stops once contact is first seen, so its resting check would be racing the impact, and one interpolation assertion duplicates another. I'll fix those and check the Catch2 header for `Approx`.
+[94m[Bash][0m Locate Catch2 Approx header $ grep -rn "catch_approx" third_party/catch2 --include=*.hpp -l | head -3
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_world_tests.cpp[0m edit: "    CHECK(stepped->position.y < 10.0);  // gravity..." → "    CHECK(stepped->position.y < 10.0);  // gravity..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_world_tests.cpp[0m edit: "        std::vector<PhysicsEvent> events;
+        ..." → "        // Two seconds: the ball falls about 2.5 m..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_world_tests.cpp[0m edit: "    auto world = make_world();
+    world->origin_s..." → "    auto world = make_world();
+    origin.subscrib..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_world_tests.cpp[0m edit: "#include <catch2/catch_test_macros.hpp>
+#include <..." → "#include <catch2/catch_approx.hpp>
+#include <catch..."
+Now I'll configure the Linux dev preset, which picks up the new module and its vendored Jolt target.
+[94m[Bash][0m Configure Linux dev preset $ tail -n 25 /tmp/us052_configure.log
+Configure passed, and vendor validation accepts the Jolt files. Jolt is a few hundred translation units, so I'll build the physics library in the background and check the log.
+[94m[Bash][0m Start physics library build in background $ echo started
+[94m[Bash][0m Show physics build log tail $ tail -n 60 /tmp/us052_physics_build.log | cut -c1-400
+The Linux build crashed in clang 10's debug-info code generator while compiling Jolt's `ConvexShape.cpp`. This is a compiler bug, not my code. I'll check which compilers are installed and what the project pins before choosing a workaround.
+[94m[Bash][0m List installed compilers and documented versions $ grep -n "clang" CMakePresets.json | head -5
+Only clang 10 and gcc 9 are installed locally, and the Linux debug gate uses clang. I'll keep clang and reduce debug info for Jolt alone to line tables (`-g1`) in Debug. That avoids the crashing type-info path and leaves first-party code unchanged.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/CMakeLists.txt[0m edit: "include(${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake)
+" → "include(${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake)
+# cl..."
+[94m[Bash][0m Build physics library target on Linux debug $ tail -n 3 /tmp/us052_physics_build.log | cut -c1-300
+[94m[Bash][0m Inspect Jolt BitCast and failing compile context $ sed -n 70,84p /tmp/us052_physics_build.log | cut -c1-300
+Clang 10 rejects Jolt's `__builtin_bit_cast` use in C++17 mode. Jolt's `Jolt.cmake` forces C++17 at the top, so I'll raise only the Jolt target to C++20, which keeps the vendored source unchanged. The first-party target is already C++20.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/CMakeLists.txt[0m edit: "include(${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake)
+# cl..." → "include(${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake)
+# Jo..."
+[94m[Bash][0m Rebuild physics library with C++20 Jolt target $ tail -n 3 /tmp/us052_physics_build.log | cut -c1-300
+Still failing with C++20, so the standard level wasn't the cause. I'll inspect the exact compile line and Jolt's feature detection for `__builtin_bit_cast`.
+[94m[Bash][0m Find Jolt bit_cast detection and language standard used $ grep -o "\-std=[^ ]*" /tmp/us052_physics_build.log | sort | uniq -c
+The compile line is `-std=c++2a`, so the standard level isn't the issue. Before deciding how to handle this, I'll test whether clang 10 can compile a minimal `__builtin_bit_cast` helper in isolation.
+[94m[Bash][0m Probe clang 10 __builtin_bit_cast support $ cd /tmp && rm -rf /tmp/bitcast_probe
+The isolated probe compiles, so the failure depends on something in Jolt's compile context. I'll rerun the exact `Shape.cpp` command from the compile database with the precompiled header removed, to see whether the PCH is involved.
+[94m[Bash][0m Extract the Jolt Shape.cpp compile command $ cd /mnt/d/dev/haiku_game_engine/build/linux-dev && python3 - <<'EOF' import json,subprocess,shlex cc...
+[94m[Bash][0m Test Shape.cpp compile variations to isolate error $ echo "exit=${PIPESTATUS[0]}"
+Removing the precompiled header makes `Shape.cpp` compile. The PCH is the culprit on clang 10, so I'll disable precompiled headers for the Jolt target only when the compiler is clang older than 11. Newer compilers keep upstream's PCH setup.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/CMakeLists.txt[0m edit: "# clang 10 also crashes in its debug-type code gen..." → "# clang 10 also crashes in its debug-type code gen..."
+[94m[Bash][0m Reconfigure and build physics library $ tail -n 2 /tmp/us052_physics_build.log | cut -c1-300
+The physics library builds on the Linux debug preset, and first-party code compiled with `-Werror`. Next I'll build the test executable in the background and poll it.
+[94m[Bash][0m Start engine_tests build in background $ echo "BUILD_EXIT=$?" >> /tmp/us052_tests_build.log) > /dev/null 2>&1 & echo started
+[94m[Bash][0m Poll test build progress and errors $ grep -n "error" /tmp/us052_tests_build.log | head -20 | cut -c1-400
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -n 3 /tmp/us052_tests_build.log cut -c1-300 grep -n "error" /tmp/us052_tests_build.log head -20 cut -c1-400. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for engine_tests build to finish $ grep -c "error:" /tmp/us052_tests_build.log
+While the test build runs, I'll write a short `docs/physics.md`, matching the other module docs such as `docs/particles.md`, so the adapter's contract is recorded next to the code.
+[94m[Bash][0m Look at existing doc style $ head -30 docs/large-world.md
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/physics.md[0m "# Physics Adapter
+
+The Jolt adapter (US-052). The contract is in `engine/physics/include/engine/physics/physics_world.hpp`, and the implementation is in `engine/physics/src/physics_world.cpp`. Jolt is... (3246 chars)"
+[94m[Monitor][0m Wait for engine_tests build to finish $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[Monitor][0m Wait for engine_tests build to finish $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[Bash][0m Check test build progress $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[Monitor][0m Wait for engine_tests build to finish $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[Monitor][0m Wait for engine_tests build (long) $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[Monitor][0m Wait for engine_tests build (long) $ grep -c "error:" /tmp/us052_tests_build.log
+[94m[ScheduleWakeup][0m
+I scheduled a wakeup with the autonomous-loop sentinel by mistake, and I'm not in a loop. I'll cancel it so it doesn't re-invoke me unexpectedly.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check build progress $ tail -n 1 /tmp/us052_tests_build.log | cut -c1-200
+[94m[Bash][0m Wait up to 10 minutes for test build to finish $ grep -c "error:" /tmp/us052_tests_build.log
+The test executable built with zero errors. The two monitor "failures" are just my grep returning exit 1 when the count was zero, not build failures. Next I'll run the unit suite, which includes the new physics cases, and check the physics results.
+[94m[Bash][0m Run unit suite including physics tests $ grep -n "FAILED\|Physics\|physics" /tmp/us052_unit.log | head -40 | cut -c1-300
+All 647 unit cases pass. Before I rely on that, I need to confirm the physics cases actually ran, so I'll run the new tests by name.
+[94m[Bash][0m Confirm physics test cases are registered $ timeout 300 ./tests/Debug/engine_tests "[unit]" --list-tests 2>/dev/null | grep -i -c "fixed step\|r...
+[94m[Bash][0m Inspect test main argument handling $ cd /mnt/d/dev/haiku_game_engine && grep -n "argv\|suite\|--list\|catch\|Session" tests/src/main.cpp ...
+[94m[Bash][0m Read test main session setup $ sed -n 48,100p tests/src/main.cpp
+Catch2 doesn't receive filter arguments through this harness, so I can't run one case by name. Instead I'll reconcile the count: the US-050 log reported 629 unit cases, and the difference should be the cases added since, plus my 13.
+[94m[Bash][0m Reconcile unit case count with added tests $ grep -n "TEST_CASE(" tests/src/physics_world_tests.cpp | cut -c1-150
+The counts reconcile: 629 + 5 particle cases + 13 physics cases = 647, so all 13 new cases ran and passed. Next is the full Linux gate sequence. I'll start the full `linux-debug` build in the background, then run `ValidateVendor` while it goes.
+[94m[Bash][0m Start full Linux debug build and run vendor validation $ tail -n 2 /tmp/us052_validate.log
+[94m[Bash][0m Check full Linux debug build result $ grep -c "warning:\|error:" /tmp/us052_linux_full.log
+Full Linux debug build passes with zero warnings or errors. Now the `linux-unit` ctest preset.
+[94m[Bash][0m Run linux-unit ctest preset $ tail -n 6 /tmp/us052_ctest_unit.log | cut -c1-200
+`linux-unit` passes 22 of 22, which covers the 1 unit test and 21 integration tests. Next is the ASan/UBSan configure, build, and sanitize ctest, which the PRD requires for physics changes. It builds the whole tree, so I'll run it in the background.
+[94m[Bash][0m Start ASan configure, build, and sanitize tests $ echo "ASAN_EXIT=$?" >> /tmp/us052_asan.log) >/dev/null 2>&1 & echo started
+While ASan builds, I'll check whether the local GCC 9 can compile Jolt at all. That determines whether the `linux-gcc` gate can run here.
+[94m[Bash][0m Check whether GCC 9 compiles Jolt sources $ g++-9 --version | head -1
+[94m[Bash][0m Retry GCC 9 compile with c++2a $ echo "gcc9 exit=${PIPESTATUS[0]}"
+GCC 9 can't compile Jolt at this revision, because it lacks `__builtin_bit_cast`. So the `linux-gcc` gate cannot pass on this machine. I'll report that as blocked rather than claim it. Next, the Windows gates: I'll confirm the Windows paths and that no earlier gate batch is still running, per the saved notes.
+[94m[Bash][0m Verify Windows toolchain paths and no running batch $ ls /mnt/d/dev/haiku_game_engine/build/
+[94m[Write][0m [95m/mnt/c/Users/bucha/AppData/Local/Temp/us052_gate.bat[0m "@echo off
+rem US-052 Windows quality gates: ValidateVendor, win-dev configure, win-debug build, win-unit ctest.
+rem Each step writes its exit code to its own file in TEMP, and its log beside it.
+call ... (944 chars)"
+I'll convert the batch to CRLF, clear any stale result files, and launch it through `cmd.exe` in the background.
+[94m[Bash][0m Convert batch to CRLF and launch Windows gates $ echo launched
+[94m[Bash][0m Wait for Windows gate batch or timeout $ tail -n 2 /tmp/us052_asan.log | cut -c1-200
+All four Windows steps exit 0. Per the saved notes, exit codes alone aren't enough, so I'll check the build log for warnings and read the ctest summary.
+[94m[Bash][0m Check Windows gate logs for warnings and results $ tail -n 3 us052_validate.log | cut -c1-200
+[94m[Bash][0m Confirm Windows ctest pass line $ grep -c "warning" us052_build.log
+Windows gates pass: `ValidateVendor`, `win-dev`, `win-debug` with 0 warning lines, and `win-unit` at 21 of 21. Now the ASan run on Linux.
+[94m[Bash][0m Wait for ASan build and sanitize tests $ grep -c "warning:\|error:" /tmp/us052_asan.log
+[94m[Bash][0m Check sanitizer output for reports $ grep -n "tests passed\|ERROR: \|runtime error\|LeakSanitizer\|SUMMARY" /tmp/us052_asan.log | head -1...
+ASan/UBSan passes: the build has 0 warnings and `linux-sanitize` is 22 of 22 with no sanitizer reports. The physics tests run inside that suite, so they were covered too.
+
+The `linux-gcc` gate is the one I can't run here. Remaining work is the record: a verification row in `docs/build.md`, the progress log, and the Codebase Patterns entries. I'll check the table format first.
+[94m[Bash][0m Inspect verification table format in build docs $ tail -n 3 docs/build.md | cut -c1-200
+[94m[Bash][0m Read recent verification table rows $ sed -n 185,200p docs/build.md | cut -c1-220
+The verification table has one row per story, so I'll add a US-052 row. Before I write the blocked status, I'll check whether a GCC 11 compiler is available locally, since that would let the GCC gate run.
+[94m[Bash][0m Check for a local GCC 11 or passwordless sudo $ which sudo >/dev/null && sudo -n true 2>/dev/null && echo "sudo-ok" || echo "no-passwordless-sudo"
+No GCC 11 is installed and I have no passwordless sudo to install one, so the `linux-gcc` gate stays blocked on this machine. I'll record that honestly in the build table.
+[94m[Bash][0m Add US-052 verification row to build docs $ GPU suites (no GPU path changed). |\n") s=s.replace(anchor,row+anchor) open(p,'w').write(s) print('o...
+Next, the progress log. I'll add the reusable Jolt patterns to the Codebase Patterns section at the top and append the US-052 entry at the end.
+[94m[Bash][0m Update progress log with patterns and US-052 entry $ `std::unordered_map::contains` needs C++20, which the adapter uses. - Status call: US-052 is **Parti...
+I wrote one inaccurate gotcha in that entry: the `Result` / `Unit` note doesn't describe anything I changed. I'll remove it.
+[94m[Bash][0m Correct an inaccurate gotcha in the progress entry $ the physics sources are C++20 first-party code.\n") open(p,'w').write(s) print('ok') EOF
+I'll also save the cross-story facts to memory: the GCC blocker and the clang 10 workarounds are environment knowledge a future story would otherwise rediscover.
+[94m[Write][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m "---
+name: project-physics-jolt
+description: US-052 Jolt physics adapter status, and the local toolchain limits that block the linux-gcc gate for Jolt-using stories
+metadata:
+  type: project
+---
+
+US-05... (1230 chars)"
+[94m[Bash][0m Add memory index pointer for physics status $ linux-gcc blocked (local GCC 9.4 cannot build Jolt)\n' if 'project-physics-jolt' not in s:     s=s.r...
+US-052 is implemented, but I'm not marking it complete: the `linux-gcc` gate can't run on this machine. Every other gate I could run passes.
+
+**What's in place**
+- **Module:** `engine/physics/` builds Jolt from the vendored `Jolt/Jolt.cmake`. The public header has no Jolt types.
+- **World per scene:** each `PhysicsWorld` owns its own Jolt system, gravity, and worker pool.
+- **Fixed 60 Hz step:** updates run whole steps from an accumulator. `render_transform` interpolates between the last two steps.
+- **Pause and catch-up:** pause runs no steps and discards the paused time. The catch-up limit defaults to 4 steps per update, and dropped steps and catch-up events are counted.
+- **Stable handles:** bodies refer to `ecs::EntityHandle`. A stale handle never matches a later entity in the same slot.
+- **Callbacks:** contact and activation events are queued under a mutex and drained with `take_events()`.
+- **Closure:** `close()` removes and destroys all bodies and joins the worker threads. An origin subscriber that outlives its world does nothing.
+- **Tests:** 13 `[unit]` cases in `tests/src/physics_world_tests.cpp`, none of which use the renderer.
+- **Docs:** `docs/physics.md`, a row in `docs/build.md`, and the progress log entry.
+
+**Gate results**
+
+| Gate | Result |
+|---|---|
+| `ValidateVendor` (Windows / Linux) | pass / pass |
+| `win-dev` configure, `win-debug` build | pass, 0 warning lines |
+| `win-unit` | 21/21 |
+| `linux-dev` configure, `linux-debug` build | pass, 0 warnings |
+| `linux-unit` | 22/22; `engine_tests --suite unit` reports 647 cases, which reconciles with the 629 reported for US-050 plus 5 particle cases plus these 13 |
+| `linux-asan` build, `linux-sanitize` | pass, 22/22, no sanitizer reports |
+| `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | **blocked** |
+| `engine_bench --suite acceptance` | not run: there is no harness yet (US-074) |
+
+The GCC gate is blocked because the local GCC 9.4 can't compile this Jolt revision (it lacks `__builtin_bit_cast`), and no GCC 11 is installed. Closing it needs a GCC 11+ environment. I haven't checked the CI GCC 11 job, so the GCC result is unverified in both places.
+
+**Build decisions you may want to review**
+- Jolt's target builds as C++20 and with SSE4.2, and the same macros are exported to consumers. Its vendor policy is unchanged, so it has no `-Werror`.
+- Clang 10 needed three local workarounds, all in `engine/physics/CMakeLists.txt`: C++20 for Jolt, no precompiled header on Jolt, and `-g1` in Debug. Clang 11+ and MSVC keep the upstream settings.
+- Shapes are box and sphere only. Colliders, filters, and queries belong to US-053.
+- The adapter subscribes to the large-world origin. The acceptance criteria don't require it, but without it the float positions would go stale after a rebase.
+- `worker_threads` defaults to 1, and the catch-up cap defaults to 4 steps.
+
+**Status:** US-052 is **Partial**. I did not emit the completion signal, because the GCC gate and the benchmark are open.

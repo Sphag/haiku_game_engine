@@ -1,0 +1,39 @@
+# Iteration 541 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T09:19:56.324Z
+- **Ended At**: 2026-10-25T09:20:09.913Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 1870
+- **Total Tokens**: 1888
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ ls && tail -80 .ralph-tui/progress.md && ls engine/save 2>/dev/null && find engine/save -type f | xa...
+[94m[Bash][0m Check for source changes and available compilers $ grep -n "bench" CMakeLists.txt engine/*/CMakeLists.txt tests/CMakeLists.txt 2>/dev/null | head -3
+US-059 is not complete, so I'm not emitting `<promise>COMPLETE</promise>`. I made no source changes this pass.
+
+**Current state**
+- The save implementation is in place: `engine/save/` (`save.cpp`, `world_changes.cpp`, and headers), plus `save_tests.cpp` with 11 `[unit]` cases.
+- Recorded results from earlier today still match the tree. `find` shows no source, test, or CMake file newer than the last progress entry.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` (0 warnings under /W4 /WX), and `win-unit` 21/21 all passed in the last run.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` 22/22, `linux-asan` build, and `linux-sanitize` 22/22 all passed.
+
+**What blocks completion**
+1. **`linux-gcc` preset, build, and `linux-gcc-unit` ctest.** The Jolt physics code needs GCC 11+ (`__builtin_bit_cast`). This machine has only g++-9 (9.4), gcc-9, and clang++-10. This needs a machine with GCC 11+.
+2. **`engine_bench --suite acceptance`.** No `engine_bench` target exists in any CMakeLists.txt; the benchmark harness is US-074.
+3. **Runtime save/load through a host.** That is US-060, not an acceptance criterion of this story. I'm noting it because the progress log lists it as open.
+
+I didn't re-run the gates, since nothing has changed since they last passed and the open items need a different toolchain or a benchmark harness that doesn't exist yet. Recent progress entries show the same status-only pass repeated many times, so I didn't add another one.
+
+**Next step:** someone with GCC 11+ needs to run the `linux-gcc` preset and ctest. The benchmark criterion needs US-074 before it can be run.

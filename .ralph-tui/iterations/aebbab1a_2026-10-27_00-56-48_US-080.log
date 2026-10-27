@@ -1,0 +1,42 @@
+# Iteration 1213 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:56:48.512Z
+- **Ended At**: 2026-10-26T21:57:03.224Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2160
+- **Total Tokens**: 2182
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state, progress log, and bench artifacts $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-080" -A3 tasks/*.md | head -40 && ls artifact...
+[94m[Bash][0m Re-check hardware, FSR permutations, and unimplemented workloads $ git -C . status 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ RTX 5080 (driver 617.42) visible under WSL only. - No build or bench run. US-080 is not signed off. ...
+US-080 is not complete, so I am not signalling COMPLETE. I re-checked the blockers and nothing has changed since the previous runs, so I stopped without building or benchmarking.
+
+**Still blocking acceptance:**
+
+1. **No native Linux Vulkan device.** `/dev/dri` is absent in this WSL environment. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42). The native Linux/Vulkan report needs a host with a real DRM device.
+2. **FSR 2 shader tables are missing.** `third_party` has 0 of the generated `*_permutations.h` files, so the FSR upscaler cannot link. This needs a vendoring decision from you.
+3. **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` still marks them `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run over them would exit 3 (incomplete).
+4. **Frame budget exceeded on the last measured run.** The us076 DX12 meshlets run (native_1080) has CPU p99 42.4 ms against a 16.7 ms budget, while GPU p99 is 11.5 ms. The miss is on the CPU side, in the `render_stress` frame path. The likely cause is `SceneRenderer::render`, but that is unconfirmed. Finding it needs a Release profile on the RTX 5080. The fix must not change the contract, settings, or workload.
+
+**What I did:** I appended a status entry to `.ralph-tui/progress.md`. No code was changed and no gate or benchmark was run.
+
+**What I need from you:**
+- A native Linux host with `/dev/dri` for the Vulkan run.
+- A decision on the FSR 2 vendoring route.
+- Sources or direction for the four unimplemented workloads.
+- Permission to profile `render_stress` on the RTX 5080 via cmd.exe. I can then fix the measured CPU hotspot.
+
+Repeated unattended status checks have not changed any of these, so I am not rescheduling this loop.

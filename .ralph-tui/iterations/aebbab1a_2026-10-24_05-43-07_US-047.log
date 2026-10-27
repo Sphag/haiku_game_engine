@@ -1,0 +1,62 @@
+# Iteration 89 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:43:07.054Z
+- **Ended At**: 2026-10-24T02:50:54.811Z
+- **Duration**: 7m 47s
+- **Input Tokens**: 88
+- **Output Tokens**: 10691
+- **Total Tokens**: 10779
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code, since the story may already be partly implemented.
+[94m[Bash][0m Read progress log and list terrain sources $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls engine/world/src | head -50 && echo ---- && gr...
+The progress log already has a US-047 entry from a previous pass. I'll read the full entry and the terrain status memory to see what it left open.
+[94m[Bash][0m Read US-047 progress entry and terrain memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+Previous passes all stopped at "Partial" because the renderer side was never started. The remaining work is the renderer draw path, splat shading, depth/shadow/RT participation, and GPU fixtures. I'll check what the bridge already provides and how meshes reach the renderer before deciding how far to go.
+[94m[Bash][0m Inspect terrain bridge and render mesh structures $ grep -n "struct MeshData" -A40 engine/render/include/engine/render/*.hpp | head -80
+The bridge gives tile meshes with a side splat channel, but nothing consumes it yet. I'll check how the renderer takes static meshes and instances, to see whether a terrain path can reuse that route.
+[94m[Bash][0m Survey renderer mesh and snapshot API $ sed -n 470,490p engine/render/src/rt_effects.cpp
+The RT support table already marks terrain as traced, but `scene_renderer.cpp` has no terrain path. I'll look at the snapshot item and vertex layout to size the renderer change.
+[94m[Bash][0m Inspect snapshot items, upload API, vertex layout $ grep -n "TerrainRenderTile" -A12 engine/render/include/engine/render/terrain_mesh.hpp | head -30
+The renderer has no terrain draw path, yet `rt_effects_geometry_support` now marks terrain as supported. I'll check whether anything actually feeds tiles into the RT pass before I rely on that row.
+[94m[Bash][0m Check terrain usage across the codebase $ grep -n "geometry_supported\|heightfield" engine/render/src/*.cpp tests/src/*.cpp | head -20
+A GPU fixture file (`render_terrain_gpu_tests.cpp`) and a terrain render test exist that the memory does not mention. The tree has moved past the recorded state, so I'll read the newest progress entries and check whether the new tests are wired in.
+[94m[Bash][0m Read newest progress entries and terrain test wiring $ ls -la --time-style=+%H:%M tests/src/render_terrain_gpu_tests.cpp engine/render/src/terrain_mesh.cpp...
+The newest entry says Windows DX12 and Vulkan GPU suites pass with terrain drawn through the static path. What's left is splat shading (a core acceptance criterion), shadow/RT checks, the bench workload, and the ASan run. I'll size the splat change by reading the vertex layout and the shader input before choosing.
+[94m[Bash][0m Read vertex layout and shader input definitions $ grep -n "kSkinnedVertexStride\|kJointsOffset" engine/render/src/scene_renderer.cpp | wc -l
+The splat channel would need a new vertex attribute, a pipeline-layout change in several paths, and a terrain-only shader branch, plus Windows DX12 and Vulkan reruns. That's a separate renderer pass, so I won't start it half-verified. The one remaining check that's cheap and required is the Linux ASan/UBSan gate on the render bridge and the new fixtures. I'll run it now.
+[94m[Bash][0m Configure, build, and run ASan/UBSan preset $ tail -n 8 /tmp/us047_asan_ctest.log
+The ASan/UBSan preset passes (22/22). Now I'll record this pass in the progress log and correct the terrain memory, which still says the renderer path is missing.
+[94m[Bash][0m Append progress entry for ASan gate pass $ terrain only inherits the static path. (3) The `engine_bench` terrain workload and the acceptance be...
+[94m[Write][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md[0m "---
+name: project-terrain-runtime
+description: "US-047 terrain status: CPU runtime, render bridge, and static-path draw done (DX12/Vulkan GPU fixture passes); splat shading, shadow/RT checks, and the ... (1725 chars)"
+US-047 is not complete, so I'm not emitting the completion signal. The CPU runtime, the render bridge, and terrain drawn through the static mesh path are done. Splat shading, shadow/RT verification, and the bench workload are still open.
+
+**What's in place**
+- `engine/world`: tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat weights, height query. Fixtures cover coverage, holes, LOD switching, and stitched edges.
+- `make_terrain_render_tile` converts tiles to render meshes. Terrain goes through the existing static path, so it gets depth and shadow participation without new draw code. The `rt_effects` support row now marks heightfield terrain as supported.
+- The last recorded Windows run of `tests/src/render_terrain_gpu_tests.cpp` passed on DX12 and Vulkan with validation on, per the renderer-integration entry in the progress log. I didn't re-run it in this pass.
+
+**What I did this pass**
+- Ran the Linux ASan/UBSan gate: `linux-asan` configure and build, then `linux-sanitize` ctest. It passed, 22 of 22.
+- Appended a progress entry and corrected the terrain memory. The memory still said the RT row was unsupported, which is stale.
+
+**What's still open**
+1. **Splat blending.** The static vertex layout and `scene.hlsl` `VSInput` have no splat attribute. The four-layer blend isn't on screen. The plan is vertex colour, using a terrain-only layout and shader branch, not a wider static layout. This needs a rerun on Windows DX12 and Vulkan.
+2. **Shadow and RT checks.** Terrain inherits the static shadow and RT paths, but no fixture checks those results.
+3. **`engine_bench` terrain workload** and the acceptance bench run.
+4. **Windows gates** were not repeated this pass because no source changed.
+
+Splat blending is the largest item and needs GPU iteration on both backends. I left it for its own pass rather than shipping an unverified shader change.

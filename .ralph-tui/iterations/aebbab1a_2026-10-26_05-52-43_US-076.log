@@ -1,0 +1,43 @@
+# Iteration 803 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:52:43.346Z
+- **Ended At**: 2026-10-26T02:53:00.071Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2330
+- **Total Tokens**: 2352
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && wc -l .ralph-tui/progress.md && grep -n "US-076\|US-075" .ralph-tui/progress.md | head -30 && ...
+The log shows US-076 was attempted many times and is blocked pending a user decision. I'll read the latest entries before doing anything.
+[94m[Bash][0m Read the US-076 progress history $ sed -n 4169,4371p .ralph-tui/progress.md
+US-076 is not complete, and I have not changed anything in this pass. I read the progress log and found 31 consecutive "status check" entries with no code, workload, or gate change since the last real measurement. Adding another would only repeat them, so I stopped there and did not signal completion.
+
+**What is done** (per the log and the artifacts under `artifacts/bench/us076-*`):
+- `render_route_v1` is defined in the manifest. The `render_stress` driver builds the 20,000-instance, 200-mesh, 100-character, 100,000-particle, 128-light scene. `engine_workload --check` reports all 4 scenes match.
+- Indexed, indirect, and meshlet paths ran on DX12 and Vulkan, with counters and screenshots. Forcing mesh shaders off falls back to indirect-indexed, and the report says `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`.
+- Windows gates passed on the last full run: validate, win-dev, win-debug build, win-unit (29/29), GPU suites on DX12 (72 cases) and Vulkan (73 cases), and win-release bench build.
+- Linux gates passed: ValidateVendor, linux-dev, linux-debug build with 0 warnings, linux-unit (30/30).
+
+**What blocks completion:**
+1. **Frame budget and triangle floor fail on the measured runs.** The route start submits 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms. The cause is instance placement: instances are uniform over 8192 m, so the start view holds about 330 items. Fixing this either changes the fixed workload (bump `kWorkloadVersion`, regenerate `workload_expected.json`) or is an implementation gap in culling or LOD. The contract forbids reducing workloads, so this needs your decision.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated permutation tables. Choosing a vendoring route is your call.
+3. **Native Linux Vulkan GPU and linux-gcc were not run.** WSL has no Vulkan device, and GCC 9 cannot build Jolt.
+
+**Decisions I need from you:**
+- Approve a placement or route-start change (a workload change), or accept the failing runs as the measured result. If you accept them, I would close the story as measured with the failures stated.
+- Pick an FSR 2 vendoring route, or mark `full_1080` unsupported for this story.
+
+I suggest pausing the auto-loop until you answer. Re-entering without a decision produces no new evidence.

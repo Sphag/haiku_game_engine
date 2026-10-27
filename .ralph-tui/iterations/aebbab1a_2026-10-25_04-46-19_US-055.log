@@ -1,0 +1,39 @@
+# Iteration 435 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T01:46:19.404Z
+- **Ended At**: 2026-10-25T01:46:34.016Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2018
+- **Total Tokens**: 2040
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-055 already exists in the tree, since the codebase notes reference `script_bindings.cpp`.
+[94m[Bash][0m Inspect script module and progress notes $ ls && ls engine/script 2>/dev/null && find engine/script -type f | head -50 && grep -n "US-055" -A3 ...
+The progress log says US-055 is implemented and passing every gate except `linux-gcc`, which is blocked by the host's GCC 9.4. I'll check whether a newer GCC or clang is now available, and whether any source changed since the last entry.
+[94m[Bash][0m Check compilers and recent source changes $ ls -la .ralph-tui/progress.md
+US-055 is not complete, so I'm not signalling `<promise>COMPLETE</promise>`.
+
+**Status: Partial.** The implementation exists and every gate I can run here passes. The one open item is the `linux-gcc` gate.
+
+- **Implemented earlier:** a Lua 5.4.7 gameplay API in the new `engine_script` module. It exposes `entity`, `transform`, `input`, `assets`, `physics` and `events`, with 15 headless unit cases in `tests/src/script_lua_tests.cpp`.
+- **Unchanged since the last full pass:** no file under `engine/`, `tests/`, `cmake/`, `docs/` or the root CMake files is newer than the last progress entry.
+- **Gates that passed in earlier passes on this tree:**
+  - Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, and `linux-asan` plus `linux-sanitize` (22 of 22, no sanitizer report).
+  - Windows: `ValidateVendor`, `win-dev`, `win-debug` build and `win-unit`, using the MSVC `/W4 /WX` setup.
+- **Still open:** `linux-gcc`, `linux-gcc-debug` and `linux-gcc-unit`. The host has only GCC 9.4 and clang 10, and Jolt needs GCC 11+ or clang 14+. The separate Linux/GCC CI job has to report this.
+
+I did not re-run the Linux build and unit gates in this pass. The tree is unchanged since the last full run, and that run is recorded in the progress log. I also did not add another "status re-check" progress entry, since the log already has several.
+
+To finish the story, run the `linux-gcc` presets on a host with GCC 11+ or in CI. If that passes, the story can be marked complete.

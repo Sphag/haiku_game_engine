@@ -1,0 +1,190 @@
+# Iteration 515 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:47:55.045Z
+- **Ended At**: 2026-10-25T08:29:55.016Z
+- **Duration**: 41m 59s
+- **Input Tokens**: 406
+- **Output Tokens**: 106309
+- **Total Tokens**: 106715
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress notes, the PRD section for US-059, and the existing save-related code.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD for US-059 $ ls && tail -n 120 .ralph-tui/progress.md && grep -n "US-059" -A 30 tasks/prd-open-world-engine.md | ...
+The progress log only covers US-058. Next I'll look at the engine modules that a save system would depend on: ECS, world cells, scripting, and the existing scene format.
+[94m[Bash][0m List engine modules, tests, and key headers $ grep -n "add_subdirectory" CMakeLists.txt && ls tests tests/src | head -100 && cat tests/CMakeLists....
+Next I'll read the APIs a save format would sit on: core file IO and GUIDs, the scene format, world cells and streaming, and the script engine.
+[94m[Bash][0m Read core file IO, GUID, and scene format headers $ cat engine/scene/include/engine/scene/scene_format.hpp | head -150
+The scene format already has reflection-driven JSON with versioning. Now the world cell, streaming, and script-runner APIs, plus the JSON library the scene format uses.
+[94m[Bash][0m Read world partition and streaming headers, JSON include $ grep -n "class\|struct\|load\|unload\|cell" engine/world/include/engine/world/streaming.hpp | head -...
+The world model already has per-cell dirty flags and atomic saves. Now the scene class, the reflection catalog, and the script engine, to see how gameplay state and Lua state can be read out.
+[94m[Bash][0m Read Scene, script engine and runner APIs $ grep -n "class\|struct\|\[\[nodiscard\]\]" engine/script/include/engine/script/script_engine.hpp eng...
+`ScriptRunner` already has private `export_state`/`import_state` hooks. I'll check how they work, since they're the natural basis for saving Lua state.
+[94m[Bash][0m Read ScriptRunner header and state export code $ grep -n "export_state\|import_state" -A 25 engine/script/src/script_runner.cpp | head -120
+The Lua state can be saved by reading the instance's environment table, so it fits the existing runner. Before I decide where the code goes, I need the CMake target names, the JSON dependency, how tests are tagged, and whether a version macro exists.
+[94m[Bash][0m Check module CMake files, JSON dependency, tags, versions $ grep -n "project(" CMakeLists.txt
+I have the module layout. Next, the PRD's save-related constraints, the performance contract, and the existing scene-format test helpers.
+[94m[Bash][0m Grep PRD for save constraints and performance contract $ sed -n 1,25p tests/src/scene_format_tests.cpp | grep include
+The design is settling. Lua state will be captured through the environment table, the scene reuses `serialize_scene`/`parse_scene`, cells reuse the world text format, and file integrity uses a checksum over the body. Next I'll read the script error types, the engine constructor, and how the existing Lua tests set up an engine.
+[94m[Bash][0m Read script error types, engine constructor and lifecycle test setup $ sed -n 1,60p tests/src/script_lifecycle_tests.cpp
+I'll check the includes and helpers in `script_runner.cpp` so the new state code matches them.
+[94m[Bash][0m Read script runner includes and helper functions $ grep -n "ScriptRunner::find\|ScriptRunner::state" -A 8 engine/script/src/script_runner.cpp | head -3...
+I have what I need to design the save path. Before writing, I'll confirm the core path, UTF-8, and temp-directory helpers that the tests and save store will use.
+[94m[Bash][0m Check Path, UTF-8, test temp-dir and Result helpers $ grep -n "struct Unit\|using Unit\|success(" engine/core/include/engine/core/result.hpp | head -5
+[94m[Bash][0m Check path helpers and world test includes $ grep -n "serialize_cell" -A 12 engine/world/src/partition.cpp | head -30
+I have the APIs I need. I'll start with the Lua side: an internal encoder/decoder for an instance's plain-data environment, then the two `ScriptRunner` methods that expose it.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/script/src/script_state.hpp[0m "#pragma once
+
+// Plain-data state of one script instance (US-059), internal to engine_script. The encoder reads the instance's environment table
+// and writes a JSON object; the decoder stages the obj... (871 chars)"
+Next the implementation. Table shape rules: string keys become a JSON object, keys `1..n` become an array, and anything else is an error, so nothing is silently dropped. Callbacks and userdata are skipped on purpose.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/script/src/script_state.cpp[0m "#include "script_state.hpp"
+
+#include "engine/core/utf8.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <va... (9523 chars)"
+Now I'll wire the two methods into `ScriptRunner`, restricting restore to instances that have not started so `create` always sees the restored values.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/script/include/engine/script/script_runner.hpp[0m edit: "    [[nodiscard]] std::optional<InstanceState> sta..." → "    // Save state (US-059). capture_state returns ..."
+[94m[Bash][0m Wire capture/restore into runner and CMake $ }  ''' assert s.count(anchor)==1 s=s.replace(anchor, add+anchor) open(p,'w').write(s) p='engine/scri...
+The Lua side is in place. Now the save module: a shared error type, the world-change capture and apply logic, and the file format with checksum, slot store, and previous-save retention. First I'll confirm the `Path::join` signature.
+[94m[Bash][0m Check Path join API and nlohmann version $ grep -n "version\|NLOHMANN_JSON_VERSION_MAJOR" third_party/nlohmann_json/single_include/nlohmann/jso...
+Now I'll write the save module's headers: the error type, world changes, and the save file and slot API.
+[94m[Bash][0m Create save module CMake and headers $ }  // namespace engine::save EOF echo ok
+Next the main save header, which defines the save data, serialization, and the slot store.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/save/include/engine/save/save.hpp[0m "#pragma once
+
+// Game saves (US-059). A slot is one JSON file, "<slot>.save", in a save directory:
+//
+//   {
+//     "format": "engine.save",
+//     "version": 1,
+//     "build": { "engine": "0.1.0" },... (4660 chars)"
+The header needs `<utility>` for `std::move`. I'll add that, then write `save.cpp`: the envelope, checksum, body encoding and decoding, and the slot store.
+[94m[Bash][0m Add missing utility include to save header $ cd /mnt/d/dev/haiku_game_engine && sed -i 's/#include <string_view>\n#include <vector>/&/' engine/sa...
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/save/src/save.cpp[0m "#include "engine/save/save.hpp"
+
+#include "engine/core/file_io.hpp"
+#include "engine/core/utf8.hpp"
+#include "engine/world/partition.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cstddef>
+#include <cs... (15252 chars)"
+Two fixes before this compiles cleanly. The checksum helper can throw on invalid UTF-8 inside a file, which must be a `Malformed` error and not an exception. Also `<initializer_list>` and `<optional>` need including.
+[94m[Bash][0m Fix checksum UTF-8 handling and includes in save.cpp $ }''') open(p,'w').write(s) EOF echo done
+Now the world-changes implementation: collect, apply with validate-before-commit, and cell-file writing.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/save/src/world_changes.cpp[0m "#include "engine/save/world_changes.hpp"
+
+#include "engine/core/file_io.hpp"
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <utility>
+
+namespace engine::save {
+namespace {
+
+SaveErr... (3481 chars)"
+Next I'll register the module in the root CMake and build the new and changed targets, so compile errors surface before I write tests.
+[94m[Bash][0m Configure linux-dev and build save and script targets $ grep -n "error\|warning" /tmp/us059_b1.log | head -40
+The new module and the script changes compile cleanly. Next the tests. I need to see how the existing scene tests build a component catalog so my fixtures follow the same pattern.
+[94m[Bash][0m Read scene test catalog setup and world test helpers $ grep -n "run_ok\|engine.run\|ScriptServices" tests/src/script_lua_tests.cpp | head -5
+Catalog setup and world helpers are clear. I'll write the save test suite covering the acceptance points: selection and GUIDs, corruption and incompatibility rejection, atomic writes with previous-save retention, Lua state round trip, and world-delta restore including conflict handling.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/save_tests.cpp[0m "// Game saves (US-059) on the CPU: component selection and GUIDs, rejection of corrupt and incompatible files, slot writes that keep the
+// previous save, script state captured and restored through Lu... (20102 chars)"
+The test file references `FieldValue`, `glm`, and an `ScriptId` default that I want to tidy. I'll check the `FieldValue` shape in the reflection header before compiling.
+[94m[Bash][0m Check FieldValue variant definition $ grep -n "using FieldValue\|variant<" -A3 engine/scene/include/engine/scene/reflection.hpp | head -12
+[94m[Bash][0m Adjust test includes and FieldValue usage $ ''') rep('#include "engine/world/partition.hpp"\n\n#include <catch2','#include "engine/world/partiti...
+Now I'll register the test file and the `engine_save` link in the test target, then build and run the new cases.
+[94m[Bash][0m Register save tests and build engine_tests $ grep -n "error\|warning" /tmp/us059_b2.log | head -40
+The build is clean with no warnings. I'll run the unit suite and then look for the save cases in the output.
+[94m[Bash][0m Run unit suite and list save test cases $ $BIN --suite unit --list-tests 2>/dev/null | grep -i "save\|script's plain\|world change\|slot" | he...
+That run used the ASan build's binary, not the linux-debug one I just built. I'll locate the right binary and confirm my new cases are included.
+[94m[Bash][0m Locate engine_tests binaries by build preset $ grep -n "linux-debug\|binaryDir" CMakePresets.json | head -5
+[94m[Bash][0m Full linux-debug build and locate its test binary $ find build/linux-debug -name engine_tests -type f
+The full linux-debug build exits 0 with no warnings. Now the actual unit gate, `ctest --preset linux-unit`, which will show the save tests in the suite.
+[94m[Bash][0m Run linux-unit ctest preset $ tail -12 /tmp/us059_ctest.log
+[94m[Bash][0m Extract failure details from ctest log $ grep -n "FAILED\|with expansion\|REQUIRE\|CHECK\|failed\|save_tests\|save_tests.cpp" /tmp/us059_ctes...
+[94m[Bash][0m Show the specific failing assertion details $ grep -n "cli_suite_unit" -A3 /tmp/us059_ctest.log | head -12
+The version test is wrong, not the code. Nlohmann sorts keys, so `body` comes first and its nested scene also contains `"version": 1`. The code returned `ChecksumMismatch` (5) because it hit the nested version. The CLI failure is the same failing test exit code. I'll target the top-level version, which is the last key in the file.
+[94m[Bash][0m Fix version test target, rebuild, rerun linux-unit $ grep -n "FAILED" -A3 /tmp/us059_ctest2.log | head
+The linux-unit gate passes all 22 tests, including the 11 new save cases. Next are the remaining Linux gates: vendor validation, the ASan/UBSan build and sanitize run (required because this touches Lua and memory), and the script's own unit tests with them.
+[94m[Bash][0m Run vendor validation and ASan build and sanitize tests $ tail -4 /tmp/us059_asan_t.log
+Vendor validation, ASan/UBSan build, and the sanitize suite all pass. Now the Windows gates; my memory notes describe how they run from WSL, so I'll read those first.
+[94m[Bash][0m Read saved Windows gate run instructions $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+The memory notes give the batch method. I'll check for a running batch and reuse an earlier batch file as the template, so I don't guess the vcvars path.
+[94m[Bash][0m Check for running batches and read a prior gate batch $ cat "$f" | tr -d '\r' | head -40
+No batch is running, so I'll write the us059 gate batch with the four Windows gates. It runs as a background job, then I'll check the logs rather than trust the exit codes alone.
+[94m[Bash][0m Write and run the Windows us059 gate batch $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us059_rc.txt 2>/dev/null
+All four Windows gates return 0. Before I trust that, I'll check the logs for compiler warnings and the unit-suite count.
+[94m[Bash][0m Check Windows build warnings and unit results $ tail -4 us059_unit.log
+Windows gates pass with zero compiler warnings and 21 of 21 tests. I'll confirm the build actually compiled the new save sources, since a warm build can skip them.
+[94m[Bash][0m Confirm new save sources were compiled on Windows $ grep -i "save" us059_build.log | head -3
+The Windows build compiled the new sources. One acceptance point, that changed cells restore for streaming, is only covered at the file level so far. I'll check how the streaming tests construct a manager, to see whether a real streaming check is cheap to add.
+[94m[Bash][0m Inspect streaming test setup and manager API $ grep -n "class StreamingManager" -A 30 engine/world/include/engine/world/streaming.hpp | grep "(" | ...
+A streaming check would cover the "unloaded cells" claim end to end. I'll read the helpers and the first streaming test to reuse their setup.
+[94m[Bash][0m Read streaming test helpers and CellData shape $ grep -n "struct CellData" -A 8 engine/world/include/engine/world/streaming.hpp
+The streaming tests show the setup. I need the `CellData` type that subscribers receive so I can read the restored object's position.
+[94m[Bash][0m Find CellData definition and streaming test includes $ grep -n "JobSystem\|include" tests/src/world_streaming_tests.cpp | head -12
+`CellData` is a `shared_ptr<const WorldCell>`, which is easy to check. I'll add one streaming test: author cells to a runtime directory, write the saved change over the crate's cell file, stream the cell, and check the subscriber sees the restored position.
+[94m[Bash][0m Add streaming restore test and rebuild linux-debug $ grep -n "error\|warning" /tmp/us059_b3.log | head -20
+Clean build. I'll rerun the Linux unit gate with the new streaming case.
+[94m[Bash][0m Rerun linux-unit ctest with streaming test $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+Unit count is 788, and 776 was the baseline before my cases, so the 12 new cases reconcile. Since the tree changed after the sanitizer run, I'll rebuild the ASan tree and rerun the sanitize suite on the final code.
+[94m[Bash][0m Rebuild ASan tree and run sanitize tests on final code $ grep -i "runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/us059_asan_t2.log | head -5
+The sanitize suite passes on the final tree with no reports. Now I'll rerun the Windows gate batch on the same tree, after confirming nothing is still running from the earlier batch.
+[94m[Bash][0m Rerun Windows gate batch on final tree $ grep "tests passed" us059_unit.log
+All four Windows gates pass on the final tree. I'll confirm the Windows build recompiled the changed test file, since it was incremental.
+[94m[Bash][0m Verify Windows build recompiled save tests $ grep "save_tests" /mnt/c/Users/bucha/AppData/Local/Temp/us059_build.log | head -2
+The Windows build recompiled the save tests. The Linux GCC gate is blocked here (only GCC 9 is installed), but I can still compile the new first-party sources with GCC 9 and `-Werror` as partial evidence.
+[94m[Bash][0m Compile new sources with GCC 9 under -Werror $ done
+[94m[Bash][0m Compile script_state.cpp with GCC 9 and -Werror $ echo rc=${PIPESTATUS[0]}
+GCC 9 compiles the new sources under `-Werror`, though the full `linux-gcc` gate stays blocked by Jolt as before. Last, I'll record the progress and reusable patterns in `.ralph-tui/progress.md`, starting with its header layout.
+[94m[Bash][0m Inspect progress file headings $ sed -n 1,4p .ralph-tui/progress.md | cut -c1-120
+[94m[Bash][0m Append US-059 progress entry and codebase patterns $ `ctest --preset win-unit --output-on-failure --no-tests=error` = 0, 100%, 21 of 21. Run twice on the...
+US-059 is implemented as a save library with a Lua state hook, but the story stays **Partial**. The Linux/GCC acceptance item cannot run here (only GCC 9 is installed and Jolt needs GCC 11+), and no benchmark run was done. I did not emit the COMPLETE signal, matching how US-058 was recorded.
+
+**Gates on the final tree**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build (0 warnings), and `win-unit` (21 of 21) all pass.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build (0 warnings), and `linux-unit` (22 of 22) pass. `linux-asan` builds with 0 warnings and `linux-sanitize` (ASan and UBSan) passes 22 of 22.
+- Partial check: GCC 9 with `-Werror` compiles the new sources. That is not the `linux-gcc` gate.
+
+**What was built**
+- **Save module** (`engine/save/`, new `engine_save` target):
+  - Each slot is one JSON file with format name, version, build version, a CRC-32 checksum, and a body holding the scene, script states, and world changes.
+  - The format name and version are checked before the checksum, so an unknown file reports what it is.
+  - Writes are atomic. Before a valid save is replaced, it is copied to `<slot>.prev`, so the last good save survives a corrupt or failed write.
+- **Gameplay components**: `select_components` keeps only the selected component types. The scene reuses the existing reflected scene format, so component schema numbers are still checked. Entities keep their GUIDs and hierarchy. No GPU, physics, or pointer data is written.
+- **Lua state** (`engine_script`): `ScriptRunner::capture_state` and `restore_state` read and write an instance's plain data as JSON. Functions and userdata are skipped. Restore only runs on a Pending instance and stages the data before writing, so a bad value changes nothing.
+- **World deltas**: `collect_world_changes` reads dirty cells without clearing their flags. `apply_world_changes` applies to a copy and validates it before committing. `write_cell_files` writes restored cells into a runtime directory for streaming.
+
+**Tests**: 12 new `[unit]` cases in `tests/src/save_tests.cpp`. They cover selection and GUIDs, rejection of wrong format, version, checksum, and truncation, the previous-save rule, slot names, Lua capture and restore, world restore and conflicts, and a streamed cell that carries the saved change. The unit count went from 776 to 788.
+
+**Choices I made**
+- I read "save slots" as a library API, not a running game. There is no runtime host until US-060, so nothing calls the save path from a real game loop.
+- Game saves read the dirty flags and never clear them. The authored project directory is therefore never rewritten by a save.
+- A Lua table that mixes string keys and integer keys is refused rather than saved partially.
+
+**Open**
+- `linux-gcc` (needs GCC 11+), the benchmark run (no harness until US-074), and a runtime save/load path through a host (US-060).
+
+The progress log has the full entry and the new codebase patterns.

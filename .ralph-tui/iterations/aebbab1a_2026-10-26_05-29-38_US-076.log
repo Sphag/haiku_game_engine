@@ -1,0 +1,42 @@
+# Iteration 751 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:29:38.142Z
+- **Ended At**: 2026-10-26T02:29:56.484Z
+- **Duration**: 18s
+- **Input Tokens**: 30
+- **Output Tokens**: 2506
+- **Total Tokens**: 2536
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-076 is already in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo state and progress log for US-076 $ grep -rn "render_stress" --include=*.cpp --include=*.hpp --include=*.json --include=*.md -l . 2>/dev...
+The log has many prior US-076 status checks. I'll read the latest entries to see where it stopped.
+[94m[Bash][0m Read US-076 progress entries $ wc -l .ralph-tui/progress.md && sed -n 4169,4400p .ralph-tui/progress.md
+The log shows 19 consecutive status checks, all blocked on one user decision. I'll confirm the tree hasn't changed since the last recorded run before deciding whether anything else is actionable.
+[94m[Bash][0m Check mtimes of benchmark sources and reports $ grep -n "kWorkloadVersion\s*=" -r tools engine benchmarks 2>/dev/null | head -3
+US-076 is not complete, and I did not emit the completion signal. The story has been blocked for 19 consecutive passes on one decision from you, and nothing in the tree has changed since the last recorded run, so I did not rerun the benchmarks or gates.
+
+**What is done (per the progress log, last verified on the current tree):**
+- `render_route_v1` is defined in `benchmarks/manifest.json`. The `render_stress` driver is in `tools/benchmark/src/render_stress.{hpp,cpp}`, with `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`. Counters, screenshots, and feature state are recorded per run.
+- Forced mesh-shader-off fallback works on DX12 and Vulkan: `meshlet_path: fell back`, indirect active with 338–340 visible items, meshlet visible 0, and features reported as disabled.
+- Counts match the contract (20000 instances, 200 meshes, 100 characters / 6400 bones, 100000 particles, 128 lights, 4 shadowed, 1 sun). `engine_workload --check` passes.
+- Windows gates pass: validate, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` for dx12 (72) and vulkan (73), and the win-release `engine_bench` build.
+- Linux gates pass: ValidateVendor, linux-dev, linux-debug build (0 warnings), linux-unit (30/30).
+
+**What blocks completion:**
+1. **Acceptance-run failures (needs your decision).** Every indexed run fails the triangle floor (312,068 at the route start against 2,000,000) and the 16.7 ms p99 budget (measured 35–47 ms). Instances are uniform over the 8192 m world, so the route start sees about 330 items. The contract forbids reducing the workload. The fix is a placement change, which bumps `kWorkloadVersion` (currently 1) and regenerates `workload_expected.json`. Please approve or reject that change. Also tell me whether a measured failing run should close the story as measured, since the criteria cannot pass on the current placement.
+2. **`full_1080` is unsupported** because the FSR 2 shader permutation headers are missing from the vendored tree. Choosing a vendoring route is your call, so only `native_1080` has run.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and the linux-gcc gate (GCC 9.4 cannot build Jolt).
+
+I did not append a 20th status entry to `.ralph-tui/progress.md`, because the existing entries already record this state. If you approve the placement change, I will bump the workload version, regenerate the expected file, rerun the eight acceptance reports, and then re-run the gates.

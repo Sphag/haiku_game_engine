@@ -1,0 +1,39 @@
+# Iteration 1090 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:02:05.369Z
+- **Ended At**: 2026-10-26T21:02:20.426Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2254
+- **Total Tokens**: 2282
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress tail and benchmark layout $ tail -c 6000 .ralph-tui/progress.md && echo ---- && ls artifacts/bench 2>/dev/null | head && ls tool...
+The log shows eleven earlier passes that stopped at the same blockers. I'll check whether any of them has changed before deciding anything.
+[94m[Bash][0m Re-check hardware, FSR tables, and manifest blockers $ find . -newer artifacts/bench/us080-dx12-meshlets-readback-off -path ./artifacts -prune -o -type f \...
+Nothing has changed since the last pass, so I'll record this check in the progress log and stop without signalling completion.
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I am not emitting the COMPLETE signal. Nothing in the repo changed this pass, and the blockers from the previous eleven passes still stand.
+
+**Blocking the story:**
+- **No native Linux Vulkan GPU:** `/dev/dri` is absent, so the native Linux/Vulkan reports cannot be produced on this host.
+- **FSR 2 permutations missing:** `third_party/fsr2` has no `*_permutations.h` files, so `full_1080` is unsupported. Vendoring them is a user decision.
+- **Workloads unimplemented:** four `implementation: none` entries remain in `benchmarks/manifest.json` (physics, streaming, all_features). Residency is not measured.
+- **Frame budget over on Windows/DX12:** the last `render_stress` native_1080 run (`us080-dx12-meshlets-readback-off`) shows CPU p99 over 16.7 ms on repeats 2 and 3. About 15 ms of CPU per frame is still unprofiled, so the cause is not yet identified.
+- **Only partial acceptance evidence:** `artifacts/bench` holds two DX12 runs, neither a complete three-repeat acceptance run.
+- **Compilers:** the host has g++ 9.4 and clang 10. `linux-gcc*` needs GCC 11+ or clang 14+.
+- **Editor smoke tests:** not run.
+
+I appended a status entry to `.ralph-tui/progress.md`. The next useful step is the CPU profile of `render_stress` on the DX12 path. That needs a decision on the FSR 2 vendoring route and access to a native Linux Vulkan device before the story can be signed off.

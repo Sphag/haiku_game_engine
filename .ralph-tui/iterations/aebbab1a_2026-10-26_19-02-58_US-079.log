@@ -1,0 +1,56 @@
+# Iteration 1018 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:02:58.325Z
+- **Ended At**: 2026-10-26T16:09:16.385Z
+- **Duration**: 6m 18s
+- **Input Tokens**: 56
+- **Output Tokens**: 4946
+- **Total Tokens**: 5002
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether an `all_features` scene already exists.
+[94m[Bash][0m Read progress log and search for all_features $ ls tools/benchmark/src 2>/dev/null
+Previous iterations kept stopping on the same blockers. I'll check the manifest route and the newest iteration log to see whether anything has changed.
+[94m[Bash][0m Check manifest route, samples dir, FSR2 headers, last log $ tail -c 2500 .ralph-tui/iterations/aebbab1a_2026-10-26_15-21-38_US-079.log
+The last log says a CPU `all_features` scene and its tests exist, but my earlier search found no such source file. I'll confirm that before I rely on either claim.
+[94m[Bash][0m Confirm no all_features sources exist in the tree $ ls -la benchmarks/manifest.json
+The earlier search was cut off by `head -30`, so the tests do exist. I'll look at what they actually cover.
+[94m[Bash][0m Inspect all_features test files and registrations $ grep -rn "all_features" tasks/prd.json | head -5
+The CPU scene and its two test files are real. I'll re-run the Linux unit gate on the current tree so the status I report is fresh, not carried over from older logs.
+[94m[Bash][0m Run Linux validate, configure, and debug build gates $ tail -3 /tmp/build.log
+[94m[Bash][0m Run Linux unit tests and count build warnings $ grep -c "warning:" /tmp/build.log
+Both Linux gates pass on the current tree. I'll append a short progress entry so the next iteration starts from the verified state.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows GUI session for the tour and the live editor run. - Stop: no COMPLETE signal. --- EOF ...
+US-079 is not complete, so I am not emitting the COMPLETE signal.
+
+**Verified on the current tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: rc 0.
+- `cmake --preset linux-dev`: rc 0.
+- `cmake --build --preset linux-debug`: rc 0, no warning lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: rc 0. Integration 29 tests and unit 1 test pass.
+
+**Correction to earlier notes:** the CPU `all_features` scene and its tests exist (`tests/src/all_features_tests.cpp`, `tests/src/all_features_editor_tests.cpp`, both registered in `tests/CMakeLists.txt`). My earlier search had been cut off by `head`, and the previous log's claim was right. I did not re-run the Windows gates in this pass, so the earlier Windows results still stand as recorded, not as re-verified now.
+
+**Still open, not claimed as passed:**
+- The benchmark side of `all_features`: no scene in `tools/benchmark/src`, and `benchmarks/manifest.json` still has `implementation: none`.
+- The tour runner with screenshots and an action log.
+- The GI/RT/upscale profiles and forced geometry paths. FSR 2 permutation headers are absent, so `full_1080` cannot be built.
+- The editor package and relaunch scenario, GUI checks, native Linux Vulkan GPU runs, `engine_bench --suite acceptance`, and the `linux-gcc*` and sanitizer presets.
+
+**Needs you:**
+1. Approval of the `all_features_route_v1` proposal. It fixes the benchmark contract, so I did not treat it as approved.
+2. Either vendored FSR 2 permutation headers, or a decision to leave `full_1080` unsupported.
+3. A Windows session with a GPU and GUI for the tour, the profiles, and the live editor run.
+
+I appended a status entry to `.ralph-tui/progress.md` with these results.

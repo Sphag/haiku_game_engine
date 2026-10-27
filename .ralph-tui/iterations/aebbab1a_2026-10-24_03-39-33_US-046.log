@@ -1,0 +1,42 @@
+# Iteration 49 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:39:33.883Z
+- **Ended At**: 2026-10-24T00:39:53.406Z
+- **Duration**: 19s
+- **Input Tokens**: 28
+- **Output Tokens**: 2530
+- **Total Tokens**: 2558
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for upscaling.
+[94m[Bash][0m Read progress log and find FSR references $ wc -l .ralph-tui/progress.md && head -c 3000 .ralph-tui/progress.md && echo ---- && tail -c 6000 .ra...
+The log shows four earlier passes stopped on the same blocker. I'll check whether the tree has changed since then.
+[94m[Bash][0m Verify FSR permutation headers and upscaling doc state $ sed -n 1,60p docs/upscaling.md
+The tree is unchanged and the blocker is still open, so I'll record this pass in the progress log and stop.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check 5, still blocked) - What was...
+US-046 is still blocked and I have not signalled COMPLETE. Nothing has changed since the last four passes, so there is no new work I can do without your decision.
+
+**The blocker:** FSR 2 needs eight generated `*_permutations.h` headers per backend (shader tables). They are not in `third_party/fsr2` or the pinned archive, so `ENGINE_FSR2_AVAILABLE` is off and both backends return `Unsupported`. I did not stub them.
+
+**Decision needed:** choose one route.
+1. Vendor the hash-pinned outputs of the archive's `tools/sc/FidelityFX_SC.exe`. This needs a documented exception to the no-prebuilt-tools rule in `third_party/manifest.json`.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator.
+
+**Already in place:** the CPU contract (profile sizes, FSR jitter phases, upscale history reset) and the RHI upscaler contract, with unit tests. Details are in `docs/upscaling.md`.
+
+**Not done, and waiting on the same decision:** the FSR 2 dispatch on both backends, the reactive mask, switching the full profile to 1280×720, and composing the UI after upscaling. Switching the profile without a working upscale would ship an unupscaled 720p image, so I left it out.
+
+**Gates:** I did not re-run the Windows or Linux gates this pass, because nothing in source changed. The last recorded results from earlier passes still stand.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. That is the only file I changed.

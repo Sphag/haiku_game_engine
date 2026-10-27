@@ -1,0 +1,41 @@
+# Iteration 316 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T19:11:56.058Z
+- **Ended At**: 2026-10-24T19:12:16.245Z
+- **Duration**: 20s
+- **Input Tokens**: 24
+- **Output Tokens**: 2328
+- **Total Tokens**: 2352
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log for US-053 entries $ grep -n "US-053" .ralph-tui/progress.md | tail -20 && tail -60 .ralph-tui/progress.md
+[94m[Bash][0m List physics sources and find US-053 code $ grep -rln "CollisionCellStreamer\|ClosestHitCollisionCollector\|cancel_unload" --include=*.cpp --inc...
+[94m[Bash][0m Check for GCC 11+ and any engine_bench target $ grep -rl "engine_bench" /mnt/d/dev/haiku_game_engine --include=CMakeLists.txt 2>/dev/null | grep -v ...
+[94m[Bash][0m Append status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-053 (status check, status Partial) - What ...
+US-053 is still **Partial**, so I am not emitting the COMPLETE signal.
+
+The code for the story is in the tree: terrain tile heightfield cells, the streamed cell loader with cancelled unloads, filters and triggers, and the query tests. The Linux gates I could run pass (ValidateVendor, linux-dev, linux-debug, linux-unit 22/22, and the ASan/UBSan run). The last full Windows pass was 21/21, but the `engine_tests_cli_help` case failed intermittently in earlier runs and I have not found its cause.
+
+Two acceptance items cannot be met here:
+
+- **`linux-gcc` gate:** only GCC 9.4 is installed (`/usr/bin` has `g++-9` and `gcc-9` and nothing newer). Jolt needs GCC 11 or later, and `sudo` needs a password to install one.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists in any non-vendored `CMakeLists.txt`. That belongs to US-074.
+
+I did not rerun the full gate suite this pass, because the tree has not changed since the last full run. I only checked the blockers above and appended a short status entry to `.ralph-tui/progress.md`.
+
+To finish the story, someone needs to do one of these:
+
+- Install GCC 11+ (or use CI) and run the three `linux-gcc` presets.
+- Land US-074 so the acceptance benchmark exists.
+- Run `win-unit` repeatedly on Windows to catch the CLI help capture failure while it is happening.

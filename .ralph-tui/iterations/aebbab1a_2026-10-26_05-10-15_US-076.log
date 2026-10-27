@@ -1,0 +1,42 @@
+# Iteration 682 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:10:15.760Z
+- **Ended At**: 2026-10-26T02:10:31.998Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2581
+- **Total Tokens**: 2603
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress notes and the current state of the benchmark tool.
+[94m[Bash][0m Inspect repo layout, progress notes, and benchmark tool $ ls && tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-0...
+The notes show 12 prior passes that stopped at the same blocker. Before deciding whether to act or stop again, I'll check the contract's triangle floor and the latest report.
+[94m[Bash][0m Check contract triangle floor and latest benchmark report $ [ -n "$f" ] && head -c 2500 "$f"
+US-076 is not complete, and I'm not emitting the completion signal. Nothing changed in this pass: the source and the benchmark artifacts are the same as in the last 12 passes.
+
+**What is done (from the earlier passes, recorded in `.ralph-tui/progress.md`):**
+- The `render_stress` counts match the contract. `engine_workload --check` passes for all four scenes.
+- Eight runs exist under `artifacts/bench/us076-*`: DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders forced off. The fallback runs report mesh shaders as disabled.
+
+**What blocks completion:**
+1. **Triangle floor and frame budget fail on placement.** The PRD (line 875) requires at least 2,000,000 submitted triangles on the starting frame in the indexed path. The current placement gives 312,068. The latest DX12 run shows p99 at 34.1 ms against a 16.7 ms budget, and it exits 1. Fixing this changes the workload, so `kWorkloadVersion` must be bumped, `workload_expected.json` regenerated, and the runs repeated. The earlier passes stopped here because that is a decision for you.
+2. **`full_1080` is unsupported** until the vendored FSR 2 permutation headers exist. Only `native_1080` runs.
+3. **Native Linux Vulkan GPU and linux-gcc were not run.** WSL has no usable Vulkan device, and the GCC 9.4 toolchain can't build Jolt.
+
+**Decisions I need from you:**
+- **Approve a placement change** (a workload version bump, regeneration, and reruns on Windows), or
+- **Close the story as measured**, recording the triangle and frame-budget misses as known failures, or
+- Provide a native Linux machine with a Vulkan GPU for the remaining runs.
+
+Once you decide, I can make the placement change and rerun the Windows gates through the `.bat` path in memory.

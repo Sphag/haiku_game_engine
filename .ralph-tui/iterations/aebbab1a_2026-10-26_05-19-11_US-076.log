@@ -1,0 +1,40 @@
+# Iteration 715 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:19:11.531Z
+- **Ended At**: 2026-10-26T02:19:28.637Z
+- **Duration**: 17s
+- **Input Tokens**: 20
+- **Output Tokens**: 1753
+- **Total Tokens**: 1773
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 is already partly implemented.
+[94m[Bash][0m Check progress log and existing render_stress code $ grep -rn "render_stress" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=...
+[94m[Bash][0m Check source and artifact timestamps $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/manifest.json && ls -l --time-style...
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing changed in this pass: the last source edit (`render_stress.cpp`, 04:15:43) still predates every `us076-*` report, so the recorded results still describe the current tree.
+
+**What is in place:** the `render_stress` workload (counts match the contract), the driver with `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`, per-frame counters, screenshots, and feature reporting. Eight reports exist for DX12 and Vulkan across the three paths and the mesh-shader-off fallback.
+
+**What blocks completion:**
+
+1. **The acceptance run fails on placement.** Triangle floor: 312,068 of the required 2,000,000. Frame budget: p99 is 35–47 ms against 16.7 ms. Every report exits 1. The fix is a workload change: place instances so more triangles are submitted, bump `kWorkloadVersion`, and regenerate `benchmarks/workload_expected.json`. The contract reserves that for your decision, so I did not make it.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so the profile cannot run until those are supplied or the vendoring route is chosen.
+3. **Not run here:** native Linux Vulkan GPU runs and the `linux-gcc` gate. WSL has no usable Vulkan device, and local GCC 9.4 cannot build Jolt.
+
+**Decisions I need from you:**
+- Approve a placement change for `render_stress`, or say what else should change the triangle count.
+- Choose how to get the FSR 2 permutation tables.
+- Say whether the story should close as "measured, failing" if the placement stays as it is. The acceptance criteria cannot pass on the current placement.
+
+Once you decide on the first item, I can make the placement change and rerun the eight configurations and the Windows and Linux gates.

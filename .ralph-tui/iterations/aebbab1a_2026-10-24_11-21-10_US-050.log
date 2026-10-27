@@ -1,0 +1,65 @@
+# Iteration 170 Log
+
+## Metadata
+
+- **Task ID**: US-050
+- **Task Title**: Large-World Coordinates
+- **Description**: As a player, I want stability far from the origin so that the open world does not jitter.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T08:21:10.135Z
+- **Ended At**: 2026-10-24T08:36:47.938Z
+- **Duration**: 15m 37s
+- **Input Tokens**: 94
+- **Output Tokens**: 7498
+- **Total Tokens**: 7592
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and inspect world sources $ tail -n 80 .ralph-tui/progress.md && ls engine/world/src | head -50 && git status 2>&1 | head -5
+[94m[Bash][0m Find existing US-050 references in the repo $ grep -n "US-050" -r --include=*.md --include=*.hpp --include=*.cpp --include=*.txt . | head -40
+Most of US-050 already exists in the tree (origin.hpp, origin.cpp, a test file, docs). I'll check it against the PRD and then run the Linux gates.
+[94m[Bash][0m Read PRD US-050 section and origin implementation $ sed -n 476,500p tasks/prd-open-world-engine.md && cat engine/world/include/engine/world/origin.hpp &...
+The origin module is in place. Next I'll check what the test file covers and run the Linux gates.
+[94m[Bash][0m List origin test cases, docs, and build presets $ cat CMakePresets.json 2>/dev/null | grep -n '"name"' | head -40
+The tests cover the acceptance points. Now the Linux gates.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -n 5 /tmp/us050_ctest.log
+[94m[Bash][0m Summarize ctest results and locate test binary $ find build -name engine_tests -type f | head -3
+[94m[Bash][0m Run origin tests specifically and the full unit set $ ./build/linux-dev/tests/Debug/engine_tests "[unit]" 2>&1 | tail -n 3
+[94m[Bash][0m Check test runner usage and run origin tests $ ./build/linux-dev/tests/Debug/engine_tests --suite unit "A 20 km route across rebasing boundaries ke...
+The Linux dev unit suite passes (629 cases, including the origin tests). Next I'll run the sanitizer and GCC gates, then look at how the Windows gates run from WSL.
+[94m[Bash][0m Run ASan/UBSan and GCC gates; read Windows gate notes $ cat ~/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md | head -40
+The Linux gates pass. Now the Windows gates, run through cmd.exe as the memory notes describe. I'll first confirm no other gate batch is running.
+[94m[Bash][0m Check for running gate batches and stage Windows gate script $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" 2>&1
+No gate batch is running, so I'll launch the Windows batch.
+[94m[Bash][0m Run Windows gates through cmd.exe and read exit codes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us050_win_rc.txt
+[94m[Bash][0m Wait for Windows gate result file $ cat /tmp/us050_win_result.txt | tail -n 3
+All four Windows gates return 0. I'll confirm the logs show real passes and no warnings, then record the result.
+[94m[Bash][0m Check Windows ctest summary and build warnings $ grep -n "keep_offscreen\|camera" /mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/fr...
+[94m[Bash][0m Append US-050 progress entry $ the physics adapter is US-052. --- EOF echo ok
+US-050 is complete on the CPU side and every gate this tree can run passes on Linux and Windows. The large-world origin was already in the tree from an earlier pass, so this session verified it rather than writing new code.
+
+**What's in place**
+- `WorldOrigin` (`engine/world/src/origin.cpp`) keeps world positions in `double` and never rewrites them. It moves the origin to the camera once the camera is more than 2048 m away, and sends each subscriber an `OriginShift` with the delta.
+- Only single-precision state kept across frames is rebased, via `rebase_local` and `rebase_matrix`. The renderer needs no rebase, because its frame snapshot is already camera-relative in `double`.
+- `tests/src/world_origin_tests.cpp` has 7 unit cases. They cover the rebase threshold, subscriber order and delta, float precision at 1e6 m, matrix consistency, a physics-style test subscriber, a far cell boundary, and a 20 km route with about ten rebases that checks transforms, handles, cells, and picking.
+- `docs/large-world.md` documents the precision model and the subscriber contract.
+
+**Verification this pass**
+- **Linux (clang):** ValidateVendor, linux-dev configure, linux-debug build (0 warnings), and linux-unit ctest (22/22) all pass. `engine_tests --suite unit` passes 629 cases.
+- **Linux (ASan/UBSan):** the linux-asan build has 0 warnings and linux-sanitize ctest passes.
+- **Linux (GCC):** linux-gcc configure, linux-gcc-debug build (0 warnings), and linux-gcc-unit ctest all pass.
+- **Windows (MSVC):** ValidateVendor, win-dev configure, win-debug build, and win-unit ctest (21/21) all return 0. The build was warm, so its log is short and shows no warnings.
+
+**Not run, as the acceptance criteria allow**
+- `engine_bench --suite acceptance`: there is no `engine_bench` target in the tree. It belongs to US-074, which is not passing.
+- GPU suites on DX12 and Vulkan: US-050 changes no GPU path, so I did not run them.
+- Native Linux Vulkan: not run.
+- Physics queries: these are US-053, and the physics adapter is US-052.
+
+I appended a US-050 entry to `.ralph-tui/progress.md`, and that is the only file I changed.
+
+<promise>COMPLETE</promise>

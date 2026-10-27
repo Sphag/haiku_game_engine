@@ -1,0 +1,41 @@
+# Iteration 918 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:12:21.715Z
+- **Ended At**: 2026-10-26T13:12:43.218Z
+- **Duration**: 21s
+- **Input Tokens**: 22
+- **Output Tokens**: 2080
+- **Total Tokens**: 2102
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-079, and whether the prerequisite stories are already in the tree.
+[94m[Bash][0m Inspect progress log and PRD story $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-079" -A 40 tasks/prd-open-world-engine.md | h...
+[94m[Bash][0m List tools, tests and any all_features references $ grep -rl "all_features" --include=* . 2>/dev/null | grep -v third_party | head -20
+[94m[Bash][0m Recheck FSR 2 headers and all_features manifest entry $ ls tests/src | grep -i all_features
+US-079 is not complete, and I'm not emitting the COMPLETE signal. The work that remains depends on two decisions only you can make, and the tree still matches the state recorded in earlier iterations.
+
+**Verified just now:**
+- `third_party/fsr2` contains 0 `*_permutations.h` files. FSR 2 cannot link, so the `full_1080` profile and the upscale mode cannot be built or measured.
+- `benchmarks/manifest.json` keeps `all_features` at `implementation: none`, with the route `all_features_route_v1` defined as "pending final benchmark scene".
+- `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp` exist. They are the CPU marker tests and the editor scenario from earlier passes, which include the Build Game and published-package relaunch checks.
+
+**What the log already records as passing:** Linux `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (30/30). Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, and `engine_tests --suite gpu --backend dx12`. `engine_tests --suite gpu --backend vulkan` on Windows with the pinned 1.4.363 layer, 73/73.
+
+**Blocked on your decisions:**
+1. **FSR 2 vendoring route.** The eight generated `*_permutations.h` per backend are missing from the tree and the pinned archive. Options: obtain them from the upstream generator and vendor them, or keep `full_1080` unsupported and record that in the capability matrix. Either changes vendored third-party content, so I won't pick one for you.
+2. **`all_features` benchmark route.** Defining it means choosing the builtin scene that the tour, the GI/RT/upscale profiles, and the forced indirect/meshlet paths run on. That changes the fixed benchmark contract, which the PRD reserves for a separate user decision.
+
+**Still not run and not reported as passed:** the tour runner with screenshots and an action log; the GI/RT/upscale profiles and forced geometry paths; the editor scenario on Windows; GUI checks; native Linux Vulkan GPU (no `/dev/dri` here); `engine_bench --suite acceptance`; `linux-gcc*` (no GCC 11+ on this host); and the ASan/UBSan preset.
+
+Once you decide on the FSR 2 route and the `all_features` route definition, the tour runner and the profile wiring can proceed in this tree. The Windows GPU and GUI runs will still need a session on your machine.

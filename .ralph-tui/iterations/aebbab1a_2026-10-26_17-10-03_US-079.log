@@ -1,0 +1,45 @@
+# Iteration 946 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:10:03.828Z
+- **Ended At**: 2026-10-26T14:12:40.422Z
+- **Duration**: 2m 36s
+- **Input Tokens**: 32
+- **Output Tokens**: 3234
+- **Total Tokens**: 3266
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `all_features` already exists.
+[94m[Bash][0m Read progress log and search for all_features $ tail -n 120 .ralph-tui/progress.md && ls && grep -ril "all_features" --include=*.cpp --include=*.hpp...
+The log shows 49 prior passes that stopped on the same two blockers without building the scene. I'll look at what exists now and decide what can actually be built this session.
+[94m[Bash][0m Inspect all_features tests, benchmark sources, and manifest $ ls third_party/fsr2/* | grep -c permutations
+The CPU combined-feature tests exist. The unfinished parts are the sample project, tour runner, live-app editor run, GPU profiles, and Windows GPU suites. Those need a live GPU and GUI session I can't drive from here. I'll re-confirm the Linux unit gate, since the last pass's count was never re-read.
+[94m[Bash][0m Build Linux debug and run linux-unit ctest $ tail -6 /tmp/us079_ctest.log
+[94m[Bash][0m Show ctest pass count and append progress entry $ `ctest --preset linux-unit --output-on-failure --no-tests=error` exits 0 (integration 29, unit 1, al...
+US-079 is not complete, and I am not signalling COMPLETE. The Linux unit gate passes on the current tree, but most of the story is still unbuilt.
+
+**Verified this pass (Linux):**
+- `cmake --build --preset linux-debug` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 30/30 (29 integration, 1 unit), exit 0.
+- The earlier Windows gate run (progress check 41) still describes this tree; I did not re-run it.
+
+**Not done, and not reported as passed:**
+- **Scene and tour:** no `samples/all_features/` project and no tour runner or screenshot/action log. `all_features` is still `implementation: none` in `benchmarks/manifest.json`, with no runner wiring in `tools/benchmark/src`.
+- **Profiles and geometry paths:** GI/RT/upscale profiles and forced indirect/meshlet paths are not run. `full_1080` is unsupported because `third_party/fsr2` has no `*_permutations.h`.
+- **Editor scenario:** no live-app run of scene/material/animation/terrain edits, undo/redo, Play/Stop, or package/relaunch. No GUI checks.
+- **GPU and benchmarks:** no `engine_tests --suite gpu` on Windows or native Linux Vulkan, and no `engine_bench --suite acceptance`.
+- **Other gates:** `linux-gcc*` (no GCC 11+ here) and the ASan preset were not run.
+
+The existing `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp` cover the CPU combined run and the editor model; they do not cover the live app. Finishing the story needs a Windows RTX 5080 session for the GPU suites and profiles, a native Linux Vulkan run, GCC 11+, and a GUI session for the editor scenario. The `all_features_route_v1` definition in the manifest is now concrete, so the only open decision is the FSR 2 vendoring route for `full_1080`.
+
+I appended a status entry to `.ralph-tui/progress.md`. The source tree is unchanged this pass.

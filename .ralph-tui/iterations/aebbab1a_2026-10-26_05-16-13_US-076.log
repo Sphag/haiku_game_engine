@@ -1,0 +1,41 @@
+# Iteration 703 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:16:13.030Z
+- **Ended At**: 2026-10-26T02:16:24.772Z
+- **Duration**: 11s
+- **Input Tokens**: 14
+- **Output Tokens**: 1831
+- **Total Tokens**: 1845
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-076 and where the progress log stands.
+[94m[Bash][0m Inspect benchmark tree and progress log $ tail -60 .ralph-tui/progress.md
+US-076 is not complete, and I haven't changed anything this pass. The story is blocked on a decision only you can make.
+
+**What's done** (from the progress log and artifacts):
+- `render_route_v1` is defined in `benchmarks/manifest.json`, and `engine_workload --check` matches all four scenes. The `render_stress` counts match the contract.
+- The `render_stress` driver (`tools/benchmark/src/render_stress.{hpp,cpp}`) has `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`. It records per-frame counters, GPU pass timings, screenshots, and feature state.
+- Eight `artifacts/bench/us076-*` reports exist (DX12 and Vulkan, each indexed, indirect, and meshlets, plus meshlets with mesh shaders forced off). The forced-off runs fall back to indirect-indexed draws and report mesh shaders as disabled, which satisfies the fallback criterion.
+- Linux gates passed on the last check: ValidateVendor, linux-dev configure, linux-debug build with 0 warnings, and linux-unit 30/30.
+
+**What blocks completion:**
+1. **Acceptance failures on placement.** At the route start, `render_stress` shows about 312,068 triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. The generator spreads the 20,000 instances uniformly over 8192 m, so the route start sees only about 330 items. Fixing this means changing the workload, which requires bumping `kWorkloadVersion` and regenerating `workload_expected.json`. The contract forbids reducing workloads, so I won't make that change without your approval.
+2. **full_1080 is unsupported.** The vendored FSR 2 permutation headers are missing, so only native_1080 runs. "Both profiles" is only partly met until those headers are supplied.
+3. **Not run:** native Linux Vulkan GPU suite, linux-gcc, and the Windows gates for the current tree.
+
+**Decision needed from you:**
+- Approve a placement change (instance distribution around the route, with a `kWorkloadVersion` bump and regenerated expected file), or
+- Close US-076 as measured, recording the failing triangle floor and frame budget as the result.
+
+Once you choose, I'll make the change, rerun the affected reports, and run the Windows and native Linux gates. I'm not emitting the completion signal, because the acceptance criteria cannot pass on the current placement.

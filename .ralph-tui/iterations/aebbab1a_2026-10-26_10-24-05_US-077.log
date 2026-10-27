@@ -1,0 +1,110 @@
+# Iteration 842 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T07:24:05.169Z
+- **Ended At**: 2026-10-26T07:30:12.332Z
+- **Duration**: 6m 7s
+- **Input Tokens**: 46
+- **Output Tokens**: 3158
+- **Total Tokens**: 3204
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file and the existing benchmark code for US-077.
+[94m[Bash][0m Inspect repo, progress notes, and benchmark tools $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-077...
+The progress log shows US-077 already implemented, with the only open gate being the Linux/GCC job, which this machine can't run. I'll confirm the implementation against the three acceptance criteria and re-run the local Linux gate rather than repeat the earlier status pass.
+[94m[Bash][0m Check physics_stress criteria and run Linux gates $ grep -c "warning" /tmp/b.log) && (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&...
+
+[91m[Error: Exit code 1
+405 tools/benchmark/src/physics_stress.cpp
+6:#include "engine/physics/character.hpp"
+33:constexpr std::uint64_t kJumpPeriodFrames = 180;  // a character may jump every 3 seconds, staggered by its index
+36:constexpr double kQuerySpreadM = 120.0;           // query origins fall within this square around the world centre
+89:// True when a finite position lies inside the reference bounds around the world centre.
+95:// Counts one sample of a body or character: a missing or non-finite pose is a NaN sample, and a finite one outside the bounds is an
+96:// out-of-bounds sample.
+103:        ++out.out_of_bounds_samples;
+133:    // The ground under the scene, sized to the reference bounds. It is not part of the table.
+177:    for (std::size_t c = 0; c < spec.constraints.size(); ++c) {
+178:        const PhysicsConstraintSpec& link = spec.constraints[c];
+189:        if (!world->add_constraint(joint).ok()) {
+190:            return fail("a constraint was rejected");
+194:    std::vector<phys::CharacterController> characters;
+195:    characters.reserve(spec.characters.size());
+196:    for (const PhysicsCharacterSpec& character : spec.characters) {
+197:        phys::CharacterDesc character_desc;
+198:        character_desc.position = to_metres(character.position_mm);
+199:        character_desc.radius = static_cast<float>(character.radius_mm) / 1000.0f;
+200:        auto made = phys::CharacterController::create(character_desc);
+202:            return fail("a physics character was rejected");
+204:        characters.push_back(std::move(made).value());
+209:    out.created.constraints = spec.constraints.size();
+210:    out.created.characters = characters.size();
+214:    if (world->constraint_count() != spec.constraints.size()) {
+215:        return fail("the world does not hold every constraint the scene created");
+221:    std::uint64_t active_sum = 0;
+229:        // The action sequence: kicks, then character moves, then the queries that look at the bodies as they are before the step.
+237:        for (std::size_t c = 0; c < characters.size(); ++c) {
+242:            if (!characters[c].update(*world, walk, jump, dt).ok()) {
+289:        const auto active = static_cast<std::uint64_t>(world->active_body_count());
+290:        const std::uint64_t sleeping = dynamic_count > active ? dynamic_count - active : 0;
+293:                out.active_min = out.active_max = active;
+294:                out.sleeping_min = out.sleeping_max = sleeping;
+296:                out.active_min = std::min(out.active_min, active);
+297:                out.active_max = std::max(out.active_max, active);
+298:                out.sleeping_min = std::min(out.sleeping_min, sleeping);
+299:                out.sleeping_max = std::max(out.sleeping_max, sleeping);
+301:            active_sum += active;
+313:        for (const phys::CharacterController& character : characters) {
+314:            const glm::dvec3 feet = character.position();
+322:    out.catch_up_events = stats.catch_up_events;
+325:    out.active_mean = out.measured_frames == 0 ? 0.0 : static_cast<double>(active_sum) / static_cast<double>(out.measured_frames);
+332:        reasons.push_back("lost timesteps: " + std::to_string(result.dropped_steps) + " fixed steps were dropped by the catch-up limit");
+335:        reasons.push_back(std::to_string(result.update_errors) + " physics steps or character moves reported an error");
+338:        reasons.push_back(std::to_string(result.nan_transforms) + " body or character samples had a missing or non-finite transform");
+340:    if (result.out_of_bounds_samples > 0) {
+341:        reasons.push_back(std::to_string(result.out_of_bounds_samples) + " body or character samples left the reference bounds");
+361:        {"constraints", result.created.constraints},
+362:        {"characters", result.created.characters},
+365:        {"catch_up_events", result.catch_up_events},
+366:        {"lost_timesteps", result.dropped_steps},
+368:        {"active_bodies_min", result.active_min},
+369:        {"active_bodies_max", result.active_max},
+370:        {"active_bodies_mean", static_cast<std::uint64_t>(std::llround(result.active_mean))},
+371:        {"sleeping_bodies_min", result.sleeping_min},
+372:        {"sleeping_bodies_max", result.sleeping_max},
+382:        {"out_of_bounds_samples", result.out_of_bounds_samples},
+402:    record.reason = "headless diagnostic; no frame-time contract; no lost timestep, non-finite transform, or out-of-bounds body";
+vendor=0
+build=0
+0][0m
+The build passes with zero warnings. The exit 1 came from `grep -c` finding no matches, which stopped the chain before ctest. I'll run the unit tests on their own.
+[94m[Bash][0m Run Linux unit test suite $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Summarize ctest pass count $ ctest --preset linux-unit --no-tests=error 2>&1 | grep -E "tests passed|Failed|Not Run" | head
+[94m[Bash][0m Wait for ctest and read its summary $ grep -E "tests passed|Failed|Not Run" /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/a20e8a9d-7180-44...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: grep -E "tests passed|Failed|Not Run" /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/a20e8a9d-7180-4493-b743-407cfbb0824b/tasks/b1r5shg87.output head. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read ctest pass summary from output file $ grep -E "tests passed|Failed|Not Run" /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/a20e8a9d-7180-44...
+[94m[Bash][0m Append status entry to progress log $ no GCC 11+ locally). Windows results from batch us077 stand (not re-run here). - No COMPLETE signal:...
+US-077 is implemented, but I'm not signalling COMPLETE. The Linux/GCC CI job can't run on this machine, and the story requires it.
+
+**Status:**
+- **Implementation:** `tools/benchmark/src/physics_stress.cpp` already covers the three acceptance criteria. It creates the specified bodies, constraints, and characters, and runs a fixed action sequence. It reports active and sleeping bodies, steps, queries, and catch-up events. It flags lost timesteps, NaN transforms, and out-of-bounds samples.
+- **Linux gates, run this pass:**
+  - `cmake -P cmake/ValidateVendor.cmake`: pass.
+  - `cmake --build --preset linux-debug`: pass, zero warnings.
+  - `ctest --preset linux-unit`: 30 of 30 pass.
+- **Linux/GCC:** the job cannot run here. The machine has GCC 9.4 and clang 10 only, and Jolt needs GCC 11+. Installing a newer compiler needs root, which I don't have.
+- **Windows gates:** not re-run in this pass. The earlier Windows batch (`artifacts/bench/us077-dx12/report.json`) still matches the tree, since no benchmark or physics file has changed since it ran.
+- **Unrun:** I did not re-run the `linux-sanitize` or `linux-asan` presets in this pass. The last recorded `linux-sanitize` run was 30 of 30 after an earlier X11 failure cleared.
+
+I appended a status entry to `.ralph-tui/progress.md`. The story can be marked complete once the Linux/GCC CI job passes on a runner with GCC 11+.

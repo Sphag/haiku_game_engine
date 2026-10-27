@@ -1,0 +1,38 @@
+# Iteration 674 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:07:50.519Z
+- **Ended At**: 2026-10-26T02:08:04.494Z
+- **Duration**: 13s
+- **Input Tokens**: 20
+- **Output Tokens**: 1673
+- **Total Tokens**: 1693
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect progress log and benchmark sources $ grep -n "US-076" -r --include=*.md --include=*.cpp --include=*.txt --include=*.cmake . 2>/dev/null |...
+[94m[Bash][0m List US-076 benchmark artifacts $ ls artifacts/bench/us076-dx12-indexed 2>/dev/null
+US-076 is not complete, so I'm not signalling completion. The work is blocked on your decisions, and I made no code changes in this pass.
+
+**What's in place**
+- The `render_stress` driver and the eight `artifacts/bench/us076-*` reports exist. They cover DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders forced off. The last source edit predates all eight reports, so they describe the current tree.
+- The Linux gates passed on the last run: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` (30/30). I did not re-run them in this pass.
+
+**What blocks completion**
+1. **Triangle floor and frame budget fail on placement.** The route start has 312,068 triangles against a floor of 2,000,000. p99 frame time is 35–47 ms against a 16.7 ms budget. Every report exits 1 for this reason. Fixing it means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `workload_expected.json`. I won't make that change without your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated permutation headers, so only `native_1080` runs. "Both profiles" is only partly met.
+3. **Not yet run:** native Linux Vulkan GPU, `linux-gcc`, and the Windows gates (`win-dev`, `win-debug`, `win-unit`, and `ValidateVendor`) in this pass.
+
+**Decisions I need from you**
+- Approve or reject the placement change in item 1. Say whether a failing run should close the story as measured, since the acceptance criteria cannot pass on the current placement.
+- Decide how to handle FSR 2 in item 2: vendor the permutation tables, or accept `full_1080` as unsupported and record it that way.

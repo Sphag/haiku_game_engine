@@ -1,0 +1,56 @@
+# Iteration 828 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T05:52:11.636Z
+- **Ended At**: 2026-10-26T05:56:36.620Z
+- **Duration**: 4m 24s
+- **Input Tokens**: 42
+- **Output Tokens**: 4100
+- **Total Tokens**: 4142
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD story, and the existing benchmark code.
+[94m[Bash][0m Read progress log, benchmark tree, and US-077 PRD entry $ grep -n "US-077" -A30 tasks/prd-open-world-engine.md | head -120
+The progress log shows US-077 was implemented and mostly verified in an earlier pass. Two items remain open: the Linux/GCC job and the `physics_visual` profile. I'll re-run the Linux gates to confirm the current tree still passes.
+[94m[Bash][0m Run Linux validate, configure, and debug build gates $ (cmake --build --preset linux-debug >/tmp/us077_build.log 2>&1 && echo BUILD_OK || tail -30 /tmp/us0...
+[94m[Bash][0m Run linux-unit ctest and count build warnings $ grep -c "warning" /tmp/us077_build.log
+[94m[Bash][0m Check validate/build outcome and locate test binary $ find . -name engine_tests -type f 2>/dev/null | head -3
+Linux validate, configure, debug build, and the 30/30 unit run all pass on the current tree. Before deciding on the open `physics_visual` item, I'll check whether the PRD's benchmark contract requires it.
+[94m[Bash][0m Find physics profile references in PRD and manifest $ grep -n "physics_visual\|physics_headless" tasks/prd-open-world-engine.md docs/benchmarks.md benchma...
+The Linux gates pass again. The Windows results from the earlier pass still stand because no source changed here, but I didn't re-run them. I'll record this pass in the progress log.
+[94m[Bash][0m Append status entry to progress log $ the PRD does not name it). - No COMPLETE signal: a required gate (linux-gcc) is unverified, so the s...
+US-077 is implemented and verified locally, but I'm not emitting the COMPLETE signal yet. One required gate can't run in this environment.
+
+**What's in place (from the earlier pass, and still valid):**
+- `physics_stress` builds 2000 dynamic bodies, 200 statics plus a ground box, 100 constraints, and 20 characters. It runs a fixed action sequence at 60 Hz simulated time.
+- Reports separate active and sleeping bodies, simulation steps, queries, and catch-up events.
+- Checks flag lost timesteps, NaN transforms, and out-of-bounds samples.
+
+**Verified in this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake` passes.
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug` pass with 0 warnings.
+- `ctest --preset linux-unit` passes 30/30.
+
+**Verified in the earlier pass (Windows, batch us077; not re-run now):**
+- The ValidateVendor, win-dev, win-debug (0 MSVC warnings), and win-unit gates pass.
+- `engine_tests --suite gpu` passes on DX12 and Vulkan.
+- The physics headless acceptance run measured 10 800 frames with 0 lost timesteps, 0 NaN transforms, and 0 out-of-bounds samples.
+- The `linux-asan` build and `ctest --preset linux-sanitize` pass.
+
+**Still open:**
+1. **Linux/GCC CI job.** The local GCC 9.4 cannot build Jolt, so `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` cannot be verified here. I won't report Linux/GCC as passing until that CI job succeeds.
+2. **`physics_visual` profile.** The manifest lists it for `physics_stress`, and it still reports Missing because no visual physics path exists. The PRD doesn't name it, so I didn't implement it.
+
+Windows `engine_bench --suite acceptance` still exits 3 because render, streaming, and all_features are not yet measured in that run. That is expected until their stories land.
+
+I appended this status to `.ralph-tui/progress.md` and made no source changes in this pass.

@@ -1,0 +1,45 @@
+# Iteration 652 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:01:08.055Z
+- **Ended At**: 2026-10-26T02:01:26.219Z
+- **Duration**: 18s
+- **Input Tokens**: 30
+- **Output Tokens**: 2706
+- **Total Tokens**: 2736
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and check existing benchmark sources $ git status --short 2>/dev/null | head -30
+The log shows US-076 is measured but not complete. Before deciding anything, I'll check whether any source changed since the last status check.
+[94m[Bash][0m Check for source changes since last benchmark artifacts $ ls artifacts/bench/us076-*/screenshots 2>/dev/null | head -20
+The `find` shows `tools/benchmark/CMakeLists.txt` and `render_stress.cpp` newer than the artifact directory. I'll compare them against the report files directly.
+[94m[Bash][0m Compare source and report modification times $ ls -l --time-style=+%F_%H:%M:%S artifacts/bench/us076-*/*.json 2>/dev/null | awk '{print $6, $7}' | ...
+US-076 is not complete. Every deliverable is in place and measured, but two contract checks fail on the current workload, and that needs your decision before the story can close.
+
+**Verified this pass**
+- No source changed since the last status check. `render_stress.cpp` was last edited at 04:15:43, and all eight `artifacts/bench/us076-*` reports are newer than that. The earlier gate results still describe the tree, so I did not rerun the 10-minute benchmarks.
+- The eight runs cover indexed, indirect, and meshlet paths on DX12 and Vulkan, plus a forced mesh-shader-off meshlet run on each backend. Screenshots and counters are recorded for each.
+- The fallback works. With mesh shaders forced off, the renderer reports `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, then draws through indirect-indexed with 338–340 visible items.
+- Gates from the last full run: Windows `ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and `win-release` `engine_bench` all exit 0. Linux `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30) exit 0.
+
+**Blocking the story**
+1. **Contract failures on placement.** The route start sees 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget, and 0% of frames fall within budget. The cause is that instances are placed uniformly over 8192 m, so only about 330 items are near the route start. The contract forbids reducing workloads. Fixing it means changing placement, which bumps `kWorkloadVersion` and regenerates `benchmarks/workload_expected.json`. Do you want that change, or should I report these failures as the measured result?
+2. **Only one profile runs.** `full_1080` is unsupported because the FSR 2 shader permutation headers are missing from the vendored tree. The "both profiles" criterion is therefore only partly met.
+
+**Not run**
+- Native Linux Vulkan GPU suite. WSL has no Vulkan device.
+- `linux-gcc`. GCC 9.4 cannot build Jolt.
+- `linux-asan`. Not run in this pass.
+
+I did not append another status entry to `.ralph-tui/progress.md`, since the log already has four consecutive "not complete" checks. I also did not emit the completion marker. Once you decide on the placement change and the FSR question, I can proceed.

@@ -1,0 +1,47 @@
+# Iteration 917 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:12:03.783Z
+- **Ended At**: 2026-10-26T13:12:20.670Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 1998
+- **Total Tokens**: 2020
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ ls && tail -80 .ralph-tui/progress.md && ls tools/ && find . -path ./third_party -prune -o -iname '*...
+[94m[Bash][0m Recheck FSR 2 headers and all_features manifest entry $ grep -n -A3 '"all_features"' benchmarks/manifest.json | head -12
+[94m[Bash][0m Append status check entry to progress log $ (2) the all_features builtin route definition. Both change the fixed contract or vendored third-part...
+US-079 is not complete, so I am not signalling COMPLETE. Most of the acceptance criteria are blocked on two decisions that only you can make.
+
+**Blocked on your decisions:**
+1. **FSR 2 vendoring route.** `third_party/fsr2` still has no `*_permutations.h` generated headers, so FSR 2 cannot build. The `full_1080` profile and any upscale mode stay unsupported until you choose how to obtain them. Obtaining them is a vendoring change, so I did not attempt it.
+2. **The `all_features` route definition.** `benchmarks/manifest.json` still has `all_features` at `implementation: none` with the route "pending final benchmark scene". Without a defined builtin scene, there is no tour runner, no GI/RT/upscale profiles, and no forced indirect or meshlet paths. Defining it changes the fixed benchmark contract, so it needs your sign-off.
+
+**Verified this session (unchanged from the last recorded runs):**
+- The Linux and Windows gates pass per `.ralph-tui/progress.md`: ValidateVendor, configure, build, and unit ctest. Linux is 30/30, and Windows runs the unit and integration suites.
+- The Windows DX12 GPU suite passed, and the Vulkan GPU suite passed 73/73 with the pinned 1.4.363 validation layer.
+- The editor scenario in `tests/src/all_features_editor_tests.cpp` covers the Build Game and published-package relaunch. Its Windows relaunch path is compiled but not executed.
+
+**Not done, and not reported as passed:**
+- Tour runner with screenshots and an action log.
+- GI/RT/upscale profiles and forced geometry paths for `all_features`.
+- Editor scenario on Windows, plus scene/material/animation/terrain edits and undo/redo through the GUI.
+- GUI checks.
+- Native Linux Vulkan GPU run (no `/dev/dri` on this host).
+- `engine_bench --suite acceptance`.
+- `linux-gcc*` presets (host lacks GCC 11+) and the ASan/UBSan sanitize run.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. I made no source changes this pass.
+
+**To move forward, I need:** a decision on the FSR 2 route (obtain the generated headers, or keep `full_1080` unsupported and record it), and a definition of the `all_features` builtin route. Once both are settled, I can implement the tour runner and profiles.

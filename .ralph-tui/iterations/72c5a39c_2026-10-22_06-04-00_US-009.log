@@ -1,0 +1,255 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: US-009
+- **Task Title**: In-House Windows Input
+- **Description**: As a player, I want Windows input so that I can control the game without a third-party input layer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T03:04:00.517Z
+- **Ended At**: 2026-10-22T03:24:40.032Z
+- **Duration**: 20m 39s
+- **Input Tokens**: 438
+- **Output Tokens**: 125465
+- **Total Tokens**: 125903
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m Inspect repo root and progress log $ ls -la && echo --- && cat .ralph-tui/progress.md | head -300 && echo --- && wc -l .ralph-tui/progres...
+[94m[Bash][0m Check git state and list project files $ find . -path ./.git -prune -o -path ./vendor -prune -o -path ./build -prune -o -type f -print 2>/dev...
+The progress log ends at US-008, so US-009 is next. Next I'll pull the PRD constraints and the existing platform code.
+[94m[Bash][0m Find input-related PRD sections and headings $ grep -n "^#" tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m List platform files and read US-009 entry $ def walk(x):     if isinstance(x,dict):         if x.get('id')=='US-009' or x.get('key')=='US-009': ...
+[94m[Bash][0m Read PRD goals, quality gates, FR, non-goals, technical sections $ sed -n 735,830p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read existing platform API headers and docs $ cat engine/platform/include/engine/platform/platform.hpp && echo ---- && cat engine/platform/include...
+The PRD requires Win32 Raw Input, XInput, UTF-8 text, cursor capture, hotplug, and focus-loss reset. Next I'll read the Win32 backend, the core UTF-8 helpers, and the presets to see which patterns to reuse.
+[94m[Bash][0m Check file sizes, core UTF-8 API, presets, build dirs $ wc -l engine/platform/src/win32/platform_win32.cpp engine/platform/src/x11/platform_x11.cpp engine/p...
+[94m[Bash][0m Read the Win32 backend source $ cat engine/platform/src/win32/platform_win32.cpp
+[94m[Bash][0m Read UTF-8 API, unsupported backend, Win32 test patterns, toolchain $ cmake --version | head -1
+The Win32 backend is clear. Before designing the input layer I need four facts: how the X11 backend exposes its methods, how test suites are tagged, which system ABIs are allowed, and where the MSVC toolchain lives for the Windows gates.
+[94m[Bash][0m Check X11 methods, test tags, ABI list, MSVC location $ which cmd.exe
+I have what I need. The approach:
+
+- **Platform-neutral** (compiles and runs on Linux too): event types, an `InputState` that dedupes and tracks edges, pure mapping functions (VK→Key, UTF-16→code points, UTF-8 encode, dead zones), and gamepad snapshot diffing.
+- **Win32 backend**: raw mouse via `WM_INPUT` only, keyboard via `WM_KEYDOWN`/`WM_KEYUP` only (a single source per kind, so no duplicates), text via `WM_CHAR`, XInput polling for pads, clip-based cursor capture.
+- **Linux**: X11 input is US-010, so it returns empty events and `Unsupported` for capture.
+
+I'll write the public API first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input.hpp[0m "#pragma once
+
+#include "engine/platform/window.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <variant>
+#include <vector>
+
+namespace engine::platform {
+
+// Physical-layout keys... (3413 chars)"
+Next, the platform-neutral state tracker and the pure mapping helpers.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input_state.hpp[0m "#pragma once
+
+#include "engine/platform/input.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace engine::platform {
+
+// Turns the event stream ... (3505 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input_mapping.hpp[0m "#pragma once
+
+// Pure conversions used by the input backends. They take plain integers, so they build and test on every OS.
+// The Win32 backend feeds them virtual-key codes, UTF-16 units, and XInput ... (2832 chars)"
+Now the implementation of the state tracker and the mapping helpers.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_state.cpp[0m "#include "engine/platform/input_state.hpp"
+
+#include <variant>
+
+namespace engine::platform {
+
+namespace {
+
+// Sets the held state for `index` and records the edge. Returns false when the state already... (7990 chars)"
+Two fixes to what I just wrote. The disconnect path resets the whole pad, which would wipe the release edges produced by the same frame's diff. The Unknown-key check also runs after the index is computed. I'll fix both.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_state.cpp[0m edit: "        // diff_gamepad releases the buttons first..." → "        // diff_gamepad releases the buttons and r..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_state.cpp[0m edit: "    if (const auto* key = std::get_if<KeyPressed>(..." → "    if (const auto* key = std::get_if<KeyPressed>(..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_state.cpp[0m edit: "    if (const auto* press = std::get_if<MouseButto..." → "    if (const auto* press = std::get_if<MouseButto..."
+Next, the mapping implementation. It covers the VK table, the UTF-16 decoder, UTF-8 encoding, dead zones, and gamepad diffing.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_mapping.cpp[0m "#include "engine/platform/input_mapping.hpp"
+
+#include <cstdlib>
+
+namespace engine::platform {
+
+namespace {
+
+// winuser.h virtual-key codes used by the table below.
+constexpr std::uint32_t kVkBack = 0... (8519 chars)"
+Two corrections. `encode_utf8` should only replace invalid code points, not control characters, which are valid to encode. I'll also drop the `llabs` call in favour of plain integer arithmetic.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_mapping.cpp[0m edit: "    if (!is_text_codepoint(codepoint) && codepoint..." → "    const bool surrogate = codepoint >= 0xD800 && ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_mapping.cpp[0m edit: "    const std::int64_t magnitude = std::llabs(stat..." → "    const auto wide = static_cast<std::int64_t>(ra..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_mapping.cpp[0m edit: "#include "engine/platform/input_mapping.hpp"
+
+#inc..." → "#include "engine/platform/input_mapping.hpp"
+
+name..."
+Next, the public `Platform` API additions and the include.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/platform.hpp[0m edit: "    // Returns the queued events in order and empt..." → "    // Returns the queued events in order and empt..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/platform.hpp[0m edit: "#include "engine/core/result.hpp"
+#include "engine..." → "#include "engine/core/result.hpp"
+#include "engine..."
+Now the stubs for the platforms without an input backend. X11 gets empty input and `Unsupported` capture, since US-010 owns that work.
+[94m[Bash][0m View X11 public method definitions tail $ sed -n 415,435p engine/platform/src/x11/platform_x11.cpp && head -20 engine/platform/src/x11/platfor...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/x11/platform_x11.cpp[0m edit: "std::size_t Platform::window_count() const noexcep..." → "std::size_t Platform::window_count() const noexcep..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/platform_unsupported.cpp[0m edit: "std::size_t Platform::window_count() const noexcep..." → "std::size_t Platform::window_count() const noexcep..."
+Next the Win32 input pieces: the raw mouse decoding and the XInput snapshot reader. They go in their own translation unit so the WndProc stays readable.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/input_win32.hpp[0m "// Win32 input sources: Raw Input mouse reports and XInput controller state. These are the only OS-specific input
+// pieces. Everything they return goes through the platform-neutral InputState and dif... (1195 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/input_win32.cpp[0m "#include "input_win32.hpp"
+
+#include <Xinput.h>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
+namespace engine::platform::win32 {
+
+namespace {
+
+constexpr std::int32_t kStickFullScale = 3276... (5250 chars)"
+The Win32 helpers are in place. Now I'll wire them into `platform_win32.cpp`, starting with includes, the per-window capture flag, and the new Impl state.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "#include "engine/core/assert.hpp"
+#include "engine..." → "#include "engine/core/assert.hpp"
+#include "engine..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "        bool focused = false;
+        bool minimiz..." → "        bool focused = false;
+        bool minimiz..."
+I referenced two HID constants that aren't defined yet. Adding them to the anonymous namespace, then the message handling.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "constexpr UINT_PTR kModalTickTimerId = 1;
+constexp..." → "constexpr UINT_PTR kModalTickTimerId = 1;
+constexp..."
+Next, raw mouse registration in `create()`, then the message handlers.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "    impl->class_registered = true;
+
+    return cor..." → "    impl->class_registered = true;
+
+    // Raw Inp..."
+Now the WndProc cases: focus loss, key and text messages, raw input, cursor, and move.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "                events.push(WindowEvent{id, Window..." → "                events.push(WindowEvent{id, Window..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "            case WM_SETFOCUS:
+            case WM_..." → "            case WM_SETFOCUS:
+            case WM_..."
+Clip release on destruction is handled by calling `update_clip` after the slot is erased, since a missing record then reads as "should not clip". Next the destroy path, pump, and the public methods.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "        if (record->hwnd != nullptr) {
+           ..." → "        if (record->hwnd != nullptr) {
+           ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "        reap();
+        rethrow_pending();
+    }
+
+..." → "        // Gamepads are polled, not messaged. Poll..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "std::size_t Platform::window_count() const noexcep..." → "std::size_t Platform::window_count() const noexcep..."
+One compile problem to fix now: `std::exchange(..., {})` can't deduce the braced-init argument, so I'll make the type explicit.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "    return std::exchange(impl_->input_events, {});" → "    return std::exchange(impl_->input_events, std:..."
+Now the CMake wiring: new sources in `engine_platform`, `xinput` as an explicitly listed Windows system import, and the new test files.
+[94m[Bash][0m Add input sources and xinput link to CMake files $ xinput for controller state (XInputGetState).\n  target_link_libraries(engine_platform PRIVATE user3...
+Next, the platform-neutral test file. It covers the replay, the edges and duplicate rule, Unicode, focus-loss reset, mapping, and gamepad diffs. All of it runs on Linux as well.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_input_tests.cpp[0m "// Input state, replay, and mapping (US-009). These are CPU-only tests and run on every operating system: they feed
+// synthetic event frames through InputState and check the pure mapping functions. T... (15219 chars)"
+The Unicode test has a leftover `units` variable that does nothing useful. I'll reduce it to the one literal that matters.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_input_tests.cpp[0m edit: "    // h, e with acute, a CJK character, and an em..." → "    // Backspace (0x08) and Enter (0x0D) are contr..."
+Next, the Win32 test file. It drives the real window procedure via `SendMessage`, which covers the key, text, and focus paths without hardware. Raw mouse decoding is tested against synthetic `RAWMOUSE` structs.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_win32_input_tests.cpp[0m "// Win32 input through the real window procedure (US-009). Keyboard and text messages are sent to a real window with
+// SendMessage, so they run the same WndProc path as the OS. Raw Input reports cann... (12049 chars)"
+I wrote one test badly: "Focus loss also releases a held mouse button" presses Space, not the mouse, and has a loop that does nothing. The mouse-release path is already covered by the `InputState` focus-loss test, so I'll remove it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_win32_input_tests.cpp[0m
+The Win32 test includes `input_win32.hpp` from `src/win32`, so the test target needs that include path. I'll also confirm the `Result` accessors I used exist.
+[94m[Bash][0m Check Result accessors and add Win32 include path $ python3 - <<'EOF' p='tests/CMakeLists.txt' s=open(p).read() old="  target_sources(engine_tests PRIVA...
+[94m[Bash][0m Check error() accessor overloads $ sed -n 64,75p engine/core/include/engine/core/result.hpp
+`error()` has a `const&` overload that also binds to temporaries, so that call is fine. Now the first real check: the Linux configure and debug build, with logs captured to files so the exit codes are real.
+[94m[Bash][0m Run Linux validate, configure, and debug build $ tail -3 /tmp/us009/build.log
+The Linux debug build is clean, with no warnings. Now the Linux unit tests.
+[94m[Bash][0m Run Linux unit ctest and inspect results $ ls build/linux-dev/tests/ 2>/dev/null | head
+Linux unit tests pass: 10/10 ctest, and 112 Catch2 cases in the unit suite. I'll confirm the new cases are in that count, then run the sanitizer and GCC presets, since the input code is new and the GCC/Clang difference is the likeliest source of trouble.
+[94m[Bash][0m Confirm new input test cases are listed $ ./build/linux-dev/tests/Debug/engine_tests --help | head -3
+[94m[Bash][0m List unit test cases with Catch2 listing flag $ ./build/linux-dev/tests/Debug/engine_tests --suite unit -l 2>&1 | grep -i "replay\|UTF\|gamepad\|foc...
+[94m[Bash][0m Check Catch2 list output for the input cases $ ./build/linux-dev/tests/Debug/engine_tests --suite unit --list-tests 2>&1 | grep -ci "replay\|utf-16...
+Catch2 here has no list flag, so I'll check the count another way. The unit total went up by one less than my 16 new cases, so I want to confirm every new case carries the `[unit]` tag.
+[94m[Bash][0m Verify tags on new test cases $ grep -h "^TEST_CASE" tests/src/platform_window_tests.cpp | grep -c unit
+All 16 new cases are tagged `[unit]` and run. Next, the GCC job and the sanitizer job, in one command with each exit code captured.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests $ tail -3 /tmp/us009/gcc_ctest.log
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitize tests $ tail -4 /tmp/us009/asan_ctest.log
+Linux is green on Clang (`linux-dev`), GCC, and the ASan/UBSan preset. Now Windows. The progress log says the gate commands must run from a `.bat` under `C:\Windows\Temp` that loads `vcvars64.bat` first, matching the VS 18 cache. I'll check that the toolchain path is present, then write the script.
+[94m[Bash][0m Check vcvars path and win-dev cache generator $ cd /mnt/d/dev/haiku_game_engine && grep -n "CMAKE_GENERATOR:\|CMAKE_BUILD_TYPE:" build/win-dev/CMake...
+[94m[Bash][0m Write Windows gate script to C:\Windows\Temp $ cat > /tmp/us009/gates.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual Studio\18\Commu...
+[94m[Bash][0m Run Windows gates via cmd.exe batch and read summary $ grep -n "error C\|error LNK\|FAILED" /mnt/c/Windows/Temp/us009/build.log 2>/dev/null | head -30
+The Win32 build caught real errors. I called `read_xinput_pad` and `raw_mouse_events` unqualified, but they live in `engine::platform::win32`. Fixing both call sites and re-running the gates.
+[94m[Bash][0m Fix namespace qualifiers and re-run Windows gates $ grep -n "error C\|error LNK\|FAILED\|warning C" /mnt/c/Windows/Temp/us009/build.log | head -30
+The link errors have one cause: I never added `src/win32/input_win32.cpp` to the Windows backend source list. The file is correct, so the fix is one line in CMake.
+[94m[Bash][0m Add Win32 input source to CMake and re-run gates $ grep -n "error C\|error LNK\|FAILED\|warning C" /mnt/c/Windows/Temp/us009/build.log | head -30
+The Windows gates pass: validate, configure, debug build with zero `warning C` lines, and `win-unit` ctest all exit 0. I'll read the ctest log to confirm the Win32 input cases ran rather than being skipped.
+[94m[Bash][0m Read Windows ctest log summary $ grep -i "skip\|fail" /mnt/c/Windows/Temp/us009/ctest.log | head -5
+[94m[Bash][0m Run Windows engine_tests suites directly and capture results $ tail -3 /mnt/c/Windows/Temp/us009/run_unit.log
+Windows results: the unit suite has 114 cases, including the two raw-mouse decoding tests, and the integration suite has 35 cases including the real-window input tests. Both exit 0. The Win32 tests touch global cursor clip state, so I'll run the integration suite 10 times to check for flakiness, as the X11 work required.
+[94m[Bash][0m Repeat Windows integration suite ten times for stability $ grep -h "All tests passed\|test cases" /mnt/c/Windows/Temp/us009/loop_*.log | sort | uniq -c
+The integration suite passed 10 of 10 with no failures. Next I'll check what the CI job actually builds, since the MSVC version differs between the cache (VS 18) and the `windows-2022` runner.
+[94m[Bash][0m Inspect CI workflow steps and Windows preset base $ grep -n "win-base" -A9 CMakePresets.json | head -24
+CI runs on `windows-2022`, so the VS 2022 toolchain is what the job will actually use. The `win-dev` cache is pinned to VS 18, so I'll configure a fresh VS 2022 tree the way the progress notes describe, but first I need the preset's cache variables.
+[94m[Bash][0m Read base preset cache variables for Windows $ ls "/mnt/c/Program Files/Microsoft Visual Studio/2022/" 2>/dev/null
+The VS 2022 install is present, and `build/win-2022-check` already exists from an earlier run, so the build will be incremental. I'll confirm that cache points at VS 2022, then run the same validate, build, and `-L "unit|integration"` ctest sequence the progress notes used.
+[94m[Bash][0m Run Windows gates with VS 2022 toolchain (CI image) $ tail -3 /mnt/c/Windows/Temp/us009/v2022_ctest.log
+VS 2022 also passes: validate, configure, build with zero `warning C` lines, and the `unit|integration` ctest. Before writing docs and the progress entry, I'll check how earlier stories recorded completion so I follow the same convention.
+[94m[Bash][0m Check prd.json completion convention and docs for input mentions $ grep -n "Input" docs/windowing.md | head
+Earlier stories set `passes: true` once their gates passed, so I'll follow that for US-009 as well. The Windows and Linux gates are now green. The GUI check is not run, since no application exists yet, and I'll say so in the record. Next, the docs: I'll replace the stale "input is US-009" line in `windowing.md` and add a short `input.md` that records the design decisions.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/input.md[0m "# Input
+
+Input lives in `engine_platform` next to windowing (`engine/platform/`). It is in-house: Win32 Raw Input,
+the keyboard and text window messages, and XInput are called directly, with no SDL or... (4557 chars)"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/windowing.md[0m edit: "Input (keyboard, mouse, gamepad) is US-009 and is ..." → "Input (keyboard, mouse, text, gamepad, cursor capt..."
+Docs are done. Next I'll flip US-009 to `passes: true` in `prd.json`, editing only that one value so the rest of the file's formatting is untouched.
+[94m[Bash][0m Mark US-009 passes true in prd.json $ print([(s['id'],s['passes']) for s in d if s['id'] in ('US-008','US-009','US-010')])"
+Next, the progress log: new reusable patterns at the top, and the US-009 entry at the end.
+[94m[Bash][0m Append US-009 entry and reusable patterns to progress log $ grep -n "Codebase Patterns" -A3 .ralph-tui/progress.md | head -5
+Last, I'll confirm the new patterns landed in the Codebase Patterns section and that the repo still has no stray artifacts from this work.
+[94m[Bash][0m Verify progress log placement and new file set $ echo "tree ok"
+US-009 is implemented and every gate I could run passes. The Windows and Linux gates are green, and the Win32 input tests run through the real window procedure. Nothing is committed; the work is in the working tree.
+
+**Gates (exit codes checked directly)**
+- **Windows, VS 18 (`win-dev` cache):** `ValidateVendor`, `win-dev`, `win-debug` build with zero warnings, and `win-unit` ctest all pass. The unit suite has 114 cases and the integration suite has 35. The integration suite passed 10 of 10 runs.
+- **Windows, VS 2022 (the `windows-2022` CI image):** fresh configure, build with zero warnings, and `ctest -L "unit|integration"` all pass.
+- **Linux, Clang:** `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` all pass, with 112 unit cases.
+- **Linux, GCC:** `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` all pass.
+- **Linux, ASan/UBSan:** passes. Input is not on the story's list of sanitizer-required areas, so this was an extra check.
+
+**What was built**
+- **Public API:** `drain_input_events()`, `set_cursor_capture()`, and `cursor_captured()`. Events cover keys, UTF-8 text, relative mouse motion, buttons, wheel, and gamepad connect/disconnect, buttons, and axes.
+- **`InputState`:** tracks held, pressed, and released states per frame. It rejects duplicate transitions, so a repeated press or an early release never queues a second event.
+- **Windows sources:** mouse via Raw Input, keyboard via `WM_KEYDOWN`/`WM_KEYUP`, text via `WM_CHAR` with surrogate pairs joined, and gamepads via XInput polling with dead zones and hotplug.
+- **Focus loss:** releases every held key and mouse button for the window. Gamepads are not released, because they are polled from hardware state.
+- **Cursor capture:** clip to the client area and hide the cursor while focused. The clip is released on focus loss, capture off, and window destruction.
+
+**Decisions I made**
+- **Keyboard is not Raw Input.** The story says "Raw Input/keyboard/text", so I split it: mouse uses Raw Input, and keyboard and text use window messages. Registering raw keyboard as well would report every key twice.
+- **`xinput` is an explicit Windows system library.** It is listed in `engine/platform/CMakeLists.txt` next to `user32`, as the PRD requires for system ABIs.
+- **Linux input is stubbed.** X11 returns an empty event list and `Unsupported` for capture. That is US-010's work, and it is documented.
+- **Replay fixtures are in code.** The replay tests use frames built in C++, not a file format. US-010's shared fixtures will need a file format.
+
+**Not run or not verified**
+- **GitHub CI:** not run, since nothing was pushed. I ran the same commands locally on both toolchains.
+- **GUI and screenshot check:** not run. No application or editor window exists yet.
+- **Physical hardware:** no real controller, keyboard focus change, or raw mouse device was exercised. The tests cover those paths through messages and synthetic structs.
+- **Benchmarks:** not run. There is no harness, and input polling cost is not measured.
+
+I also set `passes: true` for US-009 in `tasks/prd.json`, as earlier stories did. The full record is in `.ralph-tui/progress.md`, and the design is in `docs/input.md`.

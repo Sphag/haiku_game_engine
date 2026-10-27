@@ -1,0 +1,44 @@
+# Iteration 1014 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:01:27.136Z
+- **Ended At**: 2026-10-26T16:01:52.682Z
+- **Duration**: 25s
+- **Input Tokens**: 22
+- **Output Tokens**: 2422
+- **Total Tokens**: 2444
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for this story.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls -la && wc -l .ralph-tui/progress.md && tail -n 120 .ralph-tui/progress.md && grep -rn "all_featur...
+The log shows this story has been stuck for many passes on the same blockers. Before deciding whether anything has changed, I'll check the manifest route and the existing all_features tests.
+[94m[Bash][0m Check manifest route, existing tests, PRD references, and FSR2 headers $ ls third_party/fsr2/*permutations* 2>/dev/null | wc -l
+US-079 is not complete, and I have not signaled completion. Nothing in the repo changed this pass. I only read the manifest, the PRD, and the existing tests.
+
+**What exists:**
+- `tests/src/all_features_tests.cpp` (292 lines) and `tests/src/all_features_editor_tests.cpp` (248 lines) are wired into `tests/CMakeLists.txt`. Per the log, the CPU integration suite and the editor suite pass on Linux. The editor suite is CPU-side model code, not the live GUI run.
+- The Windows gates (ValidateVendor, `win-dev`, `win-debug`, `win-unit` at 29/29) passed in the last recorded run, check 97. I did not rerun them this pass.
+
+**What is still missing:**
+- `samples/all_features/` does not exist, and no `all_features` branch exists in `tools/benchmark/src/`.
+- The manifest lists `all_features` as `implementation: none`. Its route, `all_features_route_v1`, is still a proposal (`benchmarks/manifest.json`, line 152). I did not wire the benchmark branch against it, because that route fixes the performance contract and only you can approve it.
+- `full_1080` cannot run. `third_party/fsr2` has no `*_permutations.h` headers, so it has to be reported as unsupported.
+- The GI/RT/upscale profiles, the forced geometry paths, the automated tour, and the live editor scenario with package and relaunch need a Windows GUI and GPU session. They are not verified.
+- The Linux gcc and sanitizer gates are not clean. The last ASan run had one X11 input-timing failure, which was rerun and passed, and the full ctest run was not repeated.
+
+**What I need from you:**
+1. Approve or amend `all_features_route_v1` in `benchmarks/manifest.json`. Once approved, I can build the sample project and the benchmark branch.
+2. Decide whether to vendor the FSR 2 permutation headers or keep `full_1080` unsupported.
+3. Run the GUI tour and the live editor scenario on Windows, or tell me the environment to use.
+
+I did not append another "status check" entry to `.ralph-tui/progress.md`. The last 20 or so entries repeat the same blockers, so another would add noise without new information.

@@ -1,0 +1,45 @@
+# Iteration 1178 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:35:37.935Z
+- **Ended At**: 2026-10-26T21:35:53.605Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2472
+- **Total Tokens**: 2500
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark and gate tooling.
+[94m[Bash][0m Read progress log tail and list repo and artifacts $ ls artifacts/bench 2>/dev/null | head
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+The log shows US-080 blocked on the same items for many consecutive passes. I'll re-check those blockers in one batch rather than rerun a 3×180 s batch that would exit 3 again.
+[94m[Bash][0m Verify GPU device, FSR permutations, manifest and bench state $ git status 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ artifacts/bench has no acceptance-suite run (us076/us077/us078/us080 partial only). nvidia-smi sees ...
+US-080 is not complete, so I'm not signalling COMPLETE. This host cannot produce the reports the story requires, and I made no code changes or builds this pass.
+
+Four blockers, all re-checked just now:
+
+- **No native Linux Vulkan GPU.** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run cannot happen here. That needs the RTX 5080 reference machine.
+- **FSR 2 is not buildable.** There are 0 `*_permutations.h` files under `third_party`, so the FSR path stays gated off. Vendoring that archive is a decision for you.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` has four `implementation: "none"` entries (lines 88, 108, 122, 132). A 3×180 s acceptance batch would exit 3 (incomplete) while they remain.
+- **No full acceptance run exists.** `artifacts/bench` only has partial runs (us076, us077, us078, us080).
+
+The RTX 5080 is visible to WSL (driver 617.42), and the Windows gates can run through `cmd.exe` as the memory notes describe. I did not run them this pass, because the story's acceptance still cannot close without the blockers above.
+
+I appended a status entry to `.ralph-tui/progress.md`. It is the 74th such entry with no code change, so repeated status checks are not moving this story forward.
+
+To unblock, I need from you:
+1. Access to the RTX 5080 reference machine for the native Linux Vulkan run.
+2. A decision on the FSR 2 vendoring route.
+3. A go-ahead to implement the four unimplemented workloads.
+4. A call on the frame-budget question if the measured runs exceed budget. The contract cannot be changed without your decision.

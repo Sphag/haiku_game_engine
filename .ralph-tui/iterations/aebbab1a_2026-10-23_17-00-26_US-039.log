@@ -1,0 +1,119 @@
+# Iteration 15 Log
+
+## Metadata
+
+- **Task ID**: US-039
+- **Task Title**: HDR, TAA, and Postprocessing
+- **Description**: As a player, I want stable imagery so that motion does not cause flickering or incorrect exposure.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T14:00:26.104Z
+- **Ended At**: 2026-10-23T14:14:56.083Z
+- **Duration**: 14m 29s
+- **Input Tokens**: 192
+- **Output Tokens**: 42630
+- **Total Tokens**: 42822
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and the current state of the repo.
+[94m[Bash][0m Inspect repo root, progress log, and PRD size $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && grep -n "US-03[5-9]\|US-04"...
+[94m[Bash][0m Read progress header, PRD references, and existing HDR/TAA code $ sed -n 1,12p .ralph-tui/progress.md && sed -n 186,198p .ralph-tui/progress.md && grep -n -i "US-039\...
+[94m[Bash][0m Read US-039 PRD context and render module layout $ sed -n 380,400p tasks/prd-open-world-engine.md && sed -n 735,760p tasks/prd-open-world-engine.md && ...
+The full US-039 scope (DX12 and Vulkan HDR/TAA passes, GPU validation, Windows gates) is large. I'll first check the existing CPU-reference pattern and test wiring so I can build the verifiable core on it.
+[94m[Bash][0m Read shadow_atlas header, test wiring, build.md rows, and check running batches $ cat engine/render/include/engine/render/shadow_atlas.hpp | head -88 && grep -n "lighting_tests\|shad...
+I'll build the verifiable CPU core for this story: jitter, exposure, bloom, tone mapping, and TAA history with its reset rules. First I need the test conventions.
+[94m[Bash][0m Read test conventions and CPU reference pattern $ sed -n 1,40p tests/src/lighting_tests.cpp && sed -n 50,60p tests/CMakeLists.txt && grep -n "TEST_CAS...
+The conventions are clear. I'll check the velocity target's units in the shader so the TAA reprojection matches it.
+[94m[Bash][0m Check velocity units and warning flags $ grep -n -i "velocity\|motion" engine/render/shaders/scene.hlsl | head -20 && grep -n -i "velocity" e...
+Motion vectors are in UV units (x right, y down), so the history lookup is `pixel - velocity * size`. Writing the header now.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/postprocess.hpp[0m "#pragma once
+
+// HDR postprocessing (US-039): the sub-pixel jitter sequence for TAA, exposure from EV100, bloom prefilter and blur weights, the ACES
+// filmic tone curve, the reference overlay composi... (7773 chars)"
+I'm replacing the bare teleport constant with a helper so the rule is testable.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/postprocess.hpp[0m edit: "// Camera motion larger than this, in world units ..." → "// Camera motion larger than kTeleportDistance wor..."
+Now the implementation. Each function is a direct CPU reference of the formulas the post pass will use.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/postprocess.cpp[0m "#include "engine/render/postprocess.hpp"
+
+#include "engine/render/shadow_atlas.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+namespace engine::render {
+
+namespace {
+
+// Radical inverse of `index` in `b... (9283 chars)"
+Two header comments are now inaccurate: the exposure clamp order and the mismatch return. I'll fix them.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/postprocess.hpp[0m edit: "// EV100 that exposes a scene with average luminan..." → "// EV100 that exposes a scene with average luminan..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/postprocess.hpp[0m edit: "    // Both vectors must hold width * height entri..." → "    // Both vectors must hold width * height entri..."
+Next, wiring: add the source to the library and the test file to the unit suite.
+[94m[Bash][0m Register postprocess source and test file in CMake $ grep -n "lighting_tests\|lighting.cpp" tests/CMakeLists.txt engine/render/CMakeLists.txt
+Now the tests. They cover every acceptance point that does not need a GPU: jitter consistency across backends, exposure and NaN handling, bloom, tone mapping, overlay independence, and the TAA reset rules, ghost rejection on a moving pixel, and NaN safety.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/postprocess_tests.cpp[0m "// HDR postprocessing (US-039), on the CPU. These cases need no GPU: they check the jitter sequence and its NDC form on both backends,
+// exposure from EV100 and its clamps, the color hygiene that sto... (16290 chars)"
+One assertion is wrong: inside the knee the Karis contribution can exceed the bare excess, so my bound of `0.2` was incorrect. I'll correct it to the real property, that the result is positive and below the input brightness.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/postprocess_tests.cpp[0m edit: "    // Inside the knee the contribution is continu..." → "    // Inside the knee the color is partly passed:..."
+Now the Linux gates. I'll confirm `tile_row_sign`'s sign convention matches my test, then configure and build the Linux debug preset.
+[94m[Bash][0m Check row sign and run vendor validation and configure $ echo "configure=$?")
+[94m[Bash][0m Build Linux debug preset and count warnings $ grep "warning:\|error:" /tmp/us039_build.log | head -20
+The test needs the `Approx` header included explicitly. I'll check what the repo's Catch2 provides and add it.
+[94m[Bash][0m Locate Catch2 approx header and existing usage $ grep -rl "catch_approx.hpp\|Catch::Approx" tests/src | head -3
+[94m[Bash][0m Fix Approx include and rebuild Linux debug $ grep "warning:\|error:" /tmp/us039_build.log | head -20
+Build is clean with zero warnings. The file-changed notice is from my own `sed` include fix, so I'll take the current state as-is. Next, the unit suite.
+[94m[Bash][0m Run Linux unit tests and the new postprocess cases $ timeout 300 "$B" "Jitter*,*jitter*,*Exposure*,*TAA*,*ACES*,*bloom*,*Bloom*,*overlay*,*Color hygiene*...
+`ctest` passed. The binary the helper picked up is the ASan build, so I'll run the debug build's unit suite directly to confirm the new cases ran.
+[94m[Bash][0m Run debug build unit suite and key postprocess cases $ timeout 300 "$B" "The jitter sequence is centred on the pixel, repeats, and visits distinct phases" ...
+[94m[Bash][0m Locate build output directory for linux-debug $ grep -n "linux-debug\|binaryDir" CMakePresets.json | head -5
+[94m[Bash][0m Run unit suite and key postprocess cases from build output $ done
+The full unit suite passes: 495 cases, which is the previous 480 plus the 15 new cases. The `3` exit codes above came from my filter-style invocation, not failures; the full suite run is the authoritative result. Next I'll run the GCC gate, since the story requires a separate GCC build with warnings as errors.
+[94m[Bash][0m Configure and build the GCC debug preset $ grep "error" /tmp/us039_gcc_build.log | head -5
+[94m[Bash][0m Run the GCC unit test preset $ echo "linux_unit_again=$?")
+All Linux gates I can run here pass. I'll write the contract doc and the build-table row, then record the status honestly in the progress log.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/postprocess.md[0m "# HDR postprocessing and TAA (US-039)
+
+`engine/render/include/engine/render/postprocess.hpp` and `engine/render/src/postprocess.cpp` hold the CPU reference of the scene's post pass:
+the jitter sequenc... (4532 chars)"
+[94m[Bash][0m Add US-039 partial status row to build.md $ tests `postprocess_tests.cpp`) | " "Partial, 2026-10-23: the CPU reference is implemented and tested...
+Last, the progress log entry, which I'm writing as an honest partial status.
+[94m[Bash][0m Append US-039 entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-23 - US-039 - What was implemented: the CPU refere...
+US-039 is not complete. I implemented and verified the CPU side of the HDR/TAA post pass, but the GPU passes on DX12 and Vulkan, which most acceptance criteria require, do not exist yet. I did not emit the completion signal.
+
+**What's in place (Linux, verified)**
+- `engine/render/include/engine/render/postprocess.hpp` and `engine/render/src/postprocess.cpp` are the CPU reference:
+  - Halton jitter. The NDC form gives the same pixel shift on DX12 and Vulkan, using the sign from `tile_row_sign`.
+  - EV100 exposure with clamps.
+  - NaN/Inf/negative sanitizing.
+  - Soft-knee bloom prefilter and Gaussian weights.
+  - ACES tone curve.
+  - Overlay composite after tone mapping, with no exposure argument.
+  - `TaaHistory`: reset reasons (first frame, resize, camera cut, teleport), 3x3 color-box clamp, UV-motion reprojection.
+- `tests/src/postprocess_tests.cpp` adds 15 `[unit]` cases.
+- Gates:
+  - `ValidateVendor` passed.
+  - `linux-dev` configured.
+  - `linux-debug` built with 0 warnings.
+  - `linux-unit` passed: 495 cases, 146810 assertions.
+  - `linux-gcc` configured, `linux-gcc-debug` built with 0 warnings, and `linux-gcc-unit` passed.
+
+**Not done**
+- The GPU post pass on DX12 and Vulkan: linear HDR target, exposure, bloom chain, tone-map composite, and TAA resolve.
+- Jitter applied in `scene_renderer`, and GPU history resets.
+- GPU suites (`engine_tests --suite gpu`) on either backend.
+- Windows gates were not run.
+- `linux-asan`/`linux-sanitize` were not run; no code in the sanitizer-scoped areas changed.
+- `engine_bench`, the native Linux Vulkan suite, and the GUI check were not run; the bench target doesn't exist yet and this WSL host has no usable Vulkan device.
+
+**Choices I made**
+- The TAA history sampler is nearest, not bilinear. The GPU resolve may use bilinear, which would need a tolerance in the tests.
+- Bloom is added before exposure, so it scales with the scene.
+- The reference overlay composite takes no exposure argument, so it cannot depend on scene exposure.
+
+**Files changed:** `postprocess.hpp` and `postprocess.cpp` (new), `engine/render/CMakeLists.txt`, `postprocess_tests.cpp` (new), `tests/CMakeLists.txt`, `docs/postprocess.md` (new), `docs/build.md` (US-039 row marked Partial), and `.ralph-tui/progress.md`.
+
+**Next step:** the DX12 and Vulkan post passes, with jitter wired into `scene_renderer`. Then the Windows gates and the GPU suites on both backends.

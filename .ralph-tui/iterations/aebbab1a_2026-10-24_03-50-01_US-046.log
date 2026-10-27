@@ -1,0 +1,45 @@
+# Iteration 68 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:50:01.300Z
+- **Ended At**: 2026-10-24T00:51:56.525Z
+- **Duration**: 1m 55s
+- **Input Tokens**: 28
+- **Output Tokens**: 2368
+- **Total Tokens**: 2396
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the FSR blocker recorded in memory.
+[94m[Bash][0m Read progress log and FSR memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+The log shows 15 earlier re-checks, all blocked on the same user decision. I'll confirm the tree still matches that before deciding anything.
+[94m[Bash][0m Verify FSR 2 blocker state and vendor validation $ find . -newer .ralph-tui/progress.md -type f -not -path "./.git/*" -not -path "./build*" 2>/dev/null...
+The tree is unchanged and still blocked, so I'll record this re-check in the progress log and stop there.
+[94m[Bash][0m Append blocked re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ta...
+US-046 is still blocked, so I'm not signalling COMPLETE. Nothing in the source changed this iteration.
+
+**What blocks it:** FSR 2 needs eight generated `ffx_fsr2_<pass>_permutations.h` headers per backend, which hold the compiled shader blobs and permutation tables. Neither the vendored tree nor the pinned upstream archive contains them. `ENGINE_FSR2_AVAILABLE` stays off, so both upscale calls return `Unsupported`. Without FSR 2 linked, the FSR integration, the profile switch and UI-after-upscale can't be built or tested.
+
+**Verified this run:**
+- `find third_party engine/rhi -name "*_permutations.h"` finds 0 files.
+- `third_party/fsr2` holds only `LICENSE.txt` and `src`.
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+
+I didn't attempt the other criteria (Windows and Linux presets, builds, tests, benchmarks). They all depend on FSR 2 building, so running them now would only reproduce the same failure.
+
+**Decision needed from you:** pick one route to generate the blobs.
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the no-prebuilt-tools rule in `third_party/manifest.json`.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This is more work and produces different bytes from upstream.
+
+Once you choose, I can start on the vendoring and the Linux compile patches. Those are `_countof` in `ffx_fsr2.cpp` and `std::wstring_convert` in `vk/ffx_fsr2_vk.cpp`, which need a manifest-recorded patch or a compat header.
+
+I appended a re-check 16 entry to `.ralph-tui/progress.md` recording this state.

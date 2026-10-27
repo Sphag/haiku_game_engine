@@ -1,0 +1,43 @@
+# Iteration 373 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:40:40.422Z
+- **Ended At**: 2026-10-24T22:42:11.909Z
+- **Duration**: 1m 31s
+- **Input Tokens**: 32
+- **Output Tokens**: 2435
+- **Total Tokens**: 2467
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 is already in the tree, since the codebase patterns mention the character controller and joints.
+[94m[Bash][0m Inspect repo state and progress log $ tail -60 .ralph-tui/progress.md
+The story has been logged as Partial for 18 passes. Before deciding anything, I'll check whether the tree has changed since the last entry and whether the blocked gates can run now.
+[94m[Bash][0m Check for changes, list compilers, rebuild Linux debug $ echo BUILD_EXIT=$?)
+[94m[Bash][0m Run Linux unit test suite $ echo CTEST_EXIT=${PIPESTATUS[0]}
+The Linux build and unit suite pass again on the unchanged tree. I'll record this pass in the progress log.
+[94m[Bash][0m Append status check entry to progress log $ `physics_stress` is US-077). No COMPLETE signal. --- EOF tail -3 .ralph-tui/progress.md
+US-054 is still **Partial**, so I'm not signalling COMPLETE. The character controller, joints, and cell-unload fixtures are in the tree, and the Linux build and unit suite pass on it again. Two criteria can't be met on this host.
+
+**Blocked:**
+- **`linux-gcc` gate:** the only compilers here are GCC/G++ 9 and clang 10. Jolt needs GCC 11+ (`__builtin_bit_cast`), so `linux-gcc-debug` can't build. Someone with root needs to install GCC 11+, or the CI job has to run it.
+- **Performance measurement:** `engine_bench --suite acceptance` doesn't exist yet (US-074), and `physics_stress` is US-077. The benchmark contract can't be run until those land.
+
+**Verified this pass (Linux, unchanged tree):**
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21).
+
+**Earlier passes (from the log, not rerun):**
+- The Windows gates passed 21 of 21 on the same tree.
+- `linux-sanitize` passed 22 of 22 in check 12. In check 11 three X11 focus tests failed under ctest and passed on rerun, so I'm treating that as host flakiness, not a physics defect.
+
+I appended a status-check-19 entry to `.ralph-tui/progress.md`. I made no code changes.

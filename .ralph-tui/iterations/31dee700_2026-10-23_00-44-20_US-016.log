@@ -1,0 +1,90 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: US-016
+- **Task Title**: Scene Graph and Transforms
+- **Description**: As a scene author, I want an object hierarchy so that I can edit related transforms.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T21:44:20.873Z
+- **Ended At**: 2026-10-22T21:55:39.155Z
+- **Duration**: 11m 18s
+- **Input Tokens**: 168
+- **Output Tokens**: 16327
+- **Total Tokens**: 16495
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m Read progress log and list repo layout $ cat .ralph-tui/progress.md | head -300 && echo ---- && ls -la && echo ---- && ls -R src include 2>/d...
+[94m[Bash][0m Locate PRD sections for US-014 to US-016 $ wc -l tasks/prd-open-world-engine.md && grep -n "US-01[4-6]\|US-00[1-4]" tasks/prd-open-world-engine...
+[94m[Bash][0m Read PRD overview and US-014 to US-016 stories $ sed -n 1,80p tasks/prd-open-world-engine.md && echo ..... && sed -n 180,230p tasks/prd-open-world-en...
+[94m[Bash][0m Survey engine layout and scene/ECS sources $ cat CMakeLists.txt
+US-016 code already appears in the tree (`scene_graph.cpp`, `transform.cpp`, and their tests). I'll read those alongside the headers and the PRD's technical constraints.
+[94m[Bash][0m Read transform and scene graph headers $ wc -l engine/scene/include/engine/scene/*.hpp engine/scene/src/*.cpp tests/src/scene_graph_tests.cpp...
+[94m[Bash][0m Read transform and scene graph implementations $ cat engine/scene/src/transform.cpp engine/scene/src/scene_graph.cpp
+The hierarchy and transform code is already in place. Next I'll check the tests, the scene-graph doc, the build verification table, and the memory notes on running the Windows gates.
+[94m[Bash][0m Check scene-graph doc and build verification table $ grep -n "US-01[4-6]\|^#" docs/build.md | head -80
+[94m[Bash][0m Read memory notes on gate runs and list tools $ ls tools/* | head
+The docs and tests for US-016 already exist. Before running gates, I'll check the PRD's technical considerations and benchmark contract for anything that applies to scene transforms, and confirm the test cases cover the required items.
+[94m[Bash][0m Grep PRD for scene, benchmark, and constraint sections $ grep -n -i "scene graph\|transform\|hierarch\|double\|large coord\|origin\|benchmark\|acceptance\|p9...
+[94m[Bash][0m List scene graph test cases and CMake registration $ grep -rn "scene_graph_tests\|scene_transform_tests" tests/CMakeLists.txt tests/*.txt 2>/dev/null | h...
+Test coverage matches each acceptance item. The story is already implemented, so this run is verification: run the gates and record the results. I'll start with the Linux clang gates.
+[94m[Bash][0m Run Linux vendor validation, configure, and debug build $ grep -c "warning:" /tmp/us016_lin_build.log
+[94m[Bash][0m Run Linux unit tests and build ASan preset $ tail -2 /tmp/us016_asan_build.log
+The Linux unit preset has one failing test, `engine_tests_integration`. I'll check which case failed before deciding whether it's the known X11 focus flake.
+[94m[Bash][0m Extract failing test details from unit log $ grep -n "passed\|test cases" /tmp/us016_lin_unit.log | head
+The failure is in `platform_x11_input_tests.cpp` (captured-motion deltas read 0), the XWayland pointer-focus flake that earlier stories documented. Per the progress notes, I'll rerun before treating it as a regression.
+[94m[Bash][0m Rerun Linux unit suite three times to check flake $ done
+[94m[Bash][0m Show which X11 cases failed on reruns $ sed -n 445,456p tests/src/platform_x11_input_tests.cpp
+The failing X11 cases differ between runs (line 453 once, line 360 another time), and one run passed in full, so this is the XWayland focus flake, not a scene regression. Next I'll run the GCC job, the ASan/UBSan sanitize run, and the Windows gates.
+[94m[Bash][0m Run sanitize tests, configure and build GCC preset $ grep -c "warning:" /tmp/us016_gcc_build.log
+[94m[Bash][0m Show sanitize summary and run GCC unit tests $ grep -c "ERROR: AddressSanitizer\|runtime error" /tmp/us016_san.log
+Linux gates pass: the sanitize run exits 0 with no sanitizer reports, and GCC builds with 0 warnings. GCC unit shows the same X11 flake pattern, passing on rerun. Next are the Windows gates, using the batch-file approach from the memory notes.
+[94m[Bash][0m Look for an existing gate batch file to reuse $ cat -A "{}" | head -40'
+[94m[Bash][0m Read prior Windows gate batch files as templates $ cat /mnt/c/Users/bucha/AppData/Local/Temp/gates_us025.bat | tr -d '\r'
+I'll write a US-016 gate batch modeled on `gates_us025.bat`, with stdout capture. It runs in the background because configure and build can be long.
+[94m[Bash][0m Write US-016 Windows gate batch and launch it in background $ cd /mnt/c/Users/bucha/AppData/Local/Temp && printf '%s\r\n' '@echo off' 'call "C:\Program Files\Micr...
+[94m[Bash][0m Check Windows gate progress and whether engine_bench exists $ cd /mnt/d/dev/haiku_game_engine && grep -rln "engine_bench" --include=CMakeLists.txt --include=*.cma...
+No `engine_bench` target exists yet, so the benchmark step can't run for this story. I'll wait for the Windows gate run to finish.
+[94m[Bash][0m Wait for Windows gate batch to finish and show results $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/us016_* 2>/dev/null
+All four Windows exit codes are 0. The memory notes warn about warm builds, so I'll check the logs for real output.
+[94m[Bash][0m Inspect Windows build and ctest logs $ grep -ci "warning C" us016_build.log
+Windows is green: `win-unit` 21/21 and a build with no warnings. I'll record the results in the verification table in `docs/build.md`, matching the existing rows.
+[94m[Bash][0m Read verification table header and recent rows $ sed -n 155,176p docs/build.md | cut -c1-400
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "| GPU DX12 and Vulkan on Windows, GPU Vulkan on Li..." → "| US-016 scene graph and transforms (`engine/scene..."
+Now I'll append the progress entry. Following the file's convention, it goes at the end under the existing separator.
+[94m[Bash][0m Append US-016 entry to progress log $ tail -c 200 .ralph-tui/progress.md | cat -A | tail -3 && cat >> .ralph-tui/progress.md <<'EOF'  ## 2...
+US-016 is verified and recorded. The scene graph and transforms were already in the tree from an earlier pass, so this iteration checked them against the acceptance criteria and ran the gates. I did not change any source.
+
+**Gate results**
+
+| Gate | Result |
+|---|---|
+| Linux `ValidateVendor`, `linux-dev`, `linux-debug` | Pass, 0 warnings |
+| Linux `linux-unit` | Passed 1 of 3 runs. The other two failed only in X11 input cases (`platform_x11_input_tests.cpp`), which differ between runs. This is the XWayland focus flake from earlier stories, not the scene code. |
+| Linux `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | Build passes with 0 warnings. `linux-gcc-unit` passed 1 of 2 runs, with the same X11 flake. |
+| Linux `linux-asan` build and `linux-sanitize` | Pass, no sanitizer reports |
+| Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | Pass, all exit 0, `win-unit` 21/21 |
+| `engine_bench --suite acceptance` | Not applicable: no `engine_bench` target exists yet. The graph is not on a measured path. |
+| GitHub CI, GPU suites, GUI check | Not run, as recorded in `docs/build.md` |
+
+**Acceptance coverage**
+
+- Local/world transforms, dirty propagation, and reparenting with keep-world or keep-local modes are implemented in `engine/scene/`.
+- Cycles are rejected. Deleting a parent takes an explicit `ChildPolicy` (`DestroySubtree` or `ReparentToParent`).
+- Tests cover scaling, rotation, a 10 000-level chain, and millimetre precision at 5 000 km.
+
+**Changes**
+
+- `docs/build.md`: added the US-016 row to the verification table.
+- `.ralph-tui/progress.md`: appended the US-016 entry.
+
+**Caveat:** `linux-unit` did not pass cleanly on any single run. The failures were X11 input tests that differ between runs, and I did not fix them because they are outside this story. The scene tests passed in every run.
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,44 @@
+# Iteration 780 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:40:55.038Z
+- **Ended At**: 2026-10-26T02:41:12.835Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1893
+- **Total Tokens**: 1915
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-076 already has in the tree.
+[94m[Bash][0m Inspect progress log and benchmark tool state $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.json --include=*.md --i...
+The log shows 26 earlier status checks, all blocked on the same user decisions. I'll check whether anything has changed since the last pass before deciding whether to rerun anything.
+[94m[Bash][0m Check file mtimes and contract lines $ grep -n "2,000,000\|2000000" tasks/prd-open-world-engine.md | head -5
+US-076 is not complete, and I have not signalled COMPLETE. Nothing has changed since the last recorded pass: the same source, workload, and manifest files are unchanged, and I did not rerun the gates, because the blockers below need your decision first.
+
+**What is stuck (needs your decision):**
+
+1. **Triangle floor at the route start.** The PRD contract requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The measured run has 312,068. Frame time is also over budget: p99 is 35–47 ms against 16.7 ms. Fixing it means changing either the start pose (the manifest camera route, pinned by SHA-256) or the instance placement (the seeded generator, whose digests are pinned). Either change bumps `kWorkloadVersion` from 1, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The PRD reserves this for a separate user decision (around line 722), so I have not made it. Choose one of:
+   - approve a route-start or placement change, or
+   - accept the failing measured run as the result, which would close the story as measured but not passing.
+
+2. **`full_1080` profile is unsupported.** The FSR 2 permutation tables are missing from the vendored tree (see `project-fsr2-permutations-missing`), so this profile reports unsupported rather than passed. Which vendoring route to take is your call.
+
+3. **Native Linux Vulkan GPU and linux-gcc gates have not run.** WSL has no usable Vulkan device, and GCC 9.4 cannot build Jolt, so the native Linux Vulkan GPU run and the linux-gcc gate are not verified here.
+
+**What is done and verified:**
+- The `render_stress` scene, counts, and per-path/per-profile runs exist, with reports under `artifacts/bench/us076-*` for indexed, indirect, meshlets, and the no-mesh fallback on DX12 and Vulkan.
+- On linux-dev, `cmake --build --preset linux-debug` builds, `ctest --preset linux-unit` passes 30/30, and `engine_workload --check benchmarks/workload_expected.json` reports all 4 scenes matching.
+
+**Not re-run in this pass:** the Windows gates, ValidateVendor, and the ASan/UBSan job. Their last recorded results are in `.ralph-tui/progress.md`.
+
+The fastest path forward is your answer to item 1. Items 2 and 3 can follow separately, but the story cannot pass acceptance until item 1 is settled.

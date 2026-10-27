@@ -1,0 +1,51 @@
+# Iteration 1256 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:28:25.075Z
+- **Ended At**: 2026-10-26T23:29:05.501Z
+- **Duration**: 40s
+- **Input Tokens**: 62
+- **Output Tokens**: 5801
+- **Total Tokens**: 5863
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the current README, and what docs already exist.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The log shows US-081 has been through several passes and is blocked on hardware and decisions, not on missing code. I'll check whether the README and acceptance doc still have gaps I can close without that hardware.
+[94m[Bash][0m Read README and acceptance doc $ cat README.md && echo ---- && cat docs/acceptance.md | head -150
+The docs already cover most of the acceptance criteria. One row says the Windows package check was "not run," but the Windows editor suite may include the distribution test. I'll check the saved logs before changing that row.
+[94m[Bash][0m Check Windows editor logs for distribution test coverage $ ls tests/src | grep -i distrib
+[94m[Bash][0m Check tail of Windows editor logs and binaries $ find build -name "engine_tests*" -newer tests/src/editor_distribution_tests.cpp 2>/dev/null | head -...
+The Windows editor logs list 107 passing cases and no per-case names. The distribution tests are tagged `[editor][integration]` and run under `--suite editor`, so the Windows clean-directory package test ran as part of that pass. I'll record that in the acceptance doc, since the row currently says Windows was not run.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m
+[94m[Bash][0m Locate the standalone package row in acceptance doc $ grep -n "Standalone packages from clean directories" docs/acceptance.md | cut -c1-80
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| Standalone packages from clean directories | Win..." → "| Standalone packages from clean directories | Win..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "6. **Clean-directory checks.** The offline clean-c..." → "6. **Clean-directory checks.** The offline clean-c..."
+Now I'll append this pass to the progress log.
+[94m[Bash][0m Append progress entry for this pass $ no gate re-run. - Still open, as in `docs/acceptance.md`: native Linux Vulkan GPU (no `/dev/dri`), f...
+US-081 is not complete, so I'm not signing it off with a COMPLETE signal. The remaining gaps need hardware or decisions that aren't available in this environment. This pass only corrected the record.
+
+**What changed this pass**
+- `docs/acceptance.md`: the standalone-package row and open item 6 now say the Windows and Linux editor suites passed, including the clean-folder package case. The Windows result was previously recorded as "not run."
+- `.ralph-tui/progress.md`: appended an entry for this pass.
+
+The Windows logs list no per-case names. I inferred the package case ran from its `[editor][integration]` tag, and the docs say so. No source or build changed, and I didn't re-run any gate.
+
+**Still open, as the acceptance doc lists**
+1. Native Linux Vulkan GPU report. This machine (WSL2) has no `/dev/dri`.
+2. Full `engine_bench --suite acceptance` run on DX12 and Vulkan. The render, streaming, all-features, and physics scenes don't yet produce GPU timestamps, so runs would report `incomplete`.
+3. FSR 2. The vendored tree has no generated shader permutations.
+4. linux-gcc. The local GCC 9.4 can't build Jolt; the gate needs GCC 11+.
+5. Visual smoke tests. Windows has a launch screenshot only. Linux has none. A project-open and action sequence is still needed on both.
+6. A package built from a real sample game on each OS.
+7. A LICENSE file. This is a decision for the project owner.

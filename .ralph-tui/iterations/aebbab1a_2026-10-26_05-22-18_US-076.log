@@ -1,0 +1,42 @@
+# Iteration 725 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:22:18.006Z
+- **Ended At**: 2026-10-26T02:22:33.421Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1779
+- **Total Tokens**: 1801
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tool.
+[94m[Bash][0m Read progress log and locate benchmark sources $ grep -n "US-076\|render_stress" -r --include=*.md --include=*.json --include=*.cpp --include=*.hpp -...
+The progress log shows this story blocked for many passes on the same user decision. I'll check the latest benchmark artifact so my report reflects the current state rather than old notes.
+[94m[Bash][0m Inspect latest US-076 benchmark artifacts $ head -c 1500 "$latest"/*.json 2>/dev/null | head -60
+US-076 is not complete, so I'm not emitting the COMPLETE signal. The work is blocked on decisions only you can make, and I made no changes or reruns this pass.
+
+I checked the latest artifacts. The eight `us076-*` benchmark runs (DX12 and Vulkan, each with indexed, indirect, meshlets, and meshlets-with-mesh-shaders-disabled) all exit 1. The source and manifest predate those reports, so the recorded results still describe the current tree.
+
+**What's blocking it:**
+
+1. **Triangle floor and frame budget fail on instance placement.** The route starts at 312,068 triangles against a 2,000,000 target, and p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this changes the workload, so it needs `kWorkloadVersion` bumped and `benchmarks/workload_expected.json` regenerated. The contract reserves that for an intended change, so I need your approval before I do it.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so that profile can't run until the vendoring route is chosen (see the FSR 2 memory note).
+3. **Not yet run:** native Linux Vulkan GPU runs and `linux-gcc` (local GCC 9.4 can't build Jolt).
+
+**Decisions I need from you:**
+
+- Approve a placement change that brings the route to the 2,000,000-triangle floor, or tell me to keep the current placement?
+- If the placement stays as it is, should this story close as measured with the failing acceptance items recorded, or stay open?
+- Which FSR 2 route should `full_1080` take?
+
+Once you answer, I can make the placement change and rerun the Windows and Linux gates, the benchmark matrix, and the native Linux Vulkan run.

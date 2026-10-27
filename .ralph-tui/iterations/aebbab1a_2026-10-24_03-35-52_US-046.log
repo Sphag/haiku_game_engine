@@ -1,0 +1,46 @@
+# Iteration 44 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:35:52.498Z
+- **Ended At**: 2026-10-24T00:38:17.878Z
+- **Duration**: 2m 25s
+- **Input Tokens**: 48
+- **Output Tokens**: 4278
+- **Total Tokens**: 4326
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the FSR 2 integration.
+[94m[Bash][0m Read progress log and locate FSR references $ ls vendor 2>/dev/null | head -50
+[94m[Bash][0m Read FSR memory notes and Windows gate reference $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md | ...
+The memory note says FSR 2 cannot link until the user picks a vendoring route. Before deciding anything, I'll check what US-046 already has in the progress log and the code.
+[94m[Bash][0m Find US-046 entries in progress log $ awk '/## .*US-046/{f=1} f' .ralph-tui/progress.md | head -150
+[94m[Bash][0m Inspect FSR vendor tree and RHI upscaler files $ git status 2>/dev/null | head -3
+The earlier entries say US-046 is blocked on a vendoring decision. I'll confirm the blocker still holds before I report it.
+[94m[Bash][0m Re-check permutation headers and Linux configure state $ grep -i "fsr" /tmp/fsr_cfg.log | head -3
+The search timed out, probably because it walked the whole tree. I'll check the partial output and run a narrower check.
+[94m[Bash][0m Narrow check for permutation headers in vendor and RHI trees $ find third_party -maxdepth 4 -type d | head -30
+The permutation-header count is still zero, so the blocker holds. The background task exited with code 144 because my `pkill` stopped it, not because of a build failure. I'll record this re-check in the progress log, as the workflow requires, and not signal completion.
+[94m[Bash][0m Append blocked re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ta...
+US-046 is still blocked, so I have not signalled COMPLETE. The blocker is a vendoring decision only you can make.
+
+**What is blocked:** FSR 2 needs eight generated `*_permutations.h` headers per backend. The vendored tree and the pinned upstream archive both lack them. The RHI build is gated on them (`ENGINE_FSR2_AVAILABLE`), so FSR 2 is not built, and both backends return `Unsupported`. I confirmed this again: zero permutation headers exist under `third_party` or `engine/rhi`. I did not add stub headers, because they would hide the failure until pipeline creation.
+
+**What is done (from earlier iterations):** the CPU upscaler contract, the RHI upscaler API with DX12 and Vulkan backends behind the gate, the FSR 2 jitter and resolution rules, and unit tests. The Linux and Windows gates pass for that scope.
+
+**What is not done:** the upscale call on either backend, the reactive mask, switching `SceneRenderer` to the profile sizes, composing the UI after upscaling, and any GPU test that exercises an upscale.
+
+**Decision needed:** which route to take for the generated headers.
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the rule against prebuilt tools in `third_party/manifest.json`.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This is more work, and the bytes will differ from upstream.
+
+Once you pick a route, I can do the vendoring, fix the known Linux/clang issues in the FSR sources (`_countof` and `std::wstring_convert`), and finish the renderer wiring and GPU tests. I also appended a re-check entry to `.ralph-tui/progress.md`.

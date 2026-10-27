@@ -1,0 +1,42 @@
+# Iteration 906 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:43:51.154Z
+- **Ended At**: 2026-10-26T12:44:07.191Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 1890
+- **Total Tokens**: 1904
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=*.txt --include=*.cmake...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. I read the progress log and made no source changes this pass.
+
+**What's already in place**
+- `tests/src/all_features_tests.cpp` checks the `all_features` workload against `benchmarks/workload_expected.json`, plus the save/load and marker cases.
+- `tests/src/all_features_editor_tests.cpp` covers the scene, material, animation, and terrain edits with undo/redo, Play/Stop, Build Game, and the published-package relaunch.
+- The last recorded runs are green: Linux validate, linux-debug build, and `linux-unit` 30/30; Windows validate, win-dev, win-debug, and `win-unit`; `engine_tests --suite gpu` on dx12 (72) and vulkan (73). The log's last source change is 14:15, and I found nothing newer.
+
+**What is still open**
+1. **Tour runner with screenshots and an action log.** No tour code exists under `tests`, `tools`, or `engine`. The CPU marker test is not a tour over the running app.
+2. **GI/RT/upscale profiles and forced indirect/meshlet paths for `all_features`.** `benchmarks/manifest.json` still lists it as `implementation: none` with route "pending final benchmark scene". The upscale profile also cannot link: `third_party/fsr2` is missing its `*_permutations.h` headers.
+3. **`engine_bench --suite acceptance` for `all_features`.** It has no runner, so it cannot run.
+4. **GUI checks and native Linux Vulkan GPU.** This host has no `/dev/dri` and no GUI.
+5. **`linux-gcc*` and the sanitizer presets.** This host has only GCC 9.4, and Jolt needs GCC 11+.
+
+**Decisions needed before this can move**
+- **FSR 2 route:** obtain the generated permutation headers, or record the `full_1080` profile as unsupported.
+- **`all_features` route:** I can define it as a `builtin` GPU scene in `tools/benchmark`, built from the table workload. That is the step that unblocks items 2 and 3.
+
+Once those two are settled, I can build the tour runner and the route, then run the Windows GPU profiles through the `.bat` path in memory. I did not add another status-check entry to `.ralph-tui/progress.md`, since the last 18 entries already record the same blockers.

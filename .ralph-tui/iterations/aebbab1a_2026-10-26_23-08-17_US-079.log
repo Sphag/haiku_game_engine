@@ -1,0 +1,54 @@
+# Iteration 1056 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:08:17.782Z
+- **Ended At**: 2026-10-26T20:10:16.804Z
+- **Duration**: 1m 59s
+- **Input Tokens**: 52
+- **Output Tokens**: 4255
+- **Total Tokens**: 4307
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 6000 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | gr...
+The log shows many prior passes stopped on the same blockers. I'll check the current state of the all_features files and the blocking items before deciding what to do.
+[94m[Bash][0m Check all_features files, blockers, and PRD references $ grep -n "all_features\|US-079" tasks/prd-open-world-engine.md | head -40
+The blockers are still in place. I'll check what the existing all_features tests need, so the report is precise.
+[94m[Bash][0m Inspect all_features test cases and build wiring $ grep -rn "all_features" tests/CMakeLists.txt tests/*.cmake 2>/dev/null | head -5
+The tests exist and are wired into the build. I'll run them on the Linux debug build to see whether they pass or fail on the blockers.
+[94m[Bash][0m Build Linux debug and run all_features tests $ timeout 600 ctest --preset linux-unit -R "all_features|all features" --output-on-failure --no-tests=...
+[94m[Bash][0m Run integration suite and filter all_features cases $ ls build/linux-dev | head -30
+[94m[Bash][0m Run integration suite on engine_tests binary $ timeout 900 "$B" --suite integration 2>&1 | tail -25
+The integration suite passes, but the story is not complete. I'll record this pass in the progress log, since the workflow asks for an entry and the results are new.
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I have not signalled COMPLETE. The parts that need you, a Windows GPU/GUI session, or a missing project are still open.
+
+**What I checked this pass**
+- The Linux debug build passes.
+- `engine_tests --suite integration` passes 132 of 135 cases, with 3 skipped and all 1766 assertions passing. The skips are X11 focus cases. The two all_features integration cases in `tests/src/all_features_tests.cpp` are among the passing ones.
+- The all_features cases are tagged `[integration]`, so `ctest --preset linux-unit -R all_features` finds no tests. The unit preset does not run them.
+
+**What is still missing**
+- `samples/all_features` does not exist.
+- There is no all_features runner in `tools/benchmark`, so there is no automated tour or profile run.
+- `benchmarks/manifest.json` still has `all_features` at `implementation: none`, with its route `all_features_route_v1` still a proposal.
+- `third_party/fsr2` has no `*_permutations.h` headers, so `full_1080` cannot run.
+- The Windows GPU runs, the Windows GUI editor scenario with package and relaunch, and the Windows quality gates have not been run in this pass.
+
+**Decisions I need from you**
+1. Approve `all_features_route_v1`, or change it.
+2. Vendor the FSR 2 permutation headers, or accept that `full_1080` is reported unsupported.
+3. Provide a Windows GPU and GUI session for the tour, profiles, and live editor run.
+4. Decide the runtime component catalog for `samples/all_features`. The runtime catalog is empty in this build, so a scene with components is refused.
+
+I appended a status entry to `.ralph-tui/progress.md` with these results. The earlier passes recorded the same blockers, so the story has not moved since then.

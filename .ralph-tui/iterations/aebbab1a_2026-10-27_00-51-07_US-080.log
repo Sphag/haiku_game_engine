@@ -1,0 +1,46 @@
+# Iteration 1194 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:51:07.952Z
+- **Ended At**: 2026-10-26T21:51:25.966Z
+- **Duration**: 18s
+- **Input Tokens**: 26
+- **Output Tokens**: 2555
+- **Total Tokens**: 2581
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress tail and benchmark layout $ git status 2>&1 | head -3
+The log shows 84 prior status checks, all stopping on the same blockers. I'll re-check those blockers once so I'm not relying on the old notes.
+[94m[Bash][0m Re-check blockers: GPU devices, FSR tables, manifest entries $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append no-change status entry to progress log $ nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No build, gate, or bench run: the acc...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. I re-checked the blockers and nothing has changed since the previous runs.
+
+**What is blocked**
+- **No native Linux Vulkan device.** `/dev/dri` is absent under WSL. The RTX 5080 (driver 617.42) is visible to `nvidia-smi` only, so the native Linux/Vulkan acceptance run cannot happen here.
+- **FSR 2 is not vendored.** There are 0 `*_permutations.h` files under `third_party`, so FSR cannot build. Choosing a vendoring route is your decision.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still marks lines 88, 108, 122 and 132 as `implementation: "none"`. `all_features` has no source. `render_stress`, `physics_stress` and `streaming_stress` have source, but `main.cpp` refuses their visual paths. An acceptance batch would exit 3 (incomplete), and I won't stub those workloads to get a pass.
+- **Frame budgets have not been measured.** If a budget is exceeded, the contract says to fix the cause. Changing the contract is a separate decision for you.
+
+**What already passes**
+- The Linux gates passed on the earlier status checks: `ValidateVendor`, `linux-dev`, `linux-debug` and `linux-unit`.
+- The Windows gates passed on the earlier status check (batch `us080_gate.bat`): `ValidateVendor`, `win-dev`, `win-debug` and `win-unit`.
+- I did not re-run any gate in this check.
+
+**Needed to close the story**
+1. The RTX 5080 reference machine with native Linux Vulkan, for the three 3×180 s batches on Windows DX12, Windows Vulkan and native Linux Vulkan.
+2. The FSR 2 vendoring decision.
+3. Wiring the four unimplemented workloads.
+4. A decision on any budget that is exceeded.
+
+I appended a short no-change entry to `.ralph-tui/progress.md` for this check. The earlier entries repeat the same content, so the log is now mostly noise.

@@ -1,0 +1,41 @@
+# Iteration 291 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:12:39.196Z
+- **Ended At**: 2026-10-24T17:12:54.300Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1780
+- **Total Tokens**: 1802
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing Jolt status notes and the current state of the physics code.
+[94m[Bash][0m Read Jolt memory, physics dir, and progress log $ cd /mnt/d/dev/haiku_game_engine && ls engine/physics && tail -n 80 .ralph-tui/progress.md && grep -n...
+Previous passes left US-052 Partial, blocked on a GCC 11+ compiler and the benchmark target. I'll check whether that has changed on this machine before deciding anything.
+[94m[Bash][0m Check compilers, sudo, and engine_bench target $ git status 2>&1 | head -1
+US-052 is not complete, so I am not emitting the completion signal. Nothing on this machine has changed since the last several passes.
+
+**Status: Partial, with two open items that need environment changes.**
+
+- **Blocked: `linux-gcc` gate.** Jolt needs GCC 11+ (`__builtin_bit_cast`). This machine has only g++-9 and clang++-10. `sudo -n` still requires a password, and no conda, micromamba, or docker is available. I can't run `cmake --preset linux-gcc`, `linux-gcc-debug`, or `linux-gcc-unit` here.
+- **Not applicable yet: `engine_bench --suite acceptance`.** No `engine_bench` target exists in any non-vendored CMakeLists.txt. That harness belongs to US-074.
+
+**What the existing record shows as passing on this source** (from `.ralph-tui/progress.md` and the Jolt memory note; I did not re-run them in this pass):
+
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` pass (21/21).
+- Linux clang 10: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` pass (22/22, 1 unit and 21 integration).
+- Linux ASan/UBSan: `linux-asan` build and `linux-sanitize` ctest pass (22/22).
+
+The remaining acceptance criteria are covered by the 13 physics test cases in `tests/src/physics_world_tests.cpp`, which exercise the adapter without the renderer.
+
+I did not add another progress entry. The last several passes each recorded the same blocker with no source change, so one more would add noise. The `linux-gcc` gate needs a GCC 11+ environment, either a local install with sudo access or a CI job. Once it is available, run the three `linux-gcc*` presets, then re-check the story.

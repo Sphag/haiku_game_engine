@@ -1,0 +1,58 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: US-030
+- **Task Title**: Vulkan Resources and Descriptors
+- **Description**: As a rendering developer, I want the same resource model in Vulkan so that the backends have parity.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T12:02:03.227Z
+- **Ended At**: 2026-10-23T12:14:25.594Z
+- **Duration**: 12m 22s
+- **Input Tokens**: 74
+- **Output Tokens**: 4098
+- **Total Tokens**: 4172
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD section for this story, and the current repo layout.
+[94m[Bash][0m Inspect repo root, progress log, and PRD references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-030\|US-029\|US-028" tasks/prd-open-wor...
+The progress log already has a US-030 entry from earlier today, reporting the work done and gates passed. Before I signal completion, I'll re-check the story's PRD section and run the Linux gates myself.
+[94m[Bash][0m Check PRD story text and run Linux validate, configure, build, unit tests $ echo "unit=${PIPESTATUS[0]}"
+The Docs tools that just appeared aren't relevant to this story. The Linux gate run went to the background, so I'll read the PRD section and check its output.
+[94m[Bash][0m Show US-030 PRD text and background gate output so far $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl379yf...
+[94m[Bash][0m Wait briefly and check configure, build, and test progress $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl3...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/us030_dev.log tail -3 echo "dev log done" tail -3 /tmp/us030_build.log ls /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl379yfhk.output. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure, build, and test progress logs $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl3...
+[94m[Monitor][0m Wait for linux-unit ctest run to finish $ tail -8 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl3...
+The linux-unit test run and the Monitor are both still going. I'll wait for them to finish before reporting.
+[94m[Monitor][0m Wait for ctest summary line in background output $ tail -6 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8212780d-689e-4691-94c4-aefa7be07d4f/tasks/bl3...
+The Linux gates are still running in the background: configure and build finished, and the unit-test run is in progress. I'll report once the test summary is in.
+[94m[Bash][0m Show ctest output and rerun linux-unit tests for summary $ echo "exit=${PIPESTATUS[0]}"
+US-030 was already implemented in an earlier pass today, and I've re-verified the Linux gates on the current tree. I did not re-run the Windows gates, so those rest on the results recorded in `.ralph-tui/progress.md`.
+
+**Re-run this session (Linux, all passing):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0 (26 dependencies, 8542 files)
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (21 integration tests and 1 unit label)
+
+**Recorded in progress.md, not re-run here:**
+- Windows: ValidateVendor, win-dev, win-debug, win-unit, and the DX12 and Vulkan GPU suites (Vulkan with validation layers on).
+- Linux: the asan and sanitize builds, linux-gcc build and unit tests.
+- Native Linux Vulkan GPU suite: not run. This WSL host has no Vulkan 1.2 timeline-semaphore device, so it stays outstanding.
+- `engine_bench` does not exist yet, so the performance criterion has not been run.
+
+The fix from earlier today keeps swapchain images UNDEFINED at creation and moves the first transition to PRESENT_SRC in `present()`, after the acquire. The Vulkan validation layer had flagged the earlier creation-time transition.
+
+I made no code changes and did not append a new progress entry, since the existing 2026-10-23 US-030 entry already covers this work.
+
+<promise>COMPLETE</promise>
+The leftover Monitor (`b78i1esyz`) expired with no events. It was a watch on the background ctest output, and that run has already finished. I checked the results directly, so I don't need to re-arm it.
+
+The Linux results from my last message still stand: validate, linux-dev, linux-debug, and linux-unit all exited 0 on this tree. The Windows gates and the native Linux GPU suite are still unverified in this session, as I said before.

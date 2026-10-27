@@ -1,0 +1,189 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: US-006
+- **Task Title**: Jobs and Controlled Shutdown
+- **Description**: As a developer, I want background task execution so that I do not block the main loop.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T22:42:12.647Z
+- **Ended At**: 2026-10-21T23:01:53.636Z
+- **Duration**: 19m 40s
+- **Input Tokens**: 342
+- **Output Tokens**: 73565
+- **Total Tokens**: 73907
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log to see where US-005 left things.
+[94m[Bash][0m List repo root and read progress log $ ls -la && wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md && cat .ralph-tui/progress.md
+The Docs tools aren't relevant to this story, so I'll skip them. Next I'll pull the PRD's job-system and shutdown requirements and check the current engine tree.
+[94m[Bash][0m Search PRD for job-system requirements and list engine/test files $ cat tests/CMakeLists.txt | head -150
+[94m[Bash][0m Read PRD sections for US-006, functional reqs, non-goals, tech notes $ sed -n 884,915p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read runtime lifecycle code, tests, and core CMake $ cat tests/src/main.cpp | head -80
+The runtime has only a single-use lifecycle state machine, so the job system is new work. I need the core status/assert/log APIs and the warning-as-error helper before writing it.
+[94m[Bash][0m Read status, assert, log headers and warning/preset helpers $ grep -n "linux-dev\|linux-unit\|linux-gcc\"" -A8 CMakePresets.json | head -60
+The job system belongs in `engine/core` (the PRD lists "jobs" there). Before designing it I need to check threading setup, the Windows gate script, and the test-helper conventions.
+[94m[Bash][0m Inspect root CMake, existing assert tests, build dirs, and Windows gate script $ grep -n "US-00" docs/build.md | head -30
+I have what I need. The job system will go in `engine/core` with a header, implementation, and tests. Design choices:
+
+- One mutex guards the scheduler state. Handles and groups hold a shared pointer to it, so `wait()`/`state()` on a handle still work after the `JobSystem` is destroyed (every job is terminal by then).
+- Dependencies are counted. A failed or cancelled upstream cancels its dependents without running them.
+- Cancellation is cooperative for running jobs (via a token), and immediate for queued or waiting jobs.
+- `Drain` and `CancelPending` shutdown policies. Submissions after shutdown begins come back `Cancelled`.
+- `wait()` asserts when called from a worker of the same system, which would otherwise deadlock.
+
+I'll write the header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/include/engine/core/jobs.hpp[0m "#pragma once
+
+#include <atomic>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <span>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vecto... (5387 chars)"
+Next, the implementation. All scheduler state changes happen under one mutex; `complete()` is the single place that moves a job to a terminal state and settles its dependents.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/src/jobs.cpp[0m "#include "engine/core/jobs.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <algorithm>
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <mutex>
+#include <unordered_map>
+#... (11712 chars)"
+Now I'll wire the source and threading dependency into the core target, then add the tests.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/CMakeLists.txt[0m edit: "  src/guid.cpp
+  src/log.cpp
+  src/path.cpp
+  src/..." → "  src/guid.cpp
+  src/jobs.cpp
+  src/log.cpp
+  src/..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt[0m edit: "  src/core_guid_tests.cpp
+  src/core_log_tests.cpp" → "  src/core_guid_tests.cpp
+  src/core_jobs_tests.cp..."
+Now the tests. They cover the acceptance list: dependencies, failures, cancellation (pending, running, and group), shutdown policies, handles outliving the system, repeated startup/shutdown, and the worker-wait assertion.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m "#include "engine/core/assert.hpp"
+#include "engine/core/jobs.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <... (13638 chars)"
+The test file has a few problems I want to fix before building: a Catch `CHECK` called from a worker thread (not thread-safe), an awkward ternary for "optional dependency" that I'll replace with a helper, a `size_t`-vs-`int` comparison that `-Wsign-compare` would reject under `-Werror`, and missing `<chrono>`/`<span>` includes.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m edit: "#include <array>
+#include <atomic>
+#include <condi..." → "#include <array>
+#include <atomic>
+#include <chron..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m edit: "    CHECK(jobs.worker_count() == 2);" → "    CHECK(jobs.worker_count() == std::size_t{2});"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m edit: "    const JobHandle first = jobs.submit([&](const ..." → "    const JobHandle first = chain(jobs, [&](const ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m edit: "    JobHandle previous;
+    for (int i = 0; i < kC..." → "    JobHandle previous;
+    for (int i = 0; i < kC..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_jobs_tests.cpp[0m edit: "            JobHandle previous;
+            for (i..." → "            JobHandle previous;
+            for (i..."
+Next I'll build and run the Linux clang gate chain in the background, since a configure plus build can run past the default 10-minute limit.
+[94m[Bash][0m Run Linux clang validate, configure, build, and unit tests $ echo "EXIT=$?" >> /tmp/us006-linux-clang.log
+While that runs, I'll look at the docs so I can record the job-system conventions where the other runtime rules live.
+[94m[Bash][0m Show doc headings and the verification table $ sed -n 155,175p docs/build.md
+[94m[Bash][0m Read the time/identifiers and performance sections of runtime conventions $ sed -n 48,70p docs/runtime-conventions.md
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/runtime-conventions.md[0m edit: "## Performance contract
+" → "## Jobs and shutdown
+
+`engine/core/include/engine/..."
+Docs are updated. While the Linux build runs, I'll stage the Windows gate script outside the repo, same as the earlier stories did.
+[94m[Bash][0m Stage Windows gate script outside the repo $ tail -5 /tmp/us006-linux-clang.log 2>/dev/null
+[94m[Bash][0m Check Linux clang gate progress after a short wait $ ls -la /tmp/us006-linux-clang.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -c 1500 /tmp/us006-linux-clang.log echo ls -la /tmp/us006-linux-clang.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+Foreground sleeps are blocked here. I'll load the Monitor tool and wait on the log's `EXIT` line instead.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Notify when the Linux clang gate chain finishes, with key results $ tail -n 15 /tmp/us006-linux-clang.log
+The Linux clang gate chain (validate, configure, build, unit tests) is still running. I'll report results when the monitor fires.
+The background gate chain exited with code 0. I'll read the log to confirm the unit-test count and check for warnings.
+[94m[Bash][0m Check Linux clang gate log for warnings and test results $ tail -n 12 /tmp/us006-linux-clang.log
+The failure is a toolchain gap, not a logic error. This machine's libstdc++ (GCC 9 / clang 10 era) doesn't provide `<span>`, so the header doesn't compile here. I'll switch the dependency parameter to `std::initializer_list<JobHandle>`, which is portable C++17-era and fits every call site.
+[94m[Bash][0m Replace std::span with std::initializer_list in job headers $ sed -i 's/#include <span>/#include <initializer_list>/' engine/core/include/engine/core/jobs.hpp && ...
+The monitor event is from the earlier failed run; the header and source changes it mentions are my own `sed` edit, so I'll keep them. Next, the tests still pass `std::array` as dependencies, which `initializer_list` won't accept, so I'll update those call sites.
+[94m[Bash][0m Find remaining std::array and span uses in job tests $ grep -n "std::array\|<span>\|std::span\|deps\|both" tests/src/core_jobs_tests.cpp
+[94m[Bash][0m Convert test dependency arrays to initializer lists $ /d' $f && grep -n "submit(\|std::array\|{upstream}\|deps" $f
+Call sites are converted. Rerunning the Linux clang gate chain:
+[94m[Bash][0m Rerun Linux clang validate, configure, build, and unit tests $ echo "EXIT=$?" >> /tmp/us006-linux-clang.log
+[94m[Bash][0m Wait for Linux clang gate to finish and summarize results $ tail -n 8 /tmp/us006-linux-clang.log
+The Linux clang gate is running again after the `<span>` fix. I'll wait for it to finish before starting the other gates.
+[94m[Bash][0m Summarize Linux clang gate log results $ tail -n 8 /tmp/us006-linux-clang.log
+Linux clang passes 10/10. Those CTest entries run the whole `engine_tests` binary, so I'll confirm the job test cases actually executed. I'll also start the GCC and ASan/UBSan gates in the background, since the job code is threaded and the PRD requires sanitizer coverage for jobs.
+[94m[Bash][0m Verify job tests run and start GCC and sanitizer gates $ echo "ASAN_EXIT=$?") > /tmp/us006-gcc-asan.log 2>&1
+[94m[Bash][0m Check status of GCC and sanitizer gate run $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4a38904d-ee94-4502-9b00-5ce970a78373/tasks/bjj29te...
+My ad-hoc `engine_tests` invocations used the wrong argument form, so they tell me nothing yet. I'll check the job test count the supported way, `--suite`, once the GCC/ASan run finishes.
+[94m[Bash][0m Wait for GCC and ASan gate to finish and show results $ grep -nE "error|warning:|FAILED|tests passed|GCC_EXIT|ASAN_EXIT" /tmp/us006-gcc-asan.log | head -40
+[94m[Bash][0m Run unit and integration suites directly and count job tests $ build/linux-dev/tests/Debug/engine_tests --suite unit --list-tests 2>&1 | grep -ci "job\|jobs"
+[94m[Bash][0m Run suites directly and count job test names $ build/linux-dev/tests/Debug/engine_tests --suite unit --list-test-names-only 2>&1 | grep -c "job\|Jo...
+The suites pass, but my name filter returned 0, which may just be the binary's CLI not supporting that flag. I'll count the tagged test cases in source and compare with the reported totals.
+[94m[Bash][0m Compare test case counts in source against suite totals $ build/linux-dev/tests/Debug/engine_tests --help 2>&1 | head -n 12
+Counts match the source: 78 unit and 18 integration cases all ran, including the job tests. Next I'll wait for the GCC and sanitizer gates.
+[94m[Bash][0m Wait for GCC and ASan gate and show results $ grep -nE "error|warning:|FAILED|tests passed|GCC_EXIT|ASAN_EXIT" /tmp/us006-gcc-asan.log | head -40
+[94m[Bash][0m Check interim output of the GCC/ASan run $ tail -n 4 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4a38904d-ee94-4502-9b00-5ce970a78373/tasks/b...
+The GCC and sanitizer gates are still running. I'll report results once both finish; the Windows gate is next after that.
+[94m[Bash][0m Show GCC and ASan gate log summary $ tail -n 3 /tmp/us006-gcc-asan.log
+GCC (`-Werror` on first-party code) and the ASan/UBSan sanitizer run both pass 10/10 with no warnings. The last gate is Windows/MSVC, run through the staged script.
+[94m[Bash][0m Run the Windows MSVC gate script $ tail -n 3 /mnt/d/dev/us006-gates/win-run.log
+[94m[Bash][0m Wait for Windows gate to finish and show results $ grep -nE "error|warning C|WIN_GATE|WIN_GATES_PASSED|tests passed|WIN_RC" /mnt/d/dev/us006-gates/win-...
+The Windows gate is running. I'll report once it finishes.
+Those two notifications are the GCC and ASan runs I already read: both passed 10/10. The Windows gate is still running, so I'll wait for it before writing the progress entry.
+[94m[Bash][0m Show Windows gate log summary $ tail -n 3 /mnt/d/dev/us006-gates/win-run.log
+The Windows gate printed `WIN_GATES_PASSED`. I'll check that none of the MSVC warnings come from first-party code, and confirm the unit-test total.
+[94m[Bash][0m Confirm MSVC warnings are only vendored and tests passed $ grep -E "tests passed|tests failed" /mnt/d/dev/us006-gates/win-run.log
+All 2,721 MSVC warnings come from `third_party` (vendored DXC headers), none from first-party code. Last step: record the results in `docs/build.md` and the progress log.
+[94m[Bash][0m Add US-006 row to build verification table $ warnings only from vendored DXC) |\n') assert s.count(anchor)==1 s=s.replace(anchor,row+anchor) open...
+[94m[Bash][0m Append US-006 entry to progress log $ the guard asserts instead. --- EOF echo done
+US-006 is implemented and passes every local gate I could run: Linux clang, Linux GCC, Linux ASan/UBSan, and Windows MSVC. Hosted GitHub Actions has not run, so CI verification is still outstanding.
+
+**What was built**
+- `engine/core/include/engine/core/jobs.hpp` and `engine/core/src/jobs.cpp`: an in-house worker pool with:
+  - dependencies between jobs
+  - task groups with `wait()` and `cancel()`
+  - cooperative cancellation through a token
+  - `JobHandle` with `state()`, `error()`, `wait()`, and `cancel()`
+  - `shutdown(Drain | CancelPending)`
+- Behaviour:
+  - A throwing task ends `Failed`. Its dependents are cancelled without running.
+  - Cancelling a pending job takes effect immediately. A running job that is cancelled ends `Cancelled`, even if it returns normally.
+  - Submissions after shutdown begins come back `Cancelled` and never run.
+  - Handles remain valid after the `JobSystem` is destroyed.
+  - `wait()`, `wait_idle()`, and `shutdown()` assert when called from a worker of the same system, since that would deadlock.
+- `tests/src/core_jobs_tests.cpp`: 20 cases covering the acceptance list. Dependencies, failures, pending/running/group cancellation, both shutdown policies, repeated startup/shutdown, and the self-wait assertion.
+- Docs: a "Jobs and shutdown" section in `docs/runtime-conventions.md`, a US-006 row in `docs/build.md`, and a progress entry.
+
+**One decision to flag:** the first build failed because this machine's standard library (GCC 9.4 / clang 10) has no `<span>`. I switched the dependency parameter to `std::initializer_list<JobHandle>`. That keeps the header portable to the older toolchains this repo runs on.
+
+**Gate results (local)**
+| Gate | Result |
+|---|---|
+| `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` | 10/10 pass (78 unit and 18 integration cases) |
+| `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | 10/10 pass, `-Werror` on first-party code |
+| `linux-asan`, `linux-sanitize` | 10/10 pass |
+| Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | 10/10 pass (`WIN_GATES_PASSED`) |
+
+The 2,721 MSVC warnings all come from vendored DXC headers under `third_party/`. None come from first-party code.
+
+**Not verified**
+- Hosted GitHub Actions jobs for Windows/MSVC and Linux/Clang have not run, so neither OS is CI-verified.
+- `tools/ci/offline_verify.sh` was not re-run for this story.
+- No GPU or benchmark checks apply: no GPU suites exist yet, and `engine_bench` arrives with US-074.

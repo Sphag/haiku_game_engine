@@ -1,0 +1,49 @@
+# Iteration 168 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T07:51:48.197Z
+- **Ended At**: 2026-10-24T07:54:27.415Z
+- **Duration**: 2m 39s
+- **Input Tokens**: 46
+- **Output Tokens**: 3578
+- **Total Tokens**: 3624
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log, the PRD's US-049 section, and any existing streaming code.
+[94m[Bash][0m Survey repo layout and streaming-related files $ ls && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && grep -rli "stream" --include=*....
+[94m[Bash][0m Read US-049 PRD section and recent progress notes $ tail -120 .ralph-tui/progress.md
+The progress log already has a closing entry marking US-049 complete. Before signing off I'll check that the files exist and that the benchmark deferral matches the PRD.
+[94m[Bash][0m Verify streaming files and PRD benchmark ownership $ grep -n '"id": "US-049"' -A3 tasks/prd.json | head
+The PRD assigns the `streaming_stress` workload to US-078, so the deferral holds. I'll re-run the Linux unit suite on the current tree rather than rely on the earlier log.
+[94m[Bash][0m Rebuild linux-debug and run linux-unit ctest $ (cmake --build --preset linux-debug 2>&1 | tail -3) && (ctest --preset linux-unit --output-on-failur...
+The tail cut off the pass/fail summary line, so I'll re-run and capture it.
+[94m[Bash][0m Run linux-unit ctest and capture summary $ grep -E "tests passed|tests failed|Failed|\*\*\*" /tmp/us049_ctest.log | tail -5
+The Linux unit suite passes on the current tree. I'll log this pass in the progress file, following the existing entry format.
+[94m[Bash][0m Append US-049 verification entry to progress log $ linux-asan/linux-sanitize 22/22. - Not run: `engine_bench --suite acceptance` and the `streaming_str...
+US-049 is complete against its own deliverables. The streaming manager, its tests, and the Linux unit suite all check out on the current tree.
+
+**Verified this pass (Linux, clang):**
+- `streaming.hpp`, `streaming.cpp`, and `tests/src/world_streaming_tests.cpp` are present.
+- `linux-debug` builds, and `ctest --preset linux-unit` passes 22/22.
+
+**Carried forward from earlier passes on the same source (not re-run):**
+- Windows: ValidateVendor, `win-dev`, `win-debug`, and `win-unit` (21/21).
+- Linux GCC gates, and `linux-asan` with `linux-sanitize` (22/22).
+
+**Not run:**
+- `engine_bench --suite acceptance` and the `streaming_stress` workload. The PRD puts that workload in the benchmark table at line 877, and US-078 (Streaming Benchmark) owns it. The benchmark harness itself is US-074, which is not in the tree, so the criterion's "once the harness exists" condition is not met.
+- GPU suites. No GPU path changed.
+
+I appended a short verification entry to `.ralph-tui/progress.md`. I did not create a commit.
+
+<promise>COMPLETE</promise>

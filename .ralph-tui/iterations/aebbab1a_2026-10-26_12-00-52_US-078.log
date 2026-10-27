@@ -1,0 +1,255 @@
+# Iteration 864 Log
+
+## Metadata
+
+- **Task ID**: US-078
+- **Task Title**: Streaming Benchmark
+- **Description**: As a world developer, I want a streaming workload so that I can identify stalls and leaks.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T09:00:52.446Z
+- **Ended At**: 2026-10-26T10:03:22.508Z
+- **Duration**: 1h 2m 30s
+- **Input Tokens**: 752
+- **Output Tokens**: 89950
+- **Total Tokens**: 90702
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-078 work already exists.
+[94m[Bash][0m Read progress log and search for existing US-078 work $ tail -n 120 .ralph-tui/progress.md && grep -rn "streaming_stress\|US-078" --include=*.cpp --include=...
+Nothing for US-078 exists in code yet; the manifest and docs only point at it as pending. I'll read the story spec and the existing benchmark harness.
+[94m[Bash][0m Read US-078 spec, benchmark sources, and manifest $ sed -n 100,170p benchmarks/manifest.json
+The spec is large. I'll look at how `physics_stress` is wired into the CLI and at the streaming API it would build on.
+[94m[Bash][0m Inspect benchmark CMake, main wiring, and streaming API $ " engine/world/include/*/streaming.hpp | head -80
+[94m[Bash][0m Read streaming manager header and benchmark physics header $ ls engine/world/include/engine/world/ && cat engine/world/include/engine/world/streaming.hpp | head ...
+The streaming manager already exists, so the work is a route driver, a teleport case, a workload table, and the metrics. I'll check the existing streaming tests and the workload generator's API to reuse them.
+[94m[Bash][0m Read streaming tests and workload generator API $ grep -n "" tools/benchmark/include/engine/benchmark/workload.hpp | sed -n 1,200p | grep -v "^[0-9]*:...
+The workload generator already pins a streaming digest, which gives me the 200 000 descriptors. Next I need the authored-world types, how the generator's render content handles the streaming scene, and how `engine_bench` dispatches scenes.
+[94m[Bash][0m Read world partition API, generator rules, and bench dispatch $ sed -n 80,125p tools/benchmark/src/main.cpp
+Two things to confirm before designing: how the table's `descriptors` key maps onto instances, and what the expected file pins for `streaming_stress`.
+[94m[Bash][0m Read table key mapping, streaming expected digest, and physics runner entry $ grep -n "run_physics_stress" -A40 tools/benchmark/src/physics_stress.cpp | tail -45
+The table maps `descriptors` onto instances, and the generator already produces 200 000 placed instances. Before writing the runner I need four more facts: the GUID constructor, how profiles and suites are parsed, how bench tests are registered, and the instance coordinate range.
+[94m[Bash][0m Check GUID API, manifest profile parsing, test registration, and placement range $ grep -n "profiles" -A12 benchmarks/manifest.json | head -30
+Positions are in [0, 8192) m, which matches the shared world. I'll read the run record and the rest of the dispatch so the new scene plugs into the same report path.
+[94m[Bash][0m Read RunRecord, status enum, and remaining dispatch $ grep -n "physics_stress" tools/benchmark/src/*.cpp tests/src/*.cpp | grep -v "^tools/benchmark/src/p...
+The run-record shape and dispatch are clear. Two things could sink the design if I guess wrong: whether `add_object`'s duplicate-GUID check is linear (200 000 objects would make it quadratic), and the JobSystem constructor.
+[94m[Bash][0m Check add_object complexity, JobSystem ctor, and status logic $ grep -n "implementation\|route_status\|pending" tools/benchmark/src/manifest.cpp | head
+`add_object` calls `find_object` for every insert. I need to know whether that scan is linear over the whole world, since that decides how I build 200 000 objects.
+[94m[Bash][0m Read find_object and validate_world implementations $ grep -n "^std::optional<ObjectLocation> find_object\|^std::vector<std::string> validate_world\|^void...
+`add_object` scans every object on each insert, so 200 000 inserts would be quadratic. The runner will fill cells directly through the public `ensure_cell` and keep the same invariants. It will also run `validate_world` once so the catalog is still checked. Writing the header now.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/streaming_stress.hpp[0m "#pragma once
+
+// streaming_stress (US-078): the streaming benchmark on the CPU. It writes the shared world's cells from the seeded workload (the table's
+// descriptors, distributed over 32 x 32 cells ... (8139 chars)"
+Before writing the implementation I need the exact `SceneDef` field names and the JobSystem worker-count semantics.
+[94m[Bash][0m Read SceneDef, FrameTimes, and JobSystem API $ grep -n "scene.counts\|counts.at\|route_length" tools/benchmark/src/manifest.cpp | head
+The header is in place, and the route length and speed come from the table's own counts. Now the implementation: the catalog build, the route driver with per-traversal residency, the teleport case, and the judgement.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/streaming_stress.cpp[0m "#include "engine/benchmark/streaming_stress.hpp"
+
+#include "engine/benchmark/measure.hpp"
+#include "engine/benchmark/workload.hpp"
+#include "engine/core/guid.hpp"
+#include "engine/core/jobs.hpp"
+#incl... (29515 chars)"
+I left an unused `Driver` helper and two unused constants in that draft. Removing them before compiling.
+[94m[Bash][0m Remove unused helper class and constants $ echo done
+The on-disk change notice is from my own script, so nothing to undo. Next, the manifest: a real route definition, a headless streaming profile, and a separate soak suite kept out of the acceptance list.
+[94m[Bash][0m Locate profile and suite blocks in manifest $ grep -n '"builtin": {' -A6 benchmarks/manifest.json | head -8
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/benchmarks/manifest.json[0m edit: "      "settings": {"runtime": "headless"}
+    }
+  ..." → "      "settings": {"runtime": "headless"}
+    },
+ ..."
+[94m[Bash][0m Set streaming route definition and add soak suite $ grep -n "smoke or acceptance\|<smoke|acceptance>" tools/benchmark/src/cli.cpp tools/benchmark/src/ma...
+The manifest parses. Now the CLI accepts the new suite name, and the dispatch in `main.cpp` routes the scene to the new runner.
+[94m[Bash][0m Allow soak suite in CLI and dispatch streaming_stress $ grep -n "warmup_s\|repeats" tools/benchmark/src/main.cpp | head -5
+The header should not pull in the world types, so I'll drop that include and link `engine_world` privately. Then I'll build the library to shake out compile errors before writing tests.
+[94m[Bash][0m Wire CMake targets and tests, then find build directory $ grep -n '"name": "linux-debug"' -A4 CMakePresets.json | head -8
+Before writing tests, I need the exact manifest loader the physics tests use, so the streaming tests follow the same pattern.
+[94m[Bash][0m Read manifest loading pattern from physics tests $ sed -n 1,60p tests/src/bench_physics_tests.cpp | grep -n "include\|manifest\|load\|using\|namespace\...
+[94m[Bash][0m Read repository manifest helper in physics tests $ sed -n 34,52p tests/src/bench_physics_tests.cpp
+The loader pattern is clear. Writing the streaming tests: unit cases for the route, the ping-pong distance, and the judgement, plus one integration run on a reduced descriptor count.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/bench_streaming_tests.cpp[0m "// The streaming benchmark (US-078): the streaming_stress scene walks streaming_route_v1 across cell boundaries, reports the cell lifecycle
+// and the stage work, runs a separate teleport case, and ju... (7886 chars)"
+Both test cases and the library are written. Now I'll configure and build the Linux Debug targets in the background, logging to a file, since the first build is slow.
+[94m[Bash][0m Configure and build Linux debug in background $ tail -3 /tmp/us078_configure.log
+[94m[Bash][0m Check configure and build progress $ tail -2 /tmp/us078_build.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -3 /tmp/us078_configure.log grep -n "error\|warning:" /tmp/us078_build.log head -30 tail -2 /tmp/us078_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure and build progress $ grep -c "" /tmp/us078_build.log 2>/dev/null
+
+[91m[Error: Exit code 2][0m
+[94m[Monitor][0m Wait for Linux debug build to finish $ tail -2 /tmp/us078_build.log
+[94m[Monitor][0m Wait for build exit line in log $ tail -n 2 /tmp/us078_build.log
+While the build runs, I'll update the two docs that still describe `streaming_stress` as pending.
+[94m[Bash][0m Read benchmark and large-world doc passages to update $ sed -n 48,54p docs/large-world.md
+[94m[Bash][0m Update benchmark and large-world docs for streaming_stress $ `all_features`) is declared with its workload and reports `missing` until its story builds it.''') o...
+[94m[Monitor][0m Wait for Linux debug build to finish $ tail -n 2 /tmp/us078_build.log
+[94m[Monitor][0m Wait for build completion notice $ grep -c "" /tmp/us078_build.log 2>/dev/null
+[94m[Monitor][0m Wait for build exit line $ tail -n 2 /tmp/us078_build.log
+[94m[Monitor][0m Notice when build exits $ echo tick
+[94m[Bash][0m Check build log tail and errors $ grep -n "error\|warning:" /tmp/us078_build.log | head -20
+The build log was never created, so the background job probably died with its shell. Checking for a running cmake process before relaunching.
+[94m[Bash][0m Check whether cmake is running and logs exist $ ls /mnt/d/dev/haiku_game_engine/build/linux-dev 2>/dev/null | head -5
+Configure is still running from the earlier launch; its log is empty until it finishes. I'll keep waiting on the build log.
+[94m[Monitor][0m Wait for build exit line in log $ tail -n 2 /tmp/us078_build.log
+[94m[Monitor][0m Wait for the build exit notice $ pgrep -c cmake
+[94m[Monitor][0m Wait for build exit notice $ pgrep -c cmake
+[94m[Bash][0m Check configure, build, and process status $ pgrep -a "cmake|ninja" | head -3
+Configure has been running far longer than the ~100 s the notes record. Checking the clock and what cmake is doing.
+[94m[Bash][0m Inspect running cmake process and its children $ ls -la /mnt/d/dev/haiku_game_engine/build/linux-dev/CMakeCache.txt
+The configure is only 41 s old, so the clock was fine and my earlier monitors returned early. I'll wait on one until-loop monitor for the build exit line instead of polling.
+[94m[Monitor][0m Single wait for the Linux debug build exit line $ tail -n 3 /tmp/us078_build.log
+The build is running in the background and a monitor will report when it exits. Nothing else can proceed until it finishes, so I'm pausing here.
+
+Status so far:
+- **Written:** the `streaming_stress` runner (`tools/benchmark/src/streaming_stress.cpp` and its header), the `streaming_headless` profile, the `streaming_soak` suite, the `engine_bench` dispatch, and `tests/src/bench_streaming_tests.cpp`. The route is now defined in the manifest instead of "pending US-078". Docs are updated.
+- **Running:** `cmake --preset linux-dev`, then the `linux-debug` build, logging to `/tmp/us078_build.log`. The first compile of the streaming code and the new tests has not happened yet.
+- **Still to do:** fix any compile errors, run `engine_tests --suite unit` and the streaming tests, run the Linux gates, start the 30-minute soak in the background, and attempt the Windows gates.
+The build failed on compile errors in my new runner, not on the rest of the tree. The cause is that I dropped the streaming include from the header, so the `.cpp` no longer sees the world types. The path error is also a `PathError`, not a string. Checking that type before fixing both.
+[94m[Bash][0m Check PathError type and any errors outside the new file $ grep -n "error\|warning:" /tmp/us078_build.log | grep -v streaming_stress | head -5
+The errors are all in my new file, and the rest of the tree compiled. Two fixes: include `engine/world/streaming.hpp` in the `.cpp`, and convert the `PathError` to a message with `core::to_string`.
+[94m[Bash][0m Fix include and error conversion, rebuild in background $ echo "build exit $?" >> /tmp/us078_build.log) & echo started
+That notification is a stale one from the earlier build. Waiting for the rebuild I just started.
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 2 /tmp/us078_build.log
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 2 /tmp/us078_build.log
+The rebuild is still running after the fix, so I have no result to report yet. I'll wait for its exit line before running any tests or gates.
+That notification is another stale one from an earlier monitor. Checking the rebuild log directly.
+[94m[Bash][0m Check rebuild log for errors and completion $ grep -n " error\|warning:" /tmp/us078_build.log | head -20
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 2 /tmp/us078_build.log
+The rebuild is at step 9 of 10 with no errors so far. The final link and exit line are still pending, so I'm waiting on that before running any tests.
+[94m[Bash][0m Check whether the rebuild has finished $ pgrep -c -f "cmake --build"
+The build is still linking `engine_tests`, which is the largest target. Waiting for it to finish.
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 2 /tmp/us078_build.log
+The rebuild is still linking `engine_tests`, and the other targets compiled without errors. I'll hold until the exit line appears, then run the streaming tests and the unit suite.
+The Linux debug build now finishes with exit 0. Running the streaming tests next.
+[94m[Bash][0m Run streaming-related test cases $ ls build/linux-dev/tests/Debug/ | head
+My test invocation used the wrong argument form; the CLI takes `--suite`. Rerunning with the suite names.
+[94m[Bash][0m Run unit and integration suites $ echo "integration exit ${PIPESTATUS[0]}"
+The unit suite passes, but the integration suite has one failing case. I need to see which case it is, since it may be my streaming test.
+[94m[Bash][0m Show details of the failing integration case $ timeout 900 ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | grep -B3 -A12 "FAI...
+The failing case is my teleport. The route end is only about 600 m east and 1200 m north of the start, so the two 9x9 windows overlap and the manager correctly does not count it as a teleport. The teleport needs a destination whose window is clear of the start window. I'll jump to the first corner instead, 2400 m away, and update the matching text in the header, the manifest, and the test.
+[94m[Bash][0m Move teleport destination to a non-overlapping corner and rebuild $ echo "build exit $?" >> /tmp/us078_build.log) & echo started
+The script stopped at the header edit because the sentence wraps differently in the file, so the manifest and test edits never ran. The `.cpp` edits did apply and the rebuild has started. Finding the exact header wording and finishing the remaining edits.
+[94m[Bash][0m Find teleport wording in header $ grep -n "teleport" tools/benchmark/include/engine/benchmark/streaming_stress.hpp | head -5
+[94m[Bash][0m Apply remaining wording edits for teleport destination $ // the jump is to the first corner, whose window shares no cell with the start\n') EOF echo ok
+The build started before these wording-only edits. The only code change that matters is in the `.cpp`, which the build already picked up. Waiting for the build, then re-running the integration suite.
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 1 /tmp/us078_build.log
+The rebuild with the corrected teleport destination is running. Waiting for its exit line before re-running the integration suite.
+[94m[Bash][0m Re-run integration and unit suites $ echo "unit exit ${PIPESTATUS[0]}"
+The unit suite passes, but integration still has one failure. Checking which check it is now.
+[94m[Bash][0m Show failing check details $ timeout 900 ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | grep -B2 -A6 "FAIL...
+Still zero teleports even with a non-overlapping destination, so my assumption about the manager's rule is wrong. Checking how `streaming.cpp` counts a teleport.
+[94m[Bash][0m Find teleport counting logic in streaming manager $ grep -n "teleport" -B6 -A3 engine/world/src/streaming.cpp | head -60
+The manager counts a teleport only when the camera jumps more than twice the prefetch radius, which is 10 cells, not merely when the windows stop overlapping. The route's corner is only 9 cells away, so it never qualifies. The teleport destination will be 2816 m (11 cells) east of the route start, which is past that threshold and off the route. Updating the code, comment, and manifest text to match.
+[94m[Bash][0m Set teleport destination past the 10-cell threshold and rebuild $ echo "build exit $?" >> /tmp/us078_build.log) & echo started
+[94m[Monitor][0m Wait for rebuild exit line $ tail -n 1 /tmp/us078_build.log
+The rebuild with the 11-cell teleport destination is running. I'll re-run the integration and unit suites once it exits.
+[94m[Bash][0m Re-run integration and unit suites with failure details $ echo "unit exit ${PIPESTATUS[0]}"
+That command ran past the 120 s foreground limit because it runs the integration suite twice. It's continuing in the background, so I'll wait for its output file.
+[94m[Monitor][0m Wait for background test run to finish $ tail -n 25 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/782a7931-0320-4fd1-9186-2befd89d97d1/tasks/...
+[94m[Monitor][0m Wait for background test run to finish $ tail -n 25 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/782a7931-0320-4fd1-9186-2befd89d97d1/tasks/...
+I'm still waiting on the integration run in the background. Its output file has no summary line yet, so I have no result to report.
+[94m[Bash][0m Read final lines and any failures from the background run $ grep -A4 "FAILED" /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/782a7931-0320-4fd1-9186-2befd89d97d1...
+The unit suite passes in that background run. Its integration summary line isn't in the output, so I'll run the integration suite alone into a file and read the summary.
+[94m[Bash][0m Run integration suite in background to a log file $ echo "exit $?" >> /tmp/us078_integration.log) & echo started
+[94m[Monitor][0m Wait for integration log exit line $ grep -A4 "FAILED" /tmp/us078_integration.log | head -20
+[94m[Monitor][0m Wait for integration log exit line $ grep -A4 "FAILED" /tmp/us078_integration.log | head -20
+The unit suite passes on the current build, 1032 cases. The integration suite is running in the background into `/tmp/us078_integration.log`, and I'll read its summary when it exits.
+[94m[Bash][0m Check integration run progress $ pgrep -f "engine_tests --suite integration" | head -2
+Integration is still running, so there's no summary yet. The monitor for its exit line is still armed, and I'll report the result when it arrives.
+The integration suite passes: 127 cases, 5 skipped (X11 and input tests that have no device here). The streaming tests are in that set.
+
+Next is the 30-minute soak. I'll start it in the background with the Debug `engine_bench` binary and note that it's Debug, not Release.
+[94m[Bash][0m Start 30-minute streaming soak in background $ head -c 600 /tmp/us078_soak.log
+[94m[Bash][0m Check soak startup output and process $ pgrep -a engine_bench | head -2
+The soak is running. In parallel I'll run the vendor validation and the Linux unit ctest preset.
+[94m[Bash][0m Run vendor validation and linux-unit ctest $ tail -n 4 /tmp/us078_ctest.log
+[94m[Monitor][0m Wait for ctest completion $ tail -n 4 /tmp/us078_ctest.log
+The vendor validation and the Linux unit ctest are running in the background. I'll read their results when they finish. The 30-minute soak continues alongside them.
+[94m[Monitor][0m Wait for ctest final summary line $ tail -n 6 /tmp/us078_ctest.log
+The vendor validation passed (exit 0). The unit ctest is at 1 of 30 passed with the integration test running. Waiting for the summary line.
+[94m[Bash][0m Read ctest result and soak progress $ ls /mnt/d/dev/haiku_game_engine/artifacts/bench/us078-soak-linux-debug 2>/dev/null
+
+[91m[Error: Exit code 2
+
+Label Time Summary:
+integration    =  89.84 sec*proc (29 tests)
+unit           =  23.42 sec*proc (1 test)
+
+Total Test time (real) = 113.43 sec
+---][0m
+[94m[Bash][0m Summarize ctest results and soak progress $ ls /mnt/d/dev/haiku_game_engine/artifacts/bench/us078-soak-linux-debug 2>/dev/null
+
+[91m[Error: Exit code 2
+55:27/30 Test #27: engine_runtime_cli_missing_pack ..................   Passed    0.02 sec
+57:28/30 Test #28: engine_runtime_cli_invalid_backend ...............   Passed    0.02 sec
+59:29/30 Test #29: engine_runtime_cli_missing_pack_file .............   Passed    0.02 sec
+61:30/30 Test #30: engine_pack_runtime_round_trip ...................   Passed    0.19 sec
+63:100% tests passed, 0 tests failed out of 30
+---][0m
+The Linux unit ctest passes 30 of 30. The soak log has no output yet, so I'll confirm the process is still alive.
+[94m[Bash][0m Confirm soak process is alive and inspect its log $ cat /tmp/us078_soak.log | head -5
+The soak is alive and prints only at the end. Since this touches streaming code, the sanitizer gate applies, so I'll start the ASan preset build in the background now.
+[94m[Bash][0m Build ASan preset and run sanitizer ctest in background $ echo "asan ctest exit $?" >> /tmp/us078_asan_ctest.log) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for soak and ASan runs to finish $ tail -n 2 /tmp/us078_soak.log
+The ASan build and sanitizer ctest are running, and the soak is still going. I'll write the progress entry once those results are in.
+[94m[Monitor][0m Wait for soak and ASan runs to finish $ tail -n 2 /tmp/us078_soak.log
+The ASan build and sanitizer ctest are still running, and so is the soak. The monitor is armed for the ASan result, and I'll report everything once the soak and sanitizer runs finish.
+[94m[Bash][0m Check ASan build, sanitizer ctest, and soak status $ date
+The ASan build passed, and the sanitizer ctest is at 10 of 30. The soak started at 12:26 and should finish around 12:57. Re-arming the wait on both.
+[94m[Monitor][0m Wait for sanitizer ctest and soak exit $ tail -n 30 /tmp/us078_soak.log
+Both the sanitizer ctest and the 30-minute soak are still running. I'll wait for their exit lines before writing the progress entry.
+[94m[Bash][0m Check sanitizer ctest and soak status $ date
+[94m[Bash][0m Show ASan ctest pass summary $ grep -n "tests passed\|tests failed" /tmp/us078_asan_ctest.log
+[94m[Monitor][0m Wait for soak exit line $ tail -n 40 /tmp/us078_soak.log
+The ASan build passes, and the sanitizer ctest passes 30 of 30. The 30-minute soak is still running, with its exit line still pending. I'll read its report when it finishes.
+[94m[Bash][0m Check whether soak has finished $ date
+[94m[Monitor][0m Wait for soak exit line $ tail -n 40 /tmp/us078_soak.log
+The soak is still running (started 12:26, now 12:51, due around 12:57). Its report comes out only at exit, so I'm waiting on that line.
+[94m[Bash][0m Check soak output and process $ date
+[94m[Monitor][0m Wait for soak exit line $ tail -n 40 /tmp/us078_soak.log
+The soak is at about 30 minutes now and still hasn't printed its report. I'm waiting for the exit line.
+[94m[Bash][0m Check soak output, process, and artifact folder $ ls -la /mnt/d/dev/haiku_game_engine/artifacts/bench/us078-soak-linux-debug 2>/dev/null
+
+[91m[Error: Exit code 2
+1
+Mon Oct 26 13:01:30 MSK 2026][0m
+The soak has run about 35 minutes, past its 30.5-minute pacing target. I'll check whether it's still making progress before deciding anything.
+[94m[Bash][0m Check soak CPU, memory, and scratch directory $ du -sh /tmp/engine_streaming_* 2>/dev/null | head -2
+It's alive at about 16% CPU with a fixed 86 MB footprint, consistent with pacing sleeps rather than a stall. The scratch directory is in place. I'll keep waiting for the exit line.
+[94m[Monitor][0m Wait for soak exit line $ tail -n 40 /tmp/us078_soak.log
+The soak is still running, past 34 minutes of its roughly 31-minute paced schedule, and it is making progress. I'm waiting on its exit line.
+The soak finished with exit 0 and passed its checks. I'll pull the actual counters from the report so the progress entry records real numbers.
+[94m[Bash][0m Extract soak counters from report $ python3 -c " import json r=json.load(open('artifacts/bench/us078-soak-linux-debug/report.json')) run...
+The soak counters are consistent: residency stays at 121 cells and about 3.4 MB across all ten complete traversals, with no failed, missing, stale, or dangling entries. I'll record the entry in the progress log, which is the required step.
+[94m[Bash][0m Append US-078 entry to progress log $ convert with `core::to_string(error)` before `core::failure`. --- EOF echo ok
+US-078 is partly done. The streaming benchmark, the soak, and the Linux gates pass. The Windows gates have not been run, so the story is not complete and I have not signalled COMPLETE.
+
+**What I built**
+- `streaming_stress` (`tools/benchmark/src/streaming_stress.cpp`): builds the authored world from the table's 200 000 descriptors over 32×32 cells of 256 m. It drives `StreamingManager` along `streaming_route_v1`, a 5400 m route at 30 m/s that goes forward and back across cell boundaries.
+- A separate teleport case jumps the camera 11 cells east of the route start. The manager only counts a move as a teleport above 10 cells, which is why I moved the destination.
+- Each run records cell loads and unloads, IO/decode/upload bytes, update and safe-point timings, residency peaks per traversal, and teleport settle time.
+- It fails on failed cells, corrupt loads, dangling cross-cell references, missing or stale window cells, an unsettled teleport, budget overruns (12 GiB GPU, 16 GiB host), or residency growth across traversals.
+- `streaming_headless` profile and `streaming_soak` suite added to `benchmarks/manifest.json`, kept out of the acceptance suite. GPU profiles report `missing`.
+
+**Verified on Linux (Debug, clang 10)**
+- `ValidateVendor`: exit 0.
+- `linux-debug` build: exit 0.
+- Unit suite: 1032/1032.
+- Integration suite: 127 passed, 5 skipped (X11 and input tests with no device here).
+- `linux-unit` ctest: 30/30.
+- `linux-asan` build and `linux-sanitize` ctest: 30/30.
+- 30-minute soak: passed. It ran 108 000 measured frames across 10 complete traversals. Residency stayed at 121 cells and about 3.45 MB CPU in every traversal, with zero failed, missing, stale, dangling, or corrupt entries. The teleport settled in 42 ms with all 81 window cells active.
+
+**Not run**
+- The Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`). I did not attempt them this session.
+- `linux-gcc`: the host has only GCC 9, so it can't run.
+- The acceptance GPU path for `streaming_stress`, which doesn't exist yet.
+- Release-build soak numbers. The soak ran on the Debug build, so its timings are diagnostic only.
+
+Full details and the learnings are appended to `.ralph-tui/progress.md`.

@@ -1,0 +1,79 @@
+# Iteration 20 Log
+
+## Metadata
+
+- **Task ID**: US-040
+- **Task Title**: Native-Profile GI and Reflections
+- **Description**: As a player, I want indirect lighting without heavy RT so that I can use the native profile.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T17:03:09.772Z
+- **Ended At**: 2026-10-23T17:13:19.910Z
+- **Duration**: 10m 10s
+- **Input Tokens**: 162
+- **Output Tokens**: 13984
+- **Total Tokens**: 14146
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-040 work already exists.
+[94m[Bash][0m Read progress log and search for existing GI work $ wc -l .ralph-tui/progress.md && tail -n 120 .ralph-tui/progress.md && grep -rn "US-040\|irradiance\|...
+US-040 is already partly done from two earlier passes and marked Partial. Before choosing what to finish, I'll read the gate procedure memory and the open-items list in the docs.
+[94m[Bash][0m Read gate memory, GI docs, and PRD US-040 section $ grep -n "US-040" -A 30 tasks/prd-open-world-engine.md | head -80
+The open gaps are the converter payload not reaching the runtime, alpha-blended reflections, and the off-screen fallback. The payload gap is the one the acceptance criteria name directly, so I'll look at how the importer writes it and how the runtime could read it.
+[94m[Bash][0m Read GI importer, probe header, and renderer GI API $ ls engine/assets/include/engine/assets 2>/dev/null | head -30
+The docs tools aren't relevant to this story. The cheapest real closure of the payload gap is to have the GPU test feed the importer's payload through `deserialize` and `set_gi_volume` instead of baking inline. I'll check how the GPU test builds its volume and whether the test target can reach the importer.
+[94m[Bash][0m Inspect GPU GI test and importer wiring $ wc -l tests/src/render_gi_gpu_tests.cpp && grep -n "bake\|set_gi_volume\|#include\|make_gi_probes\|T...
+[94m[Bash][0m Read GPU GI fixture bake code and test linkage $ sed -n 180,300p tests/src/render_gi_gpu_tests.cpp && sed -n 330,365p tests/src/render_gi_gpu_tests.c...
+The GPU fixture bakes inline with `bake_volume`. I'll route it through the importer so the test covers the converter payload. I need to see how `gi_probe_tests.cpp` builds the registry and whether tests can include nlohmann.
+[94m[Bash][0m Read importer test setup and GPU fixture constants $ sed -n 1,20p tests/src/gi_probe_tests.cpp && sed -n 258,300p tests/src/gi_probe_tests.cpp && grep -n...
+The importer is reachable through `ImporterRegistry::builtin()`. I'll check that test sources already include nlohmann, then swap `bake_room` to build the JSON source and deserialize the importer's payload.
+[94m[Bash][0m Check nlohmann use in tests and fixture box struct $ grep -n "struct Box\|occluder\|color\|half" tests/src/render_gi_gpu_tests.cpp | sed -n 1,12p
+Tests don't include nlohmann, so I'll build the JSON source text by hand. Replacing `bake_room`:
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_gi_gpu_tests.cpp[0m edit: "GiVolume bake_room(const std::vector<Box>& boxes) ..." → "std::string vec3_json(const glm::vec3& value) {
+  ..."
+The new code needs the importer and `<sstream>` includes. I'll add them and check whether `BakeInputs` is still used, since an unused using-declaration could break the warnings-as-errors build.
+[94m[Bash][0m Find BakeInputs uses and include block $ sed -n 1,35p tests/src/render_gi_gpu_tests.cpp | grep -n "include\|^$" | head -40
+`BakeInputs` is now unused, so I'll drop that using-declaration and add the includes.
+[94m[Bash][0m Fix includes and drop unused using in GPU GI test $ $/d' $f && sed -i 's|^#include "engine/gi/probes.hpp"$|#include "asset_converter/importer.hpp"\n#inc...
+The "changed on disk" notice is from my own sed edits, so the current file is the intended state. Next I'll build the Linux debug preset to confirm it compiles with warnings-as-errors.
+[94m[Bash][0m Build Linux debug preset and count warnings $ tail -3 /tmp/us040_linux_build.log
+[94m[Bash][0m Run Linux unit tests and Vulkan GPU suite probe $ tail -3 /tmp/us040_vk_linux.log
+Linux unit tests pass 22/22, and the Linux Vulkan GPU suite reports unsupported on this host, which is the expected not-run result. Next is the Windows batch. I'll reuse the last us040b batch file as the template and check that no batch is already running.
+[94m[Bash][0m List prior gate batch files and running batches $ ps -eo pid,args | grep -i "\.bat" | grep -v grep | head
+[94m[Bash][0m Show latest gate batch template and running processes $ ps -eo pid,args | grep -i "cmd.exe\|us0" | grep -v grep | head -5
+No gate batch is running. I'll write a new batch from the us046 template with a fresh name and launch it in the background.
+[94m[Bash][0m Create and launch Windows gate batch for US-040 $ date
+While the Windows batch runs, I'll update the GI doc so it no longer says the payload is unused by the GPU path. The production cook-to-scene load is still open, so I'll keep that item listed.
+[94m[Bash][0m Update GI doc for payload path and check build row $ the coverage view is green inside and red outside. The fixture bakes through the\n  `gi_probes` impo...
+I'll wait for the Windows batch to finish before touching the build row.
+[94m[Bash][0m Wait for Windows gate batch to finish $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us040c
+All six steps exit 0. I'll check the logs rather than trust the exit codes: build warnings, unit counts, and GPU case counts.
+[94m[Bash][0m Check Windows build warnings, unit and GPU results $ find /mnt/d/dev/haiku_game_engine/engine /mnt/d/dev/haiku_game_engine/tests /mnt/d/dev/haiku_game_en...
+The GPU suites pass: DX12 47 cases and Vulkan 48 cases, and the binary is newer than every changed source. I'll confirm the validation-layer and adapter lines in the GPU logs, then record results.
+[94m[Bash][0m Show GPU run logs for validation and adapter lines $ grep -c "warning C" us040c_1.log us040c_2.log us040c_4.log 2>/dev/null
+Windows is green on the current tree. My test change touched a shared file, so I'll also rebuild and run the Linux GCC preset, which the story's CI requires.
+[94m[Bash][0m Build and unit-test Linux GCC preset $ grep "tests passed\|tests failed" /tmp/us040_gcc_unit.log
+Linux GCC is also clean. I'll update the build.md row with these results and the narrowed open list, then append the progress entry.
+[94m[Bash][0m Update build row and append progress entry $ no `warning C`/`error C`), `win-unit` 21/21, `gpu dx12` 47 cases / 17857 assertions, `gpu vulkan` 48...
+US-040 is still **Partial**, so I'm not emitting the completion signal. This pass closed one gap and re-verified the rest.
+
+**What changed**
+- `tests/src/render_gi_gpu_tests.cpp`: the indoor fixture no longer bakes inline. It writes the room as a `gi_probes` JSON source, runs it through the converter's importer, deserializes the payload, and uploads it with `set_gi_volume`. The GPU test now exercises the converter output instead of a separate in-test bake.
+- `docs/gi-probes.md`, `docs/build.md` (US-040 row), `.ralph-tui/progress.md`: updated with the results and the narrowed open list.
+
+**Gate results (current tree)**
+- Windows (batch us040c, RTX 5080): `ValidateVendor`, `win-dev`, `win-debug` (no `warning C`/`error C`), `win-unit` 21/21, `gpu dx12` 47 cases, `gpu vulkan` 48 cases, validation layers on, `software=no`. The binary is newer than every changed source.
+- Linux clang: `linux-debug` 0 warnings, `linux-unit` 22/22. `engine_tests --suite gpu --backend vulkan` exits 3 (`unsupported`, no Khronos validation layer on this host). Recorded as not run.
+- Linux GCC: `linux-gcc-debug` 0 warnings, `linux-gcc-unit` 22/22.
+- Not run: `linux-asan`/`linux-sanitize` (no memory, ECS, jobs, streaming, Lua, or physics change), `engine_bench --suite acceptance` (US-074 not built), GUI check, GitHub CI (not pushed).
+
+**Still open for US-040**
+- The game does not load a cooked `gi_probes` asset from the asset registry at startup. The fixture reaches the renderer through the importer, but the production load path is missing.
+- Alpha-blended surfaces get no screen-space reflections.
+- Off-screen mirror images fall back to the environment, not to probes.
+
+I did not commit anything, per the workflow.

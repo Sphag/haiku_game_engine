@@ -1,0 +1,44 @@
+# Iteration 781 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:41:13.877Z
+- **Ended At**: 2026-10-26T02:43:17.293Z
+- **Duration**: 2m 3s
+- **Input Tokens**: 22
+- **Output Tokens**: 2080
+- **Total Tokens**: 2102
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and US-076 PRD $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && gre...
+The progress log shows 26 prior passes on this story, all stopped at the same user decision. Before deciding whether anything has changed, I'll check the source and workload mtimes and re-run the cheap Linux checks.
+[94m[Bash][0m Check mtimes, workload version, and run Linux build and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -3)
+US-076 is not complete, and I did not signal COMPLETE. The blocker is a decision only you can make.
+
+**What's blocking it**
+
+- **Triangle floor and frame budget fail.** The start pose on the route gives 312,068 submitted triangles on the indexed path, against the contract's 2,000,000 minimum (PRD line 875). Measured p99 is 35–47 ms against the 16.7 ms budget. The cause is in the fixed workload: the instance placement from the seeded generator and the start pose from the camera route. Both are pinned by digest or SHA-256. Fixing it means bumping `kWorkloadVersion` (currently 1), regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. PRD line 722 reserves contract changes for a separate user decision, so I did not make the change.
+- **full_1080 is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so the profile cannot run until you choose a vendoring route.
+- **Native Linux Vulkan GPU and linux-gcc have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. The Windows gates were not re-run in this pass.
+
+**What I checked this pass**
+
+- Source and workload mtimes are unchanged since the last recorded run (`render_stress.cpp` 04:15:43, `workload_expected.json` 02:21:05, `manifest.json` 02:43:31). The eight `us076-*` artifact directories already exist from earlier runs.
+- `cmake --build --preset linux-debug` builds. `ctest --preset linux-unit` passes; the 30/30 count is from the earlier run in the log.
+
+**Decision needed**
+
+1. Approve a fixed-contract change (route start or placement) that bumps `kWorkloadVersion` and regenerates the expected digests, or accept the failing measured run as the result. Either way the story can't close as a pass today.
+2. Choose a FSR 2 vendoring route so full_1080 can run.
+
+I did not append another progress entry. The last 26 entries say the same thing, so I'd rather record the decision once you make it.

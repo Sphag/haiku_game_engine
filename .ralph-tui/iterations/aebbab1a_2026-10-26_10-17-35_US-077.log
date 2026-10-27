@@ -1,0 +1,37 @@
+# Iteration 840 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T07:17:35.551Z
+- **Ended At**: 2026-10-26T07:23:37.005Z
+- **Duration**: 6m 1s
+- **Input Tokens**: 24
+- **Output Tokens**: 2497
+- **Total Tokens**: 2521
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ tail -60 .ralph-tui/progress.md
+[94m[Bash][0m Search for existing US-077 references $ grep -rn "US-077\|physics_stress\|physics_spec\|generate_physics_spec" --include=* -r . 2>/dev/null ...
+[94m[Bash][0m Verify physics_stress exists and run Linux gates $ tail -3 /tmp/unit.log)
+[94m[Bash][0m Confirm unit pass count and log this status check $ no GCC 11+ locally) and `linux-sanitize` (last run 29/30, X11 key-delivery failure in `platform_x11_...
+US-077 is not complete, so I am not emitting the COMPLETE signal. The physics stress benchmark exists and the Linux gates I could run pass, but two required checks are still open.
+
+**What I verified this pass (no source changes):**
+- `physics_stress` is implemented in `tools/benchmark/src/physics_stress.cpp`. It reports active and sleeping body counts, lost timesteps from the catch-up limit, NaN samples, and out-of-bounds samples.
+- Linux gates pass: `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset linux-dev`, `cmake --build --preset linux-debug` (0 warnings), and `ctest --preset linux-unit --no-tests=error` (30/30).
+
+**What is still open:**
+- **Linux/GCC job (`linux-gcc*`):** the machine has only GCC 9.4 and clang 10, and Jolt needs GCC 11+. This needs the CI job or a newer compiler. It is not verified.
+- **`linux-sanitize`:** the last run was 29/30. `engine_tests_integration` fails three assertions in `platform_x11_input_tests.cpp` (key delivery to the focused X11 window). That is not physics code, but the gate is red.
+- **Windows gates:** not re-run in this pass. The earlier Windows batch results stand.
+
+I appended a status entry to `.ralph-tui/progress.md`. This is the 49th status check on US-077 with no code change, so the blocker is environmental. Resolving it needs a GCC 11+ toolchain (or the CI job) and a fix or waiver for the X11 test.

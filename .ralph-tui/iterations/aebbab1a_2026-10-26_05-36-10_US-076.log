@@ -1,0 +1,41 @@
+# Iteration 762 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:36:10.790Z
+- **Ended At**: 2026-10-26T02:36:27.825Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2130
+- **Total Tokens**: 2152
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 is already partly implemented.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rn "render_stress\|US-076" --include=*.cpp --incl...
+The log shows US-076 blocked on user decisions across many passes. Before deciding whether there's anything new to do, I'll check what the most recent entries say about the Windows gates and the open blockers.
+[94m[Bash][0m Check recent US-076 Windows gate and artifact status $ ls -la benchmarks/
+US-076 is not complete, and I did not change anything in this pass. The blocker needs your decision, so I'm not signalling COMPLETE.
+
+**Where it stands**
+
+- **Implemented:** the `render_stress` scene, the fixed-contract workload (`kWorkloadVersion` 1, `benchmarks/workload_expected.json`), and the manifest route. The us076 indexed, indirect, meshlet, and no-mesh-shader runs exist under `artifacts/bench/`.
+- **Windows gates:** passed on the earlier tree in the last full pass (validate, win-dev, win-debug, win-unit 29/29, `engine_tests --suite gpu` on dx12 and vulkan, win-release bench). Those results predate the current tree, so re-run them before reporting them as current.
+- **Linux gates:** re-verified in the latest pass: ValidateVendor, linux-dev, linux-debug build, and linux-unit 30/30 all pass.
+- **Not run:** native Linux Vulkan GPU suite and linux-gcc. WSL has no Vulkan device, and GCC 9.4 cannot build Jolt.
+
+**What's blocking acceptance**
+
+1. **Triangle floor and frame budget fail.** The route start submits 312,068 triangles against the PRD's 2,000,000 minimum on the indexed path. p99 is 35–47 ms against a 16.7 ms budget. The cause is the instance placement from the seeded generator, and the route start pose comes from a SHA-256-pinned manifest. Fixing it changes the fixed benchmark contract: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and update the manifest hash. Your call: approve that change, or accept the failing measured run as the result.
+2. **`full_1080` is unsupported** until the FSR 2 shader permutations are vendored. You need to choose the vendoring route.
+3. **Native Linux Vulkan GPU and linux-gcc** need a native Linux machine with a Vulkan device, or a GCC 11+ toolchain.
+
+If you approve option 1, I'll make the workload change, regenerate the expected file and manifest, re-run the measurements, and re-run the gates.

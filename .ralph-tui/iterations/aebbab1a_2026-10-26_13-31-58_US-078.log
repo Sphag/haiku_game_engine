@@ -1,0 +1,42 @@
+# Iteration 867 Log
+
+## Metadata
+
+- **Task ID**: US-078
+- **Task Title**: Streaming Benchmark
+- **Description**: As a world developer, I want a streaming workload so that I can identify stalls and leaks.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T10:31:58.786Z
+- **Ended At**: 2026-10-26T10:32:14.887Z
+- **Duration**: 16s
+- **Input Tokens**: 28
+- **Output Tokens**: 2483
+- **Total Tokens**: 2511
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing progress notes and the current state of the streaming benchmark code.
+[94m[Bash][0m Read progress notes and find streaming benchmark code $ grep -rn "streaming_stress" --include=*.cpp --include=*.hpp --include=*.json --include=*.md . 2>/dev...
+The progress log says most of US-078 is already built and the Windows gates passed. I'll check whether any file changed after that last entry before deciding what is left.
+[94m[Bash][0m Check for files changed since last progress entry $ grep -c "US-078" .ralph-tui/progress.md
+Nothing under the source trees changed after the last recorded run, so the earlier results still describe this tree. I'll record this status check in the progress log without claiming the remaining gates passed.
+[94m[Bash][0m Append status check entry to progress log $ no COMPLETE signal) - No file under engine, tools, tests, benchmarks, docs, or cmake is newer than t...
+US-078 is not complete, so I am not emitting the completion signal. Most of the story is built and verified, but two criteria remain open.
+
+**Done (from earlier runs, unchanged since):**
+- `streaming_stress` is implemented in `tools/benchmark/src/streaming_stress.cpp`. It builds the 200 000-descriptor world over 32 × 32 cells, walks the 5400 m route at 30 m/s with forward and back traversals, and runs a separate teleport case.
+- It records cell loads/unloads, IO/decode/upload bytes, residency, and teleport settle time, and it fails on dangling references, corrupt loads, missing or stale cells, budget overruns, and residency growth.
+- The 30-minute soak (Debug build, paced) passed: 10 traversals, 0 failed, 0 dangling, 0 corrupt, and the teleport settled in 42 ms.
+- Windows gates passed: ValidateVendor, `win-dev`, `win-debug` with no warnings, `win-unit` 29/29, and `engine_tests --suite gpu` with dx12 (72 cases) and vulkan (73 cases).
+- Linux gates passed: ValidateVendor, `linux-dev`, `linux-debug` with no warnings, `linux-unit` 30/30, and `linux-asan` plus `linux-sanitize` 30/30.
+
+**Still open:**
+- **`linux-gcc` gate:** the host has only g++-9 and clang++-10, and Jolt needs GCC 11+. Installing it needs root, which is unavailable. This must run on a GCC 11+ host or in CI.
+- **Release soak:** the 30-minute numbers come from a Debug build. A Release run is still needed for the performance contract.
+- **`engine_bench --suite acceptance`:** the GPU streaming path is not implemented, so the acceptance run is not applicable yet.
+
+I checked that no source file changed since the last recorded run, and appended a status entry to `.ralph-tui/progress.md`. I did not re-run the build or tests in this pass.

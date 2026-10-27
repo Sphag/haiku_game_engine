@@ -1,0 +1,50 @@
+# Iteration 526 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T09:03:38.493Z
+- **Ended At**: 2026-10-25T09:04:07.358Z
+- **Duration**: 28s
+- **Input Tokens**: 52
+- **Output Tokens**: 4293
+- **Total Tokens**: 4345
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-059 already exists in the tree, then read the progress log.
+[94m[Bash][0m Inspect repo layout, save dir, and progress log $ grep -rn "US-059" --include=*.md --include=*.txt --include=*.cmake --include=*.cpp -l . | grep -v th...
+The progress log says US-059 has been "Partial" across several passes, with no source change. Before deciding what to do, I'll check the save code against the acceptance criteria and see whether the Windows gates were ever run.
+[94m[Bash][0m Review save module, tests, and PRD entry $ ls /mnt/d/dev/haiku_game_engine/.ralph-tui/
+The save module and its 12 test cases are in place. Next I'll check which gates the log actually records as run, especially Windows and ASan.
+[94m[Bash][0m Check recorded gate results for US-059 $ ls .ralph-tui/reports | tail -5
+The record shows Windows gates passed on the final tree and Linux debug/unit pass. The ASan gate is the one required item that the log never mentions, and the save code touches Lua and streaming, so the story requires it. I'll check whether that preset can run here.
+[94m[Bash][0m Inspect ASan presets in CMakePresets.json $ grep -n -i "asan" .ralph-tui/progress.md | tail -5
+ASan and UBSan passed on this tree earlier, so the remaining gaps are the ones the log already names. I'll confirm the tree hasn't changed since those runs, then record this pass.
+[94m[Bash][0m Check tree changes since last log and compiler availability $ clang++ --version 2>/dev/null | head -1
+The tree is unchanged since the last recorded gates, and no GCC 11+ compiler exists here. I'll log this pass in the progress file.
+[94m[Bash][0m Append status entry to progress log $ and a runtime save/load path through a host (US-060). --- EOF tail -3 .ralph-tui/progress.md
+US-059 is not complete, so I'm not emitting the completion signal. The save code and its tests are in the tree, and the gates I can run here pass. Three acceptance items remain blocked.
+
+**Done and recorded as passing on the current tree:**
+- Save module (`engine/save/`): one JSON file per slot with format, version, build, a CRC-32 of the body, and the body. Writes are atomic, and the previous good save is kept as `<slot>.prev`. Corrupt or incompatible files are rejected.
+- Script state capture and restore, and changed-cell and layer saves that go through `write_cell_files` into a runtime directory, so the authored project is never written.
+- 12 unit tests in `tests/src/save_tests.cpp`.
+- Windows gates: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21 of 21).
+- Linux gates: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (22 of 22). `linux-asan` builds, and `linux-sanitize` passes 22 of 22 with ASan and UBSan.
+
+I checked this pass: nothing under `engine`, `tests`, or `cmake` has changed since the last recorded run, so those results still hold.
+
+**Blocked:**
+- **`linux-gcc` preset, build, and `linux-gcc-unit` ctest.** This machine has only GCC 9.4 and Clang 10. Jolt needs GCC 11 or newer. The log says apt has no GCC 11 or 12 for this image, so this needs a machine that has them.
+- **`engine_bench --suite acceptance`.** There is no benchmark harness yet (US-074), so the performance criterion cannot be run.
+- **Runtime save/load through a host.** The host path is US-060's job. The save and load code is tested through unit tests, not through a running game.
+
+I appended a status entry to `.ralph-tui/progress.md`. No source changed in this pass.

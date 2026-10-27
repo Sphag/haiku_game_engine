@@ -1,0 +1,40 @@
+# Iteration 62 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:46:36.689Z
+- **Ended At**: 2026-10-24T00:46:55.503Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2521
+- **Total Tokens**: 2549
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the FSR integration.
+[94m[Bash][0m Read progress log and locate FSR references $ grep -rn "FSR2_AVAILABLE\|fsr2\|FSR 2\|fsr_jitter" --include=*.txt --include=*.cmake --include=CMake...
+[94m[Bash][0m Search PRD and progress for FSR notes $ grep -n "FSR\|fsr" .ralph-tui/progress.md | head -80
+Previous iterations logged this story as blocked on a vendoring decision. I'll verify that the blocker still holds before deciding whether anything can move.
+[94m[Bash][0m Verify FSR permutation headers and blocker notes $ grep -n "Blocker" -A8 docs/upscaling.md | head -30
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check 12, still blocked) - What wa...
+US-046 is still blocked, so I have not signalled COMPLETE. Nothing new in the source could move it forward without your decision.
+
+**The blocker:** FSR 2 needs eight generated `*_permutations.h` headers per backend. Neither the vendored tree nor the pinned upstream archive contains them. Without them, `ENGINE_FSR2_AVAILABLE` stays off and both backends return `Unsupported`.
+
+**Decision needed from you.** Pick one route:
+1. **Vendor the outputs of `tools/sc/FidelityFX_SC.exe`** from the pinned archive (sha256 `19df8378…`). This needs a documented exception to the rule against vendoring prebuilt tools in `third_party/manifest.json`.
+2. **Regenerate the blobs with the engine's pinned DXC** through a first-party generator. This keeps the policy intact but is a larger piece of work.
+
+**What is done and what is not:**
+- Done (from earlier iterations): the CPU contract in `upscaler.hpp`/`upscaler.cpp`, covering profile sizes, FSR jitter phases, the benchmark policy, and history reset. Both backend upscale paths are written behind the FSR build flag, and the unit tests in `tests/src/rhi_upscaler_tests.cpp` cover the contract.
+- Not done, and waiting on FSR being callable: the profile switch to 1280×720, UI composition after upscaling, the reactive mask in the renderer, and every GPU and gate check that exercises an upscale. I did not add a renderer path over a non-working upscale, since it would hide the failure.
+
+I re-checked the blocker in this run and appended a re-check 12 entry to `.ralph-tui/progress.md`. I did not run the Windows or Linux quality gates, because the story is not at a point where they would test anything new. Once you choose a route, I can start on the generator or the vendored outputs.

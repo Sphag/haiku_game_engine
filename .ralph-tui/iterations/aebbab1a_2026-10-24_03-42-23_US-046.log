@@ -1,0 +1,41 @@
+# Iteration 53 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:42:23.827Z
+- **Ended At**: 2026-10-24T00:42:41.738Z
+- **Duration**: 17s
+- **Input Tokens**: 26
+- **Output Tokens**: 2294
+- **Total Tokens**: 2320
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the memory notes on FSR, and the current upscaler code.
+[94m[Bash][0m Inspect repo layout, progress log, and FSR memory note $ ls && wc -l .ralph-tui/progress.md && grep -n "US-046\|US-045\|FSR" .ralph-tui/progress.md | tail -6...
+The progress log shows six earlier passes stopped on the same blocker. Before I decide anything, I'll check whether the FSR 2 generated headers exist now.
+[94m[Bash][0m Check whether FSR 2 permutation headers now exist $ ls artifacts 2>/dev/null | head
+[94m[Bash][0m Append blocked-status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check 7, still blocked) - Verified...
+US-046 is still blocked, so I'm not signalling COMPLETE. Nothing has changed since the last six passes: the FSR 2 generated shader headers are still missing from `third_party/fsr2`.
+
+**What's stuck:** FSR 2 cannot build, so neither backend can upscale. `ENGINE_FSR2_AVAILABLE` stays off and both backends return `Unsupported`. The Windows and Linux gates, the GPU suite, and the profile switch all depend on a working upscale, so they are not done.
+
+**Decision needed from you:** how to supply the eight per-pass `*_permutations.h` files that the vendored FSR 2 shader tables include.
+1. **Run the archive's `tools/sc/FidelityFX_SC.exe`** once and vendor its hash-pinned outputs. This needs a documented exception to the manifest rule against vendoring prebuilt tools.
+2. **Regenerate the blobs with the engine's pinned DXC** through a first-party generator. This is more work and produces different bytes from upstream.
+
+I won't add stub headers, because they would hide the failure until pipeline creation.
+
+**Done this pass:** I confirmed the blocker still holds and appended a short re-check entry to `.ralph-tui/progress.md`. No code changed. The work already in place, from earlier passes, is the CPU contract (`upscaler.hpp`), the RHI upscaler contract, and the FSR 2 backend code, all unbuilt.
+
+**Still not done once FSR 2 builds:** the reactive mask, the `SceneRenderer` switch to profile sizes, UI composed after upscaling, GPU tests that exercise an upscale, and the Windows and Linux gate runs.
+
+Tell me which route to take and I'll continue from there.

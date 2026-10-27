@@ -1,0 +1,38 @@
+# Iteration 757 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:31:23.220Z
+- **Ended At**: 2026-10-26T02:31:36.402Z
+- **Duration**: 13s
+- **Input Tokens**: 24
+- **Output Tokens**: 1997
+- **Total Tokens**: 2021
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo state and progress notes for US-076 $ grep -n "US-076" -A3 .ralph-tui/progress.md | tail -40
+[94m[Bash][0m Check source mtimes and latest bench artifacts $ tail -c 600 .ralph-tui/progress.md
+[94m[Bash][0m Append status-check entry to progress log $ latest `us076-*` report is newer. No source, workload, or gate change in this pass. - Still blocked ...
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last recorded check, so I didn't rerun the benchmarks or the gates.
+
+**What's blocking it:**
+
+1. **Triangle floor and frame budget fail on instance placement.** The route start has 312,068 of the 2,000,000 triangles the contract requires, and p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing placement changes the fixed workload, so it needs `kWorkloadVersion` bumped (currently 1) and `benchmarks/workload_expected.json` regenerated. That is a contract change, so it needs your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 permutation headers are missing, so this profile can't run until you choose a vendoring route.
+3. **Not run here:** the native Linux Vulkan GPU suite (no Vulkan device under WSL) and the linux-gcc gate (GCC 9.4 cannot build Jolt).
+
+**Decision needed from you:**
+- Approve or reject the placement/workload change for item 1. If approved, I'll bump the version, regenerate the expected file, and rerun the acceptance suite.
+- Say whether a measured run that fails the budget should close the story as "measured, failing", or whether the story stays open until the budget passes.
+
+I appended a status-check entry to `.ralph-tui/progress.md`.

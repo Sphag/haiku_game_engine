@@ -1,0 +1,45 @@
+# Iteration 194 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T12:15:58.111Z
+- **Ended At**: 2026-10-24T12:20:56.674Z
+- **Duration**: 4m 58s
+- **Input Tokens**: 34
+- **Output Tokens**: 3139
+- **Total Tokens**: 3173
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics work against the story's acceptance criteria.
+[94m[Bash][0m Inspect physics dir and progress log $ ls engine/physics && tail -n 80 .ralph-tui/progress.md && ls cmake && (git status 2>&1 | head -5)
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The story has been re-verified many times with no source change, and the open items are the GCC 11+ gate and the benchmark harness. I'll run the Linux gates once on the current tree to confirm the state still holds.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -n 4 /tmp/ctest.log
+[94m[Bash][0m Confirm ctest totals and repo layout $ ls | head -50
+Linux gates pass on the current tree. I'll record this pass in the progress log, as the workflow requires.
+[94m[Bash][0m Append verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs GCC 11+) and the...
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The Jolt physics adapter is already in the tree. This pass only re-checked it, and two acceptance items remain open.
+
+**Verified this pass (Linux, clang 10, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --preset linux-dev`: pass
+- `cmake --build --preset linux-debug`: pass, no warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 pass (1 unit, 21 integration)
+
+**Still open:**
+- **`linux-gcc` gate:** the machine has only GCC 9.4. Jolt needs GCC 11+ (`__builtin_bit_cast`), so `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` cannot run here. I have not reported them as passed.
+- **Benchmark:** `engine_bench --suite acceptance` has no harness yet (that is US-074), so it is not run.
+- **Windows gates:** not re-run this pass. The earlier progress entries record them as passing on this same source. Re-running them needs the Windows batch flow from memory, and I did not start it.
+
+**Not changed:** no source files. I appended one entry to `.ralph-tui/progress.md` recording this pass. The log already has many near-identical re-verification entries, so this one is brief.
+
+To close the story, run the `linux-gcc*` gates in an environment with GCC 11+ and re-run the Windows gates. The benchmark waits on US-074.

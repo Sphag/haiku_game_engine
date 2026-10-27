@@ -1,0 +1,39 @@
+# Iteration 388 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:13:12.515Z
+- **Ended At**: 2026-10-24T23:13:29.780Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2854
+- **Total Tokens**: 2876
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-054 in the repo and the progress log.
+[94m[Bash][0m Inspect physics sources and progress log $ tail -c 3000 .ralph-tui/progress.md
+The log shows US-054 re-verified many times as Partial, with only the linux-gcc gate open. Before repeating another Linux pass, I'll check whether anything changed since the last entry and when the last Windows pass ran.
+[94m[Bash][0m Check for source changes and Windows gate history $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md
+US-054 is still **Partial** and I did not signal completion. Nothing in the tree has changed since the last verification, and the one remaining gate can't run on this host.
+
+**What's stuck:**
+- **`linux-gcc` gate** (`cmake --preset linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`): Jolt needs GCC 11+ (`__builtin_bit_cast`). This host has only GCC/G++ 9.4 and clang 10, and `sudo` needs a password, so I can't install a newer toolchain. This needs either a GCC 11+ install on this machine or the CI Linux/GCC job.
+- **Performance measurement**: `engine_bench --suite acceptance` doesn't exist yet (US-074), and the `physics_stress` scene is US-077. The story's own wording makes the benchmark conditional on the harness existing, so it doesn't block the story itself, but the PRD's benchmark contract is still unmet.
+
+**What I checked:**
+- No file under `engine/`, `tests/`, `cmake/`, or `docs/` is newer than the last `progress.md` entry.
+- The last Linux pass on this tree (check 26) passed: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (22 of 22). `linux-sanitize` also passed 22 of 22 on this unchanged tree (check 12).
+- The last Windows pass on this tree was 21 of 21, and it followed the last source change.
+
+I didn't re-run the gates, because the tree is unchanged and a re-run would only repeat the same results. I also didn't append another "status check" entry to `.ralph-tui/progress.md`; the previous 20-odd entries already record this state.
+
+**What would settle it:** a GCC 11+ or clang 14+ toolchain on this host (or the CI Linux/GCC job), plus US-074/US-077 for the benchmark. Once `linux-gcc*` passes, the remaining criteria are met and the story can be marked COMPLETE.

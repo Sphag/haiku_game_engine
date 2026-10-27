@@ -1,0 +1,39 @@
+# Iteration 50 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:39:54.448Z
+- **Ended At**: 2026-10-24T00:40:12.156Z
+- **Duration**: 17s
+- **Input Tokens**: 24
+- **Output Tokens**: 2130
+- **Total Tokens**: 2154
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current FSR state, since memory says FSR can't link without the generated shader tables.
+[94m[Bash][0m Read progress log and list repo layout $ ls vendor 2>/dev/null | head -50
+[94m[Bash][0m Find FSR-related files and build gating $ find . -iname "*fsr*" -not -path "./build*" | head -60
+The log shows US-046 blocked on the FSR 2 vendoring decision across several re-checks. I'll confirm the blocker is still there before deciding anything.
+[94m[Bash][0m Recheck FSR permutation headers and recent changes $ sed -n 1,40p docs/upscaling.md | head -60
+US-046 is still blocked, and I have not signalled COMPLETE. Nothing has changed since the last re-check, so I haven't edited any files.
+
+**Blocker:** FSR 2 needs eight per-pass `*_permutations.h` shader tables per backend. None are vendored: `find third_party engine/rhi -name "*_permutations.h"` returns 0. The generator, `tools/sc/FidelityFX_SC.exe`, sits in the pinned archive but isn't vendored, and the archive doesn't include the generated headers. Without them `ENGINE_FSR2_AVAILABLE` is OFF and both backends return `Unsupported` from `create_upscaler`. I won't stub them, because that would ship a fake upscaler.
+
+**What's done (from earlier iterations, unchanged):** the CPU contract (fixed profile sizes, FSR 2 jitter at 18 phases, benchmark policy, upscale history reset), the RHI upscaler API with both backends' code behind the blocked flag, and the unit tests. The Linux gates passed on the last recorded run.
+
+**What's not done:** no FSR call on either backend, no reactive mask, no profile-size switch, no UI composition after upscaling, no GPU upscale test, no Windows gate runs. The profile switch would ship an unupscaled 720p image, so I left it out.
+
+**Decision needed from you**, to unblock:
+1. **Vendor the hash-pinned outputs of `FidelityFX_SC.exe`** from the archive. This needs a documented exception to the no-prebuilt-tools rule.
+2. **Regenerate the blobs with the engine's pinned DXC** through a first-party generator. This keeps the rule intact but is more work.
+
+Once you choose, I can carry out the chosen route, then do the remaining work and the gates. I didn't append another re-check entry to `.ralph-tui/progress.md`, since five identical ones already sit there.

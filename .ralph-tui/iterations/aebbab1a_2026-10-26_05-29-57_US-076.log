@@ -1,0 +1,35 @@
+# Iteration 752 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:29:57.525Z
+- **Ended At**: 2026-10-26T02:30:09.278Z
+- **Duration**: 11s
+- **Input Tokens**: 20
+- **Output Tokens**: 1705
+- **Total Tokens**: 1725
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark tool and the progress file.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark sources $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src tools/benchmark 2>/dev/null && gre...
+[94m[Bash][0m Check mtimes of benchmark source and reports $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp tools/benchmark/src/workload.cpp benchmarks/wo...
+US-076 is not complete, and I have not signaled COMPLETE. Nothing in the tree changed since the last recorded pass: `render_stress.cpp` (04:15:43), `workload.cpp`, and `workload_expected.json` are unchanged, and all eight `us076-*` reports postdate them. I did not rerun any gates or benchmarks, and I did not add another progress entry, since the last 19 entries record the same state.
+
+The story is blocked on three things that need your decision or access:
+
+1. **Triangle floor and frame budget fail on placement.** The indexed reference path submits 312,068 triangles at the route start against a floor of 2,000,000. Frame time is p99 35–47 ms against a 16.7 ms budget. Fixing this changes the fixed benchmark contract: I would need to bump `kWorkloadVersion` (currently 1) and regenerate `benchmarks/workload_expected.json`. I won't make that change without your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so the upscale profile cannot run until you choose a vendoring route.
+3. **Native Linux Vulkan GPU and linux-gcc have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+Decisions I need from you:
+- Approve or reject the placement change in item 1.
+- Say whether a measured run that fails the floor and budget should close US-076 as measured, or stay open. The acceptance criteria cannot pass on the current placement.

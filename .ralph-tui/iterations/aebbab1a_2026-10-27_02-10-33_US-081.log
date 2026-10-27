@@ -1,0 +1,127 @@
+# Iteration 1243 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:10:33.187Z
+- **Ended At**: 2026-10-26T23:22:06.208Z
+- **Duration**: 11m 33s
+- **Input Tokens**: 286
+- **Output Tokens**: 23131
+- **Total Tokens**: 23417
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the existing docs before deciding what this story can realistically deliver here.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The progress log shows several prior US-081 passes that found the same hardware blockers and stopped. I'll check those blockers once against the machine rather than re-running the full gates.
+[94m[Bash][0m Check GPU device, compiler, license, and acceptance open items $ cmd.exe /c ver 2>/dev/null | head -1
+The blockers are confirmed: no `/dev/dri`, GCC 9.4, and no LICENSE file. The Windows quality gates are still listed as open, and my memory notes say they can be run from WSL through `cmd.exe`. I'll read that note and try them.
+[94m[Bash][0m Read Windows gate run notes from memory $ ls /mnt/d/dev/haiku_game_engine/artifacts | tail -20
+The notes give the method. I'll confirm no earlier batch is still running, then write and launch one batch for the four Windows quality gates.
+[94m[Bash][0m Check for running batches and list presets $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i us08 | head
+[94m[Bash][0m Read previous gate batch template $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && cat us080_gate.bat | head -30
+The previous batch's template works, so I'll reuse it under a US-081 name and run it in the background.
+[94m[Bash][0m Run Windows quality gate batch via cmd.exe $ cat us081_rc.txt
+[94m[Bash][0m Check interim gate results $ tail -3 /mnt/c/Users/bucha/AppData/Local/Temp/us081_build.log 2>/dev/null
+The batch is still building. I'll poll for its done marker.
+[94m[Bash][0m Poll gate batch until done marker appears $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us081_rc.txt
+All four Windows gates exit 0. Before trusting that, I'll check the logs for a real build and real test counts, since a warm build directory can look fast.
+[94m[Bash][0m Verify Windows gate logs show real build and tests $ grep -i "passed\|vendor" $T/us081_vendor.log | tail -2
+[94m[Bash][0m Show Windows build summary and ctest totals $ cat $T/us081_build.log | head -16
+The Windows build compiled and linked `engine_tests.exe` (36 of 36 steps), and `ctest` passed 29 of 29. The "not a git repository" lines are harmless. The GPU suite on the RTX 5080 is the next real evidence item, so I'll check how the earlier batch invoked it.
+[94m[Bash][0m Read earlier GPU batch and locate test binary $ ls /mnt/d/dev/haiku_game_engine/build/win-debug/tests/Debug/engine_tests.exe 2>&1
+
+[91m[Error: Exit code 2
+@echo off
+cd /d D:\dev\haiku_game_engine\build\win-dev\tests\Debug
+engine_tests.exe --suite gpu --backend dx12 > C:\Users\bucha\AppData\Local\Temp\us080_gpu_dx12.log 2>&1
+echo gpu_dx12=%ERRORLEVEL%
+echo DONE
+linux-asan
+linux-dev
+linux-gcc
+us081_win_release.log
+win-2022-check
+win-dev
+ls: cannot access '/mnt/d/dev/haiku_game_engine/build/win-debug/tests/Debug/engine_tests.exe': No such file or directory][0m
+The GPU binary lives under `build\win-dev\tests\Debug`. I'll run the DX12 GPU suite there, with the same rc-file pattern.
+[94m[Bash][0m Run DX12 GPU suite on RTX 5080 and read result $ tail -5 us081_gpu_dx12.log
+The DX12 GPU suite passed 72 cases. I'll confirm the log names the RTX 5080 adapter, since a software adapter would not count.
+[94m[Bash][0m Confirm GPU adapter name in DX12 log $ grep -i "adapter\|rtx\|geforce\|software\|warp" /mnt/c/Users/bucha/AppData/Local/Temp/us081_gpu_dx12...
+That is a valid DX12 report: the RTX 5080 adapter with validation layers on. The Windows Vulkan GPU suite is the next gate, and my memory notes say it needs the pinned validation layer at `D:\dev\vvl_build`. I'll check that exists before running.
+[94m[Bash][0m Check Vulkan validation layer build and notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-validation-layer...
+The layer is built out of tree. I'll run the Windows Vulkan GPU suite with `VK_LAYER_PATH` pointing at it, then check the vendor manifest is still clean.
+[94m[Bash][0m Run Vulkan GPU suite on Windows and read result $ grep -c -i "validation error\|VUID" us081_gpu_vulkan.log
+The Windows Vulkan GPU suite also passes on the RTX 5080: 73 cases, validation layers on, software=no, and no VUID messages. Next are the Windows editor suite and the existing win-release log.
+[94m[Bash][0m Run Windows editor suite on DX12 and check release log $ tail -4 /mnt/d/dev/haiku_game_engine/build/us081_win_release.log
+The Windows editor suite passes on DX12 (107 cases). The earlier win-release log shows a clean link, but no exit code, so I'll re-run that build gate and check it.
+[94m[Bash][0m Run Windows release build gate and read result $ tail -2 us081_release.log
+The release build exits 0, but the log's last lines are mid-progress, which doesn't look like a finished build. I'll check for link steps and failures before counting it as passed.
+[94m[Bash][0m Inspect release build log for link steps and failures $ grep -o "\[[0-9]*/[0-9]*\]" $T/us081_release.log | tail -1
+The log has only 10 lines and stops at step 33 of 171, yet the exit code was 0. I'll read the whole log before deciding anything.
+[94m[Bash][0m Read full release build log and stdout capture $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us081_rel_stdout.txt | head -20
+The log stops during dyndep generation, which points to a truncated or aborted build, not a finished one. I'll re-run the release build once and check that it links `engine_tests.exe` and the other targets.
+[94m[Bash][0m Re-run Windows release build and inspect its log $ tail -2 us081_release2.log | cut -c1-200
+The rerun behaves the same: it stops after the dxc subbuild and still reports exit 0. I'll check whether a build process is still alive on the Windows side, which would mean the batch returned early.
+[94m[Bash][0m Check for lingering build processes and release outputs $ ls /mnt/d/dev/haiku_game_engine/build/win-release/tests/Release/ 2>&1 | head
+The `build/win-release` directory does not exist, so the preset probably writes to a different folder. I'll check the preset definition.
+[94m[Bash][0m Inspect win-release preset and build directories $ ls build/win-dev | head -30
+The `win-dev` preset is a multi-config Ninja build, and `win-release` uses `build-Release.ninja`. An earlier release log in `build/` reached `596/596` with a link. I'll compare how that run started.
+[94m[Bash][0m Compare earlier release log start and end $ tail -1 us081_win_release.log | cut -c1-200
+The earlier successful release log ran to `596/596`, so the build can finish on this tree. The difference seems to be how the outer build starts. I'll run the release build directly with ninja against `build-Release.ninja` and see whether it runs to completion.
+[94m[Bash][0m Run release ninja build directly and capture result $ cat us081_rel_stdout.txt | head -5
+Ninja exits 0 after only the dxc subbuild each time, so the outer build is stopping on its own. I'll dry-run the release ninja file to see how many steps it still has.
+[94m[Bash][0m Dry-run release ninja to count pending steps $ grep "Linking" us081_dry.log | cut -c1-160 | head -3
+The dry run finds only the three dxc subbuild steps, so `build-Release.ninja` is not seeing the main project's Release targets. I'll compare the generated ninja files to find where the Release project steps live.
+[94m[Bash][0m Compare generated ninja files for Release configuration $ grep -o "build [^:]*engine_tests.exe" build.ninja | head -3 | cut -c1-200
+The main project's Release rules live in `CMakeFiles/impl-Release.ninja`, which `build-Release.ninja` includes. A bare `ninja` may be building only its default target, which is the dxc subbuild. I'll check the default target and dry-run `all`.
+[94m[Bash][0m Dry-run the all target for the Release config $ grep "^default" /mnt/d/dev/haiku_game_engine/build/win-dev/build-Release.ninja | cut -c1-200
+The dry run for `all` also shows only the three dxc steps, which suggests the Release project is already up to date. An earlier run linked `Release\engine_tests.exe`. I'll confirm that binary exists and is newer than the sources.
+[94m[Bash][0m Verify release binary exists and is newer than sources $ echo "newer-src-count: $(find /mnt/d/dev/haiku_game_engine/engine /mnt/d/dev/haiku_game_engine/tests...
+The release binary is from 01:51 and no source is newer than it, so `win-release` is an up-to-date incremental build. Its exit 0 is real, and the short log is expected. Next is `linux-release`, which the acceptance list requires natively on Linux. I'll start it in the background and read the acceptance gate table while it runs.
+[94m[Bash][0m Start Linux release build and read acceptance gate table $ echo "exit=$?" >> /tmp/us081_linux_release.log) &  cd /mnt/d/dev/haiku_game_engine && sed -n 95,140p...
+The acceptance table already has `linux-release`, `win-release`, and the Linux gates as passed. It still lists the three Windows GPU/editor rows as not run, and those now have real results. Before I update the table, I'll save the logs into the repo's reports folder so the evidence is kept with the repo, not only in Temp.
+[94m[Bash][0m Inspect existing reports artifact layout $ ls artifacts/reports/* | head -20
+[94m[Bash][0m Copy Windows gate logs into repo reports folder $ grep "gpu-report\] backend" win-gpu-dx12.log win-gpu-vulkan.log | cut -c1-200
+The logs are saved. Next I'll update the three Windows GPU and editor rows in `docs/acceptance.md` to record the real results.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| `engine_tests --suite gpu --backend dx12` | Wind..." → "| `engine_tests --suite gpu --backend dx12` | Wind..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| `engine_tests --suite editor --backend <dx12\|vu..." → "| `engine_tests --suite editor --backend <dx12\|vu..."
+Those rows are updated. Next I'll check the background `linux-release` build.
+[94m[Bash][0m Check Linux release build progress $ tail -3 /tmp/us081_linux_release.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -3 /tmp/us081_linux_release.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux release build progress $ tail -3 /tmp/us081_linux_release.log
+[94m[Bash][0m Wait for Linux release build to finish $ tail -4 /tmp/us081_linux_release.log
+`linux-release` exits 0. I'll run its unit tests too, so the release result is backed by a test run rather than only a build.
+[94m[Bash][0m Run Linux release unit tests via ctest $ cd /mnt/d/dev/haiku_game_engine && timeout 550 ctest --preset linux-release-unit --output-on-failure...
+[94m[Bash][0m Confirm Linux release unit test totals $ timeout 550 ctest --preset linux-release-unit --output-on-failure --no-tests=error 2>&1 | grep "test...
+All 30 Linux release unit tests pass. I'll record this pass in the progress log, including the win-release gotcha I hit.
+[94m[Bash][0m Append US-081 pass entry to progress log $ `--backend vulkan` passed (73 cases, `software=no`, validation on, no VUID lines, pinned 1.4.363 lay...
+US-081 is not finished, so I'm not signalling COMPLETE. This pass cleared more of the Windows gates than before, but final acceptance still has open items that need hardware or decisions I don't have.
+
+**Passed this pass (real runs, logs in `artifacts/reports/us081/`):**
+- Windows: `ValidateVendor` exit 0, `win-dev` configure exit 0, `win-debug` build exit 0 (`engine_tests.exe` linked), `win-unit` 29 of 29.
+- Windows GPU on the RTX 5080: DX12 suite passed (72 cases, validation on). Vulkan suite passed (73 cases, `software=no`, validation on, no VUID lines) using the pinned 1.4.363 layer.
+- Windows editor suite on DX12 passed (107 cases).
+- Windows `win-release`: exit 0. The log is only 10 lines because the Release tree was already up to date. I checked the binary's timestamp against the sources to confirm this.
+- Linux `linux-release` build exit 0, and `linux-release-unit` 30 of 30.
+
+I updated the three Windows GPU and editor rows in `docs/acceptance.md`, and appended a progress entry.
+
+**Still open, so final acceptance is incomplete:**
+- Native Linux Vulkan GPU report: no `/dev/dri` on this machine.
+- `linux-gcc`: the local GCC is 9.4, and Jolt needs 11 or newer.
+- Full `engine_bench --suite acceptance` on DX12 and Vulkan: the acceptance scenes don't yet produce timestamps, so runs report `incomplete`.
+- FSR 2 shader permutations are missing from the vendored tree.
+- Visual editor smoke tests with screenshots on both OSes.
+- A standalone package built from a real sample game on each OS.
+- Windows Vulkan editor suite was not run.
+- No LICENSE file exists; that is a decision for you.

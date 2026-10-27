@@ -1,0 +1,37 @@
+# Iteration 980 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:18:54.409Z
+- **Ended At**: 2026-10-26T15:19:11.950Z
+- **Duration**: 17s
+- **Input Tokens**: 18
+- **Output Tokens**: 2012
+- **Total Tokens**: 2030
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress notes $ grep -n "US-079\|US-078\|US-077" .ralph-tui/progress.md | head
+[94m[Bash][0m Read latest US-079 progress entries and recent file changes $ find engine tools tests benchmarks docs cmake -newer tests/src/all_features_editor_tests.cpp -type f...
+US-079 is not complete, and I have not signalled completion. I made no code changes this pass.
+
+**Where it stands:** `all_features` has its workload table and CPU tests, and the editor scenario test exists (`tests/src/all_features_tests.cpp`, `tests/src/all_features_editor_tests.cpp`). The last Windows and Linux gate runs recorded in `.ralph-tui/progress.md` passed. No source file has changed since then, and I did not re-run the gates.
+
+**What's still open, and why I can't close it in this session:**
+- **Automated tour with screenshots and an action log:** no tour runner exists under `tests/` or `tools/`. The CPU marker test is not a tour over the running app.
+- **GI/RT/upscale profiles and forced indirect/meshlet paths for `all_features`:** the scene has no GPU route (`implementation: none` in the benchmark manifest). FSR 2 also cannot link because the vendored `*_permutations.h` headers are missing. Building the route is a benchmark-tool change, and the profiles need a Windows GPU session.
+- **Package relaunch:** only Build Game's verify step runs. A real relaunch of the published package has not been done.
+- **`engine_bench --suite acceptance`:** it cannot run for `all_features` until the route exists.
+- **GUI checks and native Linux Vulkan GPU:** no GUI or Linux GPU device on this host.
+- **`linux-gcc*`, `linux-asan`, `linux-sanitize`:** the host has only GCC 9.4, and Jolt needs GCC 11+. The ASan preset was not run in the last passes.
+- **Windows editor suite:** `engine_tests --suite editor --backend dx12` was not run in the last pass.
+
+**Recommended next step:** define the `all_features` route and a builtin GPU scene in `tools/benchmark`, add a tour runner that records markers and an action log, and run the profiles and editor suite on the Windows GPU host. Restoring the FSR 2 permutation headers, or choosing a vendoring route for them, unblocks the upscale profile. Re-running `status checks` on this host won't move the story forward; the remaining items need that hardware and that code.

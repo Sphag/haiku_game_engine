@@ -1,0 +1,92 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: US-018
+- **Task Title**: Asset Registry
+- **Description**: As a game creator, I want stable resource references so that renaming does not break scenes.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T22:06:52.939Z
+- **Ended At**: 2026-10-22T22:20:19.435Z
+- **Duration**: 13m 26s
+- **Input Tokens**: 192
+- **Output Tokens**: 14887
+- **Total Tokens**: 15079
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -400 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+The progress log shows earlier stories mostly verified existing code. Next I'll find the US-018 section in the PRD and check whether any asset registry code already exists.
+[94m[Bash][0m Locate US-018 in PRD and survey engine tree for asset code $ grep -ril "asset\|registry\|guid" engine tests --include=*.hpp --include=*.cpp --include=*.txt --inc...
+An `asset_registry` already exists in `engine/assets`. I'll read the US-018 PRD text alongside the existing header and its tests.
+[94m[Bash][0m Read US-018 and relevant PRD constraint sections $ sed -n 867,915p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read existing asset registry header and CMake $ wc -l engine/assets/include/engine/assets/*.hpp engine/assets/src/*.cpp tests/src/assets_*.cpp engin...
+Most of US-018 is already in the tree: the registry, the project scan, and tests. I'll check the project layer, the fixture project, the test registration, and the docs row to find any real gap.
+[94m[Bash][0m Read project layer, fixtures, and test registration $ ls docs
+The registry, sidecar scan, docs page, and fixture project are all present. Before deciding what's missing, I'll check the tests against the three acceptance points and read the asset-registry doc.
+[94m[Bash][0m List registry/project test cases and read asset-registry doc $ cat docs/asset-registry.md | head -120
+The story looks functionally complete: GUID storage, conflict rejection, deletion, missing-dependency reporting, and rename coverage all exist with tests. The remaining work is verifying the gates and recording results. I'll read the Windows gate reference and the Linux/Windows preset names first.
+[94m[Bash][0m Read memory references and list CMake presets $ cd /mnt/d/dev/haiku_game_engine && grep -n '"name"' CMakePresets.json | head -60
+I'll run the Linux gates first, since they run directly in WSL. The first step is vendor validation and the `linux-dev` configure.
+[94m[Bash][0m Validate vendor tree and configure linux-dev preset $ tail -5 /tmp/us018_linux_dev.log
+[94m[Bash][0m Build linux-debug preset and count warnings $ tail -3 /tmp/us018_linux_build.log
+[94m[Bash][0m Run linux-unit ctest preset and show summary $ ls /mnt/d/dev/haiku_game_engine/build | head -30
+Linux clang configure, build, and unit ctest pass (22/22, 0 warnings). Next I'll confirm the registry and project test cases actually execute, and run the GCC gates.
+[94m[Bash][0m Run engine_tests unit and integration suites $ "$B" --list-tests 2>/dev/null | grep -c ""
+Unit: 375/375. Integration: 97 passed and 4 skipped, which matches the known X11 focus cases in the progress log. Next are the Linux GCC gates.
+[94m[Bash][0m Configure, build, and test linux-gcc presets $ tail -4 /tmp/us018_gcc_unit.log
+[94m[Bash][0m Inspect GCC integration failure details $ grep -n "FAILED\|failed\|with expansion\|REQUIRE\|CHECK" /tmp/us018_gcc_unit.log | head -30
+The only failure is the known X11 captured-motion flake (`platform_x11_input_tests.cpp:453`), which the progress log already documents. I'll rerun to confirm it is intermittent.
+[94m[Bash][0m Rerun linux-gcc-unit twice to check flake $ done
+The failure repeated twice, so I need to check whether it is still the same X11 case.
+[94m[Bash][0m Identify which test fails on rerun $ sed -n 440,460p tests/src/platform_x11_input_tests.cpp
+Each run fails a different X11 focus or capture case, which matches the intermittent XWayland pattern in the progress log. I'll run the GCC integration suite once more to get a clean result.
+[94m[Bash][0m Third linux-gcc-unit run to confirm flake $ grep -n "FAILED:" -A1 /tmp/us018_gcc_unit_3.log | head -6
+The third run passed 22/22, so the flake is confirmed intermittent. Next I'll run the ASan/UBSan gate. The registry is memory-owning code with file IO, so the sanitizer run is worth doing even though the story's list doesn't name it.
+[94m[Bash][0m Configure, build, and run ASan/UBSan sanitize gate $ grep -c "runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/us018_asan_test.log
+Linux is green on all required gates: vendor validation, clang dev/debug/unit, GCC debug/unit (with the X11 flake), and the sanitizer run with no reports. Now the Windows gates. I'll look for the batch file from a previous run so I can reuse its vcvars setup.
+[94m[Bash][0m Find prior Windows gate batch files in Temp $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+I'll write a single batch that runs the four Windows gates in order and records each exit code to its own file, following the pattern from the progress log.
+[94m[Bash][0m Write and run Windows gate batch via cmd.exe $ cat $T/us018_rc*.txt
+All four Windows steps exit 0. I'll check the logs, not just the codes: the build for warnings, and the ctest summary for the test count.
+[94m[Bash][0m Check Windows build warnings and ctest summary logs $ tail -2 $T/us018_validate.log
+The Windows build log has only 11 lines and stops at step 13 of 62. The exit code was 0, but the progress log warns that a short log is not proof, so I'll read the whole log and check the test binary against the newest source.
+[94m[Bash][0m Show full Windows build log and binary timestamps $ ls -l --time-style=full-iso /mnt/d/dev/haiku_game_engine/engine/assets/src/*.cpp /mnt/d/dev/haiku_ga...
+The build exit code is 0, and `engine_tests.exe` is newer than the assets sources. To prove the test binary is current, I'll run the dry run the progress log recommends (`ninja -n engine_tests.exe`) and check for newer source files.
+[94m[Bash][0m Check newer sources and dry-run ninja for test binary $ cat $T/us018_dry.log | tr -d '\r' | tail -5
+No source file is newer than the binary. The dry-run target name was wrong, so I'll retry with the CMake target name.
+[94m[Bash][0m Retry ninja dry run with engine_tests target $ cat $T/us018_dry.log | tr -d '\r' | tail -5
+The dry run lists only the external DXC stamp steps, so `engine_tests` is up to date and the Windows build is verified. Windows and Linux gates are all green. Last, I'll record the results in `docs/build.md` and the progress log, matching the existing rows.
+[94m[Bash][0m Check where the verification table ends in build docs $ sed -n 176,180p docs/build.md | cut -c1-200
+[94m[Bash][0m Insert US-018 verification row into docs/build.md $ `ninja -n engine_tests` shows only the DXC stamp steps), `win-unit` 21/21. The tests cover SHA-256 v...
+Next I'll append the US-018 entry to the progress log.
+[94m[Bash][0m Append US-018 entry to progress log $ the first 2 runs failed only X11 cases, a different case each time. Linux `linux-asan` build (exit 0...
+US-018 (Asset Registry) was already implemented in the tree, so I verified it against the acceptance criteria and recorded the results. No engine source changed.
+
+**What's in place**
+- `AssetRegistry` stores GUID, source path, importer type and settings, SHA-256 content hash, and sorted dependency GUIDs.
+- `add` rejects nil GUIDs, GUID conflicts, path conflicts, and self-dependencies. `move` changes only the path, so the GUID survives.
+- `remove` reports dependents, whose edges stay and then report the removed GUID as missing.
+- `scan_project` reads `.meta` sidecars, so a source moved with its sidecar keeps its GUID. A copied sidecar fails with `GuidConflict`.
+- The fixture project in `tests/fixtures/assets/registry_project` covers deletion, missing dependencies, and renaming, and these are tested in `assets_project_tests.cpp`.
+
+**Gate results**
+- **Windows (MSVC):** `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21) all pass. The `win-debug` log was short, so I ran `ninja -n engine_tests`, which showed only the DXC stamp steps.
+- **Linux (Clang):** `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` (22/22) pass. `engine_tests --suite unit` is 375/375.
+- **Linux (GCC):** `linux-gcc`, `linux-gcc-debug` (0 warnings) pass. `linux-gcc-unit` passed on its third run. The first two runs failed only X11 focus or capture cases, which are the known XWayland flake.
+- **Linux sanitizers:** `linux-asan` builds and `linux-sanitize` passes 22/22 with no reports. The story's list doesn't name the registry, but I ran it because the registry owns memory and does file IO.
+
+**Not run or not applicable**
+- GitHub CI: not run, since nothing has been pushed.
+- GPU suites: not run. The registry has no GPU path.
+- `engine_bench --suite acceptance`: not applicable. The harness doesn't exist yet (US-074).
+- GUI check: not run, since there is no editor window yet.
+
+**Recorded:** I added the US-018 row to `docs/build.md` and appended the US-018 entry to `.ralph-tui/progress.md`. No git commit was made.
+
+<promise>COMPLETE</promise>

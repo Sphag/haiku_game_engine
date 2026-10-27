@@ -1,0 +1,280 @@
+# Iteration 31 Log
+
+## Metadata
+
+- **Task ID**: US-043
+- **Task Title**: RT Shadows and Reflections
+- **Description**: As a player, I want RT shadows and reflections so that I can see dynamic geometry outside screen space.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T19:56:45.484Z
+- **Ended At**: 2026-10-23T20:42:07.148Z
+- **Duration**: 45m 21s
+- **Input Tokens**: 708
+- **Output Tokens**: 158425
+- **Total Tokens**: 159133
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the current state of the RT code.
+[94m[Bash][0m Inspect repo root and progress log tail $ ls -la && wc -l .ralph-tui/progress.md && tail -n 150 .ralph-tui/progress.md
+[94m[Bash][0m Read progress log head and US-04x entries $ grep -n "US-04[0-9]" .ralph-tui/progress.md | head -50
+US-043 is marked Partial. The open item is wiring `RtEffects` into `SceneRenderer`. Next I'll read the RT pass, the renderer, and the memory notes on the Windows gates.
+[94m[Bash][0m Size of render files and RtEffects header $ cat engine/render/include/engine/render/rt_effects.hpp
+[94m[Bash][0m Read memory notes on Windows gate runs $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+The remaining work is large: per-mesh BLAS, a per-frame TLAS, a mask atlas, and composition in the lighting path. I'll read the renderer's mesh and frame structures to size it.
+[94m[Bash][0m Outline scene renderer header $ grep -n "struct\|class \|GpuMesh\|reflected_\|ray\|Ray\|mask\|alpha" engine/render/include/engine/re...
+[94m[Bash][0m Find RT-related and mesh code in renderer $ grep -n "ray_tracing\|RayTracing" engine/rhi/include/engine/rhi/*.hpp | head -30
+The integration touches the mesh upload path, the frame graph, and the lighting shader. I'll read those regions before deciding how to split the work.
+[94m[Bash][0m Read GpuMesh and FrameSlot declarations $ sed -n 370,470p engine/render/include/engine/render/scene_renderer.hpp
+[94m[Bash][0m Read mesh upload function $ sed -n 1340,1420p engine/render/src/scene_renderer.cpp
+The mesh upload is clear. Next I'll read the frame graph assembly around the reflection pass and the lighting path, which is where the RT results would be applied.
+[94m[Bash][0m Read frame graph assembly and reflection pass $ sed -n 2380,2620p engine/render/src/scene_renderer.cpp
+The scene pass is the only place that sees the sun term separately. Before choosing where the RT results enter, I'll look at how `scene.hlsl` applies shadows and environment reflections.
+[94m[Bash][0m Locate shadow and environment code in scene shader $ grep -n "Texture2D\|Buffer<\|ByteAddress\|StructuredBuffer\|register(\|shadow\|Shadow\|SampleLevel\|...
+The hooks are clear: sun visibility is `shadow_product` (line ~1015) and the environment specular is `SampleSpecular` (line ~1009). Next I'll check how `RtEffects::record` manages barriers, since that decides how the graph can own those targets.
+[94m[Bash][0m Read RtEffects::record implementation $ grep -n "RhiStatus RtEffects::\|RtEffects::record" -A60 engine/render/src/rt_effects.cpp | sed -n '/...
+`record()` owns its own barriers, so the graph should not also declare accesses on those targets. Before I commit to a design, I need three facts: how the renderer keeps texture alpha for masks, how the graph orders passes, and how `items` and transforms come from the snapshot.
+[94m[Bash][0m Check mask and alpha handling in renderer $ grep -n "struct MaterialParams" -A25 engine/render/include/engine/render/material.hpp | head -40
+[94m[Bash][0m Check render graph ordering and snapshot item fields $ sed -n 1,129p engine/render/include/engine/render/frame_snapshot.hpp | grep -n "struct\|transform\|m...
+The renderer keeps no CPU copy of texture alpha, so a mask atlas needs one kept at upload time. I'll check the vertex layout, the texture upload path, and the mask test in `scene.hlsl` before I scope the work.
+[94m[Bash][0m Inspect vertex layout, mask test, texture upload $ grep -n "upload_texture(const ImageRgba8\|RhiResult<std::uint32_t> SceneRenderer::upload_texture" -A...
+The mask test in `scene.hlsl` is `shaded.a < alpha_cutoff`, which is base-color alpha times the factor. Next I'll read the direct-lighting loop and the shading path, where the RT terms would be applied.
+[94m[Bash][0m Read direct lighting loop in scene shader $ sed -n 476,600p engine/render/shaders/scene.hlsl
+[94m[Bash][0m Read shading function in scene shader $ sed -n 960,1045p engine/render/shaders/scene.hlsl
+I now have the shading hooks. Next I'll read the helpers I would reuse: texture upload and its states, the camera, the renderer descriptor and shader bundle, and how draws reference mesh buffers.
+[94m[Bash][0m Read texture upload, camera and renderer desc $ sed -n 179,230p engine/render/include/engine/render/scene_renderer.hpp
+[94m[Bash][0m Read render entry and camera use $ grep -n "scene_camera\|view_projection =" engine/render/src/scene_renderer.cpp | head -20
+Next I'll check how the renderer tracks mesh buffer states during draws, which determines whether BLAS-readable buffers can coexist with the existing paths.
+[94m[Bash][0m Check mesh buffer state use and RT descriptor types $ grep -n "BottomLevelDesc\|TopLevelDesc\|struct TopLevelInstance\|struct AccelerationStructure" -A14 ...
+Mesh buffers are drawn without graph tracking, so the BLAS build should own its own transitions and leave the buffers in `Common`. The existing GPU test already drives the full BLAS/TLAS/RtEffects sequence, so I'll use it as the template.
+[94m[Bash][0m Find BLAS/TLAS sequence in RT GPU test $ wc -l tests/src/render_rt_gpu_tests.cpp && grep -n "create_bottom_level\|build_bottom_level\|create_...
+The test keeps the buffers in `ShaderRead` and never draws them, so the renderer needs the transition-around-build approach. Here is the exact BLAS/TLAS call sequence.
+[94m[Bash][0m Read BLAS and TLAS build sequence in test $ sed -n 186,300p tests/src/render_rt_gpu_tests.cpp
+The sequence is clear. Next I need the lighting-set layout, the release path, the texture helpers, and where `SceneShaders` gets compiled, so the new bindings and shader entry are wired in consistently.
+[94m[Bash][0m Gather lighting layout, shader wiring, RHI list API $ grep -n "pack_rgba8_rows" -A3 engine/render/src/scene_renderer.cpp | head -8
+The lighting set currently has bindings 0 to 2 (pixel stage). Next I'll find where it is written and how the renderer's `build()` and `release()` sequence their resources.
+[94m[Bash][0m Locate lighting set writes and renderer lifecycle $ sed -n 2880,2935p engine/render/src/scene_renderer.cpp
+The renderer already has a `shadow_dummy_` pattern for a 1x1 texture bound into a second lighting set. I'll reuse it for the RT dummies. Reading that code now.
+[94m[Bash][0m Read lighting set writes and dummy texture creation $ sed -n 597,625p engine/render/src/scene_renderer.cpp
+The shadow lighting set also needs valid bindings for any new lighting slots, since the RHI checks every binding. I'll check the snapshot item fields and whether `model` is camera-relative, which determines the RT frame's origin.
+[94m[Bash][0m Read snapshot item fields and resize $ grep -n "camera-relative\|relative" engine/render/include/engine/render/frame_snapshot.hpp | head -5
+The model matrices are camera-relative, so the RT frame's eye is the origin. Shadow-only items are kept in the snapshot, so off-screen occluders are visible to the TLAS. I'll check a few remaining details: the `mask_rect` convention in the shader, the light type names, and how `post_` is declared so the RT pass can follow the same ownership pattern.
+[94m[Bash][0m Check mask rect use, light types, and includes $ grep -n "^#include" engine/render/include/engine/render/scene_renderer.hpp engine/render/src/scene_r...
+`SceneRenderer` already holds `unique_ptr<PostProcessor>` with a complete type, so `unique_ptr<RtEffects>` can follow the same pattern. I'll check the masked-UV mapping in the shader before writing the atlas packer.
+[94m[Bash][0m Read mask UV mapping in RT shader and CPU $ grep -n "mask_rect" -B2 -A6 engine/render/src/rt_effects.cpp | head -40
+The atlas must match the shader's `saturate(uv)` mapping. I'll size each rectangle so `uv = 1` lands on the texture's last texel. Next I'll view the header's public section and member block, so the new declarations follow the existing style.
+[94m[Bash][0m Read renderer header public and member sections $ sed -n 470,547p engine/render/include/engine/render/scene_renderer.hpp
+I have enough of the design to write it. A few signatures are still unknown: the device feature query, the `destroy_into` helper, the `Light` and `MeshData` fields, the texture-size fields, and where `build()` ends. I'll grep for them together.
+[94m[Bash][0m Look up feature query, helpers, and structs $ grep -n "materials_.push_back\|materials_\[.*\] = \|bool SceneRenderer::\|RhiStatus SceneRenderer::s...
+I have the remaining signatures. I'll confirm the feature-query helper, then start editing with the header.
+[94m[Bash][0m Check capability report feature helpers $ grep -n "ray_tracing\|RayTracing" engine/render/src/*.cpp | head -5
+The feature check is `capabilities().enabled(Feature::RayTracing)`. Starting the header edits: the include, the settings struct, the shader entry, and the per-mesh and per-texture fields.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "#include "engine/render/postprocess.hpp"
+#include ..." → "#include "engine/render/postprocess.hpp"
+#include ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "struct SceneRendererDesc {
+    std::uint32_t width..." → "// Ray-traced shadows and single-bounce reflection..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    gi::ScreenTraceSettings reflections;
+};" → "    gi::ScreenTraceSettings reflections;
+    // Ra..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    rhi::ShaderBinary reflections;
+};" → "    rhi::ShaderBinary reflections;
+    // Optional..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "        std::uint32_t meshlet_base = 0;
+        st..." → "        std::uint32_t meshlet_base = 0;
+        st..."
+The header comment names `set_ray_traced_settings`, so I'll add that setter with the public accessor. Then the private helpers and members.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    // The post pass (US-039). Each call fails wit..." → "    // The post pass (US-039). Each call fails wit..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    [[nodiscard]] rhi::RhiStatus build_meshlets(co..." → "    [[nodiscard]] rhi::RhiStatus build_meshlets(co..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    rhi::DescriptorSetHandle shadow_lighting_set_;..." → "    rhi::DescriptorSetHandle shadow_lighting_set_;..."
+I added a stray member, `shadow_dummy_rt_unused_`, by mistake. Removing it now.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    std::uint32_t ray_traced_instances_ = 0;
+    r..." → "    std::uint32_t ray_traced_instances_ = 0;"
+Now the implementation. I need the exact call sites inside `build()`, `resize()`, and `render()` first.
+[94m[Bash][0m Find call sites in build, render, resize $ grep -n "^RhiStatus SceneRenderer::resize" -A45 engine/render/src/scene_renderer.cpp | tail -25
+[94m[Bash][0m Read build() call order and render graph start $ sed -n 2066,2080p engine/render/src/scene_renderer.cpp
+I have all the call sites. I'll wire the pass into `build()` after the environment and GI setup, which is where the lighting sets are complete. Then I'll make the buffer usage match between the upload and the BLAS build.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    if (const RhiStatus cleared = clear_gi_volume(..." → "    if (const RhiStatus cleared = clear_gi_volume(..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    lighting_desc.bindings.push_back(rhi::Descript..." → "    lighting_desc.bindings.push_back(rhi::Descript..."
+Next, the mesh upload: the vertex and index buffers need `ShaderResource` usage when the pass is on, and the upload must record each mesh's triangles and vertex count.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    RhiResult<BufferHandle> vertices = device_.cre..." → "    const BufferUsage vertex_usage = mesh_buffer_u..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    gpu.vertex_stride = stride;
+    gpu.bones = sk..." → "    gpu.vertex_stride = stride;
+    gpu.bones = sk..."
+I dropped `CopyDestination` from the vertex and index buffer creation. Correcting both sites so the create and the graph import use the same usage.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    const BufferUsage vertex_usage = mesh_buffer_u..." → "    const BufferUsage vertex_usage = mesh_buffer_u..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "        buffer_desc(vertex_bytes, vertex_usage | B..." → "        buffer_desc(vertex_bytes, vertex_usage, "m..."
+Next, the texture path: the alpha copy and the atlas dirty flag, plus the same dirty flag in `create_material`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    textures_.push_back(GpuTexture{texture, textur..." → "    // The ray-traced mask atlas (US-043) needs ea..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    materials_.push_back(material);" → "    materials_.push_back(material);
+    mask_atlas..."
+Now the main block: the helpers, `build_ray_traced`, the output binding, the per-frame prepare, the mask atlas, the BLAS build, and the destroy path. I'm inserting it ahead of `build_atlases`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "RhiStatus SceneRenderer::build_atlases() {" → "namespace {
+
+// The triangles of a mesh in object ..."
+The main block is in. Next, `render()`: `prepare_ray_traced` runs before the graph is assembled, and the RT pass is added ahead of the scene pass so the scene reads its targets.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    RenderGraph graph;
+    const TextureUsage targ..." → "    // The ray-traced structures and the frame's t..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    // One scene pass with two render passes. The ..." → "    // The ray-traced pass (US-043) builds the top..."
+Now `resize()` rebuilds the pass at the new size, since its targets are sized to the frame. `release()` tears the RT state down after the lighting sets that reference it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    desc_.width = width;
+    desc_.height = height..." → "    desc_.width = width;
+    desc_.height = height..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    destroy_into(device_, shadow_lighting_set_, fi..." → "    destroy_into(device_, shadow_lighting_set_, fi..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String:     destroy_into(device_, shadow_lighting_set_, first);
+    destroy_into(device_, lighting_set_, first);</tool_use_error>][0m
+[94m[Bash][0m Locate lighting set destroy lines in release $ grep -n "^RhiStatus SceneRenderer::release" -A6 engine/render/src/scene_renderer.cpp | head -3
+[94m[Bash][0m Read lines around lighting set destruction $ sed -n 3368,3378p engine/render/src/scene_renderer.cpp
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp[0m edit: "    destroy_into(device_, shadow_dummy_, first);
+ ..." → "    destroy_into(device_, shadow_dummy_, first);
+ ..."
+The lighting sets are now destroyed before the pass. The header declared `destroy_ray_traced` with an unqualified `RhiStatus`, so I'll qualify it to match the rest of the header.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/scene_renderer.hpp[0m edit: "    void destroy_ray_traced(RhiStatus& first);" → "    void destroy_ray_traced(rhi::RhiStatus& first)..."
+[94m[Bash][0m Read lighting bindings comment in scene shader $ sed -n 66,72p engine/render/shaders/scene.hlsl
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/scene.hlsl[0m edit: "//                           t1: cascade shadow at..." → "//                           t1: cascade shadow at..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/scene.hlsl[0m edit: "Texture2D<float> LocalAtlas : register(t2, space3)..." → "Texture2D<float> LocalAtlas : register(t2, space3)..."
+`ShadeDirectLights` already takes the pixel position. I'll multiply the traced sun visibility into the directional light, then blend the traced reflection into the specular term.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/scene.hlsl[0m edit: "            shadow_product *= visibility;
+        ..." → "            shadow_product *= visibility;
+        ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/scene.hlsl[0m edit: "    float3 direct = ShadeDirectLights(input.positi..." → "    float3 direct = ShadeDirectLights(input.positi..."
+Shader and renderer edits are in. Before the integrated test, I'll get a Linux compile to surface errors, since the Linux build is quick to iterate. Building the debug preset and capturing the log.
+[94m[Bash][0m Build Linux debug preset and capture errors $ grep -n "error\|warning:" /tmp/us043_linux_build1.log | head -40
+The RHI types need the `rhi::` qualifier in this file. Qualifying the four names with a regex that skips ones already qualified, then rebuilding.
+[94m[Bash][0m Qualify RHI type names and rebuild Linux debug $ grep -n "error\|warning:" /tmp/us043_linux_build2.log | head -30
+The Linux debug build now passes with zero warnings. Next I need an integrated GPU test that drives the real `SceneRenderer`. The GI GPU test already sets one up, so I'll read its harness.
+[94m[Bash][0m Read GI GPU test header and helpers $ wc -l tests/src/render_gi_gpu_tests.cpp && sed -n 1,60p tests/src/render_gi_gpu_tests.cpp
+[94m[Bash][0m Read GI GPU test setup helpers $ sed -n 60,200p tests/src/render_gi_gpu_tests.cpp
+[94m[Bash][0m Read GI GPU test renderer setup and readback $ sed -n 200,330p tests/src/render_gi_gpu_tests.cpp
+The GI test gives me the pattern: device, renderer, upload, extract, render, read back. Before writing the test, I'll check the shared RT fixture, since its reference scene (moving occluder, off-screen pillar, vertical mirror) is what the integrated test should reuse.
+[94m[Bash][0m Read shared RT reference fixture $ wc -l tests/src/render_rt_fixture.hpp && cat tests/src/render_rt_fixture.hpp | head -150
+The fixture gives me the scene I need: the off-screen pillar, the moving occluder, and the masked fence. Next I need the sun direction the RT test uses, plus the `extract_frame` signature for passing lights and the camera orientation helpers.
+[94m[Bash][0m Find sun setup, extract_frame signature, camera helpers $ grep -n "make_box_mesh\|struct MeshData" engine/render/include/engine/render/mesh.hpp | head
+`extract_frame` takes the lights directly. The lighting GPU test already builds directional lights and cameras, so I'll copy its conventions.
+[94m[Bash][0m Find directional light and camera orientation conventions $ grep -n "camera_from\|look_at\|quatLookAt\|dquat" engine/render/src/camera.cpp engine/core/include/e...
+The camera convention is `angleAxis` about +X, and a downward look is a negative angle. Next I'll check how the GI suite registers its cases and handles unsupported devices, so the new cases match.
+[94m[Bash][0m Read GI test registration and RT test CMake wiring $ grep -n "require_ray_tracing" -A8 tests/src/render_rt_gpu_tests.cpp | head -14
+[94m[Bash][0m Read tests CMake shader and source wiring $ grep -n "render_rt_gpu_tests\|render_rt_tests" tests/CMakeLists.txt
+The shader is already compiled into the test target, so a new case only needs its own source file. One thing needs checking before I write it. The off-screen pillar is outside the frustum, so extraction could drop it, and I need to know the rule for keeping out-of-view items.
+[94m[Bash][0m Check extraction culling rule for out-of-view items $ grep -n "shadow\|visible\|pick_id\|casts" engine/render/src/frame_snapshot.cpp | head -30
+Extraction only keeps out-of-view items when a directional shadow can reach the view. An off-screen reflection therefore needs the snapshot to keep those items, or the pillar never reaches the TLAS. I'll check how the renderer treats shadow-only items before adding an option for it.
+[94m[Bash][0m Check pick_id handling and extraction loop $ sed -n 84,120p engine/render/src/frame_snapshot.cpp
+Shadow-only items (pick id zero) are skipped by the scene draw, so keeping out-of-view items for the trace is safe. I'll add an explicit `keep_offscreen` option to `extract_frame` rather than changing the cull rule for everyone.
+[94m[Bash][0m Read extract_frame declarations and definition head $ grep -n "^FrameSnapshot extract_frame" -A3 engine/render/src/frame_snapshot.cpp
+[94m[Bash][0m Add keep_offscreen option to extract_frame $ """ assert s.count(old1)==1 and s.count(old2)==1 s=s.replace(old1,new1).replace(old2,new2) open(p,'w...
+The option is in. Next, the test needs a dim environment so the sun's contribution is measurable, which means `set_environment` and `EquirectImage`. I'll confirm those declarations and how the GI test checks debug messages.
+[94m[Bash][0m Confirm EquirectImage and environment setter $ grep -n "make_box_mesh" -B2 -A2 engine/render/include/engine/render/mesh.hpp | head -8
+I have what the test needs. I'll confirm how `render_rt_gpu_tests` loads the RT shader and the `MaterialTextures` field names, then write the integrated case.
+[94m[Bash][0m Check RT shader load name and MaterialTextures fields $ grep -rn "struct MaterialTextures" -A8 engine/render/include/engine/render/*.hpp | head -12
+Writing the integrated test: the shadow case moves the occluder and compares RT on against RT off, and the reflection case checks the off-screen pillar through the vertical mirror.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_rt_scene_gpu_tests.cpp[0m "// Ray-traced shadows and reflections through the scene renderer on real GPUs (US-043). The reference scene of render_rt_fixture.hpp is built as
+// renderer objects: the box and the fence quad are mes... (16959 chars)"
+Reviewing the test before building, I see three problems. The props hard-code material 0 where the fence, mirror, and rough box need their harness ids. Two local names clash. Reassigning the scene graph may not compile. Fixing all three.
+[94m[Bash][0m Fix material ids, naming, and graph reset in test $ """) open(p,'w').write(s) print("ok") EOF grep -n "reference_props\|graph" tests/src/render_rt_scene...
+The test edits are in. I'll drop the unused `RayTracedSettings` using-declaration, since warnings are errors, and register the new source in the test target.
+[94m[Bash][0m Register test source and rebuild Linux debug $ grep -n "error\|warning:" /tmp/us043_linux_build3.log | head -30
+The Linux clang debug build is clean. Next is the Linux unit suite, to check the renderer changes did not regress the CPU tests.
+[94m[Bash][0m Run Linux unit test preset $ tail -n 4 /tmp/us043_linux_unit.log
+The Linux unit suite passes. The integrated path still needs the Windows GPU run, with validation layers on, which is where the debug-layer errors will show. I'll check for a running gate batch first, then reuse the last US-043 batch as the template.
+[94m[Bash][0m List recent gate batch files and running batches $ ps -eo pid,args | grep -i "\.bat\|cmd.exe" | grep -v grep | head
+[94m[Bash][0m Read the last US-043 gate batch and its results $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043b_rc.txt 2>/dev/null | tr -d '\r' | head -20
+The us043b batch format works. I'll write a us043c batch covering the full Windows gate set in order, then launch it in the background and wait on its done file.
+[94m[Bash][0m Write Windows gate batch for US-043 with CRLF endings $ echo checked
+[94m[Bash][0m Launch Windows gate batch in background $ echo launched
+The batch is running against the tree, so I won't touch source until it finishes. Meanwhile I'll read the RT design doc and the build-table row for US-043, which need updating once the results are in.
+[94m[Bash][0m Read RT effects doc gap sections and build row $ grep -n "US-043" docs/build.md
+[94m[Bash][0m Wait and check Windows gate progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us043c
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us043c_rc.txt tr -d '\r' ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us043c. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for Windows gate batch to finish $ echo END
+The batch is running. I'll wait for its completion notification rather than polling.
+[94m[Monitor][0m Keep waiting for Windows gate completion $ echo waiting
+[94m[Monitor][0m Wait for Windows gate batch done marker $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043c_rc.txt | tr -d '\r'
+[94m[Monitor][0m Wait for Windows gate batch done marker (persistent) $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043c_rc.txt | tr -d '\r'
+[94m[Monitor][0m Check Windows gate batch progress once $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043c_rc.txt 2>/dev/null | tr -d '\r'
+[94m[Monitor][0m Report status when Windows gate batch ends $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043c_rc.txt | tr -d '\r'
+The Windows run is outside the harness's task tracking, so I'll schedule a single fallback check rather than keep re-arming monitors.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check batch status now $ date
+The vendor check passed, and the build and GPU steps are still running. I'll pause here and resume when the scheduled check fires.
+
+Status so far:
+- **Integration written:** `SceneRenderer` now owns an `RtEffects` pass when `SceneRendererDesc::ray_traced` is enabled. It builds per-mesh bottom-level structures (opaque and masked), a per-frame top level from the snapshot, and a mask atlas. The pass runs before the scene pass, and `scene.hlsl` applies the traced sun shadow and the traced reflection.
+- **Also added:** `extract_frame(..., keep_offscreen)`, so out-of-view objects can be reflected, and a new GPU suite `tests/src/render_rt_scene_gpu_tests.cpp` (shadow with a moving occluder, RT on against off; off-screen pillar in a vertical mirror).
+- **Verified so far:** Linux clang debug builds with zero warnings, and Linux `linux-unit` passes. `ValidateVendor` passes on Windows.
+- **In progress:** the Windows gate batch (`win-dev`, `win-debug`, `win-unit`, DX12 and Vulkan GPU suites with validation layers). Its result decides whether the integrated path actually works.
+
+Not yet done: the Linux gcc and sanitizer gates, the progress log, and the docs updates. I'll finish those after the Windows result.
+[94m[ScheduleWakeup][0m
+
+[91m[Error: `noop` is required when `stop` is not true.][0m
+[94m[ScheduleWakeup][0m
+The Windows gate batch is still running, so US-043 is not finished. I'll resume when the scheduled check fires and read the results then.
+The Windows build, unit, and vendor gates pass, but both GPU suites return 1. I'll read the failure output before changing anything.
+[94m[Bash][0m Find DX12 GPU suite failures in log $ grep -n "FAILED\|with expansion\|REQUIRE\|CHECK(\|validation\|error\|test cases" us043c_4.log | head...
+The DX12 run has one real failure in my new test: the floor points at x = -3 fall outside the 60° view, so the projection rejects them. The other three failures are in the existing `lighting_gpu_tests.cpp`, which my change may have affected. I'll read the full failure context and the Vulkan log.
+[94m[Bash][0m Read failure context for DX12 and Vulkan runs $ grep -n "test cases" us043c_5.log | tr -d '\r'
+Both GPU failures have one root cause in my shader change. The RT shadow dummy is 1x1, but the scene shader loads it at the full pixel coordinate. Out-of-range loads return 0, so every directional light goes dark. That is why the existing lighting tests fail. The test also used floor points at x = ±3, outside the view.
+
+Fixes: clamp the traced-texture loads to the texture's size in `scene.hlsl`, and move the test occluders and sample points to x = ±1.2 so they are in view.
+[94m[Bash][0m Clamp traced loads and move test points into view, rebuild Linux $ grep -c "warning:\|error:" /tmp/us043_linux_build4.log
+The Linux debug build is clean after the fix. I'll rerun the full Windows gate under a new batch name so the old result files stay intact.
+[94m[Bash][0m Launch rerun of Windows gate batch $ echo started
+[94m[Monitor][0m Wait for us043d Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us043d_rc.txt | tr -d '\r'
+[94m[ScheduleWakeup][0m
+The rerun of the Windows gate is in progress. Its first two gates, vendor validation and the configure step, already passed in the previous run. The GPU suites are the decisive steps. I'll resume when the batch finishes.
+The full Windows gate now passes: vendor, `win-dev`, `win-debug`, `win-unit`, DX12 GPU, and Vulkan GPU with validation layers. I'll confirm the case counts and that no validation errors were reported, then run the Linux gcc gates.
+[94m[Bash][0m Check Windows case counts and run Linux gcc gates $ echo vendor_rc=$?
+Every gate is green: 56 DX12 cases and 57 Vulkan cases pass with validation on, and Linux gcc debug and unit pass. Next I'll update the design doc's gaps section and the build-table row, then write the progress entry.
+[94m[Bash][0m Read known gaps section of RT doc $ sed -n 90,107p docs/ray-tracing-effects.md
+[94m[Bash][0m Update RT doc gaps, integration section, and build row $ two directional lights are rejected. |") s=s[:i]+new_row+s[j:] open(p,'w').write(s) print("ok") EOF ...
+The script ran, but the harness flagged that the doc changed on disk after I last read it. I'll check that the write landed and matches what I intended.
+[94m[Bash][0m Verify doc edits applied $ grep -n "US-043 RT shadows" docs/build.md | cut -c1-120
+Both doc edits are in place. Last, the progress log: a Codebase Patterns entry for the two new gotchas, and the US-043 entry itself.
+[94m[Bash][0m Append US-043 progress entry and codebase patterns $ the PRD's half-resolution reflections and filtered shadows are not done. - **Learnings:**   - The fi...
+US-043 is implemented, and the renderer path now runs the ray-traced shadows and reflections. The full Windows gate passes on the RTX 5080 with validation layers on.
+
+**Windows (batch us043d):** `ValidateVendor`, `win-dev`, `win-debug` (no MSVC warnings), `win-unit` 21/21, `gpu dx12` 56 cases, and `gpu vulkan` 57 cases all pass.
+
+**Linux:** `ValidateVendor`, `linux-debug` (0 warnings), `linux-unit`, `linux-gcc-debug` (0 warnings), and `linux-gcc-unit` all pass.
+
+**Not run:** `linux-asan`/`linux-sanitize`, the native Linux Vulkan GPU suite (no usable device on this host), `engine_bench --suite acceptance` (US-074 is not built), a GUI check, and GitHub CI (not pushed).
+
+**What changed**
+- `SceneRenderer` runs the pass when `SceneRendererDesc::ray_traced` is enabled. It builds per-mesh bottom-level structures (opaque, and non-opaque for alpha-mask materials). Each frame it writes a top-level structure from the snapshot's static, non-blended items, and a graph pass records the trace before the scene pass.
+- `scene.hlsl` multiplies the directional light by the traced shadow, and replaces the environment specular with the traced reflection where that reflection applies.
+- `extract_frame` takes `keep_offscreen`, so an off-screen mirror can show an object outside the view. The scene draw never draws those items.
+- New GPU suite `render_rt_scene_gpu_tests.cpp` checks that the sun's shadow follows a moving occluder (RT on against off), and that a vertical mirror shows the off-screen pillar (RT on against off).
+
+**Decisions I made**
+- An unsupported device with `ray_traced` enabled fails at `build()` rather than silently falling back. The caller must turn it off.
+- Two directional lights in one frame are rejected, because the shadow target is the sun's.
+- The ambient term at a reflected hit is zero, so a reflected surface in shadow is black.
+
+**Known gaps** (recorded in `docs/ray-tracing-effects.md`)
+- Skinned and alpha-blended items are not traced.
+- Tables are rebuilt every frame. This is simple but not optimized, and the performance cost is unmeasured.
+- The PRD's half-resolution reflections and filtered shadows are not done. The filter belongs to US-045.
+
+**Mid-run fix:** the first Windows run failed three existing lighting cases. The new 1x1 dummy targets were read at full pixel coordinates, and out-of-range loads return 0, which darkened every light. The fix clamps those loads in `scene.hlsl` (`LoadTraced`). It also exposed one bad test point, which I moved into view.
+
+The progress log, the design doc, and the build table are updated. I did not create a git commit.
+I'll read the rc file and logs again to confirm the result I reported.
+[94m[Bash][0m Read US-043 rerun results and logs $ done
+Both GPU gates passed on the rerun, so no failing cases need diagnosing. The docs and progress entry were already written after that run, so nothing new needed writing.
+
+Results from `us043d`:
+- **Batch:** `vendor=0`, `dev=0`, `build=0`, `unit=0`, `gpu_dx12=0`, `gpu_vulkan=0`.
+- **DX12:** all 56 cases pass (17940 assertions).
+- **Vulkan:** all 57 cases pass (17952 assertions), with validation layers on and `software=no`.
+- **Build warnings:** none in the build log.
+
+The Windows GPU results are not `unsupported` or skipped. They come from the RTX 5080.
+
+Still not run: the Linux ASan and sanitizer presets, the native Linux Vulkan GPU suite (no usable device on this host), `engine_bench` (US-074 is not built), a GUI check, and GitHub CI.

@@ -1,0 +1,59 @@
+# Iteration 1259 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:31:25.311Z
+- **Ended At**: 2026-10-26T23:33:49.981Z
+- **Duration**: 2m 24s
+- **Input Tokens**: 62
+- **Output Tokens**: 4827
+- **Total Tokens**: 4889
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and which docs already exist.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The log shows US-081 has been checked many times and is blocked on hardware and decisions. Before deciding anything, I'll read the acceptance doc and check whether any blocker has changed.
+[94m[Bash][0m Read acceptance doc and check current blockers $ ls artifacts/reports/us081 | head -50
+Every blocker from the last entry still holds: no `/dev/dri`, GCC 9.4, no LICENSE, and no FSR 2 permutations. Before I record another status pass, I'll confirm the Linux unit gate still passes on the current tree, and check whether a display is available for a Linux visual smoke test.
+[94m[Bash][0m Run Linux unit CTest gate and check display $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -8
+The Linux unit gate passes (30 of 30), and WSLg gives a display. I'll check whether a Linux editor binary and a screenshot tool exist for a quick visual smoke test.
+[94m[Bash][0m Look for Linux editor binary and screenshot tools $ which python3 && python3 -c "import PIL" 2>&1 | tail -1
+[94m[Bash][0m Locate Linux game_editor binary and capture tools $ ls /usr/bin | grep -i -E "^(xwd|import|scrot|maim)$"
+No Linux screenshot tool is installed, but the earlier Windows smoke test used a PowerShell screen capture from WSL. I'll try launching the Linux editor under WSLg and see whether it starts at all, since WSL has no Vulkan device.
+[94m[Bash][0m Launch Linux game editor briefly and capture its output $ tail -20 /tmp/linux_editor_smoke.log
+The Linux editor can't create a Vulkan device under WSL, so a Linux visual smoke test isn't possible on this machine. I'll record that in the acceptance doc, replacing the bare "not run" in the visual smoke row.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "Linux: not run |" → "Linux: not run as a visual test. On the WSL2 verif..."
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `ctest --preset linux-unit --output-on-failure --no-tests=error` re-run on the...
+US-081 is not complete, so I am not emitting the COMPLETE signal. Nothing that can be done in this environment is left undone, but the remaining acceptance items need hardware or decisions I don't have.
+
+**Verified this pass**
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes on the current tree: 30 of 30 (1 unit, 29 integration).
+- Linux visual smoke test: attempted under WSLg. The Linux `game_editor` exits at start with `cannot create the vulkan device: no hardware Vulkan 1.2 adapter`. This is WSL without a Vulkan device, so it does not count as a native Linux smoke test.
+
+**Changes**
+- `docs/acceptance.md`: the Linux visual smoke row now records that launch failure and says it is not a native test.
+- `.ralph-tui/progress.md`: appended a status entry for this pass.
+
+**Still open (cannot be closed on this machine)**
+1. Native Linux Vulkan GPU report: no `/dev/dri`.
+2. Full `engine_bench --suite acceptance` run for DX12 and Vulkan: the render, streaming, all-features, and physics scenes don't yet produce GPU timestamps.
+3. FSR 2: the vendored tree has 0 of the generated `*_permutations.h` files, so temporal upscaling is unavailable.
+4. `linux-gcc` gate: needs GCC 11+; the local compiler is GCC 9.4.
+5. Visual smoke tests beyond launch: Windows has launch only, Linux has none.
+6. A package built from a real sample game on each OS.
+7. License: the repo has no LICENSE file.
+
+**Decisions needed from you**
+- The LICENSE choice (item 7). I can't pick the license for you.
+- How to vendor the FSR 2 permutations (item 3). The options are a different archive, generating them, or accepting FSR as unavailable for this release.
+
+Windows gates, the Windows GPU and editor suites, and the clean-copy offline build are recorded as passing in `docs/acceptance.md` from earlier runs. I did not re-run them in this pass.

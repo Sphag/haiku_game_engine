@@ -1,0 +1,35 @@
+# Iteration 666 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:05:25.382Z
+- **Ended At**: 2026-10-26T02:05:38.976Z
+- **Duration**: 13s
+- **Input Tokens**: 20
+- **Output Tokens**: 2046
+- **Total Tokens**: 2066
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect progress log and benchmark tool layout $ ls
+[94m[Bash][0m Check source and report timestamps and workload settings $ grep -rn "FSR\|fsr" tasks/*.md 2>/dev/null | head -3
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing changed in this pass: no source edits since the last run, so I did not rerun the benchmarks or gates.
+
+**What is done:** the `render_route_v1` route, the `render_stress` driver with `--path` and `--disable-mesh-shaders`, per-run counters, screenshots, and the mesh-shader-off fallback. The fallback works: DX12 and Vulkan both report `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with 338–340 indirect items and 0 meshlet items. Prior gate runs on the current tree passed on Windows (validate, win-dev, win-debug, win-unit 29/29, engine_tests gpu on dx12 and vulkan, win-release bench) and on Linux (ValidateVendor, linux-dev, linux-debug, linux-unit 30/30).
+
+**What blocks completion:**
+
+1. **Benchmark contract failures (needs your decision).** Every indexed, indirect, and meshlet run on both backends fails the contract. The route start submits 312,068 triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. The cause is placement: instances are uniform over the 8192 m world, so the route start sees about 330 items. I did not reduce the workload to pass. The fix is to change instance placement, which alters the workload: bump `kWorkloadVersion` and regenerate `workload_expected.json`. Do you want that change, or should I record these failures as the measured result?
+2. **full_1080 is unsupported.** The vendored FSR 2 lacks its generated permutation headers, so only native_1080 runs. This is an external blocker (see the FSR project memory).
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (local GCC 9.4 cannot build Jolt).
+
+I did not add another status entry to `.ralph-tui/progress.md`, because the last nine entries say the same thing. Tell me which option to take for item 1 and I'll proceed from there.

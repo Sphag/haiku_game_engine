@@ -1,0 +1,39 @@
+# Iteration 288 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:07:43.038Z
+- **Ended At**: 2026-10-24T17:12:00.011Z
+- **Duration**: 4m 16s
+- **Input Tokens**: 42
+- **Output Tokens**: 3599
+- **Total Tokens**: 3641
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log.
+[94m[Bash][0m Inspect physics dir and progress log $ ls && ls engine/physics 2>/dev/null && find engine/physics -type f | head -50 && tail -80 .ralph-tui...
+The log shows US-052 as Partial for many passes, with the same two open items: the `linux-gcc` gate and the benchmark. Physics is a memory-touching change, so the ASan/UBSan gate also applies, and the log never mentions it. I'll check the toolchain and the ASan preset.
+[94m[Bash][0m Check compilers and ASan presets $ grep -c . tests/src/physics_world_tests.cpp
+[94m[Bash][0m Configure, build and test the ASan preset $ tail -8 /tmp/asan_test.log
+The ASan/UBSan preset configures, builds, and passes 22 of 22 tests. Next I'll confirm the physics sources have not changed since the last Windows pass, and that the physics cases are in the suite that just ran.
+[94m[Bash][0m Check source mtimes and physics test wiring $ grep -rn "AddressSanitizer\|runtime error" /tmp/asan_test.log /tmp/asan_build.log | head -3
+The sources are unchanged since the earlier Windows and clang passes, and the physics tests are wired into `engine_tests`. I'll record this run in the progress log and the physics project memory.
+[94m[Bash][0m Append progress entry and read physics memory $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs GCC 11+ or CI) a...
+US-052 is still **Partial**, so I'm not emitting the completion signal.
+
+**This pass:** I ran the ASan/UBSan gate, which the progress log had not recorded for this story. `linux-asan` configures, builds, and `linux-sanitize` passes 22 of 22 tests (1 unit, 21 integration). The build and test logs show no sanitizer reports. I made no source changes; `engine/physics/` and `tests/src/physics_world_tests.cpp` are unchanged since 13:13, after the earlier Windows and clang passes. I appended this to `.ralph-tui/progress.md`.
+
+**Still open:**
+- **`linux-gcc` gate.** Only GCC 9.4 is installed, and Jolt needs GCC 11+ for `__builtin_bit_cast`. `sudo` needs a password, so I could not install a newer compiler. This gate needs GCC 11+ or the CI job.
+- **Acceptance benchmark.** There is no `engine_bench` target in the tree (it is US-074), so `engine_bench --suite acceptance` cannot run yet.
+
+I did not re-run the Windows gates this pass. The earlier entries record them passing on this same source, and the sources have not changed since.

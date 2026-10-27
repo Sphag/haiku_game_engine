@@ -1,0 +1,47 @@
+# Iteration 272 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T16:27:34.795Z
+- **Ended At**: 2026-10-24T16:32:57.861Z
+- **Duration**: 5m 23s
+- **Input Tokens**: 44
+- **Output Tokens**: 3590
+- **Total Tokens**: 3634
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since the codebase notes say US-052 is partly done.
+[94m[Bash][0m Inspect repo root, progress log, and physics dir $ git -C /mnt/d/dev/haiku_game_engine status 2>&1 | head -5
+The progress log has US-052 at Partial, with two open items: the `linux-gcc` gate and the acceptance benchmark. I'll check whether a GCC 11+ toolchain or the benchmark harness exists now, since either would change that status.
+[94m[Bash][0m Check compilers, bench target, and tools directory $ ls artifacts | head
+Neither blocker has changed: there is still no GCC 11+ compiler and no `engine_bench` target. The benchmark criterion only applies once the harness exists, so it isn't actionable for this story. Next I'll re-run the Linux clang gates to confirm the current tree still passes.
+[94m[Bash][0m Run Linux clang gates: validate, configure, build, unit tests $ tail -5 /tmp/ctest.log
+The Linux clang gates pass. I'll confirm the physics tests cover the pause, catch-up, and closure behaviour the story requires.
+[94m[Bash][0m List physics test cases covering the story $ grep -E "physics" /tmp/ctest.log | head -3
+Coverage is there for pause, catch-up, closure, and callbacks. I'll record this pass in the progress log, then stop short of the COMPLETE signal because two criteria remain unmet.
+[94m[Bash][0m Append re-verification entry to progress log $ no /opt compiler. linux-gcc* blocked (Jolt needs GCC 11+)." "- Benchmark: no engine_bench target in ...
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The Jolt adapter and its tests are in place and the Linux clang gates pass, but the `linux-gcc` gate is blocked by the toolchain.
+
+**Passing this pass (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (1 unit test, 21 integration tests)
+
+The physics tests cover the fixed 60 Hz step, interpolated render transforms, body types and stable handles, per-scene worlds, pause, the catch-up limit, callbacks through the queue, and world closure. These run without the renderer.
+
+**Still open:**
+- **`linux-gcc` gate (blocked):** `/usr/bin` still has only g++-9, gcc-9, and clang++-10. Jolt needs GCC 11+ for `__builtin_bit_cast`. Installing GCC 11+ needs `sudo`, which requires a password here. The `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` presets therefore have not run.
+- **Windows gates (not re-run):** the four Windows gates were not re-run this pass. The last recorded passing run is from earlier, and `engine/physics/` has not changed since.
+- **Acceptance benchmark (not applicable yet):** there is no `engine_bench` target in the tree. That belongs to US-074, so `engine_bench --suite acceptance` cannot run yet.
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. It records the status as Partial, with the `linux-gcc` gate and the Windows re-run as the open items.

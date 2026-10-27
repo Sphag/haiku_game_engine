@@ -1,0 +1,42 @@
+# Iteration 1135 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:14:51.119Z
+- **Ended At**: 2026-10-26T21:15:09.085Z
+- **Duration**: 17s
+- **Input Tokens**: 20
+- **Output Tokens**: 2424
+- **Total Tokens**: 2444
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log tail and US-07x entries $ wc -l .ralph-tui/progress.md && grep -n "US-07[5-9]\|US-080" .ralph-tui/progress.md | tail -30 && ta...
+[94m[Bash][0m Read memory notes and bench artifacts state $ ls /mnt/d/dev/haiku_game_engine/benchmarks 2>/dev/null
+[94m[Bash][0m Re-check the known US-080 blockers on this host $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+US-080 is not complete, so I'm not signalling COMPLETE. Nothing changed in the tree this pass.
+
+I re-checked the blockers the previous 38 status entries recorded, and they are unchanged:
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`).
+- **FSR 2 shader tables missing:** `third_party/fsr2` has no `*_permutations.h` files. This needs a user decision on the vendoring route.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries with `implementation: none`. Those are the physics, streaming, and all_features workloads the acceptance suite needs.
+- **No acceptance run:** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+
+Without the native Linux GPU report and the missing workloads, the story's acceptance criteria can't be met on this host. A Windows DX12 run is possible from the RTX 5080 host, but the suite would still be incomplete because of the unimplemented workloads. Running it now would only produce a partial report.
+
+To move forward, I need one of these from you:
+
+1. **FSR 2 route:** vendor the generated permutation headers, or drop FSR from the acceptance build. This is a contract-level choice, so it's yours to make.
+2. **Workloads:** tell me whether to implement the physics, streaming, and all_features workloads now. That is a large change, and it is the main remaining code gap.
+3. **Native Linux Vulkan:** run the acceptance on a machine with a real Vulkan device. The Linux gate reports can't come from WSL.
+
+I did not append another status entry to `.ralph-tui/progress.md`, because the last 38 entries already record the same blockers.

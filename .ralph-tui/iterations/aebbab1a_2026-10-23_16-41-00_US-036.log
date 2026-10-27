@@ -1,0 +1,53 @@
+# Iteration 11 Log
+
+## Metadata
+
+- **Task ID**: US-036
+- **Task Title**: Playback and Skinning
+- **Description**: As a character author, I want animated meshes so that I can bring the scene to life.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T13:41:00.094Z
+- **Ended At**: 2026-10-23T13:46:53.357Z
+- **Duration**: 5m 53s
+- **Input Tokens**: 58
+- **Output Tokens**: 5465
+- **Total Tokens**: 5523
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD sections this story depends on.
+[94m[Bash][0m List repo root and progress file size $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read top of progress log $ head -150 .ralph-tui/progress.md
+The progress log already has US-036 entries saying the code exists and the gates passed. I'll check that claim against the source, the build.md row, and file timestamps before relying on it.
+[94m[Bash][0m Check animation sources, build.md row, and mtimes $ find engine tests cmake -type f -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort | tail -3
+[94m[Bash][0m Locate US-036 in PRD and animation references $ grep -n -i "animation\|skin\|root motion\|blend" tasks/prd-open-world-engine.md | head -60
+The story's code is in the tree, and the Windows binary (14:54) is newer than every source file (latest 14:51). Next I'll confirm the Linux gates still pass on this tree and check that the tests cover the acceptance criteria.
+[94m[Bash][0m Run Linux vendor validation, configure, build, unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Run Linux gates and list animation test cases $ grep -rn "loop\|seam" tests/src/*anim*.cpp 2>/dev/null | head -10
+The Linux build is clean and the animation fixtures cover the reference pose, loop seam, and blends. I still need the ctest pass/fail summary, which the tail cut off.
+[94m[Bash][0m Get ctest summary and run animation/skin unit cases $ "$B" "[unit]" 2>&1 | tail -2
+[94m[Bash][0m Locate Linux engine_tests binary and run unit suite $ find build -name engine_tests -type f 2>/dev/null | head
+[94m[Bash][0m Run engine_tests unit suite on Linux $ $B --suite unit 2>&1 | grep -i "animation\|skin" | head -3
+Linux verification passes on the current tree. I'll append this iteration's entry to the progress log, as the workflow requires.
+[94m[Bash][0m Append US-036 verification entry to progress log $ the current count is 480. Update the row when the count next changes. --- EOF tail -3 .ralph-tui/pro...
+US-036 was already implemented in earlier iterations, and I confirmed it on the current tree without changing any source. The Linux gates pass today, and the Windows results recorded earlier still apply.
+
+**Verified this iteration**
+- **Linux:** `ValidateVendor` passed (26 deps, 8542 files). `linux-dev` configured. `linux-debug` built with 0 warnings and 0 errors. `linux-unit` passed 22/22. `engine_tests --suite unit` passed 480 cases (146,417 assertions).
+- **Windows:** not re-run. The newest source change (14:51) predates the Windows `engine_tests.exe` build (14:54), so the earlier `us036_gate` results cover this tree.
+- **Coverage:** the test files `animation_tests.cpp`, `render_skin_tests.cpp`, and `render_skin_gpu_tests.cpp` cover the reference (bind) pose, loop-seam continuity, player wrapping, root motion, two-clip blends, animated bounds, skin data checks, CPU reference skinning, and DX12/Vulkan GPU skinning with motion vectors.
+
+**Not run or unsupported**
+- `engine_bench --suite acceptance`: no bench target exists yet (US-074).
+- Native Linux Vulkan GPU suite: no usable Vulkan device on this host, so it reports exit 3 (unsupported).
+- GUI check: no application window exists yet.
+- GitHub CI: not pushed.
+- Known limit, unchanged from earlier notes: animated bounds are sampled at keys and midpoints with 5% padding, not proven to enclose the pose between samples. Skin and clip import from glTF/FBX is still unsupported by the US-022 importer.
+
+**Changed:** `.ralph-tui/progress.md` only, with a new US-036 entry. I also noted that the `build.md` US-036 row still says 475 unit cases, while the current count is 480. I did not edit `build.md`.
+
+<promise>COMPLETE</promise>

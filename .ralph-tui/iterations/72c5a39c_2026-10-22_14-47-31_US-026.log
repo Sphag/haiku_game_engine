@@ -1,0 +1,362 @@
+# Iteration 25 Log
+
+## Metadata
+
+- **Task ID**: US-026
+- **Task Title**: In-House RHI Contract
+- **Description**: As a rendering developer, I want a shared engine GPU API so that I can support two backends.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T11:47:31.673Z
+- **Ended At**: 2026-10-22T12:12:53.475Z
+- **Duration**: 25m 21s
+- **Input Tokens**: 340
+- **Output Tokens**: 152821
+- **Total Tokens**: 153161
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and progress log, then check what US-001 through US-005 already left in the repo.
+[94m[Bash][0m List repo layout and document sizes $ ls -la && wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md && ls -R | head -200
+[94m[Bash][0m Find US story references in PRD $ grep -n "US-02[4-8]\|US-00[1-5]" tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Read start of progress log $ sed -n 1,120p .ralph-tui/progress.md
+[94m[Bash][0m Read PRD header and early sections $ sed -n 1,130p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read US-026 section of PRD $ sed -n 260,300p tasks/prd-open-world-engine.md
+The PRD defines US-026 as an RHI contract. Next I'll check what the PRD says about RHI, non-goals, and the benchmark contract, and what the engine tree looks like now.
+[94m[Bash][0m Search PRD for RHI, sections; list engine tree $ cat engine/CMakeLists.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+4:## Overview
+12:## Goals
+19:- Test subsystems through dedicated benchmark scenes and a combined scene that exercises compatible features together.
+22:## Quality Gates
+24:### Common Commands
+60:### GPU, Editor, and Performance
+77:## User Stories
+81:### US-001: CMake and Initial Checks
+90:### US-002: Library Dependency Sources
+99:### US-003: Buildable Shader Toolchain
+108:### US-004: CI and Verification Reports
+116:### US-005: Core Runtime Services
+124:### US-006: Jobs and Controlled Shutdown
+132:### US-007: In-House Windows Windowing
+140:### US-008: In-House Linux Windowing
+148:### US-009: In-House Windows Input
+156:### US-010: In-House Linux Input
+164:### US-011: Actions and Input Routing
+172:### US-012: ECS Handles and Lifetime
+180:### US-013: ECS Storage and Queries
+188:### US-014: ECS Systems and Deferred Changes
+196:### US-015: Component Reflection
+204:### US-016: Scene Graph and Transforms
+212:### US-017: Scene Format and Prefabs
+220:### US-018: Asset Registry
+228:### US-019: Asset Converter CLI
+236:### US-020: Model Import
+244:### US-021: Texture Conversion
+252:### US-022: Skeleton and Animation Clip Import
+260:### US-023: LOD and Meshlet Cooking
+268:### US-024: Runtime Asset Handles
+276:### US-025: Changed Asset Updates
+284:### US-026: In-House RHI Contract
+288:- [ ] The RHI describes devices, queues, buffers/textures, descriptors, pipelines, commands, fences, and timestamp queries.
+292:### US-027: DX12 Device and Presentation
+300:### US-028: Vulkan Device and Presentation
+308:### US-029: DX12 Resources and Descriptors
+316:### US-030: Vulkan Resources and Descriptors
+324:### US-031: Shaders, Reflection, and PSO Cache
+332:### US-032: Render Graph
+340:### US-033: Scene Rendering and Picking
+348:### US-034: PBR and Transparency
+356:### US-035: Lighting and Raster Shadows
+364:### US-036: Playback and Skinning
+372:### US-037: GPU Indirect Pipeline
+380:### US-038: Mesh Shader Pipeline
+388:### US-039: HDR, TAA, and Postprocessing
+396:### US-040: Native-Profile GI and Reflections
+404:### US-041: DX12 Ray Tracing Foundation
+412:### US-042: Vulkan Ray Tracing Foundation
+420:### US-043: RT Shadows and Reflections
+428:### US-044: Dynamic RT GI
+436:### US-045: Denoising and Volumetrics
+444:### US-046: Temporal Upscaling
+450:- [ ] Resize/camera cuts reset history; benchmarks do not enable frame generation or dynamically reduce quality.
+452:### US-047: Terrain Runtime
+460:### US-048: World Partition Data
+468:### US-049: Asynchronous World Streaming
+476:### US-050: Large-World Coordinates
+484:### US-051: GPU Particles
+492:### US-052: Jolt World and Fixed Timestep
+500:### US-053: Colliders, Queries, and Terrain Physics
+508:### US-054: Character and Constraints
+516:### US-055: Engine Lua API
+524:### US-056: Lua Lifecycle and Reload
+532:### US-057: Audio
+540:### US-058: Game UI
+548:### US-059: Game Saves
+556:### US-060: Standalone Runtime and Resource Packs
+564:### US-061: ImGui Editor Shell
+572:### US-062: Scene Hierarchy and Inspector
+580:### US-063: Viewport and Gizmos
+588:### US-064: Undo/Redo
+596:### US-065: Play, Pause, Step, Stop
+604:### US-066: Asset Browser and Import UI
+612:### US-067: Material Graph Compiler
+620:### US-068: Visual Material Editor
+628:### US-069: Animation State Machine Runtime
+636:### US-070: Animation Graph Editor
+644:### US-071: Terrain Sculpting and Painting
+---
+engine
+tests
+tools
+engine/assets
+engine/core
+engine/ecs
+engine/platform
+engine/runtime
+engine/scene
+tests/cli
+tests/CMakeLists.txt
+tests/fixtures
+tests/shaders
+tests/src
+tools/asset_converter
+tools/ci
+tools/vendor
+engine/assets/CMakeLists.txt
+engine/assets/include
+engine/assets/src
+tools/asset_converter/CMakeLists.txt
+tools/asset_converter/include
+tools/asset_converter/src
+tools/ci/gpu_run.py
+tools/ci/offline_verify.sh
+tools/ci/write_status.py
+tools/vendor/vendor.py
+tests/cli/CliContract.cmake
+tests/fixtures/assets
+tests/fixtures/converter
+tests/fixtures/core
+tests/fixtures/input
+tests/fixtures/models
+tests/fixtures/textures
+tests/shaders/fixture.hlsl
+tests/shaders/fixture_error.hlsl
+tests/shaders/ShaderFixtureTests.cmake
+tests/src/assets_cooked_tests.cpp
+tests/src/assets_handle_tests.cpp
+tests/src/assets_project_tests.cpp
+tests/src/assets_registry_tests.cpp
+tests/src/cli_options.cpp
+tests/src/cli_options.hpp
+tests/src/cli_options_tests.cpp
+tests/src/converter_mesh_tests.cpp
+tests/src/converter_model_tests.cpp
+tests/src/converter_tests.cpp
+tests/src/converter_texture_tests.cpp
+tests/src/converter_watch_tests.cpp
+tests/src/core_assert_tests.cpp
+tests/src/core_clock_tests.cpp
+tests/src/core_coordinates_tests.cpp
+tests/src/core_file_io_tests.cpp
+tests/src/core_guid_tests.cpp
+tests/src/core_jobs_tests.cpp
+tests/src/core_log_tests.cpp
+tests/src/core_path_tests.cpp
+tests/src/core_result_tests.cpp
+tests/src/core_units_tests.cpp
+tests/src/core_utf8_tests.cpp
+tests/src/ecs_command_buffer_tests.cpp
+tests/src/ecs_storage_tests.cpp
+tests/src/ecs_systems_tests.cpp
+tests/src/ecs_world_tests.cpp
+tests/src/input_action_tests.cpp
+tests/src/input_profile_tests.cpp
+tests/src/input_router_tests.cpp
+tests/src/input_scenario_tests.cpp
+tests/src/lifecycle_tests.cpp
+tests/src/main.cpp
+tests/src/platform_evdev_tests.cpp
+tests/src/platform_input_tests.cpp
+tests/src/platform_replay_tests.cpp
+tests/src/platform_win32_input_tests.cpp
+tests/src/platform_win32_tests.cpp
+tests/src/platform_window_tests.cpp
+tests/src/platform_x11_input_tests.cpp
+tests/src/platform_x11_tests.cpp
+tests/src/scene_format_tests.cpp
+tests/src/scene_graph_tests.cpp
+tests/src/scene_reflection_tests.cpp
+tests/src/scene_tests.cpp
+tests/src/scene_transform_tests.cpp
+tests/src/status_tests.cpp
+engine/core/CMakeLists.txt
+engine/core/include
+engine/core/src
+engine/ecs/CMakeLists.txt
+engine/ecs/include
+engine/ecs/src
+engine/platform/CMakeLists.txt
+engine/platform/include
+engine/platform/src
+engine/runtime/CMakeLists.txt
+engine/runtime/include
+engine/runtime/src
+engine/scene/CMakeLists.txt
+engine/scene/include
+engine/scene/src
+---
+cmake_minimum_required(VERSION 3.28)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "In-source builds are not supported. Configure with a preset, for example: cmake --preset linux-dev")
+endif()
+
+project(OpenWorldEngine
+  VERSION 0.1.0
+  DESCRIPTION "C++20 single-player open-world game engine"
+  LANGUAGES C CXX)
+
+get_property(engine_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT engine_multi_config)
+  message(FATAL_ERROR "This project requires a multi-config generator such as Ninja Multi-Config. Configure with a preset, for example: cmake --preset linux-dev")
+endif()
+
+# Configuration is offline: vendored sources are checked, never downloaded.
+include(cmake/ValidateVendor.cmake)
+engine_validate_vendor("${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+
+include(cmake/EngineTargets.cmake)
+
+# Host shader toolchain: the pinned DXC is built as its own CMake project, outside the
+# engine compile policy. Prerequisites are checked first so a missing SDK fails fast.
+include(cmake/ShaderToolchain.cmake)
+if(ENGINE_BUILD_SHADER_TOOLCHAIN)
+  engine_check_shader_toolchain_prereqs()
+  engine_add_shader_host_toolchain()
+endif()
+
+# Catch2 is vendored as ordinary sources; its own warnings are not promoted to errors.
+# Its library is compiled at the same language level as its C++20 consumers so that
+# feature-dependent stringification (for example std::string_view) links consistently.
+add_subdirectory(third_party/catch2)
+set_target_properties(Catch2 PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS OFF)
+
+add_subdirectory(engine/core)
+add_subdirectory(engine/platform)
+add_subdirectory(engine/ecs)
+add_subdirectory(engine/scene)
+add_subdirectory(engine/assets)
+add_subdirectory(tools/asset_converter)
+add_subdirectory(engine/runtime)
+
+enable_testing()
+add_subdirectory(tests)][0m
+[94m[Bash][0m Read PRD non-goals, technical considerations, perf contract $ sed -n 690,915p tasks/prd-open-world-engine.md | grep -v "^$" | head -230
+The PRD places the RHI at `engine/rhi/` as a "common contract" with separate DX12/Vulkan implementations in later stories, so US-026 is the contract plus a validating in-house backend for tests. Next I'll look at the build wiring and existing code style.
+[94m[Bash][0m Read CMake target helpers and test CMake $ cat cmake/ValidateVendor.cmake | head -60
+I'll start a Linux baseline build in the background while I read the existing handle, status, and test conventions.
+[94m[Bash][0m Start baseline Linux build; read handle and status headers $ cat engine/core/include/engine/core/status.hpp | head -150
+[94m[Bash][0m Read assert header, test style, and test main $ cat tests/src/main.cpp | head -80
+[94m[Bash][0m Read perf contract, result type, runtime target $ cat engine/assets/include/engine/assets/asset_handle.hpp | head -60
+The Linux baseline build is running. I've read enough to design the RHI: a generational-handle contract in `engine/rhi/`, a CPU reference backend that enforces lifetime and state rules, and explicit DX12/Vulkan stubs that report "not built yet" rather than faking support. Let me check the build result and the vendor/CI layout before writing code.
+[94m[Bash][0m Check baseline configure/build progress and presets $ grep -n "rhi\|engine/" .github/workflows/*.yml | head
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -5 /tmp/rhi_cfg.log tail -5 /tmp/rhi_build.log cat CMakePresets.json head -80 ls docs grep -n "rhi\|engine/" .github/workflows/*.yml head. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check baseline build progress and docs layout $ grep -n "engine/" .github/workflows/*.yml | head -5
+The baseline Linux debug build passes. Now I'll write the RHI contract headers, starting with the handle and types.
+[94m[Bash][0m Write RHI handle header $ }  // namespace engine::rhi EOF
+[94m[Bash][0m Write RHI types, capabilities, errors, command list headers $ }  // namespace engine::rhi EOF
+Next, the abstract `Device` interface, the `ValidationDevice` declaration, and the factory.
+[94m[Bash][0m Write Device interface and ValidationDevice header $ }  // namespace engine::rhi EOF
+Now the small source files: `to_string` helpers and the factory.
+[94m[Bash][0m Write to_string helpers and device factory $ }  }  // namespace engine::rhi EOF echo ok
+The core piece is `validation_device.cpp`: the slot pools, the device logic, and the command recorder that enforces the rules.
+The implementation is in. Before compiling, I'm cleaning up a leftover: `check_draw_state` takes arguments it never uses, and `draw_indexed` has `(void)` casts to silence unused parameters. Both should go.
+[94m[Bash][0m Simplify draw-state helper signatures $ ''') s=s.replace('''RhiStatus ValidationDevice::Recorder::draw_indexed(std::uint32_t index_count, st...
+The line numbers look higher than I expected for this file. I'll check that nothing got duplicated.
+[94m[Bash][0m Check file length and for duplicated definitions $ wc -l validation_device.cpp && grep -c "ValidationDevice::Recorder::transition(BufferHandle" validat...
+No duplication, just a long file. Next the CMake wiring: a new `engine_rhi` target, the root `add_subdirectory`, and the test sources.
+[94m[Bash][0m Wire engine_rhi target into CMake and tests $ they link against this target. add_library(engine_rhi STATIC   src/device.cpp   src/rhi_types.cpp   ...
+Now the tests. They cover the acceptance points directly: lifetime and deferred destruction, generation checks, state transitions, queue and list rules, fences and timestamps, feature gates with forced disable, descriptors, and the backend factory.
+[94m[Bash][0m Write RHI contract unit tests $ } EOF echo ok
+A few expectations in that file are wrong, so I'm fixing them before the first build. One CHECK is a convoluted nonsense expression, the in-flight allocation count is off by one, the indirect test never transitions its argument buffers, and there's a stray `(void)`.
+[94m[Bash][0m Fix test expectations and missing transitions $ // Two draw records''') open(p,'w').write(s) print("patched") EOF
+I left one awkward assertion in that edit. A valid transition should be checked with `require_ok`, so I'll fix it and then build.
+[94m[Bash][0m Reconfigure and build Linux debug target $ grep -E "error|warning" /tmp/rhi_b1.log | head -60
+Two kinds of errors. The `INFO(...)` ternary doesn't work inside Catch2's macro, so I'll switch the helpers to `FAIL`. The unused draw parameters are a real gap: `first_index` plus `index_count` should be checked against the bound index buffer's size, so I'll add that check and leave the unused `base_vertex` and `first_instance` unnamed.
+[94m[Bash][0m Fix test helpers and draw index range check, rebuild $ grep -E "error|warning:" /tmp/rhi_b2.log | head -40
+One error left: an unused `operator!=` on `ResourceKey` in an anonymous namespace. I'll remove it and rebuild.
+[94m[Bash][0m Remove unused operator and rebuild Linux debug $ tail -2 /tmp/rhi_b3.log
+The Linux debug build is clean with `-Werror`. Next I'll run the new tests directly, then the full `linux-unit` ctest preset.
+[94m[Bash][0m Run RHI unit tests directly $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Run unit test suite including RHI tests $ echo "exit=${PIPESTATUS[0]}"
+355 of 356 pass. The one failure is a test bug, not an engine bug: both lists in that test transition the same texture from `Common`, but the tracked state is device-wide and recording order is submission order, so the second list correctly sees the texture already in `RenderTarget`. I'll give the second list its own target.
+[94m[Bash][0m Fix test target sharing, rebuild, rerun unit tests $ echo "exit=${PIPESTATUS[0]}"
+All 356 unit test cases pass on Linux/Clang. Next I'll run the remaining Linux gates: the `linux-unit` ctest preset, then the GCC 9 job, which is the most likely to reject C++20 features, and the ASan job, since this change touches lifetime and memory. I'll start GCC and ASan in the background.
+[94m[Bash][0m Run linux-unit ctest; start GCC job in background $ tail -6 /tmp/linux_unit.log
+`linux-unit` passes, including the new unit tests. While the GCC job runs, I'll write a short doc for the contract, following the style of the existing `docs/` files.
+[94m[Bash][0m Look at an existing doc's style $ grep -n "^#" docs/runtime-conventions.md | head
+[94m[Bash][0m Write RHI contract documentation $ cat > docs/rhi.md <<'EOF' # In-House RHI Contract  The engine's GPU API lives in `engine_rhi` (`engi...
+[94m[Bash][0m Remove unverifiable doc line; check GCC job status $ grep -c "error" /tmp/gcc_build.log 2>/dev/null
+[94m[Bash][0m Wait for GCC ctest to finish and report result $ tail -1 /tmp/gcc_ctest.log
+The GCC build exited 1, but ctest still ran and passed because my chain used `;`. I need to see what failed in the build.
+[94m[Bash][0m Find GCC build errors $ grep -n "FAILED" /tmp/gcc_build.log | head
+GCC 9 has no `concept` keyword, which is the failure the progress log warned about. I'll replace the concept with `enable_if`-constrained operators, which behave the same and compile on GCC 9.
+[94m[Bash][0m Replace concept with enable_if; rebuild GCC debug $ grep -n "error\|warning:" /tmp/gcc_build2.log | head -30
+The GCC debug build now passes. Since `types.hpp` changed, I'll rerun the GCC tests and the Clang debug build, and start the ASan/UBSan job in the background.
+[94m[Bash][0m Run GCC and Clang unit ctest; start ASan job $ echo "ASAN_CTEST_EXIT=$?" >> /tmp/asan_ctest.log) >/dev/null 2>&1 & echo started-asan
+While that runs, I'll prepare the Windows gates. The progress log has a working recipe: a `.bat` that calls the matching `vcvars64.bat`, run through `cmd.exe` from WSL. I need the exact compiler path the Windows cache was configured with.
+[94m[Bash][0m Find Windows compiler and user paths for gates $ grep -n "vcvars\|win-dev\|gates" /tmp/*.bat 2>/dev/null | head -3
+There's a previous gate script from an earlier story in `/tmp`. I'll reuse its structure.
+[94m[Bash][0m Read earlier Windows gate script template $ cat /tmp/us014_gates.bat
+[94m[Bash][0m Check GCC and Clang unit results $ echo "clang build lines: $(wc -l < /tmp/clang_b5.log)"
+The GCC job passes (19/19 ctest) and the Clang `linux-unit` run passes after the enable_if change. The ASan job is running. Now I'll write the Windows gate script in the same pattern as the earlier one and run it through `cmd.exe`.
+[94m[Bash][0m Write and launch Windows gate script via cmd.exe $ echo "WIN_RUN_DONE=$?" >> /tmp/us026_win_run.log) & echo started
+While the Windows and ASan jobs run, I'll run the vendor validation gate, which is quick and doesn't touch the builds.
+[94m[Bash][0m Run vendor validation gate on Linux $ tail -2 /tmp/validate_linux.log
+[94m[Bash][0m Poll ASan and Windows gate progress $ echo done-poll
+The Windows script reports all four gates at exit 0. A summary file alone isn't enough, so I'll check the Windows build and ctest logs for warnings and actual test counts.
+[94m[Bash][0m Verify Windows gate logs for warnings and tests $ tail -3 /mnt/c/Windows/Temp/us026_w_validate.log
+[94m[Bash][0m Confirm Windows ctest pass line and rhi build $ ls -la /mnt/c/Windows/Temp/us026_w_build.log | awk '{print $5}'
+Windows is fully green: validate, configure, debug build with no warnings, and `win-unit` at 19/19. Next I'll wait for the ASan/UBSan job, which is the remaining gate that matters for a change touching lifetimes.
+[94m[Bash][0m Wait for ASan build and sanitizer ctest $ tail -3 /tmp/asan_ctest.log 2>/dev/null
+[94m[Bash][0m Poll ASan job completion $ echo polled
+[94m[Bash][0m Confirm ASan/UBSan results and no sanitizer reports $ grep -c "runtime error\|ERROR: AddressSanitizer" /tmp/asan_unit_direct.log
+ASan/UBSan passes: 19/19 under `linux-sanitize`, and a direct run of the unit suite shows no sanitizer reports. Last, I'll confirm the explicit `linux-dev` configure gate still passes with the new target, then update the progress log.
+[94m[Bash][0m Update progress log with patterns and US-026 entry $ ` reports the last command's exit, not the build's. The first GCC run looked green while its build h...
+The progress entry says 26 RHI test cases. I'll verify that count against the file, and check the `linux-dev` configure gate that I started.
+[94m[Bash][0m Count RHI test cases and check configure gate $ tail -2 /tmp/final_cfg.log
+[94m[Bash][0m Confirm configure gate and correct test case count $ python3 - <<'EOF' p='/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md' s=open(p).read() assert s....
+US-026 is implemented: the in-house RHI contract in `engine/rhi/`, plus a CPU reference backend that enforces it. The DX12 and Vulkan backends are US-027 and US-028, so `create_device` returns `Unsupported` for them rather than falling back. Every local quality gate I ran passes, but I haven't run GitHub Actions CI.
+
+**What's in place**
+- **Contract:** typed generational handles (no backend pointers), a `Device` interface, and a `CommandList` with explicit `transition(before, after)`. It covers buffers, textures, descriptors, pipelines, fences, and timestamp queries. The scene and ECS code see only these types.
+- **Lifetime:** `destroy` invalidates a handle immediately. Storage stays allocated until any submission that named the object has completed, and a list that uses an object destroyed after recording is rejected at submit.
+- **Capabilities:** mesh shaders, indirect count, ray tracing, and timestamp queries are reported as `Unsupported`, `DisabledForTest`, or `Supported`. `DeviceDesc::disabled_features` forces features off, and gated commands fail with `FeatureDisabled`.
+- **Tests:** 23 `[unit]` cases in `tests/src/rhi_contract_tests.cpp`.
+- **Docs:** `docs/rhi.md`.
+
+**Choices I made**
+- The reference backend is a validation device that runs no GPU work. It executes submissions in order on one timeline and does not model queue overlap. That is enough to test the contract, and the GPU backends will be checked against the same rules.
+- Ray tracing is reported as a feature but has no commands yet. Acceleration structures belong to US-041/042.
+- The CI's GCC 9 has no `concept` keyword, so the flag-enum operators use `enable_if`. The GCC build caught this, which the Clang build had not.
+
+**Verification** (exit codes checked directly)
+- **Windows/MSVC** (via `vcvars64.bat`): `ValidateVendor`, `win-dev`, `win-debug` build with 0 warnings, and `win-unit` ctest at 19/19.
+- **Linux/Clang:** `ValidateVendor`, `linux-dev`, `linux-debug` build with no warnings, and `linux-unit` at 19/19.
+- **Linux/GCC 9:** `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` at 19/19.
+- **Linux ASan+UBSan:** `linux-asan` and `linux-sanitize` at 19/19, with no sanitizer reports in the unit run.
+
+**Not run**
+- GitHub Actions CI was not run, so the CI requirement is not verified.
+- No GPU report exists for this story. The GPU backends are not built, so there are no GPU suites to run.
+- `engine_bench --suite acceptance` was not run. The benchmark harness doesn't exist yet, and this change doesn't touch the frame path.
+
+The progress log has the US-026 entry, and the new reusable patterns are at the top of its codebase section.
+
+<promise>COMPLETE</promise>

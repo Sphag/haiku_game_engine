@@ -1,0 +1,41 @@
+# Iteration 1003 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:36:42.469Z
+- **Ended At**: 2026-10-26T15:37:08.151Z
+- **Duration**: 25s
+- **Input Tokens**: 28
+- **Output Tokens**: 2734
+- **Total Tokens**: 2762
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and what already exists for `all_features`.
+[94m[Bash][0m Inspect progress log and search for all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features\|US-079" --include=* -r . 2>/dev/n...
+The progress log shows this story has been re-checked for many passes with the same blockers. I'll confirm the current manifest state and the test files before deciding whether anything is actionable.
+[94m[Bash][0m Check manifest entry, samples dir, and benchmark references $ grep -n "all_features" tools/benchmark/src/*.cpp | head
+Nothing has changed since the last pass. The blockers are still real, so I'll record this pass in the progress log and stop without a completion signal.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows GUI session for the tour, GI/RT/upscale profiles, forced geometry paths, and the live ...
+US-079 is not complete, so I am not emitting the completion signal. This pass made no source changes and ran no builds or tests; I only re-checked the tree and logged the status.
+
+**What exists:**
+- `tests/src/all_features_tests.cpp` (CPU integration: workload digests and combined-scene markers) and `tests/src/all_features_editor_tests.cpp` (editor edits, undo/redo, Play/Stop, package). Both are wired in `tests/CMakeLists.txt`.
+- Earlier passes recorded these results, which I have not re-run here: Linux `engine_tests --suite integration` passed 132 of 135 (3 X11 window-manager skips), `ctest --preset linux-unit` 30/30, and Windows `win-dev`, `win-debug`, `ValidateVendor` and `win-unit` (29/29) all exit 0.
+
+**What is blocked, and by whom:**
+1. **Approval of `all_features_route_v1`.** The manifest entry for `all_features` is still `implementation: none`, and its route is a proposal. It fixes the benchmark contract, so I did not implement the benchmark branch or the tour against it. Approving it unblocks the `all_features` branch in `tools/benchmark/src/` and the `samples/all_features` build.
+2. **FSR 2 permutation headers.** `third_party/fsr2` has none of the eight `*_permutations.h` files per backend. Without them `full_1080` stays unsupported, which the manifest already allows. A decision to leave it unsupported would close this item.
+3. **A Windows GUI session.** The tour, the GI/RT/upscale profiles, forced indirect/meshlet paths, and the live editor run with package/relaunch need a running Windows application. WSL cannot provide that, so none of it is reported as passed.
+
+**Still open, not reported as passed:** `samples/all_features`, the `engine_bench --suite acceptance` runs, the GPU suites on DX12 and Vulkan, the linux-asan and linux-gcc presets, and the editor scenario in a live GUI.
+
+I appended a status entry to `.ralph-tui/progress.md`. Once you approve the route and decide on FSR 2, the benchmark branch and the `samples/all_features` build can be wired in a follow-up pass. The GUI items need you or a Windows session.

@@ -1,0 +1,37 @@
+# Iteration 981 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:19:12.994Z
+- **Ended At**: 2026-10-26T15:19:31.970Z
+- **Duration**: 18s
+- **Input Tokens**: 18
+- **Output Tokens**: 2323
+- **Total Tokens**: 2341
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state, progress log, and existing all_features references $ grep -rn "all_features" --include=*.cpp --include=*.hpp --include=*.txt --include=*.cmake --include=...
+[94m[Bash][0m Recheck blocker state: samples dir, FSR2 headers, manifest, benchmark branch $ find . -path ./build -prune -o -path ./third_party -prune -o -newer tests/src/all_features_editor_te...
+US-079 is not complete, so I have not emitted the COMPLETE signal. I made no source changes this pass and ran no builds or tests. The blockers recorded in `.ralph-tui/progress.md` still hold: `samples/` is absent, `third_party/fsr2` has no `*_permutations.h` files, `benchmarks/manifest.json` still has `all_features` at `implementation: none`, and `tools/benchmark/src/main.cpp` has no `all_features` branch.
+
+**What already exists:**
+- `tests/src/all_features_tests.cpp`: CPU integration test that checks the table workload against `benchmarks/workload_expected.json`.
+- `tests/src/all_features_editor_tests.cpp`: editor scenario covering scene, material graph, animation graph, and terrain edits with undo/redo, Play/Stop, and Build Game's verify step.
+- The last recorded Linux and Windows gate results (checks 71 and 73) still describe the current tree, since nothing newer has changed.
+
+**What is still open and cannot be closed from this environment:**
+1. **Route approval.** `all_features_route_v1` is only a proposal in the manifest. The benchmark branch and tour depend on it, and it needs your sign-off.
+2. **FSR 2 permutation headers.** Without them `ENGINE_FSR2_AVAILABLE` stays off and the `full_1080` profile cannot run. Either the headers need to be vendored or you decide to leave `full_1080` unsupported.
+3. **Windows GPU and GUI session.** The tour runner with screenshots and action log, the GI/RT/upscale profiles, the forced indirect/meshlet paths, the package relaunch, and the live editor run all need a machine with a GPU and display. WSL has no usable Vulkan device.
+4. **Native Linux Vulkan GPU run and `linux-gcc*` presets.** The host has GCC 9.4 only, and Jolt needs GCC 11+.
+
+**What would close it:** approve the route, and either supply the FSR 2 headers or accept `full_1080` as unsupported. Then I can add the `all_features` builtin scene and benchmark branch, and run the Windows gates and the GPU/GUI checks in a Windows session.

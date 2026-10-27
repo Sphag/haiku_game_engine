@@ -1,0 +1,41 @@
+# Iteration 696 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:14:16.795Z
+- **Ended At**: 2026-10-26T02:14:33.319Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2577
+- **Total Tokens**: 2599
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for the render benchmark.
+[94m[Bash][0m Read progress log and benchmark tool layout $ grep -n "US-076" -A3 .ralph-tui/progress.md | head -40
+The log shows US-076 has been stuck on the same user decisions for many status checks. Before I decide anything, I'll confirm the tree is unchanged since the last gate run and check whether the Windows gates ran after the final source edit.
+[94m[Bash][0m Check source mtimes, artifacts, and last Windows gate mentions $ grep -n "win-unit\|win-debug\|win-dev" .ralph-tui/progress.md | tail -8 | cut -c1-260
+US-076 is not complete, so I am not signalling COMPLETE. Nothing new was run this pass: the source and manifest are unchanged since the last recorded gate and benchmark runs, and the log already shows the Windows and Linux gates passing on this tree.
+
+**What's done (per the progress log, consistent with the file timestamps):**
+- `render_route_v1` is defined in `benchmarks/manifest.json`. `engine_workload --check` matches all four scenes, including the `render_stress` counts (20000 instances, 200 meshes, 100 characters / 6400 bones, 100000 particles, 128 lights, 4 shadowed, 1 sun).
+- The `render_stress` driver (`tools/benchmark/src/render_stress.{hpp,cpp}`) builds the scene, drives the route, and records per-frame counters, GPU pass timings, PPM screenshots, and feature state.
+- `--path indexed|indirect|meshlets` and `--disable-mesh-shaders` are wired. The forced-off run falls back to indirect-indexed draws and reports `mesh_shaders: disabled: forced off`, not as enabled.
+- The eight `artifacts/bench/us076-*` reports are current, with no more than 04:15 source edits behind them.
+
+**What's stuck:**
+1. **Acceptance contract failures (needs your decision).** On DX12 and Vulkan, every indexed, indirect, and meshlet run exits 1. The start frame has 312,068 triangles against the 2,000,000 floor, and p99 is 35–47 ms against a 16.7 ms budget. Instances are spread uniformly over 8192 m, so the route start sees about 330 items. The contract forbids reducing the workload. The fix is a placement change, which bumps `kWorkloadVersion` and regenerates `workload_expected.json`. I need you to choose one:
+   - (a) Keep the contract and close the story with these as the measured results, marked failed.
+   - (b) Approve a placement change that puts more of the 20000 instances in the route's view.
+2. **full_1080 profile unsupported.** The vendored FSR 2 shader permutation tables are missing (see `project-fsr2-permutations-missing`), so only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU suite (WSL has no usable Vulkan device) and `linux-gcc` (local GCC 9.4 cannot build Jolt).
+
+I stopped here instead of running another status pass. Another rerun would not change any of these three blockers. Once you pick option (a) or (b), I can make the change, rerun the affected benchmarks, and update the log.

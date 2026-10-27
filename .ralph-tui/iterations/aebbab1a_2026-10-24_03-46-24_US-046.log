@@ -1,0 +1,35 @@
+# Iteration 61 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:46:24.569Z
+- **Ended At**: 2026-10-24T00:46:35.646Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1219
+- **Total Tokens**: 1237
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root and progress log $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-046" -A3 .ralph-tui/progress.md | head -60
+[94m[Bash][0m Check FSR 2 permutation headers and recent changes $ find third_party engine/rhi -name "*_permutations.h" | wc -l && ls third_party/fsr2 && find engine t...
+US-046 is still blocked, and I have not made any source changes in this pass.
+
+**What's blocking it:** The vendored FSR 2 tree at `third_party/fsr2` contains only `LICENSE.txt` and `src`. The eight generated `*_permutations.h` shader tables per backend are missing, so `ENGINE_FSR2_AVAILABLE` stays off and both backends return `Unsupported` from `upscale`. Without a working FSR 2, the full profile can't switch to 1280×720 (it would ship an unupscaled 720p image), and the UI-after-upscale and reactive-mask work can't be verified.
+
+**Decision needed from you.** Pick one route for the shader tables:
+
+1. **Vendor the hash-pinned outputs** of the archive's `tools/sc/FidelityFX_SC.exe`. This is the fastest path, but it needs a documented exception to the no-prebuilt-tools rule.
+2. **Regenerate the blobs** with the engine's pinned DXC through a first-party generator. This keeps to the tools rule but is more work.
+
+Once you choose, I'll wire the upscale path, switch the profile sizes, compose UI after upscaling, and run the Linux gates here. The Windows gates and the RTX 5080 GPU suite need the Windows side, per the saved gate-run notes.
+
+I also didn't append another "re-check" entry to `.ralph-tui/progress.md`, since the last several made no new findings. I have not emitted the COMPLETE signal, because the acceptance criteria aren't met.

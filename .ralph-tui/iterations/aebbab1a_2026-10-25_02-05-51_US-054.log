@@ -1,0 +1,42 @@
+# Iteration 384 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:05:51.557Z
+- **Ended At**: 2026-10-24T23:07:38.920Z
+- **Duration**: 1m 47s
+- **Input Tokens**: 30
+- **Output Tokens**: 3764
+- **Total Tokens**: 3794
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 already exists in the tree, and reading the progress log.
+[94m[Bash][0m Inspect repo state and progress log $ git status 2>&1 | head -5
+The log shows 24 prior status checks, all ending "Partial" with no source change. I won't repeat that loop. I'll check the one thing that could change the status: whether sources changed after the last Windows pass, and whether the Linux build still passes.
+[94m[Bash][0m Find last Windows pass and newer source files $ ls -la --time-style=full-iso .ralph-tui/progress.md engine/physics/src/character.cpp tests/src/physi...
+[94m[Bash][0m Build linux-debug and run linux-unit tests $ tail -n 4 /tmp/us054_ctest.log)
+Build and unit tests pass again, and no source file is newer than the last progress entry. I'll append one short log entry and stop, since nothing left is something I can do here.
+[94m[Bash][0m Append status entry to progress log $ US-074 does not exist yet, so the conditional criterion does not yet apply), `physics_stress` (US-07...
+US-054 is not complete, so I am not signalling COMPLETE. The implementation was already in the tree from earlier passes, and nothing new was needed in this pass.
+
+**Blocking item:** the `linux-gcc` gate (`cmake --preset linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`) is an explicit acceptance criterion. It cannot run on this host. Jolt needs GCC 11+ or clang 14+, and `/usr/bin` has only GCC 9.4 and clang 10. Installing a newer compiler needs root, which I don't have. The CI job or a machine with GCC 11+ is needed to close it.
+
+**Verified this pass (Linux, WSL):**
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0. Integration 21 tests, unit 1 test.
+- No file under `engine/`, `tests/`, `cmake/`, or `docs/` is newer than the progress log, so the last Windows pass (21 of 21) and the last `linux-sanitize` pass (22 of 22) still describe the current tree.
+
+**Not run, and why:**
+- `engine_bench --suite acceptance`: no benchmark harness exists yet (US-074). The criterion applies "once the harness and workloads exist", so it does not apply yet.
+- `physics_stress`: the scene belongs to US-077, which is not built yet.
+
+I appended a short status entry to `.ralph-tui/progress.md`. Earlier entries repeated the same status with no change, so I did not run the full gate set again.

@@ -1,0 +1,78 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-004
+- **Task Title**: CI and Verification Reports
+- **Description**: As a developer, I want to check changes on both operating systems so that I can detect platform regressions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T20:58:26.517Z
+- **Ended At**: 2026-10-21T21:11:15.204Z
+- **Duration**: 12m 48s
+- **Input Tokens**: 152
+- **Output Tokens**: 13048
+- **Total Tokens**: 13200
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log, then check what US-001 through US-003 already left in the repo.
+[94m[Bash][0m Read PRD and progress log $ ls -la && cat tasks/prd-open-world-engine.md | head -400 && echo ---- && cat .ralph-tui/progress.md
+[94m[Bash][0m Show progress log $ wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md && cat .ralph-tui/progress.md
+[94m[Bash][0m Read the PRD file $ sed -n 1,400p tasks/prd-open-world-engine.md
+The progress log already records US-004 as implemented, with a verification pass. I'll check the actual CI and offline files against the acceptance criteria rather than trust the log, then rerun the Linux gates.
+[94m[Bash][0m Read CI workflows and offline script $ cat .github/workflows/ci.yml && echo ---- && cat .github/workflows/gpu.yml && echo ---- && cat tools...
+[94m[Bash][0m Read presets and warning settings $ cat CMakePresets.json && ls tools/ci tests && grep -rn "Werror\|WX" cmake CMakeLists.txt | head -20
+The CI structure matches the acceptance criteria on paper. Next I'll confirm the CTest labels and rerun the Linux gates, since those are the checks I can run here.
+[94m[Bash][0m Check test labels and validate vendor tree $ (cmake -P cmake/ValidateVendor.cmake && echo VALIDATE_OK) 2>&1 | tail -3
+Validation passes. Next I'll check that the unit and integration suites contain real functional tests, not just a smoke test, and then run the Linux build and test gates.
+[94m[Bash][0m List test sources and count assertions $ find tests/src tests/cli -type f | head -50 && grep -rho "TEST_CASE\|CHECK(\|REQUIRE(" tests/src | s...
+[94m[Bash][0m Configure, build, and run Linux unit tests $ tail -25 /tmp/us004_linux.log
+The Linux gates pass (10/10), and the unit suite covers 20 test cases. Next I'll run the offline verification from an empty build directory in the background, and the Windows gate script that a previous pass left outside the repo.
+[94m[Bash][0m Start offline verify and show Windows gate script $ echo OFFLINE_EXIT=$? >> /tmp/us004_offline.log) & ls /mnt/d/dev/us004-gates/ 2>/dev/null && cat "/mn...
+[94m[Bash][0m Show Windows gate script contents $ cat /mnt/d/dev/us004-gates/win-gate.bat 2>&1 | head -40
+The background notification is for the wrapper shell, which exited right away because I used `&` inside it. The offline script itself may still be running, so I'll check its log directly.
+[94m[Bash][0m Check offline verification progress $ pgrep -fa offline_verify | head -3
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -5 /tmp/us004_offline.log pgrep -fa offline_verify head -3. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check offline verification progress $ pgrep -fa offline_verify | head -3
+The offline run is in its configure step. I'll run the Windows gate in parallel, since it uses a separate build directory (`build\win-dev`).
+[94m[Bash][0m Run Windows MSVC quality gate script $ tail -30 /tmp/us004_win.log
+While the gates run, I'll check the PRD's Non-Goals, Technical Considerations, and performance contract sections for constraints that apply to CI.
+[94m[Bash][0m List PRD section headings $ grep -n "^## \|^### " tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Read PRD tail: benchmark, non-goals, technical notes $ sed -n 668,915p tasks/prd-open-world-engine.md | grep -v "^$" | head -150
+The PRD's technical notes require pinned working compiler versions in CI and docs. The CI workflow pins CMake and Ninja, but the compiler versions it installs (clang-14, gcc-11) differ from the ones that were run locally (clang 10, GCC 9.4). I'll record that as a gap. Now I'll wait for the offline and Windows runs to finish.
+[94m[Monitor][0m Wait for offline verify and Windows gate to finish $ echo WIN: $(grep -o "WIN_GATES_PASSED\|WIN_GATE_FAILED.*" /tmp/us004_win.log)
+[94m[Bash][0m Poll offline and Windows gate logs for completion $ tail -4 /tmp/us004_win.log
+The Windows gate passed. The offline run failed inside the DXC host-tools sub-build, so I need the first error from that log.
+[94m[Bash][0m Find errors in offline verify log $ grep -n -i "error\|FAILED\|fatal\|No such\|Could not\|Network\|resolve\|download" /tmp/us004_offline...
+The offline build is compiling `core_*_tests.cpp` files that were not in the `tests/src` listing I read a few minutes ago. I'll check whether the tree changed under me.
+[94m[Bash][0m Inspect test sources and CMake test list for changes $ ls -la --time-style=full-iso tests/src tests/CMakeLists.txt && grep -n "core_\|tests/src" tests/CMak...
+Files under `tests/src/core_*` and `tests/CMakeLists.txt` were modified at 00:03–00:04 today, after my Linux gate run. They are US-005 test files (core runtime services), not part of US-004. I'll confirm that every failure in the offline log comes from those files.
+[94m[Bash][0m List failing build targets and check for stray builds $ pgrep -fa "ninja|cmake" | grep -v pgrep | head -5
+Another session is building in `build/linux-dev` right now (a `us005` build log). My offline script deletes that directory, so I should not rerun it until that build finishes. I'll check which test set the Windows run covered, so I can report it accurately.
+[94m[Bash][0m Summarize Windows gate test results $ grep -c "core_" /tmp/us004_win.log
+The Windows run was on the tree before the US-005 files appeared (zero `core_` matches), so its result stands for that tree. Now I'll record this verification pass in the progress log. I'm not marking the story complete, because the offline criterion has not passed on the current tree.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "- Vulkan-Headers `registry/vk.xml` must be vendore..." → "- Shared build directories: `tools/ci/offline_veri..."
+[94m[Bash][0m Check end of progress log for append point $ tail -c 200 .ralph-tui/progress.md | cat -A | tail -3
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "`engine_bench --suite acceptance` is not applicabl..." → "`engine_bench --suite acceptance` is not applicabl..."
+**US-004 is not complete.** The offline verification criterion failed on the current tree, and I did not signal completion.
+
+**What failed:** `tools/ci/offline_verify.sh` failed while compiling `engine_tests`. The errors are in `tests/src/core_assert_tests.cpp`, `core_units_tests.cpp`, and `core_coordinates_tests.cpp`. Those files are US-005 work, and another session modified them at 00:03–00:04 while I was verifying. They use `ENGINE_ASSERT`/`CHECK_THROWS_AS` and `Catch::Approx` in ways that don't compile yet. The CI and offline scripts are not the cause. I did not rerun the offline check because the script deletes `build/linux-dev`, and another session was building in that directory.
+
+**Verified this pass:**
+- **Linux/Clang gates:** `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (10/10) passed. This ran before the US-005 files appeared.
+- **Windows/MSVC gates:** the `win-gate.bat` script passed `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (10/10). This run did not include the `core_*` files.
+- **CI and offline files:** `ci.yml`, `gpu.yml`, `offline_verify.sh`, and the presets match the acceptance criteria. I made no source changes.
+
+**Still open:**
+- **Hosted CI has never run.** The PRD says an OS is not verified until its CI job succeeds, so neither Windows/MSVC nor Linux/Clang counts as verified yet.
+- **Compiler pins differ from what was tested.** CI installs clang-14 and gcc-11. The locally verified compilers were clang 10 and GCC 9.4. The PRD requires pinned working versions in CI and docs.
+- **Not run:** `linux-gcc`, `linux-asan`/`linux-sanitize`. They would hit the same US-005 compile errors on the current tree. GPU checks are `not-run` because there is no GPU runner. The benchmark check does not apply until US-074.
+
+**To finish:** once the US-005 tests compile and nothing else is building in `build/linux-dev`, rerun `bash tools/ci/offline_verify.sh`, plus `linux-gcc` and `linux-asan`. Then decide whether to pin the CI compilers to the verified versions or document the difference in `docs/build.md`.
+
+I appended a "verification pass 2" entry to `.ralph-tui/progress.md` with these results, and added a codebase pattern about the shared build directory.

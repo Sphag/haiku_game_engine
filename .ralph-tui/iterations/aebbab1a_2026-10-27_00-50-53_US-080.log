@@ -1,0 +1,48 @@
+# Iteration 1193 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:50:53.217Z
+- **Ended At**: 2026-10-26T21:51:06.925Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 1761
+- **Total Tokens**: 1779
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log, repo layout, and memory notes $ tail -n 80 .ralph-tui/progress.md && ls && ls artifacts/bench 2>/dev/null | head && cat /home/max/.c...
+[94m[Bash][0m Re-check Vulkan device, workload stubs, FSR tables $ ls artifacts/bench | grep -i acc | wc -l
+US-080 is not complete, and I have not signalled COMPLETE. I re-checked the blockers and they are unchanged since the last several status checks.
+
+**What blocks sign-off:**
+
+1. **No native Linux Vulkan device.** `/dev/dri` is absent in this WSL host. Native Linux/Vulkan acceptance needs the RTX 5080 reference machine. WSL and software rendering do not count.
+2. **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` still marks four entries `implementation: "none"` (lines 88, 108, 122, 132). An acceptance batch would exit 3 (incomplete) until they exist. `all_features` has no source at all.
+3. **FSR 2 cannot link.** The tree has 0 `*_permutations.h` files under `third_party`. Choosing how to vendor them is a user decision.
+4. **Frame budget, if exceeded.** The story requires fixing the measured cause, and changing the contract needs a separate user decision. No budget has been measured yet, so this is conditional.
+
+**What is verified on this host:**
+
+- Linux gates pass: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` ctest (integration 29 tests, unit 1 test).
+- Windows gates pass per the progress log from the most recent Windows run: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` ctest.
+
+**Not run:** `linux-gcc`, `linux-asan`, the GPU suites on Windows and native Linux, the acceptance bench, and the editor smoke tests.
+
+**Decisions I need from you:**
+
+- Which FSR 2 route to take (vendor the generated permutation tables, or leave FSR gated off for this story).
+- Whether to implement the four remaining workloads now, or split them into a follow-up story.
+- Whether the RTX 5080 reference machine can run native Linux Vulkan, and when.
+
+Once those are settled, the next step is the Windows DX12 and Vulkan runs, then the native Linux run, each as three repeats of 30 s warmup and 180 s measured.
+
+I did not append another status entry to `.ralph-tui/progress.md`. It already has more than 30 identical "status check" entries, so I left it alone.

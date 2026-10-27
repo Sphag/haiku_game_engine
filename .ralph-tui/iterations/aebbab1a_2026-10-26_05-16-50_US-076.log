@@ -1,0 +1,41 @@
+# Iteration 706 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:16:50.562Z
+- **Ended At**: 2026-10-26T02:17:04.777Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2034
+- **Total Tokens**: 2056
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark code.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD story $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -150
+The log shows this story has been blocked on a user decision for many passes, with no rerun since the last source edit. I'll confirm the recorded state still matches the tree before reporting.
+[94m[Bash][0m Check source timestamps and latest US-076 report $ cat $f/*.json 2>/dev/null | head -c 1500
+US-076 is not complete, and I have not signaled COMPLETE. The benchmark runs fail acceptance on the current workload placement, and that needs your decision. I made no source changes and reran nothing. The source (`render_stress.cpp`, 04:15:43) and every `us076-*` report are unchanged since the last pass, so the recorded results still describe the tree.
+
+**What's blocked, in order of impact:**
+
+1. **Triangle floor and frame budget fail.** The `render_stress` scene places 312,068 triangles of the 2,000,000 the contract requires. p99 frame time is 35–47 ms against the 16.7 ms budget. All eight `us076-*` reports (DX12 and Vulkan, each path, plus the forced no-mesh-shader runs) exit 1 for these two reasons.
+   - The fix is in instance placement, which changes the workload. That means bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`.
+   - I did not make that change because the placement is part of the benchmark contract. Acceptance also says that changing the contract needs a separate user decision.
+2. **`full_1080` is unsupported.** FSR 2's generated shader permutations are missing from the vendored tree, so only `native_1080` runs.
+3. **Not run:** native Linux Vulkan GPU runs, and the `linux-gcc` gate (the local GCC 9.4 cannot build Jolt).
+
+**Decisions I need from you:**
+
+- Approve a placement change that reaches 2,000,000 triangles and the workload version bump, or tell me the contract should change instead. Once you decide, I can make the change, regenerate the expected workload, rerun the Windows gates and the eight benchmark runs, and update the report.
+- Should a run that fails the frame budget close US-076 as measured, or stay open until the budget passes? Acceptance cannot pass on the current placement either way.
+
+I did not append another status entry to `.ralph-tui/progress.md`. Nine prior entries already say the same thing.

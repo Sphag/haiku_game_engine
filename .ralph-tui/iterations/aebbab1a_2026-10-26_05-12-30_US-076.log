@@ -1,0 +1,48 @@
+# Iteration 690 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:12:30.479Z
+- **Ended At**: 2026-10-26T02:12:43.705Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1887
+- **Total Tokens**: 1909
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and US-076 status $ wc -l tools/benchmark/src/render_stress.cpp 2>/dev/null
+[94m[Bash][0m Read prior US-076 progress notes $ sed -n 4160,4260p .ralph-tui/progress.md
+[94m[Bash][0m Check latest progress entry and file mtimes $ ls -la --time-style=+%H:%M artifacts/bench | tail -n 12
+US-076 is not complete, and I did not signal completion. Nothing has changed since the last status check, so I ran no benchmarks or gates this pass.
+
+**Blocked on your decision: the acceptance numbers fail on the current workload.**
+- At the route start, `render_stress` submits 312,068 triangles against the manifest floor of 2,000,000.
+- p99 frame time is 35–47 ms against the 16.7 ms budget, with 0% of frames within budget on indexed runs.
+- The cause is instance placement. Instances are spread uniformly over the 8192 m world, so the route start sees about 330 items.
+- The contract forbids reducing the workload, so I did not change it. The fix is a placement change: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and rerun the eight acceptance reports.
+
+Which do you want?
+1. **Keep the contract and close the story as measured.** The failing reports stand as the result.
+2. **Approve a placement change** (for example, clustering instances near the route). I would then bump the version, regenerate, and rerun everything.
+
+**Other open items:**
+- The `full_1080` profile reports unsupported because the FSR 2 shader permutations are missing from the vendored tree. Only `native_1080` runs, so "both profiles" is only partly met.
+- Native Linux Vulkan GPU runs were not done, since WSL has no Vulkan device.
+- `linux-gcc` was not run, since GCC 9.4 cannot build Jolt.
+
+**Done and recorded in `.ralph-tui/progress.md`:**
+- The `render_stress` driver, the `render_route_v1` route, and per-run counters and screenshots.
+- `--path` and `--disable-mesh-shaders`. The forced-off run falls back to indirect-indexed draws, with `mesh_shaders: disabled: forced off` reported.
+- Eight acceptance reports under `artifacts/bench/us076-*`, covering DX12 and Vulkan across indexed, indirect, meshlets, and meshlets with mesh shaders disabled.
+- Gates on the current tree. Windows: validate, win-dev, win-debug build, win-unit (29/29), GPU suites on DX12 (72 cases) and Vulkan (73 cases), and win-release bench build. Linux: validate, linux-dev, linux-debug build, linux-unit (30/30). All passed with no warnings.
+
+I did not append another status-check entry to the progress log. The log already has twelve of them, and they added no new information.

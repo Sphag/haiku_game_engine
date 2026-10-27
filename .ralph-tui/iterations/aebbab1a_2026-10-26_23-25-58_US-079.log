@@ -1,0 +1,42 @@
+# Iteration 1071 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:25:58.851Z
+- **Ended At**: 2026-10-26T20:26:20.149Z
+- **Duration**: 21s
+- **Input Tokens**: 22
+- **Output Tokens**: 2476
+- **Total Tokens**: 2498
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any of US-079's deliverables already exist.
+[94m[Bash][0m Inspect repo root, progress log, and existing US-079 references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features\|US-079" --include=* -l . 2>...
+The progress log shows this story has stalled for many iterations on the same blockers. I'll re-check the key facts before deciding whether any part can move.
+[94m[Bash][0m Re-check samples dir, FSR2 headers, manifest, GPU device, PRD references $ grep -n "all_features\|route_v1" -r tasks docs | head -20
+US-079 is not complete, and I made no source changes this pass. The same blockers that earlier iterations recorded still hold, and I re-checked each one:
+
+- **No `samples/all_features` project.** `samples/` does not exist. The runtime component catalog is empty in this build, so a scene with components is refused. Building the combined scene needs a decision on that catalog first.
+- **FSR 2 permutation headers are missing.** `third_party/fsr2` has 0 `*_permutations.h` files. `full_1080` can only be reported as unsupported until they are vendored, which is the policy `render_stress` already uses.
+- **The benchmark route is not approved.** `benchmarks/manifest.json` still has `all_features` at `implementation: "none"`. The `all_features_route_v1` definition is written, but the tour, profiles, and forced paths depend on it being accepted.
+- **No GPU in this environment.** `/dev/dri` is absent in WSL, so the native Linux Vulkan GPU suite, the Windows GPU/GUI tour, the live editor run with package/relaunch, and the Windows quality gates cannot be run here.
+
+What exists and passed on the last Linux run recorded in the log: the CPU `all_features` integration and editor-model tests (`tests/src/all_features_tests.cpp`, `tests/src/all_features_editor_tests.cpp`), with `--suite unit` at 1032 cases and `--suite editor` at 106 cases, all passing. I did not re-run them this pass.
+
+To move this story forward, I need from you:
+
+1. Approval of `all_features_route_v1` as written in `benchmarks/manifest.json`.
+2. A choice on FSR 2: vendor the permutation headers, or keep `full_1080` reported as unsupported.
+3. A decision on the runtime component catalog, which blocks loading a `samples/all_features` scene that has components.
+4. A Windows session with a GPU and a display for the tour, profiles, forced-path runs, live editor scenario, and the Windows gates.
+
+I have not emitted the completion signal, because the acceptance criteria that matter most cannot be met from this environment.

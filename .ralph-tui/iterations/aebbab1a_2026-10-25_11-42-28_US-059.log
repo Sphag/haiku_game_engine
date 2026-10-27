@@ -1,0 +1,42 @@
+# Iteration 520 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:42:28.518Z
+- **Ended At**: 2026-10-25T08:45:13.526Z
+- **Duration**: 2m 45s
+- **Input Tokens**: 34
+- **Output Tokens**: 2448
+- **Total Tokens**: 2482
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the save code and the progress log.
+[94m[Bash][0m Inspect repo layout, save dir, and progress log $ tail -60 .ralph-tui/progress.md
+The log shows US-059 is Partial from earlier runs. I'll check whether the tree or toolchain changed, then re-run the Linux gates that can run here.
+[94m[Bash][0m Check tree changes, compilers, and rebuild and test Linux debug $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Get ctest pass summary for Linux unit preset $ echo "exit ${PIPESTATUS[0]}"
+Tree unchanged since last recorded run; Linux gates still pass. Recording this check in the progress log.
+[94m[Bash][0m Append re-check entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 (exit 0). - Toolchai...
+US-059 is still **Partial**, so I'm not emitting the COMPLETE signal. Nothing in the tree changed since the last recorded run, and the blockers are the same.
+
+**Re-verified here (Linux, clang 10 / GCC 9):**
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100%, 22 of 22 passed.
+
+**Still open, and not something I can close in this environment:**
+- **`linux-gcc` gate and CI job:** Jolt needs GCC 11+. Only GCC 9.4 is installed and I have no passwordless sudo to add one.
+- **`engine_bench --suite acceptance`:** the benchmark harness does not exist yet (US-074), so the performance item cannot run.
+- **Runtime save/load through a host:** no application host exists yet (US-060). The library paths are covered by unit tests, but a real play-session save is not.
+
+The Windows gates were run in an earlier iteration on this same tree, and the log records them as passing. I did not re-run them in this session.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. No source files changed.

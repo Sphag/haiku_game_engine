@@ -1,0 +1,170 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: US-006
+- **Task Title**: Jobs and Controlled Shutdown
+- **Description**: As a developer, I want background task execution so that I do not block the main loop.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T23:01:54.696Z
+- **Ended At**: 2026-10-21T23:25:27.477Z
+- **Duration**: 23m 32s
+- **Input Tokens**: 374
+- **Output Tokens**: 27329
+- **Total Tokens**: 27703
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and the progress log to see what already exists.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && cat .ralph-tui/progress.md 2>/dev/null | head -400 && echo --- && wc -l tasks/...
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The progress log says US-006 was already implemented in an earlier pass. My job is to verify it against the acceptance criteria and the PRD, then run the gates. I'll read the PRD sections for this story and the existing job code.
+[94m[Bash][0m Outline PRD headings and job-related lines $ grep -n -i "US-006\|job\|shutdown" tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Show jobs header and sizes $ wc -l engine/core/include/engine/core/jobs.hpp engine/core/src/jobs.cpp tests/src/core_jobs_tests.cp...
+[94m[Bash][0m Read PRD gates, US-006, functional reqs, non-goals, perf contract $ sed -n 884,897p tasks/prd-open-world-engine.md
+The header covers the required API. Next I'll read the implementation to check the shutdown and destructor paths, which the acceptance criteria call out specifically.
+[94m[Bash][0m Read jobs implementation $ cat engine/core/src/jobs.cpp
+The implementation is mostly sound, but I see two gaps against the "shutdown without accessing destroyed subsystems" criterion:
+
+1. A cancelled pending job keeps its `fn` (and its captures) alive in the record until every `JobHandle` is gone. Captured objects that touch a subsystem would then be destroyed late.
+2. `shutdown()` is not safe to call from two threads at once, since both can `join()` the same worker.
+
+I'll check the tests and the CMake labels before changing anything.
+[94m[Bash][0m List job test cases and test CMake setup $ git -C . status 2>&1 | head -2
+The test list is broad and labeled `unit`/`integration`, so coverage is in place. I'll read the shutdown tests so the new test I add matches their style.
+[94m[Bash][0m Read job test helpers and shutdown tests $ sed -n 305,399p tests/src/core_jobs_tests.cpp
+The test helpers are straightforward, so I'll make the two fixes and add regression tests for each:
+
+- Release a job's `fn` as soon as it reaches a terminal state.
+- Serialize `shutdown()` with a lifecycle mutex.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/src/jobs.cpp[0m edit: "        detail::JobRecord& job = *step.job;
+      ..." → "        detail::JobRecord& job = *step.job;
+      ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/src/jobs.cpp[0m edit: "void JobSystem::shutdown(ShutdownPolicy policy) {
+..." → "void JobSystem::shutdown(ShutdownPolicy policy) {
+..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/include/engine/core/jobs.hpp[0m edit: "private:
+    std::shared_ptr<detail::Scheduler> sc..." → "private:
+    std::shared_ptr<detail::Scheduler> sc..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/core/include/engine/core/jobs.hpp[0m edit: "#include <initializer_list>
+#include <string>" → "#include <initializer_list>
+#include <mutex>
+#incl..."
+Now the regression tests: one for capture release, one for concurrent shutdown.
+[94m[Bash][0m Append regression tests for capture release and concurrent shutdown $ sed -n 30,88p tests/src/core_jobs_tests.cpp | grep -n "wait_for_flag"
+I wrote a meaningless assertion at the end of the concurrent test (`count >= 0`). Removing it and the unused counter so the test checks only what it claims.
+[94m[Bash][0m Remove meaningless assertion from concurrent shutdown test $ } """ assert s.count(old) == 1 open(p, "w", encoding="utf-8").write(s.replace(old, new)) print("ok")...
+Now the Linux gates. A full build on `/mnt/d` can run long, so I'll run the chain in the background with a log.
+[94m[Bash][0m Run Linux clang gates (validate, configure, build, unit tests) $ tail -n 30 /tmp/us006_linux.log
+While that runs, I'll look for the Windows gate script the earlier passes used.
+[94m[Bash][0m Check for existing Windows gate scripts $ ls /mnt/d/dev/us005-gates/ 2>&1
+The Windows script is in place and uses its own build directory, so I can start it in parallel with the Linux run.
+[94m[Bash][0m Run Windows MSVC gates via the gate script $ tail -n 25 /mnt/d/dev/us006-gates/win-run2.log
+While both gates run, I'll check whether the "Jobs and shutdown" section in the conventions doc needs updating for these changes.
+[94m[Bash][0m Read jobs section of conventions doc and build verification row $ grep -n "US-006" -B2 -A3 docs/build.md
+The doc doesn't yet say that captures are released at terminal state or that concurrent `shutdown` is safe. I'll add both.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/runtime-conventions.md[0m edit: "  Cancelled. Handles stay valid after the system i..." → "  Cancelled. Handles stay valid after the system i..."
+[94m[Bash][0m Wait ten minutes, then check gate logs $ tail -n 5 /mnt/d/dev/us006-gates/win-run2.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 600 followed by: tail -n 5 /tmp/us006_linux.log echo --- tail -n 5 /mnt/d/dev/us006-gates/win-run2.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+Foreground sleeps are blocked here. Both gates run in the background and will notify me when they finish, so I'll check the current state of the logs.
+[94m[Bash][0m Check current gate log tails $ tail -n 5 /mnt/d/dev/us006-gates/win-run2.log
+[94m[Monitor][0m Wait for Linux gate chain to finish $ tail -n 40 /tmp/us006_linux.log
+[94m[Monitor][0m Wait for Windows gate script to finish $ tail -n 40 /mnt/d/dev/us006-gates/win-run2.log
+Both gate chains are running in the background. I'll wait for their results before recording anything.
+
+Status so far: the job fixes and two regression tests are in place. Still running: the Linux clang gate chain (`ValidateVendor` → `linux-dev` → `linux-debug` → `linux-unit`) and the Windows MSVC gate script. Nothing is marked verified yet. Once both finish I'll run the GCC and ASan/UBSan presets, since jobs falls under the sanitizer requirement, then update the `docs/build.md` verification row and the progress log with the real results.
+[94m[Bash][0m Check Windows gate result and Linux log tail $ tail -n 5 /tmp/us006_linux.log
+The Windows gate failed in the DXC host-tool sub-build. I need the actual compiler error, not just the summary line.
+[94m[Bash][0m Find failure lines in Windows gate log $ grep -c "" /mnt/d/dev/us006-gates/win-run2.log
+[94m[Bash][0m Show MSVC error context and test source lines $ cd /mnt/d/dev/haiku_game_engine && sed -n 425,436p tests/src/core_jobs_tests.cpp
+The MSVC error is in my new test: I discarded the `[[nodiscard]]` result of `submit()`, which `/WX` turns into an error. I'll keep the handles in a vector, which also exercises the handles outliving the workers.
+[94m[Bash][0m Keep submitted handles to avoid discarded nodiscard result $ ", 1) open(p, "w", encoding="utf-8").write(s) print("ok") EOF grep -n "is_terminal" tests/src/core_j...
+That notification is the Windows failure I already diagnosed, and the fix is in. The Linux chain started before this test edit, so its results may be stale. I'll check its status and rerun Windows against the current tree.
+[94m[Bash][0m Check Linux log and rerun Windows gate after test fix $ tail -n 12 /mnt/d/dev/us006-gates/win-run3.log
+Both runs are in progress. I'll wait for the notifications rather than poll.
+
+Current state: the Windows gate is rerunning on the fixed tree. The Linux chain (started before the fix) is still building, and its result will be rerun on the final tree before I record anything. The GCC and ASan/UBSan presets come after that. Nothing is marked verified yet.
+[94m[Bash][0m Check Linux gate log and running build processes $ pgrep -fa "cmake|ctest|ninja" | head -5
+The Linux build is still in the long DXC host-tool stage. I'll re-arm the watch on its exit line.
+[94m[Monitor][0m Wait for Linux gate chain exit line $ tail -n 25 /tmp/us006_linux.log
+The Linux monitor expired, and I re-armed it on the `GATE_EXIT=` line. The Linux build is still running (DXC host tools, then the engine). The Windows rerun is also still going. I'll record results once both finish. Two things are still outstanding:
+
+- The Linux chain started before my test fix, so I'll rerun `linux-unit` on the final tree.
+- The GCC and ASan/UBSan presets haven't been run yet.
+[94m[Bash][0m Check Linux and Windows gate progress $ tail -n 6 /mnt/d/dev/us006-gates/win-run3.log 2>/dev/null
+Both test runs are at the integration suite. I'll wait a bounded interval for the results.
+[94m[Bash][0m Wait up to four minutes for gate runs to finish $ tail -n 12 /mnt/d/dev/us006-gates/win-run3.log
+[94m[Bash][0m Check gate logs after background wait $ tail -n 12 /mnt/d/dev/us006-gates/win-run3.log
+Both platforms have been stuck at `engine_tests_integration` for several minutes. That could be my new concurrent-shutdown test, or an existing integration test. I'll check the live process.
+[94m[Bash][0m Inspect hung engine_tests process and integration test list $ ls tests/Debug | head
+Something in the integration suite is hanging. I'll kill the stuck process and run my new tests one at a time with timeouts to find out which one.
+[94m[Bash][0m Run each new and shutdown job test with a timeout $ done
+
+[91m[Error: Exit code 144][0m
+My `pkill` pattern matched my own shell command and killed it. Retrying without that.
+[94m[Bash][0m Run each new and shutdown job test with a timeout $ done
+The Linux chain has finished, but the test binary rejects positional test names, so my per-test run didn't work. I'll read the Linux results and check how the runner selects tests.
+[94m[Bash][0m Read Linux result and runner suite handling $ cd /mnt/d/dev/haiku_game_engine && grep -n "suite\|\[unit\]\|\[integration\]\|Catch\|session" tests/...
+The Linux integration suite hung and CTest killed it, so the Linux gate has failed (`GATE_EXIT=8`). Windows is probably hung the same way. I need to find which integration test hangs, so I'll see what the runner accepts.
+[94m[Bash][0m Read test runner main and CLI options $ grep -rn "\"--" tests/src/cli_options.cpp | head
+The runner doesn't forward test names to Catch, so I can't filter one case from the CLI. I'll attach a debugger to the hung process and see where the threads are blocked.
+[94m[Bash][0m Run integration suite and capture thread stacks of hang $ kill $PID
+[94m[Bash][0m Attach gdb to hung test process and dump backtraces $ [ -n "$PID" ] && kill $PID
+
+[91m[Error: Exit code 1
+pid=][0m
+The process had already exited when I tried to attach. I'll relaunch it detached and attach while it's still running.
+[94m[Bash][0m Relaunch integration suite detached and capture backtraces $ kill $PID
+
+[91m[Error: Exit code 144
+[1]+  Done                    setsid nohup ./tests/Debug/engine_tests --suite integration > /tmp/integ.out 2>&1 < /dev/null
+pid=26005][0m
+[94m[Bash][0m Inspect integration output and run it once with timeout $ tail -n 15 /tmp/integ2.out
+The run shows the hang is in my new test, not existing code. In `Cancelled and finished jobs release their captures at once` the single worker is held by the spinning blocker, so `finished.wait()` waits for a worker that never comes free. I'll cancel the blocker and wait for it before submitting the finished job.
+[94m[Bash][0m Fix hanging test, rebuild test binary, rerun integration suite $ tail -n 4 /tmp/integ3.out
+The integration suite now passes (20 test cases, 170 assertions). Next I'll rerun the Linux clang chain, the GCC and ASan/UBSan presets, and the Windows gate on the final tree.
+[94m[Bash][0m Start Linux clang, ASan, GCC, and Windows gate runs in background $ echo "WIN_EXIT=$?" >> /mnt/d/dev/us006-gates/win-run4.log) & echo started
+
+[91m[Error: Exit code 144][0m
+The `pkill -f` pattern matched my own command again. Re-running without it.
+[94m[Bash][0m Start Linux clang, ASan, GCC, and Windows gate runs in background $ echo "WIN_EXIT=$?" >> /mnt/d/dev/us006-gates/win-run4.log) & echo started
+That notification is the earlier rerun I killed with `pkill`, so it can be ignored. The new Linux and Windows runs are the ones that count. I'll wait for them with a bounded check.
+[94m[Bash][0m Bounded wait then summarize Linux and Windows gate results $ tail -n 3 /mnt/d/dev/us006-gates/win-run4.log
+Linux clang passes 10/10. The Windows run ended with `errorlevel=-1`, which looks like it was interrupted by the earlier kill, but I need the log to confirm.
+[94m[Bash][0m Find failure lines in Windows run log $ tail -n 8 /mnt/d/dev/us006-gates/win-run4.log | head -5
+[94m[Bash][0m Show lines around engine_tests.exe link failure $ sed -n 205,225p /mnt/d/dev/us006-gates/win-run4.log | cut -c1-300
+This is a file lock (`LNK1104`), not a code error. The earlier Windows test process that hung is still holding `engine_tests.exe`. I'll kill that process and rerun the Windows gate.
+[94m[Bash][0m Kill stale Windows test process and rerun Windows gate $ tail -n 6 /mnt/d/dev/us006-gates/win-run5.log
+[94m[Bash][0m Wait for ASan and GCC presets and summarize $ grep -E "_EXIT=|tests passed|tests failed|Error|error:|warning:" /tmp/us006_linux2.log | tail -n 20
+[94m[Bash][0m Wait for GCC preset and summarize $ grep -E "_EXIT=|tests passed|tests failed" /tmp/us006_linux2.log | tail -n 6
+[94m[Bash][0m Check Windows result and GCC preset status $ grep -E "_EXIT=|tests passed|tests failed" /tmp/us006_linux2.log | tail -n 3
+All gates pass on the final tree. I'll record the results in `docs/build.md` and the progress log.
+[94m[Bash][0m Update build verification row and append progress entry $ Windows MSVC `win-gate.bat` (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) `WIN_GATES_PASSED...
+US-006 is verified on every local gate, but not on hosted CI, which has never run this tree. The job system was already in the tree from an earlier pass, so I reviewed it against the acceptance criteria and fixed two shutdown gaps.
+
+**Changes**
+- `engine/core/src/jobs.cpp`: a job that reaches a terminal state now drops its task and captures immediately. Before, a cancelled job's captures stayed alive until the last `JobHandle` was released.
+- `engine/core/src/jobs.cpp`, `engine/core/include/engine/core/jobs.hpp`: `shutdown()` takes a lifecycle mutex. Two threads calling it at once could both `join()` the same worker.
+- `tests/src/core_jobs_tests.cpp`: two new integration tests, one for capture release on cancelled and finished jobs, one for concurrent shutdown.
+- `docs/runtime-conventions.md` and `docs/build.md` (verification row) and `.ralph-tui/progress.md` (new entry) are updated.
+
+**Gates on the final tree**
+- Linux clang (`ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`): 10/10.
+- Linux ASan/UBSan (`linux-asan`, `linux-sanitize`): 10/10.
+- Linux GCC 9.4 (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`): 10/10.
+- Windows MSVC (`win-gate.bat`: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`): `WIN_GATES_PASSED`.
+
+**Problems along the way**
+- The first Windows run failed on `/WX`: my new test discarded a `[[nodiscard]]` handle. Fixed.
+- The first Linux integration run hung. My capture-release test waited on a job while a spinning blocker held the only worker. Fixed by cancelling the blocker first.
+
+**Not verified or not run**
+- Hosted GitHub Actions: not executed, so neither OS is CI-verified.
+- `offline_verify.sh`: not re-run for this story.
+- GPU suites: `unsupported` (none exist yet).
+- `engine_bench`: not applicable until US-074.

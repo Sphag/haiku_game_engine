@@ -1,0 +1,45 @@
+# Iteration 355 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T21:40:30.653Z
+- **Ended At**: 2026-10-24T21:43:12.722Z
+- **Duration**: 2m 42s
+- **Input Tokens**: 40
+- **Output Tokens**: 2499
+- **Total Tokens**: 2539
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect physics sources and progress log $ tail -c 3000 .ralph-tui/progress.md
+The log says US-054 was implemented and verified on Linux and Windows, then left Partial for two reasons: no GCC 11+ and no `engine_bench`. I'll check whether either has changed.
+[94m[Bash][0m Check compilers and engine_bench target availability $ ls tools 2>/dev/null | head -30
+GCC 11+ is still missing and there is still no `engine_bench` target, so the two blockers stand. The last pass made no source changes, so I'll re-run the Linux unit suite to confirm the tree still passes.
+[94m[Bash][0m Rebuild Linux debug and run unit tests $ (cmake --build --preset linux-debug 2>&1 | tail -3) && (ctest --preset linux-unit --output-on-failur...
+[94m[Bash][0m Show ctest pass summary $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Failed|P...
+Linux unit passes 22/22 on the current tree. I'll log this pass in the progress file, as the workflow requires.
+[94m[Bash][0m Append status entry to progress log $ US-074). - Status call: US-054 stays **Partial**. No COMPLETE signal: the Linux/GCC job and the acce...
+US-054 is still Partial, so I am not emitting the COMPLETE signal. The code was already in place from earlier passes, and this pass only re-verified it.
+
+**Blocked, not done:**
+- **Linux/GCC gate:** the machine has only GCC/G++ 9.4 and clang 10. Jolt needs GCC 11+, so `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` cannot run here.
+- **Acceptance benchmark:** no `engine_bench` target exists in any CMakeLists. This is tracked as US-074, so `engine_bench --suite acceptance` and the performance measurement are not possible yet.
+
+**Verified this pass:**
+- `linux-debug` build passes.
+- `ctest --preset linux-unit --no-tests=error`: 22 of 22 pass.
+
+**Not re-run this pass:** the Windows gates and the ASan/UBSan run. The last pass ran Windows and ASan, and no source has changed since. The `ValidateVendor` gate was also not re-run; the last pass recorded it passing.
+
+**Changed:** I appended a status entry to `.ralph-tui/progress.md`. No source files changed.
+
+To finish US-054, the remaining work is a machine with GCC 11+ for the linux-gcc gate, and US-074 for the benchmark target.

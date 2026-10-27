@@ -1,0 +1,53 @@
+# Iteration 1244 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:22:07.260Z
+- **Ended At**: 2026-10-26T23:22:33.659Z
+- **Duration**: 26s
+- **Input Tokens**: 28
+- **Output Tokens**: 3173
+- **Total Tokens**: 3201
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the existing docs before changing anything.
+[94m[Bash][0m Inspect repo root, progress log, and README $ wc -l README.md 2>/dev/null
+The progress log shows several earlier US-081 passes that ended without sign-off. Before doing anything, I'll check whether the tree has changed since the last gate run and what `docs/acceptance.md` still lists as open.
+[94m[Bash][0m Check for changes since last gate run and open acceptance items $ g++ --version | head -1
+Nothing has changed since the last gate run, and the remaining blockers need hardware, a compiler, or a decision from you. I'll record this pass in the progress log so the next run starts from the current state.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - No source, test, or doc file is newer than `artifacts/reports/us081/`, so the ...
+US-081 is not signed off, so I'm not emitting the completion signal. Nothing in the tree changed in this pass, and the blockers are things I can't resolve from this machine.
+
+**What is in place**
+- The docs the story asks for exist: `README.md`, `docs/acceptance.md` (the mapping of stories to tests and artifacts), `docs/capability-matrix.md`, `docs/schemas.md`, `docs/vendor.md`, `docs/benchmarks.md`, `docs/architecture.md`, and `docs/distribution.md`.
+- Gate results from the earlier US-081 passes, logged in `artifacts/reports/us081/`:
+  - Windows: `ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` (29/29), `win-release` build, and `engine_tests --suite gpu` on DX12 and Vulkan on the RTX 5080. Windows editor suite passed on DX12 (107 cases).
+  - Linux: `ValidateVendor`, `linux-debug` build, `linux-unit` (30/30), and `linux-release` build with `linux-release-unit` (30/30).
+  - The Linux editor suite passed (106 cases), including the clean-directory package launch.
+- I checked that no source, test, or doc file is newer than those reports, so they still describe the current tree. I did not re-run the gates.
+
+**What blocks sign-off (from `docs/acceptance.md`)**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent on this machine, so `engine_tests --suite gpu --backend vulkan` cannot run here.
+- **linux-gcc:** only GCC 9.4 is installed, and Jolt needs GCC 11+.
+- **Windows Vulkan editor suite:** not run.
+- **Visual editor smoke tests with screenshots:** not run on either OS.
+- **Full acceptance benchmark** (`engine_bench --suite acceptance`) on DX12, Vulkan, and native Linux Vulkan: not run.
+- **FSR 2 permutations:** the vendored shader tables are missing, so FSR cannot link.
+- **Standalone package from a real sample game** on each OS: not built.
+- **LICENSE:** no file exists. This is a licensing decision, so I did not pick one.
+
+**What I need from you**
+1. A license choice, so I can add the LICENSE file and update the distribution docs.
+2. Access to a native Linux machine with a Vulkan device and GCC 11+, or a decision to accept the linux-gcc and native Linux Vulkan gaps as open.
+3. Someone at the RTX 5080 machine for the visual editor smoke tests and the acceptance benchmark, or confirmation that those stay open.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this pass.

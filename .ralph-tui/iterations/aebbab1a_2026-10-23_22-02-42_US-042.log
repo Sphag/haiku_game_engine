@@ -1,0 +1,58 @@
+# Iteration 27 Log
+
+## Metadata
+
+- **Task ID**: US-042
+- **Task Title**: Vulkan Ray Tracing Foundation
+- **Description**: As a rendering developer, I want RT in Vulkan so that both APIs retain feature parity.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T19:02:42.085Z
+- **Ended At**: 2026-10-23T19:09:00.160Z
+- **Duration**: 6m 18s
+- **Input Tokens**: 74
+- **Output Tokens**: 6603
+- **Total Tokens**: 6677
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the Vulkan RT code.
+[94m[Bash][0m Inspect repo root and recent progress log $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-04[0-2]" .ralph-tui/progress.md | head ...
+[94m[Bash][0m List RHI sources and ray tracing references $ grep -rl -i "raytrac\|acceleration" engine --include=*.cpp --include=*.hpp --include=*.h | head -50
+The progress log already has a US-042 entry claiming Windows GPU evidence. Before I accept that, I'll check whether any source changed after the last recorded gate run.
+[94m[Bash][0m Compare source timestamps against the progress log $ ls tests/shaders | head -40
+Every source file predates the progress log, so the recorded Windows results still describe the current tree. I'll re-run the Linux quality gates to confirm the Linux side myself.
+[94m[Bash][0m Run Linux vendor validation, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Confirm Linux unit test totals and Vulkan GPU suite result $ echo "gpu_vk=$?"
+Linux unit tests pass 22/22. The engine_tests path I guessed doesn't exist, so I'll locate the binary and run the Vulkan GPU suite to record what it actually does here.
+[94m[Bash][0m Run Vulkan GPU suite on Linux to record its outcome $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Find the linux-debug build directory and test binary $ find build -name engine_tests -type f 2>/dev/null | head
+[94m[Bash][0m Run Vulkan GPU suite on Linux from the debug build $ echo "exit=${PIPESTATUS[0]}"
+The Vulkan GPU suite reports "not run" (exit 3) because the validation layer isn't on this host. My memory notes say a layer was built out of tree in `/tmp/vvl`, so I'll check whether it's still there.
+[94m[Bash][0m Check for out-of-tree Vulkan validation layer and GPU device $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+[94m[Bash][0m Run Vulkan GPU suite with out-of-tree validation layer $ echo "exit=${PIPESTATUS[0]}"
+The Linux Vulkan GPU suite can't run here: the device lacks timeline semaphores, and no hardware adapter exists. I'll record a re-verification entry in the progress log, following the pattern the US-041 re-check used.
+[94m[Bash][0m Append US-042 re-verification entry to progress log $ `build/linux-debug` is only a preset name, not a directory. --- EOF tail -3 .ralph-tui/progress.md
+US-042 was already implemented in an earlier pass, and I re-checked it. I did not find any new work to do, so I'm not emitting the completion signal. Two acceptance criteria remain unmet on this host.
+
+**Verified in this pass**
+- No source file changed after the existing US-042 progress entry, so its recorded Windows results still describe the current tree.
+- `cmake -P cmake/ValidateVendor.cmake` passed: 26 dependencies, 8542 files.
+- `cmake --preset linux-dev` configured.
+- `cmake --build --preset linux-debug` built with zero warning lines.
+- `ctest --preset linux-unit` passed 22/22.
+
+**Not met here**
+- **Linux Vulkan GPU suite:** `engine_tests --suite gpu --backend vulkan` exits 3, which means not run. Without the out-of-tree validation layer it reports the layer is missing. With `VK_LAYER_PATH=/tmp/vvl/layer` it reports no hardware Vulkan 1.2 adapter with timeline semaphores. This WSL host has no usable Vulkan device, so the Linux GPU report and the cross-OS equivalence of the hit/miss/skinned/unload fixtures cannot be shown here.
+- **`engine_bench --suite acceptance`:** not built yet (US-074), so there are no performance numbers.
+
+**Carried over, not rerun**
+- The Windows gates on the RTX 5080 (validation layers on) and the Linux clang sanitizer and gcc results come from the earlier entry. Their build outputs are newer than the last source edit.
+
+**Change made**
+- I appended a US-042 re-verification entry to `.ralph-tui/progress.md`. It records the results above and that the Linux GPU suite is not run.
+
+I did not emit `<promise>COMPLETE</promise>`. The story's acceptance criteria require a Linux GPU report and a benchmark, and neither can be produced on this machine. The Windows GPU runs and the Linux build and unit gates are done. Completing the story needs a native Linux machine with a Vulkan device, or a decision to accept the Windows evidence alone.

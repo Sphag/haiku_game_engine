@@ -1,0 +1,45 @@
+# Iteration 1027 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:12:17.432Z
+- **Ended At**: 2026-10-26T16:12:27.640Z
+- **Duration**: 10s
+- **Input Tokens**: 18
+- **Output Tokens**: 1684
+- **Total Tokens**: 1702
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ grep -rn "all_features" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=*...
+[94m[Bash][0m Re-verify blocker facts for US-079 $ git status 2>&1 | head -2
+US-079 is not complete, so I am not signalling COMPLETE. I re-checked the three blockers the previous status entries named, and all three still hold:
+
+1. **The `all_features` route is unapproved.** `benchmarks/manifest.json` still has `"implementation": "none"` for `all_features` (line 131), and the route `all_features_route_v1` is only a proposal. No `all_features` runner exists in `tools/benchmark/src`.
+2. **FSR 2 cannot link.** `third_party/fsr2` contains 0 `*_permutations.h` files, so `full_1080` stays unsupported. The `native_1080` and forced-path profiles don't depend on this.
+3. **No Windows GPU or GUI session.** The tour with screenshots, the live editor run with package and relaunch, and the GPU/GUI gates all need a Windows session with a GPU and a display. This environment is WSL with no usable Vulkan device.
+
+What already exists from earlier iterations (per `.ralph-tui/progress.md`): the workload-table check in `tests/src/all_features_tests.cpp`, and the editor scenario test in `tests/src/all_features_editor_tests.cpp` (scene, material, animation, and terrain edits, undo/redo, Play/Stop, Build Game from a clean copy). Those are CPU tests, not the automated tour or the package/relaunch run.
+
+Still open, and not to be reported as passed:
+- An automated tour runner with screenshots and an action log.
+- GI/RT/upscale profiles and forced indirect/meshlet geometry paths for `all_features`.
+- A relaunch of the published package, and GUI checks.
+- Native Linux Vulkan GPU runs.
+- `engine_bench --suite acceptance` for `all_features`.
+- The `linux-gcc*` gates (no GCC 11+ on this host).
+
+To move this forward I need from you:
+- Approval of `all_features_route_v1` in `benchmarks/manifest.json`, which fixes the benchmark contract.
+- Either FSR 2 permutation headers, or a decision to keep `full_1080` unsupported.
+- A Windows session with a GPU and display for the tour, the profiles, and the live editor run.
+
+I did not change any files or run any builds in this pass. I did not append a new progress entry, since the last several entries already record this same state.

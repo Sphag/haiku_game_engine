@@ -1,0 +1,42 @@
+# Iteration 146 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:00:10.681Z
+- **Ended At**: 2026-10-24T06:00:29.739Z
+- **Duration**: 19s
+- **Input Tokens**: 26
+- **Output Tokens**: 2779
+- **Total Tokens**: 2805
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see how much of US-047 is already done.
+[94m[Bash][0m Read progress log tail and locate terrain files $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-047" .ralph-tui/progress.md | head -5...
+The log shows US-047 has been re-checked many times with the same two open items. I'll confirm those blockers on the host and check whether the PRD actually requires the bench harness for this story.
+[94m[Bash][0m Check GPU device, bench references, and PRD story status $ python3 -c " import json d=json.load(open('tasks/prd.json')) for s in d.get('userStories',d.get('sto...
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` with the terrain workload (US-074, not in the tree). --- EOF t...
+US-047 is still Partial, so I'm not signalling COMPLETE. The implementation is in the tree and its gates pass, but two acceptance items cannot run on this host.
+
+**Done (from the earlier passes, unchanged this pass):**
+- Terrain tiles, LOD and stitching, normals, and four-material splat blending in `engine/world`. The CPU fixtures cover tile boundaries, holes, overlaps, and LOD selection.
+- The renderer path for terrain: its own vertex stride and shaders, the depth and shadow pipelines, and the RT triangle source.
+- The traced-shadow failure was in the fixture, not the renderer. The hill fixture now uses a black environment, so the sun alone lights the ground. The `ShadowFactor` view showed 404 shadowed pixels, which confirms the shadow reaches the lighting.
+- Last full gate run, on the current tree:
+  - Windows: `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit` (21/21), and `engine_tests --suite gpu` on DX12 and Vulkan (validation layers on) all passed.
+  - Linux: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` (22/22), and the GCC debug build and unit tests passed.
+  - The ASan preset was not re-run after the last change, which was test-only.
+
+**Still open:**
+1. `engine_tests --suite gpu --backend vulkan` on native Linux. `/dev/dri` is absent and `vulkaninfo` is not installed, so there is no native Linux Vulkan device here. WSL does not count.
+2. `engine_bench --suite acceptance` with the terrain workload. No bench target or source exists in the tree. The PRD lists US-074 (Benchmark Harness) as not passing, and the story itself does not list it as a prerequisite. Building the harness is outside this story's scope.
+
+I did not make any source changes this pass. I appended a short re-check entry to `.ralph-tui/progress.md`. The previous ~50 re-check entries repeat the same blockers, so further re-checks on this host will not change the status. Closing the story needs a native Linux Vulkan host and the bench harness.

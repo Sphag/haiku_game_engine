@@ -1,0 +1,50 @@
+# Iteration 31 Log
+
+## Metadata
+
+- **Task ID**: US-028
+- **Task Title**: Vulkan Device and Presentation
+- **Description**: As a user of both operating systems, I want Vulkan output so that I can use a shared alternative backend.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T13:43:38.342Z
+- **Ended At**: 2026-10-22T13:49:49.640Z
+- **Duration**: 6m 11s
+- **Input Tokens**: 66
+- **Output Tokens**: 4967
+- **Total Tokens**: 5033
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current repo state.
+[94m[Bash][0m List repo and read progress log header $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && head -150 .ralph-tui/progre...
+[94m[Bash][0m Survey progress log sections and Vulkan mentions $ grep -n -i "US-02[0-9]\|vulkan" .ralph-tui/progress.md | head -80
+US-028 has been through several passes already, and the last ones left the native Linux GPU report open. I'll read the latest entry and check whether this host has a usable Vulkan device now.
+[94m[Bash][0m Check last log entry, GPU devices, and Vulkan info $ ls tasks
+The host is unchanged: `/dev/dri` is absent and there is no hardware Vulkan adapter. I'll re-run the Linux gates on the current tree to confirm they still pass, then check the GPU suite.
+[94m[Bash][0m Run Linux quality gates and Vulkan GPU suite $ tail -3 /tmp/us028_gpu.log
+[94m[Bash][0m Check background gate output so far $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8402e33f-d324-4b3b-a23f-c09333a2856f/tasks/bu87rvk...
+[94m[Bash][0m Poll for background gate completion $ ls -la /tmp/us028_*.log
+[94m[Bash][0m Show ctest and GPU run logs $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8402e33f-d324-4b3b-a23f-c09333a2856f/tasks/bu87rvk...
+The integration suite is still running. I'll wait for it to finish.
+[94m[Bash][0m Wait for ctest integration suite to finish $ pgrep -fa "ctest --preset|engine_tests" | head -3
+[94m[Bash][0m Run Vulkan GPU suite on Linux with validation layer $ tail -4 /tmp/us028_gpu.log
+The Linux gates pass, and the Vulkan GPU suite still reports `unsupported` because this host has no hardware adapter. I'll record this pass in the progress log without claiming completion.
+[94m[Bash][0m Append US-028 fifth-pass entry to progress log $ `engine_bench`. Windows gates were last run in the second pass (WSL re-verification) and not repeate...
+US-028 is not complete, so I'm not signalling completion. The code is in place, but the story requires a native Linux GPU report that this machine cannot produce.
+
+**Blocked:** the acceptance criterion for `engine_tests --suite gpu --backend vulkan` on native Linux with validation layers. This WSL host has no `/dev/dri` and no Vulkan 1.2 hardware adapter with timeline semaphores. The suite exits 3 `unsupported`, which is not a pass. Closing this needs a real Linux machine with a Vulkan 1.2 hardware driver. Until then the story stays `passes: false`.
+
+**Verified in this pass (Linux, no source changes):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug`: pass, 0 warnings
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 pass
+
+**Not re-run this pass:** Windows gates. The last Windows run was in an earlier pass and the tree has not changed since. The GCC, ASan, and `engine_bench` checks were also not run in this pass.
+
+**Other open items:** surface-loss recovery on either OS, GitHub CI, and `engine_bench`.
+
+I appended a fifth-pass entry to `.ralph-tui/progress.md` with these results. It is the only file I changed.

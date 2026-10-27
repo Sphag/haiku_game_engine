@@ -1,0 +1,41 @@
+# Iteration 1220 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:58:34.625Z
+- **Ended At**: 2026-10-26T21:58:48.707Z
+- **Duration**: 14s
+- **Input Tokens**: 20
+- **Output Tokens**: 1816
+- **Total Tokens**: 1836
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and list bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Re-check hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ the user must decide the open items. No COMPLETE signal. --- EOF
+US-080 is not complete, and I am not signalling COMPLETE. I re-checked the blockers in this environment and nothing has changed since the last status entries in the progress log.
+
+**Blocked on the user or on hardware:**
+- **Native Linux Vulkan:** `/dev/dri` is absent in this WSL session, so no native Linux Vulkan device exists here. The RTX 5080 (driver 617.42) is visible only through WSL.
+- **FSR 2 shader tables:** `third_party` has 0 of the generated `*_permutations.h` files. FSR cannot link until you choose a vendoring route.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has four entries with `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run would exit 3 (incomplete) while they stand.
+- **Frame budget:** the last `render_stress` run on meshlets measured CPU p99 of 42.4 ms against a 16.7 ms budget, and 21% of frames were over 33.3 ms against a 0.1% limit. I have not profiled the cause. Profiling needs a Release build on the RTX 5080 through cmd.exe. Under the contract, the fix is to find and correct the cause, not to change the budget, and changing the contract needs your decision.
+
+**Not run in this turn:** the Windows and Linux quality gates, the GPU suites, and the acceptance benchmark. Running them now would produce an incomplete report, so I did not start them.
+
+**What I did:** appended a short status entry to `.ralph-tui/progress.md`. I did not re-run the profiling or the gates.
+
+**What would unblock it:**
+1. A native Linux host with `/dev/dri`, or confirmation that Linux Vulkan is out of scope for this sign-off.
+2. A decision on the FSR 2 vendoring route.
+3. Sources for the four unimplemented workloads.
+4. Permission to run the Release CPU profile of `render_stress` on the Windows side, followed by a fix to the measured hotspot.

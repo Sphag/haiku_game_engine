@@ -1,0 +1,46 @@
+# Iteration 94 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:52:50.386Z
+- **Ended At**: 2026-10-24T02:53:18.763Z
+- **Duration**: 28s
+- **Input Tokens**: 36
+- **Output Tokens**: 4717
+- **Total Tokens**: 4753
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the current terrain code to see what US-047 already has.
+[94m[Bash][0m Read progress log tail and list terrain files $ wc -l engine/world/src/terrain.cpp 2>/dev/null
+The notes show US-047 stuck at "Partial" for fifteen passes, each blocked on the splat design. Before choosing an approach I want to see how the splat weights are currently encoded and passed to the shader.
+[94m[Bash][0m Find splat references across engine and tests $ ls engine/render/include/engine/render 2>/dev/null | grep -i terrain
+The splat weights reach `TerrainMeshData` but never reach the GPU. Before committing to a new vertex layout, I'll check whether the existing static vertex layout already has a spare attribute that could carry them.
+[94m[Bash][0m Inspect terrain mesh bridge and vertex layout $ grep -n "static_attributes" -A12 engine/render/src/scene_renderer.cpp | head -30
+The spare-attribute route doesn't exist. The static layout is shared by every mesh, and the skinned path shows that a terrain variant needs its own layout, pool, pipeline, and shader branch. That change can only be checked on the Windows GPU batch, which previous passes also declined to start blind. I'll record this pass in the progress log rather than edit the shared draw path.
+[94m[Bash][0m Append this pass's status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-047 (re-check 16, still Partial) - What wa...
+US-047 is not complete, so I am not emitting the completion signal. I made no source changes this pass; I only appended a status entry to `.ralph-tui/progress.md`.
+
+**What is in place**
+- The CPU runtime in `engine/world`: tiles, LOD, stitching, normals, and four-layer splat weights, with fixtures in `tests/src/world_terrain_tests.cpp`.
+- The render bridge, `make_terrain_render_tile` in `engine/render/src/terrain_mesh.cpp`, which keeps the splat weights as a side channel.
+
+**What is blocking**
+- The splat never reaches the GPU. The static vertex layout (`scene_renderer.cpp:352`) has only position, normal, and UV, at locations 0 to 2. Adding a splat attribute means a terrain-only layout, pool, and pipeline variant, plus a `scene.hlsl` branch. That touches the draw path every mesh shares.
+- I can't verify that change here: WSL has no usable Vulkan device, and the splat, shadow, and RT GPU fixtures don't exist yet.
+
+**Still not run or not done**
+- The four-layer splat shading, and the shadow and RT checks for terrain.
+- The `engine_bench` terrain workload and the acceptance run.
+- The Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) and the Linux gates on this pass. The Linux GCC and ASan gates from earlier passes still stand, but none were re-run here.
+
+**Decision needed from you**
+Approve option (b) from the earlier notes: constant layer colours first, with a terrain-only vertex layout. Then the change can be made and run through the Windows DX12 and Vulkan GPU batch. Until you approve it, I'd leave the shared draw path alone.

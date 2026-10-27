@@ -1,0 +1,45 @@
+# Iteration 387 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:12:55.373Z
+- **Ended At**: 2026-10-24T23:13:11.479Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2630
+- **Total Tokens**: 2652
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-054, since the codebase notes mention `character.cpp` and joints.
+[94m[Bash][0m Inspect repo layout, physics sources, and progress log $ tail -80 .ralph-tui/progress.md
+The log shows 26 prior "status check" passes, all stuck at Partial on one blocker: no GCC 11+ on this host for `linux-gcc`. Before repeating that pattern, I'll check whether a newer compiler exists now and confirm the Linux gates still pass.
+[94m[Bash][0m Look for GCC 11+ or clang 14+ and files changed since last log $ cd /mnt/d/dev/haiku_game_engine && find engine tests cmake -newer .ralph-tui/progress.md -type f 2>/...
+US-054 is not complete, so I'm not signalling COMPLETE. Nothing changed in this pass.
+
+**Current state**
+- The tree is unchanged since the last log entry: no file under `engine/`, `tests/`, or `cmake/` is newer than `.ralph-tui/progress.md`.
+- The host still has only GCC/G++ 9.4 and clang/clang++ 10. No GCC 11+ or clang 14+ is installed anywhere I looked.
+- Your progress log shows 26 consecutive "status check" passes, all Partial for the same reason. Re-running the same gates again would add nothing, so I did not.
+
+**What's still open**
+- **`linux-gcc` gate (explicit acceptance criterion):** blocked by the toolchain. Jolt needs GCC 11+. Fixing it needs someone with root to install `g++-11` (or the CI job runs it).
+- **Performance criterion:** `engine_bench --suite acceptance` does not exist yet. The log ties it to US-074, and `physics_stress` to US-077. This conditional criterion can't be measured until those land.
+
+**Carried forward from earlier passes (not re-run this turn)**
+- Windows gates: 21 of 21 passed on the current tree.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (22 of 22), and `linux-sanitize` (22 of 22) passed on this unchanged tree.
+
+**To finish US-054**
+1. Install GCC 11+ (or let CI run `linux-gcc`), then run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit`.
+2. Decide whether the performance criterion is deferred to US-074/US-077, or whether the story should stay open until then.
+
+If you can install the compiler, I can run the `linux-gcc` gates immediately.

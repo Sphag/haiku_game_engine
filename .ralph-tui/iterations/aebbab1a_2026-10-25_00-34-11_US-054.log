@@ -1,0 +1,48 @@
+# Iteration 354 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T21:34:11.296Z
+- **Ended At**: 2026-10-24T21:40:29.607Z
+- **Duration**: 6m 18s
+- **Input Tokens**: 50
+- **Output Tokens**: 5151
+- **Total Tokens**: 5201
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect physics module and progress notes $ grep -n "US-054" -r --include=*.md --include=*.cpp --include=*.hpp --include=*.txt . | head -30
+[94m[Bash][0m Read US-054 PRD section and check file recency $ date
+[94m[Bash][0m Search PRD for character and benchmark constraints $ ls artifacts/bench 2>/dev/null | head
+[94m[Bash][0m Read physics-relevant PRD constraints and current physics doc $ cat docs/physics.md | head -80
+[94m[Bash][0m Check for newer GCC and rerun Linux gates $ cd /mnt/d/dev/haiku_game_engine && (cmake -P cmake/ValidateVendor.cmake && cmake --preset linux-dev ...
+[94m[Bash][0m Rerun linux-unit and report pass count $ grep -c "TEST_CASE" tests/src/physics_character_tests.cpp
+[94m[Bash][0m Append PRD physics benchmark contract to physics doc $ cat >> docs/physics.md <<'EOF'  ## Benchmark contract  The PRD's `physics_stress` workload (US-077) ...
+[94m[Bash][0m Append progress log entry for this pass $ US-074) and the `physics_stress` scene (US-077). - Status call: US-054 stays **Partial**. No COMPLET...
+US-054 stays **Partial**, so I'm not signalling COMPLETE. The code from the earlier pass is in place and the Linux unit gate passes again, but two criteria cannot run in this environment.
+
+**Verified this pass (Linux)**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8 542 files).
+- `cmake --preset linux-dev` configures and `cmake --build --preset linux-debug` builds.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 pass. The 14 new character and joint cases are in `tests/src/physics_character_tests.cpp`.
+
+**Changed**
+- `docs/physics.md`: a new "Benchmark contract" section records the PRD `physics_stress` figures: 2 000 dynamic bodies, 100 constraints, 20 characters, 1 000 raycasts/s and 100 shape casts/s at 60 Hz. It also says the workload must keep its bodies active, not sleeping. This is the PRD constraint I could apply now.
+- `.ralph-tui/progress.md`: appended the status entry for this pass.
+
+**Not run, so not passed**
+- `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`: only GCC/G++ 9 and clang 10 are installed. Jolt needs GCC 11+.
+- `engine_bench --suite acceptance`: there is no `engine_bench` target yet (US-074), and the `physics_stress` scene is US-077.
+- Windows gates: not rerun this pass. No source changed after the previous Windows pass, which was green.
+
+**Still open for COMPLETE**
+- A GCC 11+ toolchain or the CI `linux-gcc` job.
+- The benchmark scene and Release measurements, which depend on US-074 and US-077.

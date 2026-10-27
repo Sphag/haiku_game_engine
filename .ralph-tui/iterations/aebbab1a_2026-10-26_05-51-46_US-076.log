@@ -1,0 +1,41 @@
+# Iteration 800 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:51:46.364Z
+- **Ended At**: 2026-10-26T02:52:04.189Z
+- **Duration**: 17s
+- **Input Tokens**: 24
+- **Output Tokens**: 2955
+- **Total Tokens**: 2979
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect repo state, progress log, benchmark tool $ ls && tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && g...
+[94m[Bash][0m Read US-076 section of PRD $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -150
+The log shows 30 prior status checks, all blocked on a user decision. Before deciding anything, I'll check what evidence exists for the fallback and Windows gates.
+[94m[Bash][0m Find US-076 evidence on fallback, Windows gates, artifacts $ ls artifacts/bench 2>/dev/null | tail -20
+US-076 is not complete, and I did not emit the completion signal. The implementation exists, but the measured runs fail the fixed benchmark contract, and the fixes that would change that are contract decisions that need you.
+
+**Implemented and measured (from the progress log, not re-run this pass):**
+- `render_stress` builds to the contract counts: 20,000 instances, 200 meshes, 100 characters with 64 bones, 100,000 particles, 128 lights, 4 shadowed, 1 sun. `engine_workload --check` matches all 4 scenes.
+- Indexed, indirect, and meshlet paths ran on DX12 and Vulkan on the RTX 5080, with counters and start/end screenshots under `artifacts/bench/us076-*/`.
+- Mesh shaders forced off: the driver checks `geometry_path()`, so the run falls back to indirect-indexed. It reports `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with 338–340 visible items and 0 meshlet visible.
+- Windows gates passed on the last full pass: validate, win-dev, win-debug, win-unit (29/29), `engine_tests --suite gpu` for dx12 (72 cases) and vulkan (73 cases), and win-release `engine_bench`. Linux passed ValidateVendor, linux-dev, linux-debug, and linux-unit (30/30).
+
+**Blocked on you:**
+1. **Triangle floor and frame budget fail.** The start frame submits 312,068 triangles against the 2,000,000 floor. Every indexed run also misses the 16.7 ms budget, with p99 at 35–47 ms and 0% of frames within budget. Mesh-shader runs also exceed the 33.3 ms outlier check on 17–22% of frames. The route start and instance placement are pinned by the manifest hash and the seeded generator. Changing either is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and update the manifest. PRD line 722 reserves contract changes for a separate user decision.
+   - My recommendation is to profile before deciding. 312k triangles should not cost 35–47 ms on this GPU, so the bottleneck may be CPU submission or extraction for 20,000 instances. If so, the fix is in the engine, and the contract stays as written.
+2. **full_1080 is unsupported** until the vendored FSR 2 permutation headers exist. Only native_1080 has run, so "both profiles" is only partly met.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (local GCC 9.4 cannot build Jolt).
+
+I did not re-run anything in this pass. Re-running would reproduce the same results, and the progress log already has 30 identical status entries. Tell me whether to pursue the profiling route or approve a workload change, and I'll proceed from there.

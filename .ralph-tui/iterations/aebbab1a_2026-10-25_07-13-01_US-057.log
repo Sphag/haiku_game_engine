@@ -1,0 +1,43 @@
+# Iteration 451 Log
+
+## Metadata
+
+- **Task ID**: US-057
+- **Task Title**: Audio
+- **Description**: As a game creator, I want audio so that I can add sound to the game world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T04:13:01.540Z
+- **Ended At**: 2026-10-25T04:13:21.133Z
+- **Duration**: 19s
+- **Input Tokens**: 22
+- **Output Tokens**: 2628
+- **Total Tokens**: 2650
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and audio directory state $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/audio 2>/dev/null && find engine/audio -type f ...
+[94m[Bash][0m Check toolchains, recent edits, and bench target $ grep -rl "engine_bench" --include=CMakeLists.txt . 2>/dev/null | grep -v build | head -3
+[94m[Bash][0m Append re-check entry to progress log $ no GCC 11+ and no docker/podman/conda, so `linux-gcc*` cannot run here. - Benchmark: no `engine_benc...
+US-057 is still **Partial**, so I'm not emitting the COMPLETE signal.
+
+The audio module was implemented in an earlier pass and re-verified today. Nothing under `engine/`, `tests/`, or `cmake/` has changed since that verification, so I did not rerun the gates. The recorded results are:
+
+- **Linux:** `ValidateVendor` passes, `linux-dev` configures, `linux-debug` builds with 0 warnings, and `linux-unit` passes 22 of 22. `linux-asan` builds, and `linux-sanitize` passes 22 of 22 with no sanitizer reports.
+- **Windows (MSVC):** `ValidateVendor`, `win-dev`, and `win-debug` pass with 0 `warning C`, and `win-unit` passes 21 of 21.
+- **Functional coverage:** WAV and Ogg decode, 2D and 3D voices, listener, attenuation, looping, streamed music, the three buses, owner release, the Lua `audio` module, and the device fallback to offline.
+
+Two acceptance items remain open:
+
+1. **`linux-gcc` gate and CI job.** The host has only GCC 9.4, and Jolt needs GCC 11+. The audio target itself compiles under GCC 9.4 with `-Werror`, but the full `linux-gcc-debug` build stops in `engine_physics`. I can't verify this gate here.
+2. **`engine_bench --suite acceptance`.** There is no `engine_bench` target in the tree. The harness is US-074, so this can't run yet.
+
+Two deviations from the spec are also recorded in the progress log:
+
+- **World unload is not wired.** `AudioEngine::stop_owner(owner)` is the release mechanism, but nothing in the runtime calls it on world unload yet.
+- **Music is not streamed from disk.** The encoded bytes are held in memory.
+
+I appended a re-check entry to `.ralph-tui/progress.md` with these results. I did not create a commit.

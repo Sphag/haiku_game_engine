@@ -1,0 +1,42 @@
+# Iteration 1162 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:22:13.769Z
+- **Ended At**: 2026-10-26T21:22:29.019Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2140
+- **Total Tokens**: 2166
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing benchmark tooling before deciding what this story can verify from WSL.
+[94m[Bash][0m Read progress log and benchmark directory state $ git status 2>&1 | head -3
+The log shows many earlier passes that ended in the same blocked state. I'll re-check the key blockers in one batch so the report reflects the current tree.
+[94m[Bash][0m Re-check hardware, FSR2, workload, and artifact blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ RTX 5080 visible to WSL nvidia-smi only.\n- Stop: US-080 cannot be signed off on this host. No COMPL...
+US-080 is not complete, and I have not signalled completion. This host cannot produce the reports the story requires, and I made no code changes this pass.
+
+**What blocks sign-off (re-checked just now):**
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run cannot happen here. The RTX 5080 is visible to WSL `nvidia-smi` only, which does not count as a native Linux report.
+- **FSR 2 is not buildable.** `third_party/fsr2` has no `*_permutations.h` files. Choosing a vendoring route is a user decision.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` has four `implementation: none` entries (lines 88, 108, 122, 132). A run that includes them exits 3 (incomplete), so no acceptance pass is possible yet.
+- **No acceptance reports exist.** `artifacts/bench` holds only earlier US-076, US-077, US-078 and US-080 readback runs. There is no `acceptance` run with three 180 s repeats per scene, profile and backend.
+- **Not attempted:** the Windows and Linux quality gates and the editor smoke tests. I did not run them in this pass, so none of those criteria are verified.
+
+**What would unblock it:**
+1. A native Linux host with a Vulkan GPU, or a decision that native Linux is out of scope for this story.
+2. Your decision on the FSR 2 permutations route.
+3. Implementation of the four missing workloads, which is a separate story of work.
+4. Then the Windows DX12 and Vulkan runs on the RTX 5080, plus the Linux run, each three repeats at 30 s warmup and 180 s measured.
+
+I appended a short status entry to `.ralph-tui/progress.md`. Earlier entries in that file repeat this same conclusion, so the file has grown with near-identical notes.

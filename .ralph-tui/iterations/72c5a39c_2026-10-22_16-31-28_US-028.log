@@ -1,0 +1,76 @@
+# Iteration 28 Log
+
+## Metadata
+
+- **Task ID**: US-028
+- **Task Title**: Vulkan Device and Presentation
+- **Description**: As a user of both operating systems, I want Vulkan output so that I can use a shared alternative backend.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T13:31:28.589Z
+- **Ended At**: 2026-10-22T13:38:17.536Z
+- **Duration**: 6m 48s
+- **Input Tokens**: 86
+- **Output Tokens**: 7673
+- **Total Tokens**: 7759
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current repo state.
+[94m[Bash][0m Inspect repo root, progress log, and US-028 PRD section $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-028" -A30 tasks/prd-open-world-engine.m...
+[94m[Bash][0m List repository files and progress log size $ find . -path ./.git -prune -o -type f -print | grep -v -E "^./(vendor|third_party)/" | head -300 && ...
+The log shows a previous US-028 iteration already landed most of the Vulkan backend, but it left the native Linux GPU report open. I'll check the status file and the memory notes on the Windows and Linux environments.
+[94m[Bash][0m Check US-028 status and read saved environment notes $ ls /tmp/vvl 2>/dev/null | head
+US-028 is still open. The native Linux GPU report is missing, and my saved notes say this WSL host can't produce one. Before deciding anything, I'll re-run the Linux gates, because the last Linux unit run predates a later change.
+[94m[Bash][0m Run Linux validate, configure, build, and unit gates $ tail -4 /tmp/lx_ctest.log)
+
+[91m[Error: Exit code 1
+-- Vendor validation passed: 26 dependencies, 8542 files
+validate=0
+configure=0
+build=0
+0][0m
+The build passed. The chain stopped only because `grep -c` returned 0 matches, which is exit 1. I'll run the unit tests on their own.
+[94m[Bash][0m Run Linux unit tests and Linux Vulkan GPU probe $ ls build/linux-debug 2>/dev/null | head -3
+[94m[Bash][0m Locate engine_tests and run Linux Vulkan GPU suite $ ls /tmp/vvl/layer 2>&1
+The Linux GPU probe exits 3 (unsupported). I'll point `VK_LAYER_PATH` at the out-of-tree layer and retry to confirm the actual blocker.
+[94m[Bash][0m Run Linux Vulkan GPU suite with the validation layer $ tail -4 /tmp/gpu_lx2.log
+The Linux probe now gets past the layer and stops at the adapter check: lavapipe has no timeline semaphores, and there is no hardware adapter. Next I'll re-run the Windows gates and the RTX 5080 Vulkan suite from WSL, using the batch approach in my notes. First I'll check for an existing batch file to reuse.
+[94m[Bash][0m Look for existing Windows gate batch files $ ls /mnt/d/dev/haiku_game_engine/tools/ci/gpu_run.py && sed -n 1,40p /mnt/d/dev/haiku_game_engine/too...
+[94m[Bash][0m Read the previous US-028 Windows gate batch $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us027_win_result.txt
+The earlier batch covers all Windows gates and both GPU suites, so I'll re-run it on the current tree.
+[94m[Bash][0m Run Windows US-028 gate batch via cmd.exe $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us028/summary.txt 2>&1
+All Windows exit codes are 0. I'll check the logs for warnings, test counts, and validation messages, since exit codes alone don't prove those.
+[94m[Bash][0m Check Windows logs for warnings, test counts, validation errors $ tail -2 $D/gpu_dx12.log
+The Windows state checks out: 0 warnings, 21/21 unit tests, and the Vulkan suite passes on the RTX 5080 with validation on. I'll record this run in the progress log. The story stays open because the native Linux GPU report can't be produced on this host.
+[94m[Bash][0m Append US-028 re-verification entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-22 - US-028 (re-verification, WSL) - What was impl...
+US-028 is not complete. I did not emit the completion signal, because the native Linux GPU report is still missing and this WSL host can't produce it.
+
+**What I re-verified on the current tree**
+
+| Gate | Result |
+|---|---|
+| Windows `ValidateVendor`, `win-dev`, `win-debug` build | exit 0, 0 `warning C` |
+| Windows `win-unit` ctest | 21/21 passed |
+| Windows `engine_tests --suite gpu --backend dx12` | exit 0, 8 cases, 71 assertions |
+| Windows `engine_tests --suite gpu --backend vulkan` | exit 0, 9 cases, 80 assertions, validation layers on, RTX 5080, not software |
+| Linux `ValidateVendor`, `linux-dev` configure, `linux-debug` build | exit 0, 0 warnings |
+| Linux `linux-unit` ctest | 22/22 passed |
+| Linux `engine_tests --suite gpu --backend vulkan` | exit 3, unsupported (not run) |
+
+**Why the Linux GPU report is blocked**
+
+- With the out-of-tree validation layer loaded (`VK_LAYER_PATH=/tmp/vvl/layer`), the probe reports no hardware Vulkan 1.2 adapter with timeline semaphores and swapchains.
+- `/dev/dri` is absent, and Mesa lavapipe on this host lacks timeline semaphores.
+- The acceptance criterion needs a native Linux machine with a Vulkan 1.2 hardware adapter. This environment doesn't have one.
+
+**Still open**
+
+- The native Linux clear/readback report with validation layers.
+- Surface-loss recovery, which is implemented but has never been exercised on either OS.
+- Linux GCC and ASan gates weren't re-run this pass. No source changed since their last run.
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. `passes` stays `false` in `tasks/prd.json`. The next step is a run of `engine_tests --suite gpu --backend vulkan` with validation layers on a native Linux host with a hardware Vulkan 1.2 device.

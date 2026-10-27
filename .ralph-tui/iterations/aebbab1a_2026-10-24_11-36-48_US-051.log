@@ -1,0 +1,1234 @@
+# Iteration 171 Log
+
+## Metadata
+
+- **Task ID**: US-051
+- **Task Title**: GPU Particles
+- **Description**: As an effects author, I want a particle system so that I can add dynamic effects to the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T08:36:48.992Z
+- **Ended At**: 2026-10-24T09:40:26.818Z
+- **Duration**: 1h 3m 37s
+- **Input Tokens**: 4138
+- **Output Tokens**: 405709
+- **Total Tokens**: 409847
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and existing particle code $ ls && tail -n 80 .ralph-tui/progress.md && grep -ril "particle" --include=*.cpp --include=*.hpp --in...
+[94m[Bash][0m Find US-051 in PRD and list render module files $ grep -rn -i "particle" engine/render/src/rt_effects.cpp | head -3
+[94m[Bash][0m Read US-051 section and related PRD constraints $ grep -n -i "perf\|bench\|Non-Goal" tasks/prd-open-world-engine.md | head -40
+[94m[Bash][0m Read memory notes on gates and GPU environment $ cd /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/ && cat reference-windows-gate-run...
+[94m[Bash][0m Survey RHI command list API and render file sizes $ wc -l engine/rhi/include/engine/rhi/*.hpp engine/render/include/engine/render/{scene_renderer,render...
+[94m[Bash][0m Read RHI type definitions $ sed -n 1,352p engine/rhi/include/engine/rhi/types.hpp | grep -v "^\s*$" | head -330
+[94m[Bash][0m Read volumetric fog header as template $ cat engine/render/include/engine/render/volumetric_fog.hpp
+[94m[Bash][0m Read volumetric fog CPU/GPU implementation pattern $ grep -n "::create\|::release\|::apply\|::inject(\|::set_apply_targets\|upload_buffer\|create_buffer\...
+[94m[Bash][0m Read fog create/upload/release and gpu_upload helpers $ cat engine/render/src/gpu_upload.hpp | head -80
+[94m[Bash][0m List tests, render CMake, and shader build function $ grep -n "engine_add_hlsl_shader" -A30 cmake/*.cmake | head -80
+[94m[Bash][0m Read volumetric GPU test structure $ sed -n 1,140p tests/src/render_volumetric_gpu_tests.cpp
+[94m[Bash][0m Read Device API and find alpha_blend usages $ grep -rn "alpha_blend" engine tests --include=*.cpp --include=*.hpp | grep -v third_party | head -40
+[94m[Bash][0m Read blend state code in DX12, Vulkan, and rules $ sed -n 835,860p tests/src/rhi_contract_tests.cpp
+[94m[Bash][0m Read gpu upload helper, test CMake shader registration, render CMake $ sed -n 1,80p engine/render/CMakeLists.txt
+[94m[Bash][0m Read fog HLSL conventions, clip helper, and GPU test submission flow $ sed -n 140,200p tests/src/render_volumetric_gpu_tests.cpp
+[94m[Bash][0m Read buffer state rules and error codes $ grep -n "to_vulkan_clip\|Backend::Vulkan" engine/render/src/volumetric_fog.cpp engine/render/src/sce...
+Starting with the RHI: the existing blend state only supports source-alpha blending, so additive particles need a new pipeline flag on both backends.
+[94m[Bash][0m Add additive blend flag to RHI pipeline description $ file engine/rhi/src/vulkan/vulkan_device.cpp
+The RHI edit is in. Next, I'll let the upload helper take a final state, since the particle index buffer must end in `IndexBuffer` rather than `ShaderRead`.
+[94m[Bash][0m Let upload helper take an optional final state $ """) print("ok") EOF grep -n "after" engine/render/src/gpu_upload.cpp
+The RHI now has an additive blend. Next is the particle module itself. I'm keeping the design close to `VolumetricFog`: a CPU-side header with pure helpers, a system that owns device resources, and one HLSL file with raw byte buffers, which avoids the structured-buffer rule.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/particles.hpp[0m "#pragma once
+
+// GPU particles (US-051). Each emitter owns a ring of particle slots, a draw list, a live counter, and an indirect argument record. Per frame:
+//   prepare()   on the CPU: advances the ... (12952 chars)"
+Two fixes before the implementation: `unique_ptr<Emitter>` needs a complete type where the destructor is instantiated, so the destructor moves to the `.cpp`. The direction comment also needs to match the validation I'm adding.
+[94m[Bash][0m Move destructor out of header and fix comments $ non-zero, and normalised by the packer\n") edit(p, "// Checks an emitter: a positive capacity, finit...
+[94m[Bash][0m Verify header edits applied $ ls -la engine/render/include/engine/render/particles.hpp
+The header is as intended. Now the HLSL: four entries that share one parameter layout.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/particles.hlsl[0m "// GPU particles (US-051): the simulation, the indirect-argument, and the billboard entries that ParticleSystem (engine/render/src/particles.cpp)
+// dispatches and draws. pack_particle_parameters in p... (10553 chars)"
+Shader is written. Before the C++ implementation I need the handle API (for validity checks in cleanup) and the rhi helpers for `copy_buffer`/`dispatch` error patterns.
+[94m[Bash][0m Check handle validity API and graph import signature $ grep -n "import_buffer" engine/render/include/engine/render/render_graph.hpp
+The handle API is clear. Now the implementation: pure CPU helpers (curves, validation, spawn accumulator, parameter packing) plus the system's resource lifecycle and per-frame recording.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/particles.cpp[0m "#include "engine/render/particles.hpp"
+
+#include "engine/core/coordinates.hpp"
+#include "engine/core/result.hpp"
+#include "gpu_upload.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#in... (35864 chars)"
+The implementation draft needs a few checks against the real APIs: the `core::success` signature, the error struct name, and whether `destroy_emitter` is declared.
+[94m[Bash][0m Check core result helpers and RHI error type names $ grep -n "fog\b" engine/render/src/volumetric_fog.cpp | grep return | head -3
+[94m[Bash][0m Declare destroy_emitter and fix includes and return $ " engine/render/include/engine/render/particles.hpp
+Now I'll register the source with the render library and the shaders with the test target, then build on Linux to find compile errors.
+[94m[Bash][0m Register particles source and shaders in CMake $ grep -n "render_volumetric" tests/CMakeLists.txt
+Next, CPU unit tests. First I'll check how the existing CPU tests build a device and whether the validation backend accepts placeholder shader bytecode, since the lifecycle tests depend on that.
+[94m[Bash][0m Check CPU test device usage and validation device shader handling $ ls engine/rhi/src | head -40
+[94m[Bash][0m Find CPU test device creation examples $ sed -n 1,40p tests/src/rhi_contract_tests.cpp | grep -n "include\|namespace\|TEST_CASE" | head -30
+[94m[Bash][0m Read validation device creation API for CPU tests $ grep -n "Backend::Validation" tests/src/render_graph_tests.cpp | head -3
+The validation device accepts placeholder bytecode and enforces states, so the lifecycle and recording can be unit-tested without a GPU. Writing the CPU test file:
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_particles_tests.cpp[0m "// GPU particles (US-051), CPU side. Curves, emitter validation, the spawn accumulator, the parameter block's offsets, and the system's budget
+// and lifecycle run on the CPU reference device, which e... (18013 chars)"
+Two small cleanups in the test file (a leftover `0 + 1` and an awkward aggregate frame), then I'll register the test and compile on Linux.
+[94m[Bash][0m Fix test details and register test source $ 
+Configuring and building the Linux debug preset in the background, logging to a file, so I can keep working on the GPU test while it compiles.
+[94m[Bash][0m Configure linux-dev and build linux-debug in background $ tail -3 /tmp/us051_configure.log
+While that builds, I'll look at how the existing GPU tests declare shaders and camera projections, so the particle GPU test follows the same conventions.
+[94m[Bash][0m Read GPU test conventions: shaders, cases, projection helpers $ cat tests/src/gpu_test_options.hpp | head -40
+[94m[Bash][0m Check camera projection convention and build progress $ tail -3 /tmp/us051_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+engine/render/src/camera.cpp:25:    const glm::dmat4 projection = glm::perspectiveRH_ZO(camera.fov_y_radians, camera.aspect, camera.near_plane, camera.far_plane);
+engine/core/include/engine/core/coordinates.hpp:21:// Right-handed perspective with engine clip space (depth 0..1, y up).
+engine/core/include/engine/core/coordinates.hpp:22:[[nodiscard]] inline glm::mat4 perspective(float fov_y_radians, float aspect, float near_z, float far_z) {
+engine/core/include/engine/core/coordinates.hpp:23:    return glm::perspectiveRH_ZO(fov_y_radians, aspect, near_z, far_z);
+14:struct Camera {
+15-    glm::dvec3 position{0.0, 0.0, 0.0};
+16-    glm::dquat orientation{1.0, 0.0, 0.0, 0.0};  // (w, x, y, z), unit length
+17-    double fov_y_radians = 1.0471975511965976;    // 60 degrees
+18-    double aspect = 1.0;                         // width / height of the target
+19-    double near_plane = 0.1;
+20-    double far_plane = 1000.0;
+21-
+22-    [[nodiscard]] glm::dvec3 forward() const;
+23-    // Finite, unit-length orientation, 0 < fov < pi, a positive aspect, and 0 < near < far.
+24-    [[nodiscard]] bool is_valid() const noexcept;
+25-};
+26-][0m
+[94m[Bash][0m Check configure and build progress $ grep -c "error" /tmp/us051_build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -3 /tmp/us051_configure.log tail -5 /tmp/us051_build.log grep -c "error" /tmp/us051_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure and build progress $ grep -c "error" /tmp/us051_build.log 2>/dev/null
+
+[91m[Error: Exit code 2][0m
+[94m[Bash][0m List build log files $ cat /tmp/us051_configure.log 2>&1 | tail -5
+[94m[Bash][0m Check whether configure is still running $ ps -eo pid,etime,args | grep -E "cmake|ninja|dxc" | grep -v grep | head -8
+Configure is still running. While it finishes, I'll write the GPU test file: spawn/count, seeded reproducibility, blend and depth on a real render target, and overflow, pause, reset, and deletion.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_particles_gpu_tests.cpp[0m "// GPU particles (US-051) on real GPUs. Each case runs ParticleSystem on DX12 or Vulkan with the debug layers on, and any validation error fails
+// it. The cases check the live count against the spawn... (22508 chars)"
+The GPU test has a few things to fix before it compiles: a helper I invented (`fails_with_capacity`), a missing `<array>` include, and cleanup of the textures and system in the blend helper. Applying those now.
+[94m[Bash][0m Fix GPU test helpers and cleanup $ ls /tmp/us051_*
+[94m[Bash][0m Register GPU particle test; check build output $ tail -c 1500 /tmp/us051_build.log 2>/dev/null
+[94m[Bash][0m Extract compile errors and warnings from build log $ grep -n "error\|warning" /tmp/us051_build.log | head -40
+The test file needs Catch's `Approx`, which isn't in the header I included. Checking how other tests in the tree get it:
+[94m[Bash][0m Find how other tests use Approx $ grep -rln "catch_approx\|catch_matchers_floating" tests/src | head -3
+[94m[Bash][0m Check includes used for Approx in another test $ 
+[94m[Bash][0m Add Approx include and rebuild the Linux debug target $ grep -n "error" /tmp/us051_build.log | head -30
+The Linux debug build passes with the GPU test included. Running the new CPU unit cases now:
+[94m[Bash][0m Run the particle unit tests on Linux $ "$T" "*particles*,*particle*,*curve*,*spawn*,*Emitter*,*Frames*,*budgets*,*parameter*,*particle*" 2>...
+[94m[Bash][0m Run all CPU unit tests on Linux $ "$T" --suite unit 2>&1 | tail -60
+The CPU reference device keeps no buffer contents, so `upload_buffer` fails there. That blocks the zeroing source in `create()`, and the `prepare()` upload too. Before choosing a fix, I'll check whether the RHI documents zero-initialised buffers or how it handles same-state UAV transitions.
+[94m[Bash][0m Check RHI zero-init guarantees and UAV transition rules $ grep -n "before == after\|same state\|UnorderedAccess" engine/rhi/src/validation_device.cpp | head -...
+The RHI has no zero-init guarantee, and the CPU reference device can't upload at all. That means `ParticleSystem::create()` can't run on it, since it zeroes the counter through an upload. The GPU suite already covers the budget, pause, reset, and deletion paths on real hardware. So I'll keep the CPU tests to what they can check honestly (curves, validation, the spawn accumulator, parameter packing, and create's argument checks) and remove the two CPU lifecycle cases.
+[94m[Bash][0m Trim CPU tests that need GPU-only system paths $ \n") open(p,'w',encoding='utf-8',newline='').write(s) print(len(s)) EOF grep -n "TEST_CASE" tests/sr...
+[94m[Bash][0m Rebuild after trimming CPU tests $ grep -n "error\|warning" /tmp/us051_build.log | grep -v "^.*-DENGINE" | head -20
+[94m[Bash][0m Remove unused CPU test helpers $ a)     s=s[:a]+s[b:] cut("void require_ok(const RhiStatus& status) {", "template <typename T>\nbool ...
+[94m[Bash][0m Rebuild and run the CPU unit suite $ "$T" --suite unit 2>&1 | tail -4
+While the build runs in the background, I'll write the short design doc that the render CMake comment already points to.
+[94m[Bash][0m Look at an existing feature doc for house style $ sed -n 1,25p docs/denoise-volumetrics.md
+[94m[Bash][0m Check build result and run CPU unit suite $ build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -30
+All 634 CPU unit cases pass on Linux, including the particle tests. The GPU cases can't run here (no usable Vulkan device in WSL), so they need the Windows host. First I'll confirm the particle shaders built for both backends, then run the Linux unit ctest preset.
+[94m[Bash][0m Confirm particle shaders and run Linux unit ctest $ ls -la build/linux-dev/shaders/particles_* && timeout 600 ctest --preset linux-unit --output-on-fail...
+[94m[Bash][0m Get ctest pass/fail summary line $ timeout 600 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests pas...
+Linux unit ctest passes 22/22. Reviewing the simulate kernel before the Windows run, I found a real bug: a particle spawned this frame returns early and never reaches the draw list, so it isn't counted or drawn until the next frame. The count test would catch it, but I'll fix it now rather than spend a Windows run on it.
+[94m[Bash][0m Fix spawned particles missing from the draw list $ }  ''' s=s.replace(old,new) open(p,'w',encoding='utf-8',newline='').write(s) EOF sed -n '/void CSPar...
+Kernel fixed. I'll rebuild Linux to recompile the shader, rerun the unit tests, and check the Windows prerequisites: the pinned validation layer and an earlier gate batch to copy from.
+[94m[Bash][0m Rebuild Linux, and check Windows gate prerequisites $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i gate | tail -5
+[94m[Bash][0m Read the previous Windows gate batch template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us050_win_gate.bat | tr -d '\r'
+[94m[Bash][0m Read the GPU gate batch template $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "us04[5-9]\|us05" | head -30
+I have the batch template. Before launching, I'll check that no earlier gate batch is still running, per the overlap memory note. Then I'll write the batch covering ValidateVendor, win-dev, win-debug, win-unit, and both GPU suites.
+[94m[Bash][0m Write and launch the Windows gate batch in background $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_gate.bat" > $T/us051_stdout.txt 2>&1 & ech...
+The Windows batch is running. While it works, I'll run the Linux gates that remain: ValidateVendor, the GCC job, and the ASan/UBSan job, since this change allocates GPU memory.
+[94m[Bash][0m Run remaining Linux gates in background $ nohup bash /tmp/us051_linux.sh > /dev/null 2>&1 & echo started
+While those run, I'll write the design doc the render CMake comment points to.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/particles.md[0m "# GPU particles (US-051)
+
+GPU particles run emission, simulation, and drawing on the device. The CPU keeps only the spawn accumulator and the parameters of each emitter.
+
+## Pieces
+
+| Piece | Where | ... (3942 chars)"
+Checking the Windows batch progress:
+[94m[Bash][0m Check progress of Windows and Linux gate runs $ ls $T | grep us051_ | head -20
+Validation passed on Windows. I'll wait on both runs with a Monitor loop rather than polling by hand. Loading that tool first:
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m US-051 Windows gate batch and Linux gate completion $ cat /tmp/us051_l_rc.txt
+The Windows batch and the Linux gate chain are still running. The monitor will report when both finish. Nothing is changed in the working tree since the last edit, so no action is needed until then.
+The gate chain finished with failures, so I'm reading the logs before deciding anything.
+[94m[Bash][0m Read gate failure logs for Linux GCC/ASan and Windows GPU runs $ grep -n -i "failed\|FAILED" $T/us051_6.log | head -30
+Two separate problems. The Linux GCC and ASan builds fail because the GPU test has an unused `upload` helper, which `-Werror` rejects. The Windows GPU runs fail at a test assertion around line 74 of the GPU test file. Reading that failure message:
+[94m[Bash][0m Read the failing assertion detail from the Windows GPU logs $ cd /mnt/d/dev/haiku_game_engine && sed -n 70,76p tests/src/render_particles_gpu_tests.cpp
+The GPU failure is a real API rule: `draw_indexed_indirect` requires both a vertex and an index buffer bound. Checking what the RHI expects for a pipeline with no vertex input:
+[94m[Bash][0m Find the RHI check and how other passes bind vertex buffers $ grep -rn "set_vertex_buffer" engine/render/src/*.cpp | head -5
+[94m[Bash][0m Read the RHI bound-buffer check in DX12 command list $ sed -n 405,415p engine/rhi/src/dx12/dx12_command_list.cpp
+The RHI requires a vertex buffer bound even when the pipeline reads no vertex input, so the particle draw needs a small dummy vertex buffer. I'll add one (uploaded once with its final state `VertexBuffer`), bind it in `draw`, release it in `release`, and delete the unused GPU-test helper that broke the GCC and ASan builds.
+[94m[Bash][0m Bind a dummy vertex buffer in particle draws and drop unused helper $ \n") g='tests/src/render_particles_gpu_tests.cpp' s=open(g,encoding='utf-8',newline='').read() a=s.i...
+Now I'll relaunch both chains against the fixed tree. The Windows batch is the same one as before, and the Linux chain now also runs the debug build and unit ctest first.
+[94m[Bash][0m Relaunch Windows gate batch and Linux gate chain on fixed tree $ echo "sanitize_ctest=$?" >> /tmp/us051_l2_rc.txt echo done >> /tmp/us051_l2_rc.txt EOF nohup bash /t...
+[94m[Monitor][0m US-051 relaunched Windows gates and Linux gate chain results $ cat /tmp/us051_l2_rc.txt
+Both chains are running again. The results will decide what goes into the progress log, so I'll wait for them.
+[94m[Monitor][0m US-051 gate chain result (re-arm) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 2) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 3) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 4) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 5) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 6) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 7) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check current status of both gate chains $ tail -2 $T/us051_5.log 2>/dev/null
+Both chains are still in progress; the rc files are empty because the Windows batch clears them on start. The next notification will carry the results.
+[94m[Monitor][0m US-051 gate chain result (re-arm 8) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 9) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 10) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 11) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 12) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 13) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 14) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 15) $ cat /tmp/us051_l2_rc.txt
+The monitor keeps timing out with no result, so I'll check what each chain is actually doing.
+[94m[Bash][0m Check gate progress and running processes $ ps -eo pid,etime,args | grep -E "ctest|cmake --build|engine_tests|us051" | grep -v grep | head -5
+Both chains are in progress: the Linux debug link is running, and the Windows batch is still in its build step. Re-arming the wait.
+[94m[Monitor][0m US-051 gate chain result (re-arm 16) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 17) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 18) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 19) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 20) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate results so far $ tail -3 $T/us051_5.log 2>/dev/null
+The Linux chain has not written its first result yet, so the debug build is still running. The Windows batch is at the configure step. Waiting for the next notification.
+[94m[Monitor][0m US-051 gate chain result (re-arm 21) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 22) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 23) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 24) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check progress of both chains $ tail -c 300 /tmp/us051_l2_debug.log
+The Windows build passed, and its unit run is now in progress. The Linux debug build is still linking.
+[94m[Monitor][0m US-051 gate chain result (re-arm 25) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 26) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 27) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 28) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate results $ tail -3 $T/us051_5.log 2>/dev/null
+The GPU logs shown are from the previous run, since the batch hasn't reached the GPU steps yet. Continuing to wait.
+[94m[Monitor][0m US-051 gate chain result (re-arm 29) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 30) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 31) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate progress and log timestamps $ date +%T
+The Linux debug build has not reported after about 20 minutes, so I'll check whether it's stuck.
+[94m[Bash][0m Inspect Linux debug build log and running processes $ cat /tmp/us051_l2_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+ary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+[1/7] Building CXX object engine/render/CMakeFiles/engine_render.dir/Debug/src/particles.cpp.o
+[3/7] Performing install step for 'engine_dxc_host'
+[4/7] Completed 'engine_dxc_host'
+[5/7] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_tests.cpp.o
+[6/7] Linking CXX static library engine/render/Debug/libengine_renderd.a
+
+24055       01:13 /home/max/.local/lib/python3.8/site-packages/cmake/data/bin/cmake --build --preset linux-debug
+24063       01:13 /usr/bin/ninja -f build-Debug.ninja
+24139       00:52 /bin/sh -c : && /usr/bin/clang++ -g  tests/CMakeFiles/engine_tests.dir/Debug/src/main.cpp.o tests/CMakeFiles/engine_tests.dir/Debug/
+24140       00:52 /usr/bin/clang++ -g tests/CMakeFiles/engine_tests.dir/Debug/src/main.cpp.o tests/CMakeFiles/engine_tests.dir/Debug/src/cli_options.c
+24150       00:52 /usr/bin/ld -z relro --hash-style=gnu --build-id --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o tests/D][0m
+The Linux link is just slow, not stuck. Continuing to wait.
+[94m[Monitor][0m US-051 gate chain result (re-arm 32) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 33) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 34) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate results and log state $ date +%T
+The Windows unit ctest is running its integration tests now (the first unit test passed). Still waiting on both chains.
+[94m[Monitor][0m US-051 gate chain result (re-arm 35) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 36) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 37) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate and Linux link progress $ tail -c 200 /tmp/us051_l2_debug.log
+[94m[Monitor][0m US-051 gate chain result (re-arm 38) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 39) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 40) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check gate and Linux link state $ ps -eo etime,args | grep -E "ld |clang\+\+" | grep -v grep | cut -c1-60
+Windows unit ctest passed (`unit=0`), and the DX12 GPU suite has started. Waiting for the GPU results and the Linux chain.
+[94m[Monitor][0m US-051 gate chain result (re-arm 41) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 42) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU DX12 progress and Linux chain $ date +%T
+[94m[Monitor][0m US-051 gate chain result (re-arm 43) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 44) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU DX12 progress again $ date +%T
+[94m[Monitor][0m US-051 gate chain result (re-arm 45) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 46) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU DX12 and Vulkan progress $ date +%T
+The DX12 GPU log hasn't advanced in a while. I'll check whether the test process is still alive on the Windows side.
+[94m[Bash][0m Check whether the Windows GPU test process is alive $ ls -la --time-style=+%T /mnt/c/Users/bucha/AppData/Local/Temp/us051_5.log
+The DX12 test process is alive; it has only been running for about 20 seconds in this run. Continuing to wait.
+[94m[Monitor][0m US-051 gate chain result (re-arm 47) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 48) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU run status and process $ cmd.exe /c "tasklist" 2>/dev/null | grep -i engine_tests
+[94m[Monitor][0m US-051 gate chain result (re-arm 49) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 50) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU run status and process $ cmd.exe /c "tasklist" 2>/dev/null | grep -i engine_tests
+The Linux debug build is done, and the DX12 GPU suite is still running (same process, no failure output yet). Waiting for both.
+[94m[Monitor][0m US-051 gate chain result (re-arm 51) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 52) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU run and Linux chain status $ cmd.exe /c "tasklist" 2>/dev/null | grep -i engine_tests
+[94m[Monitor][0m US-051 gate chain result (re-arm 53) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 54) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU and Linux progress $ date +%T
+[94m[Monitor][0m US-051 gate chain result (re-arm 55) $ cat /tmp/us051_l2_rc.txt
+[94m[Monitor][0m US-051 gate chain result (re-arm 56) $ cat /tmp/us051_l2_rc.txt
+[94m[Bash][0m Check GPU run and Linux chain status $ cmd.exe /c "tasklist" 2>/dev/null | grep -i engine_tests
+The DX12 GPU process has been running for over six minutes, while the earlier failing run finished in under a minute. That points to a hang in one of the particle GPU cases, not a slow suite. I'll stop the batch and its test process so the rest of the run doesn't stall behind it.
+[94m[Bash][0m List Windows cmd and engine_tests processes $ 
+The test process has used under a minute of CPU in eight minutes of wall time, so it is blocked, not computing. I'm killing the batch and its test process together.
+[94m[Bash][0m Terminate hung Windows gate batch and engine_tests $ echo done
+The batch and the hung process are terminated. The earlier run completed every case except the billboard assertion, and the new hang appeared only once `draw` started recording fully. So the GPU work after the draw is the suspect. To find the exact stall, I'm adding temporary stage markers to the billboard path, written to a file so I can read progress while the test runs. I'll remove these before finishing.
+[94m[Bash][0m Add temporary stage markers to diagnose the GPU hang $ \n\n        TextureDesc',1) open(p,'w',encoding='utf-8',newline='').write(s) print(s.count('stage(')...
+Now I'll rebuild on Windows and run only the DX12 GPU suite under a fresh batch, reading the stage file as it goes.
+[94m[Bash][0m Build on Windows and run DX12 GPU suite with stage tracing $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 GPU diagnostic run finished or stalled $ tail -2 $T/us051_dx_build.log 2>/dev/null
+[94m[Monitor][0m DX12 GPU diagnostic run finished or stalled (re-arm) $ tail -2 $T/us051_dx_build.log 2>/dev/null
+[94m[Bash][0m Check diagnostic run stage trace and Linux chain $ cat /tmp/us051_l2_rc.txt 2>/dev/null
+The Windows build failed on my temporary `fopen` marker (MSVC deprecation warning, which the tree treats as an error). The run log is from the old binary, so I'm ignoring it. Switching the marker to `std::ofstream` and rerunning. The Linux debug build and unit ctest now pass with the dummy vertex buffer.
+[94m[Bash][0m Switch stage marker to ofstream and rerun Windows DX12 diagnostic $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 GPU diagnostic run finished or stalled (re-arm 2) $ grep -i "error" $T/us051_dx_build.log 2>/dev/null | head -3
+[94m[Monitor][0m DX12 GPU diagnostic run finished or stalled (re-arm 3) $ grep -i " error" $T/us051_dx_build.log 2>/dev/null | head -3
+[94m[Bash][0m Check diagnostic build and stage trace $ tail -2 $T/us051_dx_build.log
+The link failed with LNK1168, meaning `engine_tests.exe` is still locked by a leftover process. Checking for stale test processes before retrying:
+[94m[Bash][0m Find and terminate leftover engine_tests processes $ echo cleared
+Two stale test processes were holding the binary, one from the previous diagnostic batch. Both are now terminated. Relaunching the diagnostic build and run:
+[94m[Bash][0m Relaunch Windows diagnostic build and DX12 run $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 diagnostic run progress (stage trace) $ tail -4 $T/us051_stage.txt 2>/dev/null
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm) $ tail -4 $T/us051_stage.txt 2>/dev/null
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 2) $ tail -4 $T/us051_stage.txt 2>/dev/null
+[94m[Bash][0m Check diagnostic stage trace $ tail -3 $T/us051_dx_run.log 2>/dev/null
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 3) $ tail -4 $T/us051_stage.txt 2>/dev/null
+[94m[Bash][0m Check stage trace and test process $ cmd.exe /c "tasklist" 2>/dev/null | grep engine_tests
+Nothing has reached the stage file yet, so the stall may be earlier than the billboard path. Waiting one more interval before adding markers at the start of each case.
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 4) $ tail -4 $T/us051_stage.txt 2>/dev/null
+[94m[Bash][0m Recheck stage trace and test process $ date +%T
+The stage file is still empty, so the stall happens before the billboard path, most likely during setup. The only setup change since the previous passing run is the new dummy vertex upload, which uses a different final state than the index buffer. Killing this run and adding stage markers at the start of the spawn case and around `create`:
+[94m[Bash][0m Add setup stage markers, kill stale run, relaunch diagnostic $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+The kill step didn't run (my `&&` chain skipped the script write), so the new batch may collide with the old process. Killing it properly and relaunching:
+[94m[Bash][0m Terminate leftover test and batch processes $ echo checked
+The monitors reported "failed" only because of my shell exit codes; the underlying state is what matters. Checking what's actually running now, then relaunching cleanly:
+[94m[Bash][0m Check remaining Windows processes and diagnostic files $ cat $T/us051_stage.txt 2>/dev/null | tail -3
+[94m[Bash][0m Relaunch diagnostic batch on a clean process table $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 diagnostic run progress (stage trace, run 5) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (run 5 re-arm) $ true
+[94m[Bash][0m Check diagnostic run stage trace $ cmd.exe /c "tasklist" 2>/dev/null | grep engine_tests
+The stage file is still empty even for the first case of this file. The gpu suite runs many cases from other files first, so the stall may be in an unrelated case. Leftover killed processes could also be holding the GPU. Checking GPU state:
+[94m[Bash][0m Inspect GPU state and remaining test processes $ cmd.exe /c "tasklist" 2>/dev/null | grep -i "engine_tests"
+The GPU is idle while the test process holds memory, so the process is blocked on a CPU-side fence wait. Since no marker from my file was written, the hang is probably in an earlier case. To see which case stalls, I'm adding a temporary Catch listener that logs each test case name to the stage file.
+[94m[Bash][0m Add temporary case-start listener, kill stale run, relaunch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+That completion notice belongs to the previous batch's run, which finished with `gpu_dx12=0` and was then killed-racing with my relaunch. The current batch (with the case listener) is the one to trust, so checking its state directly:
+[94m[Bash][0m Check the current diagnostic run's stage and result $ date +%T
+The build failed (`build=2`), so that run used a stale binary. Killing it and reading the compile error from my listener:
+[94m[Bash][0m Kill stale binary run and show the compile error $ grep -m3 -i "error" $T/us051_dx_build.log
+[94m[Bash][0m Find the right Catch2 listener header in the tree $ ls third_party/catch2/src/catch2/reporters 2>/dev/null | head -3
+[94m[Bash][0m Locate CATCH_REGISTER_LISTENER definition $ grep -rln "define CATCH_REGISTER_LISTENER" third_party/catch2/src | head -2
+The stage file from that earlier run shows the full billboard path completing (`draw submit done`, `copy done`), and that binary finished the DX12 GPU suite with `gpu_dx12=0`. So the stall was a leftover-process interference, not a logic hang in my code. I'm removing all the temporary diagnostics now and returning the test file to its clean form.
+[94m[Bash][0m Remove all temporary stage markers and listener from the test $ grep -n "^#include" tests/src/render_particles_gpu_tests.cpp | head -3
+Clean. Before the full Windows gate run I'll check the Linux chain status and clear any leftover processes.
+[94m[Bash][0m Check Linux chain results and running build processes $ ps -eo pid,args | grep -E "us051_linux2|ctest|cmake --build" | grep -v grep | cut -c1-100
+The GCC build failed in this chain even though the unused helper was removed before it started, so I need the actual error:
+[94m[Bash][0m Read GCC build errors from the chain log $ grep -n "error" /tmp/us051_l2_gcc_build.log | grep -v "^.*-DENGINE" | head -5
+That error ("shorter than expected") came from the file changing mid-compile while I was editing it, so it's transient. The ASan build in the current chain is also on a stale file version. I'll stop that chain and start a clean full run of both the Windows gates and the Linux chain on the final source.
+[94m[Bash][0m Launch clean full Windows gates and Linux gate chain on final source $ echo "sanitize_ctest=$?" >> /tmp/us051_l3_rc.txt echo done >> /tmp/us051_l3_rc.txt EOF nohup bash /t...
+
+[91m[Error: Exit code 144][0m
+The `pkill -f` pattern matched my own shell command line, so the shell was killed (exit 144). Redoing it using the known PIDs:
+[94m[Bash][0m Stop the stale Linux chain by PID $ echo cleared
+[94m[Bash][0m Launch clean Windows gate batch and Linux chain on final source $ echo "sanitize_ctest=$?" >> /tmp/us051_l3_rc.txt echo done >> /tmp/us051_l3_rc.txt EOF nohup bash /t...
+[94m[Monitor][0m US-051 final gate results (Windows and Linux) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 2) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 3) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 4) $ true
+[94m[Bash][0m Check status of the final gate runs $ date +%T
+[94m[Monitor][0m US-051 final gate results (re-arm 5) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 6) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 7) $ true
+[94m[Bash][0m Check final gate progress $ date +%T
+Both chains have started and are at their first steps. Continuing to wait for results.
+[94m[Monitor][0m US-051 final gate results (re-arm 8) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 9) $ true
+[94m[Bash][0m Check final gate progress $ date +%T
+[94m[Monitor][0m US-051 final gate results (re-arm 10) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 11) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 12) $ true
+[94m[Bash][0m Check final gate progress $ date +%T
+[94m[Monitor][0m US-051 final gate results (re-arm 13) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 14) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 15) $ true
+[94m[Bash][0m Check final gate progress $ date +%T
+[94m[Monitor][0m US-051 final gate results (re-arm 16) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 17) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 18) $ true
+[94m[Bash][0m Check gate progress with timestamps $ tail -1 /tmp/us051_l3_validate.log
+[94m[Monitor][0m US-051 final gate results (re-arm 19) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 20) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 21) $ true
+[94m[Bash][0m Check gate progress and build activity $ cmd.exe /c tasklist 2>/dev/null | grep -i "engine_tests\|cl.exe" | head -3
+[94m[Monitor][0m US-051 final gate results (re-arm 22) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 23) $ true
+[94m[Bash][0m Check gate progress and GPU log tails $ tail -3 $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m US-051 final gate results (re-arm 24) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 25) $ true
+[94m[Bash][0m Check gate and Linux chain status $ tail -2 /tmp/us051_l3_debug.log 2>/dev/null
+
+[91m[Error: Exit code 1
+validate=0
+configure=0
+build=0
+---
+---
+12:13:38
+Filters: [gpu] [dx12]
+Randomness seeded to: 1138489734
+assertions: 43913 | 43912 passed | 1 failed][0m
+[94m[Monitor][0m US-051 final gate results (re-arm 26) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 27) $ true
+[94m[Bash][0m Check gate timestamps and results $ ls -la --time-style=+%T $T/us051_5.log $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m US-051 final gate results (re-arm 28) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 29) $ true
+[94m[Bash][0m Check gate timestamps and GPU run log $ tail -2 $T/us051_5.log
+[94m[Monitor][0m US-051 final gate results (re-arm 30) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 31) $ true
+[94m[Bash][0m Check unit and GPU progress $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m US-051 final gate results (re-arm 32) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 33) $ true
+[94m[Bash][0m Check status of gate runs $ tail -1 $T/us051_4.log
+The Windows unit ctest is still on test 10 of 21. The Linux `ValidateVendor` step hasn't reported in a while, so I'm checking whether it's actually running:
+[94m[Bash][0m Check whether the Linux ValidateVendor step is running $ tail -3 /tmp/us051_l3_validate.log 2>/dev/null
+[94m[Monitor][0m US-051 final gate results (re-arm 34) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 35) $ true
+[94m[Bash][0m Check gate and validate progress $ ps -eo etime,args | grep "ValidateVendor" | grep -v grep | cut -c1-40
+Windows unit ctest passes (`unit=0`), and the DX12 GPU suite has started.
+[94m[Monitor][0m US-051 final gate results (re-arm 36) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 37) $ true
+[94m[Bash][0m Check GPU DX12 and Linux validate progress $ ps -eo etime,args | grep "ValidateVendor" | grep -v grep | cut -c1-40
+[94m[Monitor][0m US-051 final gate results (re-arm 38) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 39) $ true
+[94m[Bash][0m Check DX12 run and Linux validate state $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+The DX12 GPU suite is running, and Linux validation has passed. Checking the test process's CPU time in a few minutes will show whether it's computing or blocked.
+[94m[Monitor][0m US-051 final gate results (re-arm 40) $ true
+[94m[Bash][0m Check whether DX12 run is computing or blocked $ tail -2 $T/us051_5.log
+[94m[Monitor][0m US-051 final gate results (re-arm 41) $ true
+[94m[Bash][0m Check DX12 run after several minutes $ tail -2 $T/us051_5.log
+[94m[Bash][0m Sample engine_tests CPU time twice to see if it is busy $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+The process is computing (CPU time advances as wall time does) while its memory grows about 80 MB a second. That looks like a runaway loop or something accumulating, not a blocked wait. I'll give it one more interval and kill it if the growth continues.
+[94m[Bash][0m Sample memory growth again to decide whether to stop the run $ cat $T/us051_rc.txt | tail -1
+
+[91m[Error: <tool_use_error>Blocked: sleep 30 followed by: powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local/Temp\\cpu.ps1" tail -1 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu.ps1" tail -1 T=/mnt/c/Users/bucha/AppData/Local/Temp cat $T/us051_rc.txt tail -1. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Sample engine_tests memory again $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us051_rc.txt | tail -1
+Memory has dropped back to about 1.35 GB, so this is active work, not a runaway allocation. Waiting for the DX12 suite to finish.
+[94m[Monitor][0m US-051 final gate results (re-arm 42) $ true
+[94m[Monitor][0m US-051 final gate results (re-arm 43) $ true
+[94m[Bash][0m Check DX12 run state and memory $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+CPU time over the whole run is low, so the process is blocked on a fence, not computing. It's a nondeterministic stall, and the GPU reads 0%, so it isn't a shader loop. To find the exact case, I'm restoring the case-start listener with the correct header path and running the DX12 suite under it.
+[94m[Bash][0m Add case listener with correct header, kill stalled run, relaunch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+I killed the stalled test process, but the full gate batch is still alive and would start its Vulkan step on the binary being rebuilt. Stopping that batch too before anything else touches the build:
+[94m[Bash][0m Stop the full gate batch and any test process it started $ echo done
+[94m[Monitor][0m DX12 diagnostic with case listener (finished or stalled) $ true
+[94m[Monitor][0m DX12 diagnostic with case listener (re-arm) $ true
+The build failed again (`build=2`), so the reported `gpu_dx12=0` came from an older binary. Reading the compile error:
+[94m[Bash][0m Read the Windows build error $ grep -m4 -i "error" $T/us051_dx_build.log
+The listener needs `TestCaseInfo`'s header. Adding it and relaunching the diagnostic:
+[94m[Bash][0m Fix listener include and relaunch the diagnostic run $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 diagnostic (listener, run 3) $ true
+[94m[Monitor][0m DX12 diagnostic (listener, re-arm) $ true
+[94m[Monitor][0m DX12 diagnostic (listener, re-arm 2) $ true
+[94m[Bash][0m Check diagnostic build and case trace $ date +%T
+The listener shows the suite reached `DX12 seeded GPU particles reproduce bit for bit`, so that case is where it stalls. The stall is inside `run_seeded`, so I'm adding finer markers in `run_frame` and per frame to locate the exact call.
+[94m[Bash][0m Add per-step markers to run_frame for stall localization $ \n}\nnamespace {\nstruct TempStageListener",1) open(p,'w',encoding='utf-8',newline='').write(s) prin...
+[94m[Bash][0m Relaunch diagnostic with run_frame markers $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+[94m[Monitor][0m DX12 diagnostic with run_frame markers (re-arm) $ true
+[94m[Monitor][0m DX12 diagnostic with run_frame markers (re-arm 2) $ true
+These notifications are arriving from older monitors and don't reflect the current run. Reading the files directly:
+[94m[Bash][0m Read the current diagnostic run directly $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+Catch2 runs cases in random order (the log prints a random seed), so the stall moves between runs. It's a state-dependent hang rather than one specific case. I'll let this run continue and watch whether it completes.
+[94m[Monitor][0m DX12 diagnostic run progress (random-order, watch for stall) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm) $ true
+[94m[Bash][0m Check run progress and CPU state $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 2) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 3) $ true
+[94m[Bash][0m Check run progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+Cases are progressing normally in random order. Continuing until the suite finishes.
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 4) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 5) $ true
+[94m[Bash][0m Check run progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 6) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 7) $ true
+[94m[Bash][0m Check run progress again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 8) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 9) $ true
+[94m[Bash][0m Check run progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 10) $ true
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 11) $ true
+[94m[Bash][0m Check run progress and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m DX12 diagnostic run progress (re-arm 12) $ true
+[94m[Bash][0m Check progress of DX12 run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+The DX12 run is slowly working through the suite, with the RT and GI cases taking a while. Setting one wait on its result file rather than re-arming repeatedly.
+[94m[Monitor][0m DX12 diagnostic run finished (single wait) $ true
+[94m[Bash][0m Check DX12 run and Linux chain state $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Bash][0m Wait briefly and check DX12 run $ date +%T
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: T=/mnt/c/Users/bucha/AppData/Local/Temp cat $T/us051_dx_rc.txt echo --- tail -2 $T/us051_stage.txt date +%T. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m DX12 diagnostic finished (wait 2) $ true
+[94m[Bash][0m Check DX12 run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+The stage file hasn't advanced since the last check, so the run may be stuck in `alpha blend`. Sampling CPU time twice to confirm:
+[94m[Bash][0m Sample CPU time of the stalled-looking test process $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+CPU time is flat across ten seconds, so the process is blocked in a fence wait inside `alpha blend`, which is pre-existing code. Earlier stalls also landed right after particle cases, so I need to know whether my particle tests leave the DX12 device in a bad state. To test that, I'll take the particle GPU test file out of the build, run the DX12 suite a couple of times without it, and compare. Killing the stalled run first:
+[94m[Bash][0m Stop stalled run, exclude particle GPU tests temporarily, relaunch DX12 suite $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us051_dx.bat" > $T/us051_dx_stdout.txt 2>&1 & ec...
+Stale monitors from earlier waits are still firing and aren't informative. I'll wait on the new run's result file directly.
+[94m[Monitor][0m DX12 suite without particle GPU tests (finished) $ true
+Those `gpu_dx12=0` events are from old monitors matching earlier result files. I'll read the current run's files directly:
+[94m[Bash][0m Check the no-particle diagnostic run directly $ tail -2 $T/us051_dx_build.log
+The status files are contradicting each other, so I'll check the batch's own log and the real process state before trusting any of them:
+[94m[Bash][0m Inspect the diagnostic batch's actual state and timestamps $ ls -la --time-style=+%T $T/us051_dx_rc.txt $T/us051_dx_build.log
+The diagnostic files are being written by more than one batch. Earlier relaunches left batch processes running (the kill steps only stopped the test binary), and two `cmake.exe` processes are running now. This is the overlap hazard in my notes. I'm stopping every batch, cmake, and test process, then running one clean batch.
+[94m[Bash][0m Terminate all overlapping gate batches and their build/test processes $ echo clear
+All overlapping processes are cleared. Now one clean DX12 run without the particle GPU file, as the controlled experiment. I'll wait on that single batch's result.
+[94m[Bash][0m Launch exactly one DX12 run without particle GPU tests $ date +%T
+[94m[Monitor][0m Single no-particle DX12 run result $ true
+[94m[Bash][0m Check the single no-particle run $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+The two `cmake.exe` processes are a parent and child of one reconfigure, not overlapping batches. Waiting for the build and run to finish.
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 2) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 3) $ true
+[94m[Bash][0m Check single run progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 4) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 5) $ true
+[94m[Bash][0m Check single run state $ cmd.exe /c tasklist 2>/dev/null | grep -i "engine_tests\|cmake"
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 6) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 7) $ true
+[94m[Bash][0m Check single run state $ cmd.exe /c tasklist 2>/dev/null | grep -i "engine_tests"
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 8) $ true
+[94m[Bash][0m Check single run progress and CPU state $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 9) $ true
+[94m[Bash][0m Check no-particle run progress and CPU state $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 10) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 11) $ true
+[94m[Bash][0m Check no-particle run progress and CPU state $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 12) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 13) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 14) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 15) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 16) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 17) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 18) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 19) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 20) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 21) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+The Linux GCC build now passes (`gcc_build=0`), and the chain continues. Windows DX12 is still running.
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 22) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 23) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 24) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 25) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 26) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 27) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 28) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 29) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 30) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 31) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 32) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 33) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 34) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 35) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 36) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 37) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 38) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 39) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 40) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 41) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 42) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+The Linux GCC unit ctest passes (`gcc_ctest=0`). Windows DX12 still running.
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 43) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 44) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 45) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 46) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 47) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 48) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 49) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 50) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 51) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 52) $ true
+[94m[Bash][0m Check no-particle run again $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 53) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 54) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 55) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 56) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 57) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 58) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 59) $ true
+[94m[Monitor][0m Single no-particle DX12 run result (re-arm 60) $ true
+[94m[Bash][0m Check no-particle run and Linux chain $ cat /tmp/us051_l3_rc.txt | tr '\n' ' '
+The DX12 suite without particle tests is still stalled after about 15 minutes, so the hang is not caused by the particle GPU file. I'll let the Linux chain finish (ASan build and sanitizer ctest are the last steps), then report what has and hasn't been verified.
+[94m[Monitor][0m Linux gate chain final result $ true
+[94m[Monitor][0m Linux gate chain final result (re-arm) $ true
+[94m[Bash][0m Check Linux chain and DX12 run $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Linux gate chain final result (re-arm 2) $ true
+[94m[Monitor][0m Linux gate chain final result (re-arm 3) $ true
+[94m[Monitor][0m Linux gate chain final result (re-arm 4) $ true
+[94m[Bash][0m Check Linux chain and DX12 run status $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+The DX12 run without particle tests is still blocked after more than 15 minutes, and the Linux ASan build is still going on a file that now contains my temporary diagnostics. I'm stopping the Windows run, cleaning up all temporary instrumentation, and restoring the particle GPU test to the build. Then I'll verify the cleaned tree on Linux.
+[94m[Bash][0m Stop Windows run and Linux ASan build, then remove temporary diagnostics $ \n    TempMark') i=s.find('// TEMP-STAGE: logs every case start')  if i<0: i=s.find('// TEMP-STAGE: ...
+Two leftover temporary blocks remain (a marker line near the top and the listener at the end). Viewing them and removing precisely:
+[94m[Bash][0m View the leftover temporary blocks $ sed -n 500,530p tests/src/render_particles_gpu_tests.cpp
+[94m[Bash][0m Remove the remaining temporary include and listener marker $ tail -3 tests/src/render_particles_gpu_tests.cpp
+[94m[Bash][0m Fix include block and check CMake registration of the GPU test $ grep -n "render_particles_gpu_tests" tests/CMakeLists.txt
+The GPU test file is clean. Restoring its CMake registration, which I removed for the experiment:
+[94m[Bash][0m Restore particle GPU test in CMake and scan for leftover markers $ echo "scan done"
+The tree is clean again. Rebuilding Linux debug and rerunning the unit ctest on the final source, to confirm the cleanup compiles:
+[94m[Bash][0m Rebuild Linux debug and run unit ctest on the cleaned tree $ echo done >> /tmp/us051_final_rc.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Final Linux rebuild and unit ctest on cleaned tree $ true
+[94m[Monitor][0m Final Linux rebuild and unit ctest on cleaned tree (re-arm) $ true
+[94m[Bash][0m Check the cleaned-tree rebuild $ grep -c "warning:" /tmp/us051_final_debug.log
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 2) $ true
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 3) $ true
+[94m[Bash][0m Check cleaned-tree rebuild and unit run $ tail -2 /tmp/us051_final_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+---
+[0/1] Re-running CMake...
+0][0m
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 4) $ true
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 5) $ true
+[94m[Bash][0m Check cleaned-tree rebuild and unit run $ tail -2 /tmp/us051_final_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+---
+[0/1] Re-running CMake...
+0][0m
+The Linux rebuild has been on "Re-running CMake" for several minutes. Checking whether it's progressing:
+[94m[Bash][0m Check whether the Linux CMake re-run is active $ ps -eo pid,etime,pcpu,args | grep -E "cmake|ninja" | grep -v grep | cut -c1-120
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 6) $ true
+[94m[Monitor][0m Final Linux rebuild and unit ctest (re-arm 7) $ true
+[94m[Bash][0m Check cleaned-tree rebuild and unit run $ tail -2 /tmp/us051_final_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+---
+[0/1] Re-running CMake...
+0][0m
+[94m[Bash][0m Check CMake regenerate CPU usage $ date +%T
+The elapsed times in these checks are much shorter than my estimates, so my "stall" conclusion was based on too little wall-clock time. Re-checking the DX12 run against the actual elapsed time before deciding anything:
+[94m[Bash][0m Check DX12 run wall-clock age and CPU $ ls -la --time-style=+%T $T/us051_dx_run.log
+This is important: the full gate batch launched at 12:12 finished its Windows DX12 GPU suite with `gpu_dx12=0`, with the particle tests included. The later "stall" happened while I was running overlapping diagnostic batches. Checking the Vulkan step of that same gate run:
+[94m[Bash][0m Read the full gate batch's Vulkan step and result files $ cat /tmp/us051_final_rc.txt 2>/dev/null | tr '\n' ' '
+The clean full gate batch (12:12) is the key evidence: on the same code that now differs only by the removed diagnostics, Windows ValidateVendor, win-dev configure, win-debug build, win-unit, and the DX12 GPU suite all pass. The Vulkan step was started and then interrupted by my cleanup, so it hasn't produced a result. I'll run one clean full batch on the final tree, with nothing else running on Windows.
+[94m[Bash][0m Launch one clean full Windows gate batch on the final tree $ date +%T
+These are stale monitor notices repeating the earlier result. I'm reading the new batch's own files instead.
+[94m[Bash][0m Check new full batch and Linux final chain files $ tail -1 $T/us051_3.log 2>/dev/null
+[94m[Monitor][0m Clean full Windows gate batch result $ true
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm) $ true
+[94m[Bash][0m Check clean batch progress $ tail -1 $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm 2) $ true
+[94m[Bash][0m Check clean batch progress $ tail -1 $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm 3) $ true
+[94m[Bash][0m Check clean batch progress $ tail -1 $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm 4) $ true
+[94m[Bash][0m Check clean batch and final Linux progress $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm 17) $ true
+[94m[Bash][0m Check clean batch progress $ tail -1 $T/us051_5.log 2>/dev/null
+[94m[Bash][0m Check Linux final rebuild process $ tail -2 /tmp/us051_final_debug.log
+[94m[Monitor][0m Clean full Windows gate batch result (re-arm 19) $ true
+[94m[Bash][0m Check clean batch progress $ tail -1 $T/us051_5.log 2>/dev/null
+While the gates run, I'll write the progress-log entry and the Codebase Patterns notes. I'll fill in the final gate results once they're in.
+[94m[Bash][0m Locate the progress log format $ grep -n "^## Codebase Patterns" .ralph-tui/progress.md | head -2
+[94m[Bash][0m Append US-051 progress entry and codebase patterns $ US-074).\n" "- Gotchas: the DX12 GPU suite stalled once for several minutes when several GPU batches...
+[94m[Bash][0m Check clean batch and final Linux progress $ tail -1 $T/us051_3.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 2) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 3) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 4) $ true
+[94m[Bash][0m Check batch and Linux final status $ tail -1 $T/us051_5.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 5) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 6) $ true
+[94m[Bash][0m Check batch and final Linux status $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 7) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 8) $ true
+[94m[Bash][0m Check batch and final Linux status $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 9) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 10) $ true
+[94m[Bash][0m Check batch and final Linux status $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 11) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 12) $ true
+[94m[Bash][0m Check batch and final Linux status $ tail -1 $T/us051_4.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 13) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 14) $ true
+[94m[Bash][0m Check batch progress $ tail -1 $T/us051_6.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 15) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 16) $ true
+[94m[Bash][0m Check batch progress $ tail -1 $T/us051_5.log 2>/dev/null
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 17) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 18) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 19) $ true
+[94m[Bash][0m Check batch progress with timestamps $ ls -la --time-style=+%T $T/us051_5.log
+Windows unit ctest passes (`unit=0`). The DX12 GPU suite is running now.
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 20) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 21) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 22) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 23) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 24) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 25) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 26) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 27) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 28) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 29) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 30) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 31) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 32) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 33) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 34) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 35) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 36) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 37) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 38) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 39) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 40) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 41) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+The DX12 run is about 80 seconds in, which matches the earlier clean pass (about two minutes). Continuing.
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 42) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 43) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 44) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 45) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 46) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 47) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 48) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 49) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 50) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 51) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 52) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 53) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 54) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 55) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 56) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 57) $ true
+[94m[Bash][0m Check DX12 run status $ cmd.exe /c tasklist 2>/dev/null | grep engine_tests
+The DX12 run is now over two minutes in, longer than the earlier clean pass. Sampling its CPU time to tell busy from stalled:
+[94m[Bash][0m Sample CPU time to determine busy or blocked $ date +%T
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 58) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 59) $ true
+[94m[Bash][0m Check DX12 run status and CPU $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+CPU time is advancing at roughly wall-clock rate, so the suite is working, not blocked. Waiting for it to finish.
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 60) $ true
+The Linux rebuild and unit ctest pass on the cleaned tree (`debug_build=0 unit=0`). Windows is still on the DX12 suite, then Vulkan.
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 61) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 62) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 63) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 64) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 65) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 66) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 67) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 68) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 69) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 70) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 71) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 72) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 73) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 74) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 75) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 76) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 77) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 78) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 79) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 80) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 81) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 82) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 83) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 84) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 85) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 86) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+The run has now taken about four minutes of wall time and 240 seconds of CPU. Note that this run's random seed (1246983266) differs from the clean pass (3122675830), so the outcome depends on test order. I'll give it a few more checks before deciding whether to stop it.
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 87) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 88) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 89) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 90) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 91) $ true
+[94m[Monitor][0m Clean Windows batch finished (done file, re-arm 92) $ true
+[94m[Bash][0m Check Windows batch progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+The DX12 run has now taken about six minutes of wall time and is still busy, with no result. I'm stopping it here rather than letting it run indefinitely. The clean gate pass from 12:12 is the only completed DX12 result, and I'll report it as such. Stopping the batch and test process:
+[94m[Bash][0m Stop the stalled run and record the verified status in the progress log $ cd /mnt/d/dev/haiku_game_engine && python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p,encoding='u...
+Processes are cleared. Recording the US-051 status in memory so the next session starts from the right place:
+[94m[Bash][0m Save US-051 status memory and index it $ a later random-order DX12 run stalled\n" if 'project-gpu-particles' not in s:     s=s.rstrip()+"\n"+...
+The Windows side is stopped. The ASan/UBSan gate is still open and is required for memory-touching changes, so I'll run it now on the final tree.
+[94m[Bash][0m Run the ASan/UBSan configure, build, and sanitizer ctest on the final tree $ echo done >> /tmp/us051_asan_rc.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m ASan/UBSan gate chain result $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 2) $ true
+[94m[Bash][0m Check ASan chain progress $ ps -eo etime,args | grep -E "clang\+\+|cmake --build" | grep -v grep | wc -l
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 3) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 4) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 5) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:29:03][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 6) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 7) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:29:09][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 8) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 9) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:29:15
+|][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 10) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 11) $ true
+[94m[Bash][0m Check ASan chain progress $ ps -eo etime,args | grep -E "linux-asan|clang" | grep -v grep | wc -l
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 12) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 13) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:29:26][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 14) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 15) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 16) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 17) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 18) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 19) $ true
+[94m[Bash][0m Check ASan chain progress and running cmake $ ps -eo etime,args | grep -E "cmake --(preset|build)" | grep -v grep | cut -c1-80
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 20) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 21) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 22) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 23) $ true
+[94m[Bash][0m Check ASan chain progress $ ps -eo etime,args | grep -E "cmake --(preset|build)" | grep -v grep | cut -c1-60
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 24) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 25) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 26) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 27) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 28) $ true
+[94m[Bash][0m Check ASan chain progress $ ps -eo etime,args | grep -E "cmake --(preset|build)" | grep -v grep | cut -c1-70
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 29) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 30) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 31) $ true
+[94m[Bash][0m Check ASan chain progress $ tail -1 /tmp/us051_asan_conf.log 2>/dev/null
+ASan configure has finished (vendor validation passed). The sanitizer build is next and will take a while.
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 32) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 33) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:30:30][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 34) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 35) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 36) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 37) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 38) $ true
+[94m[Bash][0m Check ASan build progress $ ps -eo etime,args | grep -c "clang++"
+The ASan build is rebuilding the DXC host toolchain first, which is slow. I'll keep waiting on it a bit longer.
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 39) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 40) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 41) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 42) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 43) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 44) $ true
+[94m[Bash][0m Check ASan build progress and warning count $ grep -c "warning:\|error:" /tmp/us051_asan_build.log
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 45) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 46) $ true
+[94m[Bash][0m Check ASan build and sanitizer test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:08
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 47) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 48) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 49) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 50) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_build.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 51) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 52) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:26
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 53) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 54) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:32
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 55) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 56) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:39
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 57) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 58) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:45
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 59) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 60) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 61) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:31:54
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 62) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 63) $ true
+[94m[Bash][0m Check ASan build and test progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:32:00
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 64) $ true
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 65) $ true
+[94m[Bash][0m Check ASan build and test progress $ ps -eo etime,args | grep "clang++" | grep -v grep | cut -c1-40
+The sanitizer build is compiling the particle GPU test file now (about 75 seconds into it). Continuing to wait for the link and the sanitizer ctest.
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 66) $ true
+A new notice arrived from the clean Windows batch: `gpu_dx12=0`. I stopped that batch around 12:28, so I need to check when this line was written and what the run log says before relying on it.
+[94m[Bash][0m Verify the gpu_dx12 result: timestamps, log tail, and processes $ cmd.exe /c tasklist 2>/dev/null | grep -i "engine_tests\|us051"
+The DX12 GPU suite passed on the final tree: `All tests passed (43905 assertions in 71 test cases)`, written at 12:28:31 by the clean batch. That is the run I had thought was stalled. It took about four and a half minutes, not seconds, and it finished. My kill at 12:28:32 stopped the Vulkan step that followed, so Vulkan still has no result. I'm correcting the progress log and memory to match, then running Vulkan alone.
+[94m[Bash][0m Run the Vulkan GPU suite alone on the built binary $ date +%T
+Updating the progress log and memory to the verified facts: DX12 passes 71/71 on the final tree, and the earlier "stall" was a slow run that completed.
+[94m[Bash][0m Correct progress log and memory to the verified DX12 result $ Vulkan GPU, ASan, bench open\n") open(p2,'w',encoding='utf-8').write(t) print('memory ok') EOF
+[94m[Monitor][0m Vulkan GPU suite run result $ true
+[94m[Monitor][0m Vulkan GPU suite run result (re-arm) $ true
+[94m[Monitor][0m Vulkan GPU suite run result (re-arm 2) $ true
+[94m[Monitor][0m Vulkan GPU suite run result (re-arm 3) $ true
+[94m[Bash][0m Check Vulkan and ASan progress $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Users\\bucha\\AppData\\Local\\Temp\\cpu...
+[94m[Monitor][0m Vulkan GPU suite run result (re-arm 4) $ true
+[94m[Monitor][0m Vulkan GPU suite run result (re-arm 5) $ true
+The Vulkan GPU suite passes on the final tree: `gpu_vulkan=0`, `All tests passed (43917 assertions in 72 test cases)`. Remaining open gate is the ASan/UBSan chain on Linux.
+[94m[Monitor][0m ASan/UBSan gate chain result (re-arm 67) $ true
+[94m[Bash][0m Record the Vulkan pass in the progress log and memory $ native Linux GPU (no device in WSL).") open(p,'w',encoding='utf-8').write(s) print('memory ok') EOF ...
+Windows gates are all green. Only the Linux ASan/UBSan chain is still running (it's in the sanitizer build now).
+[94m[Monitor][0m ASan/UBSan chain result (wait) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 2) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 3) $ true
+[94m[Bash][0m Check ASan build progress $ ps -eo etime,args | grep -c "clang++"
+[94m[Monitor][0m ASan/UBSan chain result (wait 4) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 5) $ true
+[94m[Bash][0m Check ASan build progress $ ps -eo etime,args | grep "clang++" | grep -v grep | cut -c1-30
+[94m[Monitor][0m ASan/UBSan chain result (wait 6) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 7) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:33:17
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan chain result (wait 8) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 9) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 10) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:33:25
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan chain result (wait 11) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 12) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:33:30
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan chain result (wait 13) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 14) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:33:36
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan chain result (wait 15) $ true
+[94m[Monitor][0m ASan/UBSan chain result (wait 16) $ true
+[94m[Bash][0m Check ASan build progress $ tail -1 /tmp/us051_asan_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+12:33:43
+asan_configure=0 
+[4/5] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_particles_gpu_tests.cpp.o][0m
+[94m[Monitor][0m ASan/UBSan chain result (wait 17) $ true
+[94m[Bash][0m Check ASan build progress $ ps -eo etime,args | grep "clang++" | grep -v grep | cut -c1-30
+ASan build passes (`asan_build=0`, 0 warnings). The sanitizer ctest is next.
+[94m[Monitor][0m ASan/UBSan sanitize ctest result $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 2) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -3 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 3) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 4) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -3 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 5) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 6) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -3 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 7) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 8) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -3 /tmp/us051_asan_ctest.log 2>/dev/null
+The sanitizer unit test passes (1/22, 20 seconds). The integration cases are running now.
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 9) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 10) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 11) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 12) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 13) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 14) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 15) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 16) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 17) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 18) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 19) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 20) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 21) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 22) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 23) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 24) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 25) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 26) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 27) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 28) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 29) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 30) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 31) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 32) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 33) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 34) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 35) $ true
+[94m[Monitor][0m ASan/UBSan sanitize ctest result (wait 36) $ true
+[94m[Bash][0m Check sanitizer ctest progress $ tail -2 /tmp/us051_asan_ctest.log 2>/dev/null
+The ASan/UBSan chain is done: `asan_build=0`, `sanitize_ctest=0`. Confirming the test count and recording it:
+[94m[Bash][0m Confirm the sanitizer test count and record the final gate status $ head -5 /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-gpu-particles.md
+Every gate the tree can run now has a result, except one. The GCC job passed before I removed the diagnostics from the GPU test file, so the cleaned file hasn't been compiled by GCC yet. Running the GCC build and unit ctest on the final tree:
+[94m[Bash][0m Build and unit-test the final tree with GCC $ echo done >> /tmp/us051_gcc_final.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Final GCC build and unit ctest on the cleaned tree $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 2) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 3) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 4) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 5) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 6) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 7) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 8) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 9) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 10) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 11) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 12) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 13) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 14) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 15) $ true
+[94m[Bash][0m Check the final GCC build status and process $ ps -eo etime,args | grep -E "cmake --regenerate|cmake --build" | grep -v grep | cut -c1-50
+[94m[Monitor][0m Final GCC build and unit ctest (wait 16) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 17) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 18) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 19) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 20) $ true
+[94m[Bash][0m Check the final GCC build status $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Bash][0m Check the GCC build and that the deliverable files exist $ ls engine/render/src/particles.cpp engine/render/shaders/particles.hlsl tests/src/render_particles_g...
+The final GCC rebuild is still stuck in CMake's regenerate step, so I can't claim a GCC pass on the exact final tree. Correcting the progress log so it says exactly that:
+[94m[Bash][0m Record the exact GCC verification scope in the progress log $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p,encoding='utf-8',newline='').read() old="  - L...
+US-051 (GPU particles) is **Partial**. Every gate this environment can run passes on the final tree, except the GCC rebuild of the last cleanup edit and the native Linux GPU and benchmark runs. I did not mark it complete, and I did not emit the completion signal.
+
+**Implemented**
+- **Particle system** (`engine/render/src/particles.cpp`, `include/engine/render/particles.hpp`, `shaders/particles.hlsl`): emitters with lifetime, velocity cone, gravity, colour and size curves (8 keys), spawn radius, bounds, and seeded spawns. Compute emit and simulate, an atomic live counter, and an indirect draw of textured billboards.
+- **Blend and depth:** alpha and additive blend. Billboards test against the scene depth and do not write it.
+- **Budgets:** per-emitter capacity, a system particle budget, and an emitter count. Overflow is clamped to capacity and counted as dropped; the ring overwrites the oldest slots.
+- **Lifecycle:** pause, reset, and emitter removal. Removal destroys the emitter's five buffers and three descriptor sets.
+- **RHI:** a new `PipelineDesc::additive_blend` flag, implemented on DX12 and Vulkan, with contract tests.
+- **Docs:** `docs/particles.md`, and a progress-log entry with Codebase Patterns.
+
+**Choices I made (the PRD leaves these open)**
+- Textures are read with `Load`, because the RHI has no sampler descriptor.
+- Each emitter owns its own GPU buffers, so removal releases them directly.
+- The system can't be created on the CPU reference device, since it needs uploads. Budget, pause, reset, and deletion are tested on the GPU.
+- Reproducibility is checked within one backend. Two seeded runs must match byte for byte.
+
+**Verification (final tree unless noted)**
+
+| Gate | Result |
+|---|---|
+| Windows ValidateVendor, win-dev, win-debug, win-unit | pass (21/21 unit) |
+| Windows `engine_tests --suite gpu --backend dx12` | pass, 71 cases |
+| Windows `engine_tests --suite gpu --backend vulkan` | pass, 72 cases |
+| Linux clang debug build and unit ctest | pass (22/22) |
+| Linux ASan/UBSan build and sanitize ctest | pass (22/22, 0 build warnings) |
+| Linux GCC build and unit ctest | pass on the tree before my last cleanup; not rebuilt with the cleaned file |
+
+**Not verified**
+- **Linux GCC on the cleaned file.** The rebuild stalled in CMake's regenerate step when I stopped it. The only change since the passing run removed temporary diagnostics from the GPU test.
+- **`engine_bench --suite acceptance`.** No benchmark harness exists in the tree (US-074), so the PRD's 100 000-particle workload is not measured.
+- **Native Linux GPU.** WSL has no usable Vulkan device.
+
+**Problems I hit**
+- The GPU test file didn't compile under GCC or ASan because of an unused helper; that is fixed.
+- The DX12 suite took about 4.5 minutes on one run, and I first took that for a hang. Earlier stall reports came from overlapping GPU batches sharing the test binary; I killed some runs mid-flight. The clean runs pass.
+- The spawn kernel dropped newly spawned particles from the draw list. A test would have caught this; it is fixed.
+These notifications are stale monitor output repeating the earlier clean batch result, so nothing new. I'll check whether the GCC rebuild on the cleaned file has finished.
+[94m[Bash][0m Check whether the final GCC rebuild has finished $ tail -2 /tmp/us051_gcc_final_build.log 2>/dev/null
+Nothing new. The two notifications repeat the clean Windows batch result I already reported (ValidateVendor, configure, build, unit, and DX12 all pass).
+
+The one open item is still the GCC rebuild of the cleaned `render_particles_gpu_tests.cpp`. It has been stuck in CMake's regenerate step for several minutes, so I haven't confirmed it. Everything else in my last report stands, and US-051 is still **Partial**. The open items are:
+
+- The GCC rebuild on the final file.
+- The `engine_bench` acceptance run (no harness yet, US-074).
+- The native Linux GPU report (no device in WSL).
+[94m[Bash][0m Check the GCC rebuild status once more $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+The GCC rebuild on the cleaned file is still stuck in CMake's regenerate step, so it remains unverified. These notifications are stale repeats of the clean Windows batch result.
+
+US-051 stays **Partial**. Still open:
+- The GCC build and unit ctest on the final `render_particles_gpu_tests.cpp`. The last passing GCC run predates the diagnostic cleanup.
+- The `engine_bench` acceptance run (no harness yet, US-074).
+- The native Linux GPU report (no device in WSL).
+
+Everything else in my earlier report stands: CPU, Linux clang build and ctest, ASan/UBSan, Windows ValidateVendor and builds, and the DX12 (71 cases) and Vulkan (72 cases) GPU suites all pass on the final tree.
+This is another stale repeat of the clean Windows batch result. There is nothing new to act on.
+
+US-051 is still **Partial**. The GCC rebuild on the cleaned GPU test file is still unverified, and the `engine_bench` run and native Linux GPU report are still open. The rest of my earlier report stands.
+[94m[Bash][0m Check whether the GCC rebuild is still running $ ps -eo pid,etime,args | grep -E "cmake --build --preset linux-gcc" | grep -v grep | cut -c1-80
+The stale notification is the same clean Windows batch result. The GCC rebuild is still running (its CMake regenerate step has been going about 90 seconds), with no result yet.
+
+US-051 is still **Partial**. The GCC build and unit ctest on the cleaned GPU test file are unverified. The `engine_bench` run and the native Linux GPU report are still open. The rest of my earlier report stands.
+Another stale repeat of the clean Windows batch result, with nothing new in it.
+
+Status is unchanged: US-051 is **Partial**. The GCC build and unit ctest on the cleaned GPU test file are still unverified, and the `engine_bench` run and native Linux GPU report remain open. My earlier report covers the rest.
+Same stale repeat. Nothing has changed.
+
+US-051 is still **Partial**. The GCC check on the cleaned GPU test file is unverified, and the `engine_bench` and native Linux GPU items are still open.
+I'm not going to report on this again; the notification is the same stale Windows batch result. Several old monitors are still firing and I can't stop them from here, so the noise will continue until they expire.
+
+Status: US-051 is **Partial**. Open items:
+- GCC build and unit ctest on the cleaned GPU test file.
+- `engine_bench` acceptance run (no harness yet, US-074).
+- Native Linux GPU report (no device in WSL).
+[94m[ToolSearch][0m query: [93mselect:TaskStop[0m
+[94m[Bash][0m Check the GCC rebuild result and whether it is still running $ ps -eo etime,args | grep -E "cmake --build --preset linux-gcc" | grep -v grep | cut -c1-60
+The GCC regenerate step has finished and the build is running now. Waiting for its result.
+[94m[Monitor][0m Final GCC build and unit ctest on cleaned tree $ true
+[94m[Monitor][0m Final GCC build and unit ctest on cleaned tree (wait) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 2) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 3) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 4) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 5) $ true
+[94m[Bash][0m Check the GCC build progress and log tail $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+[94m[Monitor][0m Final GCC build and unit ctest (wait 6) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 7) $ true
+[94m[Monitor][0m Final GCC build and unit ctest (wait 8) $ true
+[94m[Bash][0m Check the GCC build progress $ tail -1 /tmp/us051_gcc_final_build.log 2>/dev/null
+The GCC build is still running and hasn't written a result yet. The last log line is "Completed 'engine_dxc_host'". The clean Windows batch notices are stale repeats.
+
+US-051 is still **Partial**. The GCC build and unit ctest on the cleaned GPU test file are the one item I can still check; the `engine_bench` run and native Linux GPU report remain open.
+The GCC build and unit ctest on the cleaned tree both returned 0. Checking the log for warnings and the test count before I record it:
+[94m[Bash][0m Verify GCC build warnings and ctest summary $ grep -E "tests passed|tests failed" /tmp/us051_gcc_final_ctest.log
+[94m[Bash][0m Record the final GCC pass in the progress log $ echo done
+US-051 (GPU particles) is still **Partial**, but every gate this environment can run now passes on the final tree.
+
+**Passing on the final tree**
+- Linux clang: debug build (0 warnings) and unit ctest, 22/22.
+- Linux GCC: debug build (0 warnings) and unit ctest, 22/22. This was the last open item; the rebuild finished after the CMake regenerate step.
+- Linux ASan/UBSan: build (0 warnings) and sanitize ctest, 22/22.
+- Windows: ValidateVendor, win-dev configure, win-debug build, win-unit.
+- Windows GPU: `engine_tests --suite gpu` passes on DX12 (71 cases) and Vulkan (72 cases), including the particle GPU tests.
+
+**Still open**
+- `engine_bench --suite acceptance`. There is no harness in the tree yet (US-074), so the PRD's 100 000-particle workload is not measured.
+- A native Linux GPU report. WSL has no usable Vulkan device.
+
+The progress log and project memory are updated with these results.

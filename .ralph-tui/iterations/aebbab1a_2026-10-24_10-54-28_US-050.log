@@ -1,0 +1,163 @@
+# Iteration 169 Log
+
+## Metadata
+
+- **Task ID**: US-050
+- **Task Title**: Large-World Coordinates
+- **Description**: As a player, I want stability far from the origin so that the open world does not jitter.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:54:28.469Z
+- **Ended At**: 2026-10-24T08:21:09.078Z
+- **Duration**: 26m 40s
+- **Input Tokens**: 306
+- **Output Tokens**: 57415
+- **Total Tokens**: 57721
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for US-050, and whether any large-world code already exists.
+[94m[Bash][0m Read progress log, PRD US-050, and search for existing rebasing code $ grep -rniE "large.?world|rebase|camera.relative|origin_shift|rebas" --include=*.hpp --include=*.cpp ...
+The renderer already converts to camera-relative floats, so the gap is origin rebasing. Next I'll read the scene, world, and streaming code that rebasing would have to touch.
+[94m[Bash][0m Survey scene, world, and test layout $ grep -n "world\|scene" tests/CMakeLists.txt | head -40
+[94m[Bash][0m Read transform, streaming, and scene graph headers $ grep -n "^## " docs/*.md | grep -i "world\|origin\|float"
+The renderer already computes camera-relative positions in `double`, and the scene graph stores `double` transforms. The remaining work is an explicit origin/rebasing layer, plus checking temporal history and streaming's camera input. I'll look at those call sites next.
+[94m[Bash][0m Find streaming camera input, picking, and temporal history $ sed -n 1,60p engine/world/include/engine/world/partition.hpp | grep -n "CellCoord\|cell_of\|struct\|...
+Streaming takes `glm::vec2` for the camera, so at 1e6 m its cell selection loses precision. That's a real gap for this story. I'll check the callers of that API and the snapshot extraction API before I design the change.
+[94m[Bash][0m Find callers of camera-position world APIs and extraction $ ls docs | head -80
+The precision gap is concrete: `cell_coord_at`, streaming's `update`, and the terrain LOD selection all take float camera positions. I'll read the terrain distance code, the render test setup I can reuse for a picking check, and the Windows gate notes.
+[94m[Bash][0m Read terrain distance, scene test setup, and Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md
+I have enough context to design the change. The plan is an explicit `WorldOrigin` layer in `engine_world` with a subscriber event, plus moving the world-space camera APIs to `double`. Before writing the picking/route test, I need the camera and golden-scene fixture types.
+[94m[Bash][0m Read camera, fixture, and pick APIs $ grep -n "position" engine/world/include/engine/world/partition.hpp | head -4
+I have the camera and picking APIs. Now I'll write the origin layer: a header with the shift event and `WorldOrigin`, then its implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/origin.hpp[0m "#pragma once
+
+// Large-world origin (US-050). Authored world positions are double (engine_scene's Transform), and they are never rewritten by a
+// rebase: an entity's world transform, its handle, and ... (3922 chars)"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/origin.hpp[0m edit: "values are float(world - origin), which keeps abou..." → "values are float(world - origin), whose spacing is..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/origin.hpp[0m edit: "inline constexpr double kDefaultRebaseDistance = 2..." → "inline constexpr double kDefaultRebaseDistance = 2..."
+Next, the implementation. `rebase_matrix` multiplies by a double-precision translation, so the rewritten matrix keeps the precision of the old one.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/origin.cpp[0m "#include "engine/world/origin.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <cmath>
+#include <utility>
+
+namespace engine::world {
+namespace {
+
+bool finite(... (2255 chars)"
+The origin layer is written. Now I'll move the world-space camera APIs to `double`, so a camera far from the origin keeps its cell and LOD decisions exact. I'll start with the call sites, then the function bodies.
+[94m[Bash][0m Switch world camera-position APIs to double precision $ grep -n "at_cell" -A3 tests/src/world_streaming_tests.cpp | head -8
+[94m[Bash][0m Update function bodies for double camera positions $ grep -n "partition.hpp\|cell_coord_at" engine/world/src/partition.cpp | head -3
+The first four edits landed; the fifth had three matches, not one. I'll keep `settle` taking the test's float cell position and convert it to `double` inside, then update all three call sites.
+[94m[Bash][0m Keep streaming test helper float input, convert to double $ ls | head -30
+Now I'll register the new source file, then read the snapshot item structure so the picking test can use it.
+[94m[Bash][0m Register origin sources and read snapshot item fields $ grep -n "struct RenderableRef" -A8 engine/render/include/engine/render/*.hpp | head -12
+The CMake registration is in place. Before writing the test, I need the snapshot's item accessor and the mesh helper signatures.
+[94m[Bash][0m Find snapshot item accessor and mesh helper signatures $ python3 - <<'EOF' p='engine/world/CMakeLists.txt' s=open(p).read() s=s.replace("# asynchronous strea...
+[94m[Bash][0m Check scene node creation and test tag conventions $ grep -n "world_matrix" tests/src/scene_graph_tests.cpp | head -2
+I have what I need for the tests. The file covers the origin contract, a physics-style test subscriber, the far-camera cell boundary, and a 20 km route across about ten rebases that checks transforms, handles, cells, and picking.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/world_origin_tests.cpp[0m "// Large-world origin (US-050) on the CPU: rebasing events, single-precision local positions far from the origin, rebased matrices, a
+// physics-style subscriber, and a 20 km route across rebasing bou... (11788 chars)"
+Before compiling, I re-read the test for float precision traps. Three checks are too tight for single-precision results: the `to_world` round trip, the 2 km camera-offset bound, and the local-position distance. I'll loosen them to tolerances that float rounding can actually meet, and move the second body onto the route.
+[94m[Bash][0m Tighten float tolerances and list CMake presets $ print([p['name'] for p in d['testPresets']])"
+That change notice is from my own scripted edit, so the file is in the state I intended. Next I'll run the Linux gates: vendor validation, configure, and the debug build, logging to files.
+[94m[Bash][0m Run vendor validation, configure, and debug build on Linux $ grep -c "warning:\|error:" /tmp/us050_build.log
+The build passed with zero warnings or errors. I'll confirm the new files were actually compiled, then run the full Linux unit suite.
+[94m[Bash][0m Run linux unit ctest and confirm origin tests ran $ ls build/linux-dev/tests/Debug 2>/dev/null | head -3
+[94m[Bash][0m Inspect failing ctest output $ grep -n "Test cases\|assertions" -B2 /tmp/us050_ctest.log | head -20
+The one failure is in `platform_x11_input_tests.cpp`, an X11 input test that has nothing to do with the origin code. I'll read its message to confirm it's environmental.
+[94m[Bash][0m Read the X11 test failure details $ grep -c "PASSED\|passed" /tmp/us050_ctest.log
+That is a real XTest pointer-motion check: the cursor moved by 6360 px during the run instead of the 3 px injected. It's a live-desktop race, not something this change touches. I'll rerun the integration test to confirm it's flaky, and run the origin tests directly.
+[94m[Bash][0m Rerun linux unit ctest and origin tests directly $ ./build/linux-dev/tests/Debug/engine_tests "A 20 km route across rebasing boundaries keeps transform...
+The rerun passed (`ctest=0`), so the X11 failure was a flaky live-pointer race. Next I'll confirm the origin cases are in the unit suite and that the suite passes.
+[94m[Bash][0m Run unit suite directly and check summary $ grep -rl "origin" build/linux-dev/tests/CMakeFiles 2>/dev/null | head -2
+All 629 unit test cases pass, including the new origin file. Next are the GCC and sanitizer gates, since GCC rejects some constructs Clang accepts and the story touches world and streaming code.
+[94m[Bash][0m Run linux-gcc configure, build, and unit ctest $ tail -4 /tmp/us050_gcc_ctest.log
+[94m[Bash][0m Show the GCC build error $ tail -3 /tmp/us050_gcc_build.log
+GCC's `-Werror=missing-field-initializers` rejects partial designated initializers. I'll set the fields explicitly in the two places I used them.
+[94m[Bash][0m Fix designated initializers and rerun GCC build and tests $ grep -n "FAILED\|Failed" /tmp/us050_gcc_ctest.log | head -5
+GCC is clean now. Next are the AddressSanitizer and UBSan gates: the sanitizer build, then the sanitizer test preset.
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitize tests $ grep -n "FAILED\|Failed\|runtime error\|ERROR: AddressSanitizer" /tmp/us050_asan_ctest.log | head -5
+The sanitizer gates pass. Before the Windows gates, I'll check for a gate batch already running and reuse the vcvars path from an earlier batch in the Temp directory.
+[94m[Bash][0m Check running gate batches and reuse prior batch template $ [ -n "$f" ] && cat "$f" | tr -d '\r' | head -30
+No batch is running. I'll write the Windows gate batch from the same template, with CRLF endings, and start it in the background.
+[94m[Bash][0m Write Windows gate batch file with CRLF endings $ cat > $T/us050_gates.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual Studio\18\Communi...
+[94m[Bash][0m Launch Windows gate batch in background $ pgrep -fa us050_gates | head -2
+While the Windows gates run, I'll write the design doc. I won't touch source files until the run finishes, so its results stay valid.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/large-world.md[0m "# Large-World Coordinates
+
+The precision model for worlds far from the origin (US-050). The code is in `engine/world/include/engine/world/origin.hpp`, and the camera-relative render path is in `engine... (3919 chars)"
+The doc is written. I'll check on the Windows batch now.
+[94m[Bash][0m Check Windows gate progress $ pgrep -f us050_gates.bat >/dev/null && echo running
+The batch is still running. Meanwhile I'll look at the top of the progress log so I can add the reusable pattern to its Codebase Patterns section.
+[94m[Bash][0m Locate Codebase Patterns section in progress log $ sed -n 1,3p .ralph-tui/progress.md | cut -c1-200
+[94m[Bash][0m Add reusable patterns to Codebase Patterns section $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() anchor="## Codebase Patterns (Study Th...
+[94m[Bash][0m Poll Windows gate progress $ pgrep -f us050_gates.bat >/dev/null && echo running || echo finished
+
+[91m[Error: <tool_use_error>Blocked: sleep 120 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us050_rc.txt pgrep -f us050_gates.bat echo running echo finished. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+Foreground sleeps are blocked, so I'll load the Monitor tool and use an until-loop to wait for the batch to finish.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Windows gate batch completion and step codes $ echo GATES_DONE
+The Windows gate batch is running in the background. I'll report back when it finishes.
+
+Status so far:
+
+- **Linux, verified:**
+  - `ValidateVendor` passes.
+  - `linux-dev` configure and `linux-debug` build pass with zero warnings.
+  - `linux-unit` passes on a rerun. The first run failed one X11 pointer-motion check (6360 px instead of 3). That is a live-desktop race, not this change, and it passed on the next run.
+  - `linux-gcc` configure, build, and `linux-gcc-unit` pass.
+  - `linux-asan` build and `linux-sanitize` pass.
+- **Windows:** the gate batch (`ValidateVendor`, `win-dev`, `win-debug` build, `win-unit`) is running. Its result file will be `us050_rc.txt` in the Temp directory.
+- **Not run:** the GPU suites (no GPU path changed), and `engine_bench --suite acceptance` (no harness; US-074 is not in the tree).
+
+What I implemented:
+
+- `engine/world/origin.hpp` and `src/origin.cpp`: `WorldOrigin`, which rebases the origin to the camera past 2048 m. Subscribers receive an `OriginShift`. `rebase_local` and `rebase_matrix` rewrite float state kept across frames.
+- `cell_coord_at`, `StreamingManager::update`, `tile_distance`, and `select_terrain_lods` now take `glm::dvec2` camera positions. A float camera at 1e6 m could land in the wrong cell.
+- `tests/src/world_origin_tests.cpp`, six `[unit]` cases: rebase thresholds, subscriber order and delta, far-field precision, rebased matrices, a physics-style subscriber, far-camera cell boundaries, and a 20 km route with about ten rebases that checks transforms, handles, cells, and picking.
+- `docs/large-world.md` and progress-log entries.
+
+Choices I made that you may want to change:
+
+- Rebasing never rewrites authored transforms. The origin is only an anchor for float state, so handles and pick ids are stable by construction.
+- The renderer needs no rebase, since it is already camera-relative in `double`. That keeps the GPU path unchanged.
+- Physics is not wired yet. The subscriber contract is proven with a test subscriber, and the real adapter belongs to US-052 and US-053.
+[94m[ReportFindings][0m
+Windows gates are still running. I'll report their result when the batch finishes.
+All four Windows gate steps returned 0. I'll check the build and test logs for warnings and the test summary before reporting.
+[94m[Bash][0m Check Windows build warnings and ctest summary $ tr -d '\r' < us050_ctest.log | tail -3
+US-050 is implemented, and every Linux and Windows gate that applies to this change passes. Two gates were not run: the GPU suites and `engine_bench`, because no GPU path changed and the benchmark harness (US-074) is not in the tree.
+
+**Windows gates** (MSVC, `win-dev` / `win-debug`):
+- `ValidateVendor`: 0.
+- `win-dev` configure: 0.
+- `win-debug` build: 0, with zero warnings in the log.
+- `win-unit` ctest: 21/21 passed.
+
+**Linux gates:**
+- `ValidateVendor`, `linux-dev` configure, and `linux-debug` build: all pass, with zero warnings.
+- `linux-unit` ctest: passed on a rerun. The first run had one failure in `platform_x11_input_tests.cpp`: an XTest pointer-motion check saw 6360 px instead of 3. That is a live-desktop race and unrelated to this change, and it passed on the next run.
+- `linux-gcc` configure, build, and `linux-gcc-unit`: pass.
+- `linux-asan` build and `linux-sanitize` ctest: pass.
+
+**What changed:**
+- **Origin rebasing:** `engine/world/origin.hpp` and `src/origin.cpp` add `WorldOrigin`. Past 2048 m from the origin, it moves the origin to the camera and notifies subscribers with an `OriginShift`. `rebase_local` and `rebase_matrix` rewrite single-precision state kept across frames.
+- **Double-precision camera positions:** `cell_coord_at`, `StreamingManager::update`, `tile_distance`, and `select_terrain_lods` now take `glm::dvec2`. At 1e6 m a float camera can land in the wrong cell.
+- **Tests:** `tests/src/world_origin_tests.cpp` adds six `[unit]` cases. They cover the rebase threshold, subscriber order and delta, far-field precision, rebased matrices, a physics-style subscriber, far-camera cell boundaries, and a 20 km route with about ten rebases. The route checks authored transforms, entity handles, cells, and picking.
+- **Docs and logs:** `docs/large-world.md` is new, and `.ralph-tui/progress.md` has the story entry and two patterns.
+
+**Choices you may want to change:**
+- Rebasing never rewrites authored transforms, so handles and pick ids stay stable by construction. The origin only anchors float state.
+- The renderer needs no rebase. It is already camera-relative in `double`, and its previous-frame matrices are relative to the previous camera, so the GPU path is unchanged.
+- Physics is not wired yet. The subscriber contract is proven with a test subscriber; the real physics adapter belongs to US-052 and its queries to US-053.
+
+I did not run `engine_tests --suite gpu` on either backend, and I did not run `engine_bench`. Under the PRD's conditional wording, both are recorded as not run, not as passed.

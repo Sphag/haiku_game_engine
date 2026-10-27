@@ -1,0 +1,137 @@
+# Iteration 1083 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:44:07.427Z
+- **Ended At**: 2026-10-26T21:00:13.637Z
+- **Duration**: 16m 6s
+- **Input Tokens**: 254
+- **Output Tokens**: 25521
+- **Total Tokens**: 25775
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark work.
+[94m[Bash][0m Read progress tail and bench artifacts $ ls benchmarks 2>/dev/null
+The log says the next concrete step is a Windows Release capture of `render_stress` to find the frame-time cause. I'll check how Windows runs are driven from WSL and what the bench binary accepts.
+[94m[Bash][0m Read Windows run notes and bench tool layout $ ls tools/benchmark/src
+[94m[Bash][0m Summarize the render_stress report structure $ grep -n "gpu\|cpu" tools/benchmark/src/render_stress.cpp | head -40
+The report shows the cause is CPU-side: CPU frame p50 is 29.7 ms while GPU p50 is 3.3 ms. I'll read the frame loop to find what costs the CPU time.
+[94m[Bash][0m Read render_stress frame loop $ sed -n 440,520p tools/benchmark/src/render_stress.cpp
+The per-frame CPU work is `extract_frame` plus `renderer->render`. I'll check how many instances the scene holds and what `extract_frame` does per frame.
+[94m[Bash][0m Locate extract_frame and instance counts $ grep -n "instances\|count" tools/benchmark/src/render_stress.cpp | head -30
+[94m[Bash][0m Read extract_frame implementation $ sed -n 1,140p engine/render/src/frame_snapshot.cpp
+`extract_frame` is linear over the renderables and looks cheap. Next I'll check the scene size from the report and see where `render()` blocks on the CPU.
+[94m[Bash][0m Print render_stress workload and counters $ grep -n "wait\|fence\|Fence" engine/render/src/scene_renderer.cpp | head -30
+[94m[Bash][0m Read the readback and wait section of render $ grep -n "wait_idle\|\.wait(\|wait_for\|readback" engine/render/src/scene_renderer.cpp | head -30
+The renderer reads four full-resolution targets back to the CPU on every frame, with fresh zeroed vectors, and it waits for the GPU each time. That is a plausible cause of the ~30 ms CPU time. I'll confirm what the readback feeds and whether a switch exists to turn it off.
+[94m[Bash][0m Trace what the readback bytes feed $ find engine/render -name "scene_renderer.hpp"
+The CPU readback path is `render()` filling `image_` with a per-pixel copy loop. I'll read that loop and the header contract for `image()` before deciding on a change.
+[94m[Bash][0m Read per-pixel copy loop and image() users $ grep -rn "image()" tools engine tests --include=*.cpp | grep -v "^engine/render/src/scene_renderer.c...
+`render()` always does a full-frame CPU readback and a per-pixel copy, even when nothing reads `image()`. I'll check whether the bench CLI can run a short duration and how `read_buffer` synchronises, so I can measure before and after.
+[94m[Bash][0m Check bench CLI options, presets, and read_buffer sync $ grep -rn "RhiStatus.*read_buffer\|read_buffer(" engine/rhi/src/dx12/*.cpp | head -3
+[94m[Bash][0m Read DX12 read_buffer and renderer setters $ grep -n "set_\|void " engine/render/include/engine/render/scene_renderer.hpp | head -30
+The counts readbacks are non-blocking, so the per-frame cost is the full-frame copy. My hypothesis: about 80 MB of zeroed and copied buffers plus a 2-million-pixel loop per frame accounts for the ~26 ms CPU gap. The fix is an opt-out readback switch that the benchmark turns off for timed frames, and I'll verify by measurement. First I'll find the member declarations and the frame-history fields.
+[94m[Bash][0m Locate member declarations for the readback flag $ sed -n 416,424p engine/render/include/engine/render/scene_renderer.hpp
+I'll make the change in three parts: a setter and member in the header, a guard around the two readback sections in `render()`, and the benchmark turning readback off for timed frames.
+[94m[Bash][0m Add opt-out readback flag and guard the copies $ j = c.index(end_b, i) block_b = c[i:j] new_b = "    if (readback_enabled_) {\n" + "".join(("    " + ...
+The guard split the readback block across two `if` statements, and the image copy needs `w`, `h`, and the pitch variables from the first one. I'll fold the copy into the first guard so they stay in scope.
+[94m[Bash][0m Merge the image copy into the readback guard $ \n") # the first guard's closing brace is the "    }\n" just before the IndirectStats line brace = c...
+The copy now sits under one guard with its variables in scope. Next, the benchmark turns readback off for timed frames and keeps it on only for the start-frame screenshot.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/render_stress.cpp[0m edit: "        const auto status = built.renderer->render..." → "        // A game never reads the frame back, so t..."
+Before the Windows run, I'll compile the change on Linux to catch errors quickly.
+[94m[Bash][0m Build engine_bench on Linux dev preset $ timeout 580 cmake --build build/linux-dev --target engine_bench -j8 2>&1 | tail -15
+The Linux Debug build compiles. Next I'll check whether the acceptance suite lets me shorten the run for a quick diagnostic. A short run would be diagnostic only, not a report.
+[94m[Bash][0m Check whether timing flags override the acceptance contract $ grep -n "warmup\|duration\|repeats" tools/benchmark/src/cli.cpp tools/benchmark/src/main.cpp | sed -...
+The acceptance suite is the only one that runs `render_stress`, so the diagnostic has to use the full contract timing. I'll reuse the vcvars path and conventions from the existing Windows gate batch, check that no batch is running, then build the Release bench.
+[94m[Bash][0m Read existing gate batch and check running jobs $ grep -n '"name": "win-release"' -A8 CMakePresets.json | head -12
+The `win-release` build preset shares the `win-dev` tree, so the binary lands in `build/win-dev/tools/benchmark/Release`. I'll write the batch, launch the Release build and the DX12 acceptance run in the background, and log exit codes to a file.
+[94m[Bash][0m Launch Windows Release build and DX12 acceptance run $ echo launched
+The build and the 84-minute acceptance run are going in the background. I'll wait for the build result first, since a failed build would make the run use an old binary.
+[94m[Bash][0m Wait for the Windows Release build result $ grep -c "error" /mnt/c/Users/bucha/AppData/Local/Temp/us080_rel_build.log 2>/dev/null
+The build succeeded and the background wrapper exited. The bench itself may still be running, so I'll check the bench log and the process before reading anything into that notification.
+[94m[Bash][0m Check whether the acceptance bench is running $ pgrep -fa "engine_bench|us080_rel" | grep -v pgrep | head -3
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us080_rel_rc.txt echo ... tail -c 800 /mnt/c/Users/bucha/AppData/Local/Temp/us080_rel_bench.log echo pgrep -fa "engine_bench|us080_rel" grep -v pgrep head -3. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check bench result file and running processes $ pgrep -fa "engine_bench|us080_rel" | grep -v pgrep | head -3
+The Release build passed and the 24-run acceptance bench is now running (about 84 minutes). I'll run a background watcher that notifies me when the bench exit code is written, instead of polling.
+[94m[Bash][0m Wait for the acceptance bench exit code $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us080_rel_rc.txt
+While the bench runs, I'll record this iteration's finding in the progress log so it survives a context reset.
+[94m[Bash][0m Append progress entry for this iteration $ rc in Temp `us080_rel_rc.txt`). - Still open: Vulkan and Linux acceptance runs, the physics/streamin...
+[94m[Bash][0m Wait for the acceptance bench exit code $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us080_rel_rc.txt
+The acceptance run is still going, and my background watcher will re-invoke me when it finishes. Nothing else can usefully proceed until its numbers are in, so I'm stopping here for now.
+
+**Status: US-080 is not complete, and no COMPLETE signal is due yet.**
+
+**What changed this iteration**
+- **Cause found:** the `render_stress` CPU frame p50 is 29.7 ms against a GPU pass sum of 3.3 ms, so the budget miss is CPU-side. The cost is in `SceneRenderer::render()`. Every frame it reads back four full-size targets (about 40 MB), allocates them zeroed, and runs a per-pixel copy loop into `image_`, even though a game never reads that copy.
+- **Fix:** `SceneRenderer::set_readback(bool)` in `engine/render/include/engine/render/scene_renderer.hpp`, default on so tests and the editor keep `image()`. `render_stress` (`tools/benchmark/src/render_stress.cpp`) turns it off for timed frames and keeps it on only for the start-frame screenshot. The indirect and meshlet counter readbacks still run.
+- **Verified:** the Linux Debug `engine_bench` build compiles. The Windows Release `engine_bench` build passes (`cfg=0`, `build=0`).
+- **Running:** `engine_bench --suite acceptance --backend dx12 --output artifacts/bench/us080-dx12-readback-off` on the RTX 5080 (roughly 84 minutes). I'll get the exit code from `us080_rel_rc.txt` in Temp. I haven't measured the effect yet, so the fix is a hypothesis until this run reports.
+- **Progress log:** this iteration's entry is in `.ralph-tui/progress.md`.
+
+**Still open, and why US-080 can't be signed off yet**
+- The DX12 frame budget is unverified until the run reports.
+- Vulkan on Windows and native Linux/Vulkan have no acceptance runs. `/dev/dri` is absent here, so there is no native Linux GPU.
+- The physics, streaming, and `all_features` workloads are still `implementation: none` in the manifest, so their 18 acceptance entries are missing.
+- Residency isn't measured. `full_1080` needs FSR 2 permutation headers that the tree lacks.
+- `linux-gcc*` needs GCC 11+ or clang 14+. The host has g++ 9.4 and clang 10.
+
+The readback change is a benchmark-path change that doesn't alter the contract, settings, or workload. If the run shows the readback was not the cost, I'll profile the remaining CPU time rather than touch thresholds.
+[94m[Bash][0m Read bench exit code and log tail $ ls artifacts/bench/us080-dx12-readback-off 2>/dev/null
+[94m[Bash][0m Summarize render_stress results from the new run $ print(run['profile'],run['repeat'],run['status'],'cpu p50 %.2f p99 %.2f'%(c.get('p50',0),c.get('p99'...
+
+[91m[Error: Exit code 1
+Traceback (most recent call last):
+  File "<string>", line 8, in <module>
+AttributeError: 'NoneType' object has no attribute 'get'
+{'failed': 0, 'incomplete': 6, 'missing': 15, 'passed': 3, 'unsupported': 0}][0m
+[94m[Bash][0m Summarize render_stress runs from the new report $ or {}     print(run['profile'],run['repeat'],run['status'],'cpu p50',c.get('p50'),'p99',c.get('p99')...
+The new run did not measure `render_stress` at all: those six entries are `incomplete` because I omitted `--path`, which the suite requires. The 3 passes are headless physics diagnostics only. I'll check how `--path` is validated before rerunning.
+[94m[Bash][0m Check --path validation in bench CLI $ grep -n "render_stress" tools/benchmark/src/main.cpp | head
+The bench exit code 3 means incomplete, which matches the missing render path. I'll rerun the DX12 acceptance suite with `--path meshlets`, the path the earlier report measured, and keep the same logging.
+[94m[Bash][0m Relaunch DX12 acceptance run with meshlets path $ echo launched
+[94m[Bash][0m Wait for the meshlets acceptance run to finish $ tail -n 3 /mnt/c/Users/bucha/AppData/Local/Temp/us080_run2_bench.log
+The first acceptance run did not measure `render_stress`. I've relaunched it with `--path meshlets`, and it's running in the background, which will take roughly 84 minutes.
+
+**Where things stand**
+- **Run 1** (`artifacts/bench/us080-dx12-readback-off`): exit code 3, incomplete. All six `render_stress` entries were marked incomplete because I omitted `--path`, so the readback fix is still unmeasured. The three passes were headless physics diagnostics only. Physics visual, streaming, and `all_features` are missing, as before.
+- **Run 2** (`artifacts/bench/us080-dx12-meshlets-readback-off`): same acceptance contract, with `--path meshlets`. Its exit code will land in `us080_run2_rc.txt` in the Windows Temp folder. I'll compare its `render_stress` CPU p50 and p99 against the earlier 29.7 ms and 42.4 ms, and check the raw data.
+
+**Still open for US-080:** the Vulkan and native Linux acceptance runs, the physics visual, streaming, and `all_features` workloads, residency measurement, FSR 2 permutations, and `linux-gcc*`. No COMPLETE signal yet.
+[94m[Bash][0m Read run 2 exit code and render_stress results $ or {}     print(run['profile'],run['repeat'],run['status'],'cpu p50',c.get('p50'),'p99',c.get('p99')...
+The readback change cut the CPU frame time roughly in half, but `render_stress` still misses the 60 FPS budget. I'll record the result in the progress log.
+[94m[Bash][0m Append run 2 results to progress log $ repeat 1 is incomplete because features are unwired. Residency is not measured. - full_1080 is unsup...
+The readback change halved the CPU frame time, but `render_stress` still misses the 60 FPS budget, and US-080 is not complete.
+
+**Measured on the RTX 5080, DX12, Release, full contract timing (`us080-dx12-meshlets-readback-off`):**
+
+| | Before | After |
+|---|---|---|
+| CPU frame p50 | 29.7 ms | 14.5–15.0 ms |
+| CPU frame p99 | 42.4 ms | 16.4–17.1 ms |
+| GPU p99 | 11.5 ms | 4.5–4.9 ms |
+
+- Repeats 2 and 3 fail the frame budget: p99 is about 16.9 ms against 16.67 ms.
+- Repeat 1 is marked incomplete. Its reason is that skinned characters, GPU particles, volumetric fog, and baked probe GI aren't wired into `render_stress`.
+- Residency is not measured, so the residency check can't pass yet.
+- `full_1080` is unsupported because the FSR 2 permutation headers are missing.
+- Physics visual, streaming, and `all_features` are still unimplemented.
+
+The first run had omitted `--path`, so its `render_stress` entries were incomplete. The results above come from the second run.
+
+**Still open:**
+- About 15 ms of CPU per frame is unprofiled. The next suspects are the extract over 20,000 renderables and the render submission. Finding it needs a profile on the Windows host.
+- Wiring residency measurement and the unimplemented features into `render_stress`.
+- The Vulkan, Windows, and native Linux acceptance runs.
+- FSR 2 permutations and `linux-gcc*` (needs GCC 11+ or clang 14+).
+
+I logged this in `.ralph-tui/progress.md`. No COMPLETE signal.

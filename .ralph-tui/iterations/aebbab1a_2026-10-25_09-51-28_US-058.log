@@ -1,0 +1,47 @@
+# Iteration 494 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T06:51:28.783Z
+- **Ended At**: 2026-10-25T06:56:36.515Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 44
+- **Output Tokens**: 3458
+- **Total Tokens**: 3502
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-058 work already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout, UI directory, and progress log $ grep -n "US-058" -r --include=*.md . | head -30
+The previous pass left US-058 at Partial, with the Linux GCC gate blocked and no running-app check. I'll confirm the tree matches that record, check the test coverage, and rerun the Linux gates.
+[94m[Bash][0m Check tree changes, UI tests, and overlay API $ grep -n "set_overlay\|overlay" engine/render/include/engine/render/*.hpp | head
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -n 4 /tmp/us058_unit.log
+[94m[Bash][0m Summarize unit test results $ grep -n "TEST_CASE" tests/src/ui_interaction_tests.cpp tests/src/ui_text_tests.cpp | wc -l
+Linux gates are green on the current tree. I'll check whether a GCC 11+ toolchain has appeared since the last record, since that is the one open gate that could change.
+[94m[Bash][0m List installed g++ compilers $ which g++ && g++ --version | head -1
+Nothing has changed since the last recorded Windows pass, so those results still stand. I'll log this verification pass in the progress file.
+[94m[Bash][0m Append verification entry to progress log $ the running-application UI check with screenshots. --- EOF tail -n 3 .ralph-tui/progress.md
+US-058 is still Partial, so I'm not signalling COMPLETE. The implementation was already in the tree; this pass only re-verified it and logged the result.
+
+**Passing on the current tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: passes.
+- `cmake --build --preset linux-debug`: passes with 0 warnings or errors.
+- `ctest --preset linux-unit`: 22 of 22 pass, including the UI layout, text, interaction, and Lua callback tests.
+
+No source file under `engine/`, `tests/` or `cmake/` has changed since the last recorded Windows pass, so those results still stand: all four Windows gates passed, and the unit suite was 21 of 21.
+
+**Still open:**
+- **`linux-gcc` gate:** the machine has only GCC 9.4, and Jolt needs GCC 11+. This needs you to install GCC 11+ before the gate can run.
+- **Composition check:** `PostProcessor::set_overlay` is not exercised by a running application or a GPU fixture, because no application host calls it yet.
+- **Running-application check:** no window or GUI run has happened, so there are no screenshots or action log.
+
+I appended this pass to `.ralph-tui/progress.md`. I did not run `linux-asan` or the Windows gates again, since the tree is unchanged from the last recorded runs.

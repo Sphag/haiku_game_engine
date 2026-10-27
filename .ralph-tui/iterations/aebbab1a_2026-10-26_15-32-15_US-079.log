@@ -1,0 +1,62 @@
+# Iteration 902 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:32:15.357Z
+- **Ended At**: 2026-10-26T12:39:47.160Z
+- **Duration**: 7m 31s
+- **Input Tokens**: 86
+- **Output Tokens**: 7498
+- **Total Tokens**: 7584
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the all-features scene work.
+[94m[Bash][0m Inspect repo layout, progress log, and all_features references $ ls && tail -n 120 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp ...
+The log shows 16 prior status checks with no code change and the same open items. Repeating another status check won't move the story, so I'll look for one open item I can actually close here, starting with the package relaunch.
+[94m[Bash][0m Read the all_features tests and build_game entry points $ sed -n 1,60p tests/src/all_features_tests.cpp && echo ---- && sed -n 60,200p tests/src/all_features_...
+The editor test packages the project but never launches the output. I'll check what the package contains and whether a runtime can start from it.
+[94m[Bash][0m Read rest of editor test and the distribution API $ sed -n 200,260p tests/src/all_features_editor_tests.cpp && echo ---- && cat engine/editor/include/en...
+Build Game's verify step launches a copy before publishing, so the relaunch exists, but the published folder itself is never launched. I'll check the verify code to confirm what it launches.
+[94m[Bash][0m Find verify and launch logic in distribution.cpp $ grep -n "verify\|Verify\|launch\|clean" engine/editor/src/distribution.cpp | head -60
+[94m[Bash][0m Read publish step and runtime launch helper $ sed -n 395,475p engine/editor/src/distribution.cpp && grep -n "run_runtime" -A25 engine/editor/src/d...
+The published folder is never launched; only the staged copy is. I can close that gap in the editor test by relaunching the published package with its launcher. I'll check what the launcher does first.
+[94m[Bash][0m Read launcher text and test includes $ grep -n "kStartScene\|kFixedStep" tests/src/all_features_editor_tests.cpp | head -3
+The launcher is a plain script that starts the runtime from the package folder. I'll add a relaunch of the published folder through that launcher to the editor test and check the started-scene line.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_editor_tests.cpp[0m edit: "    CHECK_FALSE(fs::exists(root / "output" / "AllF..." → "    CHECK_FALSE(fs::exists(root / "output" / "AllF..."
+I used `value_or` and `engine::core::read_text_file` without checking they exist. I'll match the pattern in distribution.cpp and add the missing includes.
+[94m[Bash][0m Check read_text_file and Result API for the relaunch check $ grep -n "fs::copy\|std::ofstream" tests/src/all_features_editor_tests.cpp | head -2
+[94m[Bash][0m Rebuild Linux debug and run integration suite $ find / -name engine_tests -type f 2>/dev/null | grep -v proc | head -3
+The file-changed note comes from my own scripted edit, but I'll confirm the current content before building. I'll also run the build and the integration suite from the correct output path.
+[94m[Bash][0m Verify edited test content, build, and run editor and integration suites $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -3
+Both suites pass with the relaunch check included. I'll record this step in the progress log, following the existing format.
+[94m[Bash][0m Append progress log entry for this session $ `linux-gcc*` and sanitizer presets. - Learnings:   - `build_game`'s verify step launches a copy in `...
+US-079 is not complete, so I'm not emitting the completion signal. This session closed one open item: the editor scenario now relaunches the published package.
+
+**What changed**
+- `tests/src/all_features_editor_tests.cpp`: after Build Game publishes `output/AllFeatures`, the test runs that folder's own launcher (`run_game.sh` on Linux, `run_game.bat` on Windows). It checks that the log reports `game_runtime: started scene <start scene>`. Before this, only the verify copy in `build/verify` was ever launched.
+- `.ralph-tui/progress.md`: appended a log entry for this step.
+
+**Verified on Linux (linux-debug, clang 10)**
+- Build exit 0, with no `warning:` lines.
+- `engine_tests --suite editor`: 106/106 cases passed.
+- `engine_tests --suite integration`: 131 passed, 4 skipped (X11), 0 failed.
+
+**Not verified**
+- The Windows `run_game.bat` path is compiled but not executed. The Windows gates were not rerun for this change.
+
+**Still open (unchanged from the earlier status checks)**
+- Automated tour runner with screenshots and an action log. No tour code exists yet.
+- GI/RT/upscale profiles and forced indirect/meshlet paths for `all_features`. The manifest entry is `implementation: none`, and FSR 2 cannot link because its `*_permutations.h` headers are missing.
+- `engine_bench --suite acceptance` for `all_features`, which has no runner.
+- GUI checks, native Linux Vulkan GPU suite, and `linux-gcc*` / sanitizer presets. This host has GCC 9.4 only and no `/dev/dri` device.
+
+The remaining items need a decision on the FSR 2 vendoring route, a defined `all_features` GPU route, and a Windows GPU session. Repeating status checks won't close them.

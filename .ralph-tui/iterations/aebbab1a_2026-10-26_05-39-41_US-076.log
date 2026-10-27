@@ -1,0 +1,42 @@
+# Iteration 776 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:39:41.961Z
+- **Ended At**: 2026-10-26T02:40:03.450Z
+- **Duration**: 21s
+- **Input Tokens**: 26
+- **Output Tokens**: 2698
+- **Total Tokens**: 2724
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the render benchmark code.
+[94m[Bash][0m Read progress log and benchmark sources $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -150
+The log shows 25 earlier passes on this story, all blocked on the same user decision. I'll check whether anything has changed since the last pass before deciding what to do.
+[94m[Bash][0m Check file mtimes and recent bench artifacts $ find . -newer tasks/prd-open-world-engine.md -path ./.git -prune -o -type f -newer .ralph-tui/progre...
+[94m[Bash][0m Append status note to progress log $ native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal. --- EOF tail -3 .ralph-tui/prog...
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing in the tree has changed since the last pass, and the remaining blockers need your decision.
+
+**What's blocking it**
+
+1. **Triangle floor and frame budget.** The acceptance route starts at 312,068 submitted triangles on the indexed path, against a contract minimum of 2,000,000. The measured p99 frame time is 35–47 ms, against a 16.7 ms budget. The cause is instance placement, which the seeded generator and the pinned camera route both fix. Changing either means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. PRD line 722 says changing the contract requires a separate user decision, so I haven't made that change. Options:
+   - Approve a placement change, and I'll make it, regenerate the expected file, and rerun the measurements.
+   - Reject it, and the failing measured run stands as the result for this story.
+2. **`full_1080` profile.** It is unsupported until the vendored FSR 2 shader permutation headers exist. Vendoring them is your choice of route.
+3. **Native Linux Vulkan GPU run and `linux-gcc`.** Neither has run here. WSL has no Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What is verified**
+
+- On the last full check (status pass 23), `linux-debug` builds, `linux-unit` passes 30/30, and `engine_workload --check` matches all 4 scenes.
+- The indexed, indirect, meshlet, and no-mesh-shader runs exist as artifacts under `artifacts/bench/us076-*`.
+
+I appended a status note to `.ralph-tui/progress.md`. The file is now full of near-identical "blocked" entries, so consider trimming it once the decision is made.

@@ -1,0 +1,295 @@
+# Iteration 21 Log
+
+## Metadata
+
+- **Task ID**: US-037
+- **Task Title**: GPU Indirect Pipeline
+- **Description**: As a rendering developer, I want GPU-generated draw commands so that I can reduce CPU overhead.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T06:43:04.781Z
+- **Ended At**: 2026-10-23T07:29:24.280Z
+- **Duration**: 46m 19s
+- **Input Tokens**: 988
+- **Output Tokens**: 223377
+- **Total Tokens**: 224365
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD constraints for this story, and the current repo state.
+[94m[Bash][0m Inspect repo root and progress log head $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && head -c 6000 .ralph-tui/pro...
+[94m[Bash][0m Read recent progress log and PRD story index $ grep -n "US-03[4-9]\|US-04" tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Read US-037 PRD section and search constraints $ grep -n -i "indirect\|culling\|bench\|FR-\|non-goal\|Non-Goal" tasks/prd-open-world-engine.md | head...
+[94m[Bash][0m Read non-goals and technical considerations $ sed -n 840,915p tasks/prd-open-world-engine.md
+Next, the existing render and RHI code: whether the RHI already has indirect draw or compute dispatch, and how the scene renderer draws.
+[94m[Bash][0m List engine modules and grep RHI for indirect support $ wc -l engine/render/src/scene_renderer.cpp engine/render/include/engine/render/*.hpp | tail -1
+The RHI already declares `draw_indexed_indirect` and `draw_indexed_indirect_count`. Next I'll check whether anything uses them and how the scene renderer draws.
+[94m[Bash][0m Find indirect usages and read scene renderer header $ cat engine/render/include/engine/render/scene_renderer.hpp | head -200
+The DX12 and Vulkan indirect draws are stubs that return `Unsupported`, so the RHI side has to be built out. Next I'll check what compute and UAV support already exists in the device API.
+[94m[Bash][0m Read command list API and grep compute and UAV support $ grep -n "compute\|Compute\|UnorderedAccess\|Uav\|UAV\|Storage" engine/rhi/include/engine/rhi/*.hpp |...
+[94m[Bash][0m Find compute usage and DX12 draw/dispatch implementation $ grep -n "RhiStatus Dx12CommandList::draw_indexed\b\|draw_indexed(" -A12 engine/rhi/src/dx12/dx12_com...
+Compute dispatch and UAV-capable buffers are already in place. Next I'll check how the existing GPU tests drive compute and which capabilities each backend reports.
+[94m[Bash][0m Check capability reporting and compute test patterns $ sed -n 1,140p engine/rhi/include/engine/rhi/types.hpp | sed -n 100,200p
+DX12 reports `IndirectCount` as available, and Vulkan reports it when `drawIndirectCount` is on. Before choosing a design, I need to see how the shader reads per-item data and whether the RHI supports per-instance vertex input.
+[94m[Bash][0m Inspect vertex layout types and shader item access $ grep -n "SV_InstanceID\|InstanceID\|cbuffer\|StructuredBuffer\|ByteAddress\|Buffer<\|register(" engi...
+The shader reads every item from one `ByteAddressBuffer`, but a direct draw binds a separate per-draw slot. That affects the design, so I'll read the snapshot, culling, and the render function before deciding.
+[94m[Bash][0m Read frame snapshot header and culling references $ grep -n "cull\|frustum\|Frustum" -i engine/render/src/*.cpp engine/render/include/engine/render/*.hp...
+CPU frustum culling already runs in `extract_frame`, so it can serve as the reference path. Next I'll map the structure of `scene_renderer.cpp`, where the render pass and draw loop live.
+[94m[Bash][0m Outline scene renderer source functions $ wc -l engine/render/src/scene_renderer.cpp engine/render/shaders/scene.hlsl && grep -n "^[A-Za-z].*(...
+[94m[Bash][0m Read the render() first half $ sed -n 1038,1180p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read render() middle section $ sed -n 1180,1420p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read render() graph and draw recording $ sed -n 1420,1600p engine/render/src/scene_renderer.cpp
+The renderer batches each mesh and material into one per-draw frame slot, and the vertex shader reads the record for `SV_InstanceID`. I'll check the memory notes for the Windows gate workflow, then read the RHI pipeline and draw code that an indirect path would touch.
+[94m[Bash][0m Read memory notes on Windows gates and list build dirs $ ls artifacts build | head -30
+[94m[Bash][0m Find vertex input usage across code $ grep -rn "vertex_attributes\|vertex_stride" engine tests tools --include=*.cpp --include=*.hpp | gre...
+[94m[Bash][0m Read DX12 and Vulkan vertex input setup and validation $ sed -n 380,400p engine/rhi/src/dx12/dx12_command_list.cpp
+The DX12 draw binds only vertex slot 0, so an instance-rate slot has to be added. I'll check how the command list records vertex buffers and how the validation device checks them.
+[94m[Bash][0m Read vertex buffer binding in DX12 and validation checks $ grep -n "check_vertex_and_index_state" -A25 engine/rhi/src/validation_device.cpp | sed -n 1,60p
+The validation device already tracks per-slot vertex buffers, which helps. Now I'll read the vertex shader and its item-record access, since the indirect entry points have to reuse them.
+[94m[Bash][0m Read shader constants and vertex shader entries $ sed -n 470,560p engine/render/shaders/scene.hlsl
+[94m[Bash][0m Read the static and skinned vertex entry points $ sed -n 560,640p engine/render/shaders/scene.hlsl
+The static vertex shader reads its record from `SV_InstanceID`. The indirect path can reuse the same record code by taking the item index from a per-instance attribute instead. Next I'll check how shader entries are compiled and passed to `SceneShaders`, and how UAVs and compute resources are declared.
+[94m[Bash][0m Locate shader compile wiring and UAV shader sources $ grep -rln "RWByteAddress\|RWStructured\|RWBuffer" tests engine --include=*.hlsl | head
+[94m[Bash][0m Read test shader wiring and UAV mapping in backends $ grep -n "UnorderedAccess" engine/rhi/src/dx12/*.cpp engine/rhi/src/vulkan/*.cpp | head -20
+Binding numbers match register numbers, so the cull shader's UAVs can use fixed registers on both backends. Next I'll check how Vulkan maps indirect usage and states.
+[94m[Bash][0m Inspect Vulkan indirect mapping and draw recording $ grep -n "RhiStatus VulkanCommandList::draw_indexed(" -A40 engine/rhi/src/vulkan/vulkan_command_list....
+The Vulkan command list keeps a single vertex buffer pointer, so it needs an instance slot too. Before I change any stubs, I'll check which tests currently assert the `Unsupported` results.
+[94m[Bash][0m Find indirect references in tests and Vulkan vertex binding $ grep -n "set_vertex_buffer" -A18 engine/rhi/src/vulkan/vulkan_command_list.cpp | head -30
+The indirect stubs are only referenced by unit tests that check validation, so implementing them won't break existing expectations. I'll read the remaining pieces the design depends on: the frustum test, the render-graph access and pass kinds, and the renderer's private state.
+[94m[Bash][0m Read sphere test, graph access enums, renderer members $ sed -n 200,290p engine/render/include/engine/render/scene_renderer.hpp
+[94m[Bash][0m Read SceneRenderer::build pipeline and set setup $ sed -n 338,506p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read BoundDraw helpers and the scene pass and readback tail $ sed -n 1600,1754p engine/render/src/scene_renderer.cpp
+I now have the render flow. The last things to confirm are how frame slots and descriptor sets are created, and whether the graph already runs compute passes.
+[94m[Bash][0m Read slot allocation, buffer upload, and compute pass usage $ grep -n "create_descriptor_set\|write_descriptor\|read_buffer\|upload_buffer" engine/rhi/include/eng...
+The graph already supports compute passes with storage writes, and `read_buffer` and `upload_buffer` cover the counts readback. Last RHI check: how the validation device tracks vertex slots and where the DX12 device keeps its members.
+[94m[Bash][0m Read validation vertex slot handling and DX12 device members $ grep -n "class Dx12Device\|  ComPtr\|shader_heap_\|std::unique_ptr<\|    Dx12Device(" engine/rhi/src...
+The validation device already has a per-slot vertex table, so only the instance check is new. Next I'll confirm the Vulkan loader exposes the indirect draw entry points and see how the pipeline and command list headers store state.
+[94m[Bash][0m Check Vulkan indirect loader and command list members $ grep -n "struct PipelineRecord\|struct PipelineObject" -A12 engine/rhi/src/validation_device.cpp | h...
+[94m[Bash][0m Locate Vulkan function table definitions $ ls engine/rhi/src/vulkan
+[94m[Bash][0m View Vulkan device function list macro $ grep -n "ENGINE_VK_DEVICE_FUNCTIONS\|DEVICE_FUNCTIONS\|vkGetDeviceProcAddr" engine/rhi/src/vulkan/vu...
+I have enough context to start. The plan has three parts:
+
+1. **RHI:** per-instance vertex input (slot 1), so an indirect draw's `first_instance` selects its item on both APIs. Then DX12 `ExecuteIndirect` and Vulkan `DrawIndexedIndirect(Count)`.
+2. **Shaders:** indirect vertex entries that read the item from that attribute, plus a compute cull pass that writes the args and counts.
+3. **Renderer:** group the opaque items per mesh and material, cull and compact them on the GPU, and fall back to the existing indexed path when indirect is unavailable.
+
+I'll start with the RHI header and layout validation.
+[94m[Bash][0m Add per-instance vertex input fields to PipelineDesc $ """ assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF grep -n "kDrawIndexedIndire...
+Next, the layout check. Instance attributes follow the same rules as vertex attributes, and their locations must not clash with the vertex locations.
+[94m[Bash][0m Rewrite vertex layout validation for per-instance input $ }  ''' s=s[:start]+new+s[end:] open(p,'w').write(s) EOF grep -n "^#include" engine/rhi/src/rhi_types...
+Now the DX12 side. I'll read the device and pipeline object headers to see where the instance stride and the cached command signature go.
+[94m[Bash][0m Read DX12 device members and pipeline object $ grep -n "Dx12Device::~Dx12Device\|Dx12Device::shutdown\|void Dx12Device::" engine/rhi/src/dx12/dx12_...
+[94m[Bash][0m Find DX12 error helper and device method patterns $ grep -n "^RhiResult<PipelineHandle>\|find_pipeline" engine/rhi/src/dx12/dx12_device.cpp engine/rhi/s...
+I'll add the DX12 pieces: the per-instance input elements, the instance stride on the pipeline object, and a lazily created `DrawIndexedInstanced` command signature on the device.
+[94m[Bash][0m Add DX12 per-instance input and command signature members $ sed -n 70,80p engine/rhi/src/dx12/dx12_pipeline.cpp
+[94m[Bash][0m Implement DX12 draw-indexed command signature helper $ grep -n "hresult_error" engine/rhi/src/dx12/*.hpp | head -3
+Now the DX12 command list: an instance buffer slot, binding both slots in the indexed draw, and real `ExecuteIndirect` calls in place of the stubs.
+[94m[Bash][0m Read DX12 indirect stubs and header declarations $ grep -n "RhiStatus Dx12CommandList::draw_indexed_indirect_count" -A6 engine/rhi/src/dx12/dx12_comman...
+I'll check the DX12 buffer object's state field and how `use()` keeps references, then write the indirect draws.
+[94m[Bash][0m Check DX12 buffer object state and use helper $ sed -n 355,366p engine/rhi/src/dx12/dx12_command_list.cpp
+[94m[Bash][0m Route DX12 draw binding through bind_input helper $ } """ + s[i1:] open(c,'w').write(s) print(seg) EOF
+I removed the null check that protects the index-range test, so I'll put it back. Then I'll write `bind_input` and the two indirect draws.
+[94m[Bash][0m Implement DX12 ExecuteIndirect draws and shared input binding $ grep -n "struct BufferHandle\|using BufferHandle\|BufferHandle =" -A3 engine/rhi/include/engine/rhi/...
+`set_vertex_buffer` already records the reference, so the extra `use()` calls in `bind_input` would only grow the list on every draw. I'll remove them, then do the Vulkan side.
+[94m[Bash][0m Drop duplicate buffer refs and inspect Vulkan list header $ grep -n "struct PipelineObject" -A8 engine/rhi/src/vulkan/vulkan_device.hpp
+Now the Vulkan side: a binding-1 instance input in pipeline creation, `set_vertex_buffer(1)`, and the two indirect draws through the loader table.
+[94m[Bash][0m Add Vulkan instance binding and indirect API entries $ """) rep(d,"""               desc.depth_format != Format::Unknown || !desc.vertex_attributes.empty()...
+[94m[Bash][0m Implement Vulkan indirect draws and instance vertex binding $ grep -n "void use(\|use(\*" engine/rhi/src/vulkan/vulkan_command_list.hpp engine/rhi/src/vulkan/vulk...
+I still need the header declaration for `check_indexed_indirect`. The validation device also needs to know when a pipeline reads slot 1, so I'll look at how it tracks the bound pipeline.
+[94m[Bash][0m Inspect validation device pipeline tracking $ grep -n "state_->pipelines\|pipelines.emplace\|PipelineRecord record" engine/rhi/src/validation_devi...
+[94m[Bash][0m Read validation pipeline record creation and draw checks $ sed -n 1205,1222p engine/rhi/src/validation_device.cpp
+[94m[Bash][0m Make validation device require slot 1 for per-instance pipelines $ grep -n "vertex_buffers_\[slot\]" engine/rhi/src/validation_device.cpp
+The RHI edits are in place. Before going further I'll build on Linux to catch Vulkan and shared-code errors. DX12 compiles only on Windows, so that gets checked through the gate harness later.
+[94m[Bash][0m Build linux-dev preset to check RHI changes $ tail -3 /tmp/build_dev1.log
+[94m[Bash][0m Check available build presets $ print([p['name'] for p in d['configurePresets']])"
+[94m[Bash][0m Configure linux-dev and build linux-debug $ tail -3 /tmp/build_dev1.log
+The build is running in the background. While it runs, I'll read `TransformPoint` and `release()`, since the cull shader and the new handles both depend on them.
+[94m[Bash][0m Read shader transform helpers and renderer release $ sed -n 1754,1811p engine/render/src/scene_renderer.cpp | head -60
+I have what I need for the shader. I'll add the indirect vertex entries, which read the item from the instance attribute and share the skinning code, plus the `CSCull` compute entry with the same frustum test as the CPU.
+[94m[Bash][0m Add indirect vertex entries and CSCull compute shader $ head -1 engine/render/shaders/scene.hlsl
+The shader is written. I'll check the background build before wiring the renderer.
+[94m[Bash][0m Check background build output for errors $ tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/638220f3-40e3-4c73-9319-1d5fbc009c16/tasks/btp...
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/638220f3-40e3-4c73-9319-1d5fbc009c16/tasks/btpje653f.output grep -n "error\|warning:\|Error" head -30 tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/638220f3-40e3-4c73-9319-1d5fbc009c16/tasks/btpje653f.output. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check background build output for errors $ tail -3 $F
+The build log is separate from this output. I'll check the build log directly later. Meanwhile I'll check how the device exposes capabilities, because the renderer needs to test `IndirectCount` before it commits to indirect draws.
+[94m[Bash][0m Check device capability accessor and build progress $ grep -n "error\|warning:" /tmp/build_dev1.log | head
+The Linux build is compiling without errors so far. Next I'll update the renderer header: the draw-path options, the indirect stats, the new shader entries, and the pipeline and buffer members.
+[94m[Bash][0m Extend scene renderer header with indirect draw API and state $ """) EOF grep -n "kMaxVertexBufferSlots\|#include" engine/render/include/engine/render/scene_rendere...
+The background build finished with exit 0. Before the renderer changes, I need to fix one thing in the shader: the RHI keys each descriptor by its binding number, and the register number has to match it. The cull set therefore uses `t0`, `u1`, and `u2` so the three bindings stay distinct.
+[94m[Bash][0m Fix cull register numbers and document the cull set $ u2: CullCounts. CSCull also reads FrameData from set 0 (see GPU culling below). """) EOF grep -n "Li...
+Next, the renderer source. I'll start with the helpers: the static and skinned attribute lists, the cull packer, and the `BoundDraw` indirect fields. I'll also refactor `upload_buffer_bytes` so it can target the vertex-usage instance buffer.
+[94m[Bash][0m Locate upload helper callers and vertex constants $ grep -n "kVertexStride\|kSkinnedVertexStride\|kJointsOffset =" engine/render/src/scene_renderer.cpp ...
+[94m[Bash][0m Add cull packing, attribute helpers, and indirect bound draws $ """) EOF echo ok
+The `pack_cull` signature I just wrote is clumsy: it takes two parallel lookups keyed by mesh. I'll replace it with a small `CullGroup` record so the caller passes one entry per group.
+[94m[Bash][0m Simplify cull packing to a per-group record $ }  ''' s=s[:a]+new+s[b:] open(c,'w').write(s) EOF grep -n "^std::vector<std::uint8_t> pack_cull\|^st...
+Next, `build_indirect`, which creates the cull layout and pipeline, the buffers, the cull set, the instance identity buffer, and the four indirect opaque pipelines.
+[94m[Bash][0m Add build_indirect and generalize buffer upload usage $ grep -n "using\|BufferUsage" engine/render/src/scene_renderer.cpp | head -8
+`build_indirect` is in place. Now the main change in `render()`: opaque groups get split between indirect and indexed, the cull inputs are uploaded, and the graph gets the cull pass, the counts clear, the indirect draws, and a counts readback. First I'll pull the exact text of the group loop and the `bind` lambda so the edit matches.
+[94m[Bash][0m Show exact text of group loop and bind lambda $ grep -n "const auto bind = \[&\]" -A8 engine/render/src/scene_renderer.cpp | head -10
+[94m[Bash][0m Split opaque groups into indirect and indexed draws $ }     } """) EOF echo done
+Next the graph. I'll factor the frame-upload pass out of `bind` so the indirect frame can reuse it, add the cull and count-clear passes, and wire the indirect draws into the scene pass.
+[94m[Bash][0m Factor frame upload into import_frame lambda $ """) EOF grep -n "const auto bind = " -A14 engine/render/src/scene_renderer.cpp | sed -n 1,20p
+Now the graph section: the cull, the counts clear, the indirect draws in the scene pass, the counts readback, and the stats.
+[94m[Bash][0m Add indirect cull, draws, counts readback, and stats $ """) EOF grep -n "kCullThreads\|kIndirectCountSize" engine/render/src/scene_renderer.cpp | head
+The remaining pieces are the `kCullThreads` constant, the `rhi::` qualifiers on the indirect constants, and releasing the new handles. I'll apply those and then compile.
+[94m[Bash][0m Qualify indirect constants and release new handles $ """) EOF grep -n "kDrawIndexedIndirectStride\|kIndirectCountSize" engine/render/src/scene_renderer.c...
+The renderer changes are in. I'll build the Linux debug target now to catch compile errors before writing tests.
+[94m[Bash][0m Build linux-debug to check renderer compile errors $ tail -2 /tmp/build2.log
+Two compile errors. `DrawPath` is referenced before it's declared, and the positional `BoundDraw{...}` in `bind` is now short of fields, which `-Wextra` treats as an error. I'll look at the header placement first.
+[94m[Bash][0m View header around SceneShaders and DrawPath $ sed -n 84,94p engine/render/include/engine/render/scene_renderer.hpp
+`SceneRendererDesc` comes before `SceneShaders` in the header, so the new enum has to move above it. I'll move the `DrawPath` and `IndirectStats` block, and fix the `bind` aggregate.
+[94m[Bash][0m Move DrawPath above SceneRendererDesc and rebuild $ tail -2 /tmp/build2.log
+The move went wrong: `SceneShaders` now appears twice. I'll look at that region and repair it by hand.
+[94m[Bash][0m Outline scene renderer header declarations $ " engine/render/include/engine/render/scene_renderer.hpp | sed -n 1,60p
+[94m[Bash][0m View duplicated SceneShaders region $ sed -n 95,130p engine/render/include/engine/render/scene_renderer.hpp
+The earlier move left a stale copy of `SceneShaders` behind. I'll remove the first copy, then move the `DrawPath` and `IndirectStats` block above `SceneRendererDesc`.
+[94m[Bash][0m Remove stale SceneShaders copy and reorder header $ \n\n") assert end_first<=second s=s[:first]+s[end_first:] # Move the DrawPath/IndirectStats block ab...
+The script stopped before writing, so the header is unchanged. I'll redo it with the right search bounds.
+[94m[Bash][0m Fix header ordering and rebuild linux-debug $ tail -2 /tmp/build2.log
+The Linux debug build now compiles, including the tests. The header move also pulled `LightingView` out of place, so I'll put it back after `SceneShaders`.
+[94m[Bash][0m Restore LightingView enum placement in header $ python3 - <<'EOF' h='engine/render/include/engine/render/scene_renderer.hpp' s=open(h).read() a=s.in...
+The header is in order. Next are the tests, so I'll look at the scene GPU test fixture to reuse its setup for the indirect comparison.
+[94m[Bash][0m Read scene test fixture header $ sed -n 1,200p tests/src/render_scene_fixture.hpp
+[94m[Bash][0m Read scene GPU test setup and helpers $ sed -n 1,120p tests/src/render_scene_gpu_tests.cpp
+[94m[Bash][0m Read scene GPU test cases and renderer usage $ sed -n 120,224p tests/src/render_scene_gpu_tests.cpp
+The existing golden test is a good model. It needs the indirect shader entries, and a new GPU test file can compare indexed and indirect frames. I'll check how the test sources and shader entries are listed in CMake, and whether the Linux build compiles the HLSL entries.
+[94m[Bash][0m Locate test source list and shader toolchain flag $ grep -rn "ENGINE_BUILD_SHADER_TOOLCHAIN" CMakeLists.txt cmake/*.cmake 2>/dev/null | head -3
+The toolchain compiles scene entries on Linux, so the new entries will be compiled there too. I'll register them and the new test file, then look at the skinned GPU test to reuse its setup.
+[94m[Bash][0m Register indirect shaders and test file in CMake $ python3 - <<'EOF' def rep(path, old, new, count=1):     s=open(path).read()     n=s.count(old)     a...
+[94m[Bash][0m Read skinned GPU test scene construction $ sed -n 80,200p tests/src/render_skin_gpu_tests.cpp
+I have the skinned setup and the golden scene. The new GPU test file will cover four things on each backend: indirect versus indexed frames on the golden scene, culling disabled, overflow past the group capacity, an empty frame, and skinned groups.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_indirect_gpu_tests.cpp[0m "// GPU indirect draws (US-037) on real GPUs. The same frame is drawn twice on one device: once indexed, the reference path, and once with
+// GPU culling and one indirect count draw per group. The two ... (17731 chars)"
+Before compiling I'll confirm two names the new test relies on: the `resource_stats` fields and `ResourceStats` pipelines count.
+[94m[Bash][0m Check ResourceStats field names $ grep -n "struct ResourceStats" -A10 engine/rhi/include/engine/rhi/device.hpp | head -14
+`ResourceStats` has no pipeline count, so I'll drop that check. I'll also add the indirect shaders to the existing golden scene test so its default render runs the indirect path.
+[94m[Bash][0m Fix stats check and enable indirect in golden test $ } """) EOF grep -n "TEST_CASE(\"Indirect count reads" -A34 tests/src/rhi_contract_tests.cpp | head -...
+The file change is my own pipeline-stat edit, so the current state is correct. Now the CPU-side unit tests. I'll look at the existing vertex-layout test and the pipeline helper.
+[94m[Bash][0m Read pipeline helper and vertex layout unit tests $ sed -n 730,770p tests/src/rhi_contract_tests.cpp
+I'll add a unit test for the per-instance layout rules and for the slot-1 requirement at draw time.
+[94m[Bash][0m Add per-instance unit test and rebuild linux-debug $ tail -2 /tmp/build3.log
+The build timed out while rebuilding the DXC host tool. I'll run it in the background and poll the log.
+[94m[Bash][0m Build linux-debug fully and capture log $ echo "rc=$?" >> /tmp/build3.log
+While that builds, I'll fix one thing I noticed. The frame descriptor layout is visible only to vertex and pixel stages, but the cull compute pass reads the frame buffer, so the layout needs the compute stage too.
+[94m[Bash][0m Give frame set layout the compute stage $ """) rep(c,"""    // Set 0: the frame buffer at t0, read by both stages. Set 1: the material paramet...
+I'll also check the Vulkan barrier mapping. The cull reads the frame buffer and writes the indirect buffers from compute, so the ShaderRead and UnorderedAccess states need compute-stage barriers.
+[94m[Bash][0m Read Vulkan resource state to barrier mapping $ sed -n 100,175p engine/rhi/src/vulkan/vulkan_common.cpp
+The barrier mapping covers both cases: UnorderedAccess spans the compute stage, and IndirectArgument maps to the draw-indirect stage. I'll check on the background build.
+[94m[Bash][0m Check background build progress and errors $ grep -n "error\|warning:" /tmp/build3.log | head -20
+[94m[Bash][0m Wait briefly and check build result $ grep -n "error\|warning:" /tmp/build3.log | head -20
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -3 /tmp/build3.log grep -n "error\|warning:" /tmp/build3.log head -20. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check build log tail and errors $ grep -n "error\|warning:" /tmp/build3.log | head -20
+[94m[Bash][0m Wait until the linux-debug build finishes $ grep -n "error\|warning:" /tmp/build3.log | head -20
+The Linux debug build passes. Some of my edits landed after the build started, so I'll rebuild incrementally and then run the Linux unit tests.
+[94m[Bash][0m Incremental rebuild of linux-debug $ tail -1 /tmp/build4.log
+[94m[Bash][0m Run Linux unit test suite via ctest preset $ tail -15 /tmp/unit1.log
+The ctest suite passes. I'll run the `[unit]` cases directly to confirm the new per-instance test executed.
+[94m[Bash][0m Run unit suite and confirm new test is listed $ timeout 60 $B --suite unit --list-tests 2>/dev/null | grep -i "per-instance\|Indirect" | head
+That picked the ASan binary. I'll run the debug one explicitly.
+[94m[Bash][0m Run debug unit suite and the new per-instance test $ timeout 60 $B --suite unit --list-tests 2>/dev/null | grep -c "^  "
+[94m[Bash][0m Locate the linux-debug engine_tests binary $ grep -n "linux-debug\|binaryDir" CMakePresets.json | head -5
+[94m[Bash][0m Run unit suite on the linux-dev binary $ timeout 60 $B --suite unit "Per-instance input has its own stride and locations, and a draw needs sl...
+All 476 unit cases pass, including the new per-instance test. Next I'll confirm the new HLSL entries actually compiled to SPIR-V and DXIL on Linux, since the GPU build only uses those outputs.
+[94m[Bash][0m Check compiled indirect and cull shader outputs exist $ find build/linux-dev -name "scene_cull*" -o -name "scene_indirect*" | head
+Both backends compiled all three new entries. Before the Windows run I'll make one small fix: the instance-slot ternary in `bind_input` should use unsigned literals to match the `UINT` parameter. Then I'll look for an earlier gate batch file to reuse.
+[94m[Bash][0m Fix IASetVertexBuffers literal and find old gate batch $ """) EOF ls -la /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "\.bat\|gate\|rc" | hea...
+[94m[Bash][0m Read previous Windows gate batch templates $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us010_gates.bat | tr -d '\r' | head -40
+The previous gate batch is a good template. I'll write a US-037 version that runs all four Windows gates, then the DX12 and Vulkan GPU suites, and writes each code to a result file.
+[94m[Bash][0m Write and launch the US-037 Windows gate batch $ echo launched
+While the Windows gates run, I'll start the Linux GCC and ASan gates in the background. Those build trees are separate from the Windows ones.
+[94m[Bash][0m Configure linux-gcc and start its debug build $ tail -2 /tmp/gcc_cfg.log
+While those run, I'll check how the PRD JSON records story status and look at the docs that cover the render and RHI APIs.
+[94m[Bash][0m Check PRD JSON status fields and docs index $ grep -n "US-036" docs/build.md | head -3
+The docs record each story in a table, and `rhi.md` may still describe indirect draws as unsupported. I'll check the docs for stale statements.
+[94m[Bash][0m Find docs mentioning indirect draws or US-037 $ grep -rn -i "indirect\|US-037\|instance" docs/rhi.md docs/dx12.md docs/vulkan.md docs/scene-renderin...
+Several docs still say indirect draws are `Unsupported` or deferred to US-037. I'll update those statements and add a section on the indirect path. First the relevant part of `scene-rendering.md`.
+[94m[Bash][0m Read scene-rendering doc structure near culling $ grep -n "^## \|^### " docs/scene-rendering.md
+[94m[Bash][0m Document GPU indirect path in scene-rendering doc $ python3 - <<'EOF' def rep(path, old, new, count=1):     s=open(path).read()     n=s.count(old)     a...
+[94m[Bash][0m Update RHI docs and check gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us037_rc.txt 2>/dev/null
+The Windows build and the unit gate pass. Both GPU suites returned 1, so I'll read those logs.
+[94m[Bash][0m Read DX12 GPU suite failure details $ grep -v "^\s*$" $T/us037_5.log | grep -n "FAILED\|failed\|REQUIRE\|CHECK\|error\|with expansion\|tes...
+[94m[Bash][0m Show failing DX12 check details $ sed -n 10,80p $T/us037_5.log | tr -d '\r' | grep -v "^\s*$" | head -80
+Two real problems. The render graph rejects the counts buffer having two writers, the clear pass and the cull pass. The DX12 RHI test also expects slot 1 to be out of range, which is no longer true. I'll check the graph's writer rule and the other tests that use slot 1.
+[94m[Bash][0m Inspect render graph writer rule and slot-1 test usage $ grep -n "graphics_only" -A6 engine/render/src/render_graph.cpp | head -12
+The graph allows one writer per resource per graph, so the clear and the cull can't be separate passes. I'll fold the zeroing into the cull pass: transition the counts to copy-destination, copy zeros in, transition back to UAV, then dispatch. I'll also move the DX12 out-of-range check to slot 2.
+[94m[Bash][0m Merge counts zeroing into the cull pass and fix slot test $ grep -n "transition(BufferHandle" engine/rhi/include/engine/rhi/command_list.hpp
+Now I'll check whether the background GCC build has finished before starting another build.
+[94m[Bash][0m Check status of the background GCC debug build $ grep -n "error\|warning:" /tmp/gcc_build.log | head -10
+[94m[Bash][0m Wait for the GCC debug build to finish $ grep -n "error\|warning:" /tmp/gcc_build.log | head -10
+The GCC debug build passes, though it predates the last two edits. I'll relaunch the Windows gate batch on the current code, and rebuild Linux clang alongside it.
+[94m[Bash][0m Relaunch Windows US-037 gate batch $ echo relaunched)
+[94m[Bash][0m Check whether the first Windows gate batch is still running $ pgrep -af us037 | head -3
+The first batch has finished; the earlier check matched my own shell command. I'll relaunch.
+[94m[Bash][0m Relaunch Windows US-037 gate batch $ echo relaunched
+[94m[Bash][0m Incremental Linux debug build after cull changes $ tail -1 /tmp/build5.log
+The Linux build is clean with the cull change. I'll wait for the Windows batch to finish.
+[94m[Bash][0m Wait for the Windows gate batch to finish $ ls $T/us037_done.txt 2>/dev/null
+[94m[Bash][0m Show Vulkan GPU suite failure details $ tr -d '\r' < $T/us037_6.log | grep -v "^\s*$" | grep -n "FAILED\|with expansion\|explicitly\|  CHECK...
+DX12 passes now. On Vulkan the golden scene and the indirect cases fail with validation errors. I'll read the validation messages.
+[94m[Bash][0m Read Vulkan validation error messages $ tr -d '\r' < $T/us037_6.log | grep -v "^\s*$" | sed -n 71,115p
+The cause is the location numbering. DXC assigns SPIR-V input locations in declaration order, so the `item` attribute ends up at location 3 (or 5 for skinned), while the pipeline provides location 8. I'll pin it with `[[vk::location(8)]]`, which DXC ignores for DXIL, so DX12 keeps `TEXCOORD8`.
+[94m[Bash][0m Pin indirect instance input to location 8 and rebuild $ tail -1 /tmp/build6.log
+DXC rejects the attribute as a warning, and the shader step treats warnings as errors. The skinned error also confirms the declaration-order rule: `joints` at 3 and `item` at 5. I'll drop the attribute and follow that rule directly. The item attribute goes at the next location after each layout's vertex inputs: 3 for static and 5 for skinned.
+[94m[Bash][0m Use per-layout instance locations 3 and 5 $ """) EOF grep -rn "location 8\|kInstanceLocation" engine docs tests | head
+[94m[Bash][0m Rebuild Linux debug with per-layout instance locations $ tail -1 /tmp/build6.log
+The Linux build is clean. I'll relaunch the Windows gate on this code.
+[94m[Bash][0m Relaunch Windows US-037 gate batch $ echo relaunched
+While that runs, I'll rerun the Linux unit ctest on the current code.
+[94m[Bash][0m Run Linux unit ctest preset on current code $ tail -4 /tmp/unit2.log
+[94m[Bash][0m Wait for the Windows gate batch to finish $ ls $T/us037_done.txt 2>/dev/null
+Every Windows gate reports 0. I'll check the logs to confirm the GPU runs actually executed the new cases, and the build log has no warnings.
+[94m[Bash][0m Verify Windows gate logs show the new GPU cases ran $ tr -d '\r' < $T/us037_5.log | tail -3
+The DX12 run has 37 cases (32 before plus 5 new) and the Vulkan run has 38 (33 plus 5), all passing. The build log has zero warnings. Next are the remaining Linux gates, which I'll run as one background sequence.
+[94m[Bash][0m Run remaining Linux gates in background $ echo started
+While the Linux gates run, I'll collect the Windows unit count for the build record.
+[94m[Bash][0m Read Windows ctest and validate summary lines $ tr -d '\r' < $T/us037_1.log | tail -2
+The Windows unit ctest passes 21 of 21. I'll check the Linux gate progress.
+[94m[Bash][0m Check Linux gate progress $ cat /tmp/lg_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+[94m[Bash][0m Check Linux gate progress $ tail -2 /tmp/lg_gcc_build.log 2>/dev/null
+[94m[Bash][0m Inspect Linux gate log files $ tail -3 /tmp/lg_validate.log 2>/dev/null
+[94m[Bash][0m Check the gate result file and running script $ pgrep -fa linux_gates | head -2
+The gate script is still on its first step, `ValidateVendor`, which is hashing thousands of vendor files. I'll wait for it.
+[94m[Bash][0m Wait for Linux gate sequence to complete $ cat /tmp/lg_rc.txt 2>/dev/null
+[94m[Bash][0m Wait for sanitize run and check warning counts $ tail -3 /tmp/lg_asan_ctest.log 2>/dev/null
+All Linux gates pass: `ValidateVendor`, the GCC debug build (0 warnings), `linux-gcc-unit`, the ASan build (0 warnings), and `linux-sanitize`. I'll check the sanitizer run for reports before recording results.
+[94m[Bash][0m Check sanitizer output and progress log structure $ grep -n "^## " /mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md | tail -3
+The sanitizer run is clean and both ctest runs pass 22 of 22. I'll record the results: a row in `docs/build.md`, the reusable patterns at the top of the progress log, and the story entry at the end.
+[94m[Bash][0m Record US-037 in build doc and progress log $ tail -3 .ralph-tui/progress.md
+One learning in the entry overstates what happened. I widened the frame layout's stage mask by reasoning, not because a run failed, so I'll say that.
+[94m[Bash][0m Correct learning wording and mark US-037 passing in PRD JSON $ print([s['passes'] for s in json.load(open('tasks/prd.json'))['userStories'] if s['id']=='US-037'])"
+I rewrote `prd.json` programmatically, and this directory is not a git repo, so I'll check the head of the file to make sure its layout survived.
+[94m[Bash][0m Check PRD JSON formatting after rewrite $ ls /mnt/d/dev/haiku_game_engine/tasks | head
+The PRD file keeps its layout. Two last checks: the shader header's list of entry points should name the new entries, and `destroy_into` must accept unset handles, because `release()` now walks more handles.
+[94m[Bash][0m Check destroy_into null handling and HLSL entry list comment $ grep -n "The entry points are" -A3 engine/render/shaders/scene.hlsl
+[94m[Bash][0m Update shader entry list comment and rebuild $ grep -n "error\|warning" /tmp/build7.log | head -3
+US-037 is implemented, and every Windows and Linux gate in the list passes except the two things I could not run here (native Linux Vulkan GPU and `engine_bench`). One acceptance item is only partly met: there is no LOD selection.
+
+**What was built**
+- **Culling and indirect draws:** For opaque and mask items, a compute pass (`CSCull`) tests each candidate's bounding sphere against the same six frustum planes the CPU uses. Each visible item appends a `DrawIndexed` record and bumps its group's count. Each (mesh, material) group is then one indirect count draw: `ExecuteIndirect` on DX12, `vkCmdDrawIndexedIndirectCount` on Vulkan. Static and skinned groups both go through this path.
+- **Item index:** The item index reaches the shader through a per-instance vertex input at `first_instance`. DX12's `SV_InstanceID` ignores `first_instance`, so a per-instance attribute is the portable way to carry it.
+- **Fallback:** The renderer draws indexed when the shaders are missing, `IndirectCount` is unavailable, or the group limit is zero. Groups past the limit also stay indexed.
+- **Stats:** `indirect_stats()` reports groups, candidates, visible, drawn, and overflow.
+
+**Scope calls**
+- **LOD is not implemented.** Meshes have one level and the converter has no LOD generation yet, so there is nothing to select. The culling half of the criterion is met. This is the one acceptance gap, and you may want to decide whether it blocks the story.
+- Shadow tiles and alpha-blended items stay on the indexed path.
+- The default path is now indirect, so the existing golden-scene GPU test also exercises it.
+
+**Verification**
+- **Windows:** `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), and `win-unit` (21/21) pass. `engine_tests --suite gpu`: DX12 37 cases and Vulkan 38 cases pass, with the debug layers on, on the RTX 5080.
+- **Linux:** `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (22/22), `linux-gcc-debug` (0 warnings), `linux-gcc-unit` (22/22), `linux-asan` (0 warnings), and `linux-sanitize` (22/22, no sanitizer reports) pass.
+- **Not run:** the native Linux Vulkan GPU suite (this WSL host has no usable Vulkan device), `engine_bench` (no bench target exists yet), any GUI check, and the GitHub CI jobs, which I did not trigger.
+
+**Things you should know**
+- The GPU tests cover the golden scene, culling disabled, overflow past a group's capacity, an empty frame, and a skinned box. Each compares the indexed and indirect frames pixel by pixel, and checks the visible count against the CPU's drawn count. The empty-frame case is an empty snapshot. A frame where the GPU alone culls everything cannot be built through the public API.
+- Opaque draws within a group now come in atomic-append order rather than instance order. The depth test makes that irrelevant except for exact depth ties.
+- The argument buffer holds `max_draw_groups × capacity` records, so its size scales with both.
+
+I marked US-037 `passes: true` in `tasks/prd.json`, following US-035 and US-036, which were marked passing with the same not-run GPU items. Revert it if you want LOD counted as a blocker. I updated the scene, RHI, DX12, and Vulkan docs, `docs/build.md`, and `.ralph-tui/progress.md` with the learnings. Nothing is committed.

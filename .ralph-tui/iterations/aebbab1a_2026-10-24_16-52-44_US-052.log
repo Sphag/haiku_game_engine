@@ -1,0 +1,63 @@
+# Iteration 215 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T13:52:44.423Z
+- **Ended At**: 2026-10-24T13:57:51.776Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 38
+- **Output Tokens**: 3503
+- **Total Tokens**: 3541
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current physics code, since the memory notes say US-052 is partly done.
+[94m[Bash][0m Inspect progress log and physics directory $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/physics && git status 2>/dev/null | head -5
+[94m[Bash][0m Read physics and environment memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The log shows the Windows and clang gates passing, with `linux-gcc` blocked and the benchmark missing. Before deciding, I'll check whether a GCC 11+ compiler now exists and re-run the local Linux gates.
+[94m[Bash][0m Check compilers and re-run Linux clang gates $ tail -n 4 /tmp/t.log)
+
+[91m[Error: Exit code 1
+clang++
+clang++-10
+g++
+g++-9
+gcc
+gcc-9
+gcc-ar
+gcc-ar-9
+gcc-nm
+gcc-nm-9
+gcc-ranlib
+gcc-ranlib-9
+validate=0
+dev=0
+build=0
+0][0m
+The `grep -c` returned 1 on zero matches, which stopped the chain before ctest. I'll run the unit tests on their own.
+[94m[Bash][0m Run linux-unit ctest suite $ grep -n "Physics\|physics" /tmp/t.log | head
+Gates confirm the state my notes already record. I'll log this pass in the progress file, without a completion signal, since `linux-gcc` and the benchmark are still open.
+[94m[Bash][0m Append this pass's entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The Jolt adapter and its tests are in place, but two acceptance items cannot run in this environment.
+
+**Blocked:**
+- **`linux-gcc` gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`):** The only local GCC is 9.4, and Jolt needs GCC 11+ for `__builtin_bit_cast`. No GCC 11+ is installed, and apt has no candidate (checked earlier). This needs a GCC 11+ machine or the CI job.
+- **Acceptance benchmark (`engine_bench --suite acceptance`):** There is no `engine_bench` CMake target in the tree; that harness is US-074. The criterion only applies once the harness exists.
+
+**Verified this pass (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --preset linux-dev`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0, 22 tests (1 unit, 21 integration).
+
+The Windows gates and the ASan/UBSan run were not repeated this pass. My notes record them as passing on this unchanged tree.
+
+I appended a progress entry to `.ralph-tui/progress.md` and made no source changes. The log already has many identical "Partial" entries, so further rechecks will not move the story unless a GCC 11+ environment or the benchmark harness appears.

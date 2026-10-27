@@ -1,0 +1,38 @@
+# Iteration 1052 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:31:33.833Z
+- **Ended At**: 2026-10-26T16:31:50.283Z
+- **Duration**: 16s
+- **Input Tokens**: 28
+- **Output Tokens**: 2400
+- **Total Tokens**: 2428
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log, since this story depends on several prerequisites.
+[94m[Bash][0m Inspect repo root, progress log, and PRD story $ grep -n "US-079" -A3 tasks/prd-open-world-engine.md | head -40
+The log shows many prior status checks that all concluded the story is blocked on user decisions. I'll re-verify the blockers directly rather than trust the log.
+[94m[Bash][0m Re-verify blockers for US-079 $ grep -rn "all_features" tools/benchmark/src engine --include=*.cpp -l | head
+The blockers hold. I'm recording this pass in the progress log so the next run starts from the current state.
+[94m[Bash][0m Append status note to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I'm not signalling COMPLETE. The blockers still hold, and I made no source changes this pass.
+
+**Blocked on your decisions:**
+1. **Approve the route.** `all_features_route_v1` in `benchmarks/manifest.json` (line 132) is still a proposal, and `all_features` is `implementation: none`. No runner exists in `tools/benchmark/src`.
+2. **FSR 2 permutation headers.** `third_party/fsr2` has none of the eight `*_permutations.h` per backend. Either vendor them, or keep `full_1080` reported as unsupported, as the route already describes.
+3. **Runtime component catalog.** The runtime's catalog is empty in this build, so a `samples/all_features` scene with components is refused. `samples/` does not exist. Someone has to decide how to resolve that before the sample project can be built.
+4. **Windows GPU and GUI session.** The tour, profiles, and live editor run with package/relaunch need an RTX 5080 session with a display. WSL cannot provide that.
+
+**What already exists:** the test files `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are present. The last Linux gate run (recorded in the log at check 116) passed `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` at 30/30. I did not re-run the gates in this pass.
+
+I appended a status entry to `.ralph-tui/progress.md`. Once you decide on items 1–3 and can give me item 4, I can start on the runner and sample project.

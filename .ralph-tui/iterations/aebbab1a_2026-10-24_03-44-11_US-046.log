@@ -1,0 +1,37 @@
+# Iteration 59 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:44:11.490Z
+- **Ended At**: 2026-10-24T00:44:30.322Z
+- **Duration**: 18s
+- **Input Tokens**: 22
+- **Output Tokens**: 2225
+- **Total Tokens**: 2247
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and locate FSR-related files $ git status 2>&1 | head -3
+[94m[Bash][0m Recheck FSR permutation blocker and upscaling docs $ find engine tests cmake docs tools third_party -newer .ralph-tui/progress.md -type f | head
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check 10, still blocked) - What wa...
+US-046 is still blocked, so I have not signalled completion. I made no source changes this pass.
+
+**What's blocking it:** FSR 2 needs eight generated `*_permutations.h` headers per backend. None exist in `third_party/fsr2` or `engine/rhi`, so `ENGINE_FSR2_AVAILABLE` stays off and both upscale calls return `Unsupported`. Without those headers the upscaler cannot be integrated, and the full profile's 1280x720 switch and UI-after-upscale would ship an unupscaled image.
+
+**What I checked:** the header count is still 0, and nothing under `engine`, `tests`, `cmake`, `docs`, `tools` or `third_party` has changed since the last log entry. The Windows gates and the GPU suites were not run because the story has no implementation to test.
+
+**Decision needed from you:** how to produce the headers.
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once on Windows and vendor the output with hashes in `third_party/manifest.json`. This is faster, but it needs a documented exception to the no-prebuilt-tools rule.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This keeps the rule intact but is more work.
+
+My recommendation is option 2, since it avoids the exception. Tell me which you want and I'll start on it. Once the headers exist, the integration, profile switch and gate runs can proceed.
+
+I appended a re-check 10 entry to `.ralph-tui/progress.md` recording this status.

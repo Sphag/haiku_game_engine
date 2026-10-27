@@ -1,0 +1,38 @@
+# Iteration 689 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:12:16.695Z
+- **Ended At**: 2026-10-26T02:12:29.437Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1745
+- **Total Tokens**: 1763
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect benchmark tree and progress notes $ ls artifacts/bench 2>/dev/null | head
+[94m[Bash][0m Read latest US-076 progress entries $ sed -n 4178,4264p .ralph-tui/progress.md
+US-076 is not complete, and I did not rerun anything this pass. The source and manifest haven't changed since the last recorded run, so another benchmark or gate run would only repeat the same result.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on every indexed, indirect and meshlet run (DX12 and Vulkan).** The start frame submits 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. The contract forbids reducing the workload. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`. Do you approve that change? If not, the story closes with these failures recorded as the measured result.
+2. **The full_1080 profile is unsupported** because the vendored FSR 2 permutation headers are missing. Only native_1080 runs, so "both profiles" is only partly met.
+
+**Not run:** native Linux Vulkan GPU suite and the linux-gcc gate. WSL has no Vulkan device, and GCC 9 cannot build Jolt.
+
+**Verified on the current tree (per the last recorded gate runs):**
+- Windows: validate, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and win-release `engine_bench` build all pass.
+- Linux: ValidateVendor, linux-dev, linux-debug build (0 warnings), and linux-unit (30/30) pass.
+- Mesh-shader fallback works. With `--disable-mesh-shaders`, the renderer reports `fell back` to indirect-indexed draws (339–340 visible items, 0 meshlet visible), and the feature is reported as disabled.
+- Eight reports are in `artifacts/bench/us076-*`, each with screenshots and counters.
+
+I have not added a COMPLETE signal because the acceptance criteria cannot pass on the current placement. Reply with your decision on the placement change, and I'll either make the workload change and rerun the eight benchmarks and gates, or record the story as measured-failing.

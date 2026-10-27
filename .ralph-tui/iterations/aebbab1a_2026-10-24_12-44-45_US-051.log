@@ -1,0 +1,53 @@
+# Iteration 173 Log
+
+## Metadata
+
+- **Task ID**: US-051
+- **Task Title**: GPU Particles
+- **Description**: As an effects author, I want a particle system so that I can add dynamic effects to the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T09:44:45.021Z
+- **Ended At**: 2026-10-24T09:47:56.510Z
+- **Duration**: 3m 11s
+- **Input Tokens**: 40
+- **Output Tokens**: 2979
+- **Total Tokens**: 3019
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing particle status notes and the progress log, since memory says US-051 is largely done.
+[94m[Bash][0m Read particle memory, progress tail, and file state $ ls tests 2>/dev/null | head -50
+The notes say US-051 is Partial: the code and Windows GPU gates pass, and the benchmark and native Linux GPU runs are still open. I'll re-run the Linux unit gate on the current tree to confirm it still holds before reporting.
+[94m[Bash][0m Run vendor validation, Linux debug build, and unit ctest $ tail -4 /tmp/ct.log)
+
+[91m[Error: Exit code 1
+validate=0
+build=0
+0][0m
+[94m[Bash][0m Run Linux unit ctest and show results $ grep -i particle /tmp/ct.log | head
+The Linux unit gate passes (ctest exit 0; the earlier exit 1 came from `grep -c` finding zero matches). Next I'll confirm the benchmark harness and native Linux Vulkan device are still absent, since those are the open items.
+[94m[Bash][0m Check bench target and Vulkan device availability $ grep -c "TEST_CASE" tests/src/render_particles_tests.cpp tests/src/render_particles_gpu_tests.cpp
+Both open items are still blocked: there is no `engine_bench` target in the tree, and this WSL session has no usable Vulkan device. I'll record this pass in the progress log.
+[94m[Bash][0m Append re-verification entry to progress log $ `vulkaninfo` not installed). - Status call: US-051 stays **Partial**. Open: the benchmark run and th...
+US-051 is still **Partial**, so I'm not emitting the completion promise. Everything the tree can verify here passes, but two acceptance items cannot be run in this environment.
+
+**Passing on the current tree (re-checked this pass, Linux clang):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed.
+- `cmake --build --preset linux-debug`: passed with no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: passed.
+
+**Passing from earlier passes on the final tree (per the progress log and memory notes; not re-run here):**
+- Linux GCC debug build and unit ctest.
+- Linux ASan/UBSan build and `linux-sanitize` ctest (22/22).
+- Windows ValidateVendor, `win-dev`, `win-debug`, and `win-unit`.
+- `engine_tests --suite gpu --backend dx12` (71 cases) and `--backend vulkan` (72 cases), with the particle GPU tests included.
+
+**Still open:**
+- **`engine_bench --suite acceptance`:** there is no `engine_bench` target in any CMakeLists.txt. The benchmark harness is US-074, which is not in the tree.
+- **Native Linux Vulkan GPU suite:** this WSL session has no usable Vulkan device, and `vulkaninfo` is not installed. This needs a native Linux machine with a GPU.
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. I did not change any source files this pass, and I did not create a commit.

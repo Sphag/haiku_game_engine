@@ -1,0 +1,43 @@
+# Iteration 664 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:04:49.648Z
+- **Ended At**: 2026-10-26T02:05:11.082Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 2728
+- **Total Tokens**: 2756
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and existing US-076 traces $ git status --short | head -30
+[94m[Bash][0m Check for source changes since last recorded status $ ls -l artifacts/bench/us076-*/ 2>/dev/null | head -5
+[94m[Bash][0m Inspect recent file mtimes and report status fields $ grep -o '"status"[^,]*' artifacts/bench/us076-*/report.json | sort | uniq -c
+[94m[Bash][0m Append status note to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. --- EOF tail -3 .ralph-tui/progress.md
+US-076 is not complete, so I am not signalling COMPLETE. Nothing has changed since the last several status passes, and the remaining work is blocked on your decisions.
+
+**What is done**
+- The `render_stress` driver, `--path indexed|indirect|meshlets`, `--disable-mesh-shaders`, per-run counters, screenshots, and the fallback evidence are in place.
+- Eight reports exist under `artifacts/bench/us076-*` (DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets-with-mesh-shaders-disabled).
+- The workload check passes against the contract counts.
+- The Linux gates passed on the last source change (checked in an earlier pass; not re-run this time).
+
+**What is blocking it**
+1. **Contract failures on the measured runs.** All eight reports exit 1. The route starts with 312,068 triangles against a floor of 2,000,000. p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`. The contract forbids reducing the workload, so I need your approval before I touch it.
+2. **`full_1080` profile is unsupported.** The vendored FSR 2 is missing its generated permutation headers, so only `native_1080` runs. "Both profiles" cannot be met until those headers exist or you choose another vendoring route.
+3. **Not run:** native Linux Vulkan GPU suite and the `linux-gcc` gate. The Windows gates were not re-run in this pass.
+
+**Decisions I need from you**
+- Approve a placement change (and version bump) so the triangle floor and frame budget can be measured, or tell me the contract should be revised.
+- Choose how to provide FSR 2 permutations, or accept `full_1080` as unsupported and record it that way.
+
+I appended a status note to `.ralph-tui/progress.md` recording this, with no source changes and no benchmark rerun.

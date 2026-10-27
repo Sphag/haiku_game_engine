@@ -1,0 +1,43 @@
+# Iteration 330 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T19:36:40.892Z
+- **Ended At**: 2026-10-24T19:41:43.043Z
+- **Duration**: 5m 2s
+- **Input Tokens**: 28
+- **Output Tokens**: 2855
+- **Total Tokens**: 2883
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the physics code, since the Codebase Patterns already describe US-053 as implemented.
+[94m[Bash][0m Inspect repo state and progress log $ ls engine/physics/ 2>/dev/null
+The progress log says US-053 has been Partial for several passes, with the same blockers each time: no GCC 11+ for `linux-gcc`, no `engine_bench` target, and an intermittent Windows test. I'll run the Linux gates once on the current tree to confirm the state before deciding anything.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ echo "ctest=${PIPESTATUS[0]}")
+The Linux gates pass on the current tree. I'll record this pass in the progress log, following the existing format.
+[94m[Bash][0m Append Linux gate rerun entry to progress log $ Jolt needs GCC 11+), `engine_bench --suite acceptance` (no target yet, US-074). - Status call: US-05...
+US-053 is not complete, so I'm not emitting the COMPLETE signal. The code was already in place, and this pass only re-verified it on Linux.
+
+**Passing on this tree (Linux, this pass):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: configured.
+- `cmake --build --preset linux-debug`: built.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 passed (unit 1, integration 21).
+
+**Still open:**
+- **`linux-gcc` gate:** Jolt needs GCC 11+ (`__builtin_bit_cast`). Only GCC/G++ 9 and clang-10 are installed here, and apt has no GCC 11. This needs the CI job or a newer compiler.
+- **`engine_bench --suite acceptance`:** there is no `engine_bench` target in the tree yet. That belongs to US-074.
+- **Windows gates:** not run in this pass. The last full pass on this tree was 21 of 21, per the log.
+- **`linux-asan`:** not run in this pass. The last clean run on this tree was 22 of 22, per the log.
+- **Windows CLI flake:** the intermittent `engine_tests_cli_help` capture failure has no identified cause. It needs repeated Windows runs of that single test.
+
+I appended a dated entry to `.ralph-tui/progress.md` recording these results. The repo is not a git repository, so nothing was committed.

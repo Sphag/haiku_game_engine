@@ -1,0 +1,49 @@
+# Iteration 916 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:11:45.860Z
+- **Ended At**: 2026-10-26T13:12:02.739Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 1701
+- **Total Tokens**: 1715
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-079 and what the prerequisites left behind.
+[94m[Bash][0m Check progress log and existing all_features references $ grep -ril "all_features" --include=* . 2>/dev/null | grep -v third_party | head -30
+US-079 is not complete, and I'm not emitting the COMPLETE signal. This is the 26th pass on it, and the log shows the same two blockers each time. I didn't change any source this turn, so there's nothing new to gate.
+
+**What's done (from earlier passes, not re-run here beyond the Linux check in the log):**
+- Linux: `cmake -P cmake/ValidateVendor.cmake`, `linux-dev`, `linux-debug`, and `linux-unit` pass (30/30).
+- Windows: validate, configure, build, `win-unit`, and `engine_tests --suite gpu --backend dx12` pass. `engine_tests --suite gpu --backend vulkan` passes 73/73 with the pinned 1.4.363 layer.
+- CPU scenario tests (`tests/src/all_features_tests.cpp`) and editor scenario tests (`all_features_editor_tests.cpp`) exist.
+
+**What's blocked, and why I stopped:**
+1. **FSR 2 vendoring route.** `third_party/fsr2` has no `*_permutations.h`, so the upscale profile (`full_1080`) cannot build or be measured. Generating or obtaining those headers is a vendoring decision, not an in-tree edit.
+2. **`all_features` benchmark route.** `benchmarks/manifest.json` still has `all_features` at `implementation: none` with route "pending final benchmark scene". Defining it changes the fixed benchmark contract, so it needs your sign-off.
+
+**Still not done, and not reported as passed:**
+- Tour runner with screenshots and an action log
+- GI/RT/upscale profiles and forced geometry paths
+- Editor scenario on Windows (scene/material/animation/terrain edits, undo/redo, Play/Stop, package/relaunch)
+- GUI checks
+- Native Linux Vulkan GPU run (no `/dev/dri` here)
+- `engine_bench --suite acceptance`
+- `linux-gcc*` presets (no GCC 11+ on this host)
+- ASan/UBSan `linux-sanitize` run
+
+**Decisions I need from you:**
+- **FSR 2:** either supply the generated permutation headers for the pinned FSR 2 archive, or I can mark the upscale profile as unsupported with a documented reason. I'd recommend the second for this story, and treat vendoring as its own story.
+- **`all_features` route:** I'd define it as a builtin scene built from the table workload (the `workload.cpp` recipe) and add it to the manifest. That is a contract change, so I want your approval before I edit `manifest.json`.
+
+Once you answer both, the remaining work is the tour runner, the editor scenario, and the Windows GPU runs, which need a Windows session.

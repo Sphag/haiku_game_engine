@@ -1,0 +1,41 @@
+# Iteration 234 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T14:35:11.059Z
+- **Ended At**: 2026-10-24T14:38:16.211Z
+- **Duration**: 3m 5s
+- **Input Tokens**: 30
+- **Output Tokens**: 2811
+- **Total Tokens**: 2841
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-052 already has in the tree, since the memory notes say the adapter exists.
+[94m[Bash][0m Inspect physics directory and progress log $ grep -n "US-052" .ralph-tui/progress.md | tail -5
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The memory and progress log say US-052 is Partial: Linux clang and Windows gates pass, and `linux-gcc` is blocked by a GCC 9 toolchain. Before I decide what's left, I'll confirm the tree still builds and the unit tests pass, and check whether a newer GCC has appeared.
+[94m[Bash][0m Run Linux validate, build, and unit gates $ tail -n 4 /tmp/unit.log)
+The Linux gates pass again on the unchanged tree. I'll record this pass in the progress log, then stop, since the remaining criteria can't be closed here.
+[94m[Bash][0m Append re-verification entry to progress log $ US-074). Windows gates not re-run this pass. - Status call: US-052 stays **Partial**. No COMPLETE si...
+US-052 is still Partial, so I am not signalling COMPLETE. The Jolt adapter was already in the tree and I changed no source this pass.
+
+**Passing on this tree (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21).
+
+**Still open:**
+- **`linux-gcc` gate (mandatory):** the only compiler here is g++ 9.4. Jolt needs GCC 11+ for `__builtin_bit_cast`, and apt has no GCC 11 candidate on this Ubuntu 20.04 host. This gate needs a GCC 11+ environment or the CI job.
+- **`engine_bench --suite acceptance`:** no benchmark harness exists in the tree yet (US-074), so it can't run.
+- **Windows gates:** not re-run this pass. The memory notes record them as passing from an earlier run.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this pass. The log already has many identical "Partial" entries from earlier passes.

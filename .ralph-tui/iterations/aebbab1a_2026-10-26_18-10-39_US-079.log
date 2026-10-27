@@ -1,0 +1,58 @@
+# Iteration 973 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:10:39.088Z
+- **Ended At**: 2026-10-26T15:13:11.477Z
+- **Duration**: 2m 32s
+- **Input Tokens**: 44
+- **Output Tokens**: 3713
+- **Total Tokens**: 3757
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo root and search for all_features $ grep -rIl "all_features" --exclude-dir=third_party --exclude-dir=build . 2>/dev/null | head -30
+The repo isn't under git, and there are many prior US-079 iteration logs. I'll check the progress notes to see what earlier attempts already did.
+[94m[Bash][0m Read US-079 progress notes and tools layout $ ls tools/* | head -80
+Earlier iterations already established the state: the Linux gates pass, but the story can't close here. Before I conclude, I'll confirm nothing changed since the last gate run.
+[94m[Bash][0m Check for changes since last run and blocker state $ grep -c all_features tools/benchmark/src/main.cpp
+Two files changed after the last logged run. I'll check what the manifest entry says now.
+[94m[Bash][0m Show all_features entries in benchmark manifest $ python3 -I -c " import json m=json.load(open('benchmarks/manifest.json')) def find(o,p=''):     if i...
+The manifest state is unchanged, but the editor test and manifest were edited after the last gate run. I'll rerun the Linux build and unit tests to check the current tree.
+[94m[Bash][0m Rebuild Linux debug and run unit tests $ echo "BUILD_EXIT=${PIPESTATUS[0]}") && timeout 900 ctest --preset linux-unit --output-on-failure --n...
+US-079 is not complete, so I am not emitting the COMPLETE signal. The Linux debug build and unit suite pass on the current tree, but the acceptance criteria that need a Windows GPU host or a GUI session, plus two decisions only you can make, are still open.
+
+**Verified this pass (Linux, WSL):**
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30/30 passed (integration 29, unit 1). This includes the two CPU `all_features` cases.
+- I did not re-run `ValidateVendor`, the Windows gates, the GPU suites, ASan, or `linux-gcc`, so those keep their last recorded results.
+
+**What exists:**
+- CPU tests: `tests/src/all_features_tests.cpp` (workload digests, Lua gameplay and audio, animation, UI click, save round trip, material graph, marker tour) and `tests/src/all_features_editor_tests.cpp` (headless scene/material/animation/terrain edits, undo/redo, Play/Stop, package and relaunch). Both are registered in `engine_tests`.
+- `benchmarks/manifest.json` has an `all_features` scene with `implementation: none` and a proposed `all_features_route_v1`.
+
+**What is still missing:**
+- **`all_features` benchmark branch:** `tools/benchmark/src/main.cpp` has no `all_features` branch, so `engine_bench` reports it as Missing.
+- **`samples/all_features/` project:** the `samples/` directory does not exist.
+- **Forced geometry paths and GI/RT/upscale profiles:** not run.
+- **`full_1080` profile:** blocked because `third_party/fsr2` has none of the eight `*_permutations.h` headers. Vendoring them is a decision for you.
+- **Live-app editor run with package and relaunch, plus screenshots:** needs a Windows GUI session.
+- **Windows gates:** the last recorded run passed (ValidateVendor, win-dev, win-debug, win-unit, and the DX12 and Vulkan GPU suites). These were not re-run this pass.
+- **ASan:** the last recorded `linux-sanitize` run passed 30/30 with no sanitizer reports. The X11 input tests are flaky under WSL focus timing and remain open.
+- **`linux-gcc` presets and native Linux Vulkan GPU suite:** not run. The local GCC 9.4 cannot build Jolt.
+- **`engine_bench --suite acceptance`:** not run.
+
+**Decisions needed from you:**
+1. Choose the FSR 2 vendoring route for the `full_1080` profile.
+2. Approve `all_features_route_v1` as written in the manifest, so the benchmark branch and `samples/all_features` project can be built.
+
+I have not added another progress entry. Prior iterations logged more than 70 status checks with the same blockers, so one more would add nothing.

@@ -1,0 +1,57 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: US-007
+- **Task Title**: In-House Windows Windowing
+- **Description**: As a Windows user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T00:45:27.641Z
+- **Ended At**: 2026-10-22T00:52:14.830Z
+- **Duration**: 6m 47s
+- **Input Tokens**: 74
+- **Output Tokens**: 6738
+- **Total Tokens**: 6812
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The progress log already has a US-007 entry from an earlier pass, so I'll verify the claimed state against the tree rather than rebuild it.
+[94m[Bash][0m Verify US-007 files exist and check toolchain $ which clang++ g++ 2>/dev/null
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -5 /tmp/us007_ctest.log
+Linux gates pass. Next I'll check the test counts and whether the Windows toolchain is reachable from WSL so I can re-run its gates.
+[94m[Bash][0m Check Linux test counts and Windows toolchain availability $ ls "/mnt/c/Program Files/Microsoft Visual Studio" 2>/dev/null
+The Linux build log has 18 lines matching "warning". I need to check whether any are first-party before I accept the zero-warning claim.
+[94m[Bash][0m Inspect warnings in Linux build log $ grep -i "warning" /tmp/us007_build.log | sed 's/^\s*//' | cut -c1-220 | sort | uniq -c | head -20
+No warnings; the earlier "18" was the Visual Studio version directory, not a count. Now the Windows gates, using the `.bat` approach the progress log documents.
+[94m[Bash][0m Locate vcvars64 and check cached MSVC linker $ grep CMAKE_LINKER /mnt/d/dev/haiku_game_engine/build/win-dev/CMakeCache.txt | head -2
+[94m[Bash][0m Run Windows quality gates via batch file $ cat > /tmp/us007_gates.bat <<'EOF' @echo off cd /d D:\dev\haiku_game_engine call "C:\Program Files\M...
+[94m[Bash][0m Check Windows build warnings and ctest summary $ rm -f /mnt/c/Windows/Temp/us007_gates.bat
+All four Windows gates pass with zero MSVC warnings. The story also requires the Linux/GCC gate, so I'll run that as well.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests $ tail -2 /tmp/gcc_ctest.log
+Every gate passes, so the existing implementation holds. I'll append a short re-verification note to the progress log, as the workflow asks.
+[94m[Bash][0m Append US-007 re-verification entry to progress log $ integration 170 assertions in 20 cases.   - Linux/GCC: `linux-gcc`, `linux-gcc-debug` (0 warnings), ...
+US-007 was already implemented by an earlier pass. This iteration re-ran every gate the story lists, and they all pass. I made no code changes.
+
+**Gates (exit codes checked directly):**
+- **Windows/MSVC** (VS 18, matching the `win-dev` cache): `ValidateVendor`, `win-dev`, `win-debug` build with zero `warning C` lines, and `win-unit` ctest all pass.
+- **Linux/Clang**: `ValidateVendor`, `linux-dev`, `linux-debug` build with zero warnings, and `linux-unit` ctest all pass. Unit suite: 12040 assertions in 97 cases. Integration suite: 170 assertions in 20 cases.
+- **Linux/GCC**: `linux-gcc`, `linux-gcc-debug` build with zero warnings, and `linux-gcc-unit` ctest all pass.
+
+**What the implementation covers:** the in-house Win32 layer in `engine/platform` uses user32 directly with no SDL or GLFW. It supports multiple windows, generation-checked window IDs, and native handles for DX12/Vulkan. Framebuffer pixels and logical DIP size are separate types. A minimized window reports 0×0. Per-monitor DPI v2 is enabled. Windows are never destroyed while their message handler runs, so close during a resize is deferred. A modal timer keeps the app ticking during the OS size loop. Linux `Platform::create()` returns `Unsupported` until X11 lands in US-008.
+
+**Not run, and why:**
+- **GUI and screenshot checks:** no editor or application exists yet, so there is no UI to drive. Real keyboard focus and a real monitor DPI change are not automated.
+- **Sanitizer presets (`linux-asan`, `linux-sanitize`):** windowing is not in the memory/ECS/jobs/streaming/Lua/physics list the story gates on. The earlier pass ran them and they passed; I did not repeat them.
+- **Benchmarks:** this is not a performance-affecting change.
+- **Remote CI:** not triggered.
+- **`win-2022-check`:** not re-run this pass; the earlier entry records it passing.
+
+I appended a short re-verification entry to `.ralph-tui/progress.md`. I did not create a git commit, as the workflow specifies.
+
+<promise>COMPLETE</promise>

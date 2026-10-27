@@ -1,0 +1,41 @@
+# Iteration 453 Log
+
+## Metadata
+
+- **Task ID**: US-057
+- **Task Title**: Audio
+- **Description**: As a game creator, I want audio so that I can add sound to the game world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T04:13:39.765Z
+- **Ended At**: 2026-10-25T04:14:07.411Z
+- **Duration**: 27s
+- **Input Tokens**: 36
+- **Output Tokens**: 4543
+- **Total Tokens**: 4579
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for audio and what the progress log says.
+[94m[Bash][0m Inspect repo layout and audio state $ ls && ls engine/audio 2>/dev/null && find engine/audio -type f 2>/dev/null | head -100 && grep -n "U...
+Audio code already exists from an earlier pass, but the progress log has no US-057 entry. I'll check the tail of the log and the audio tests and CMake wiring.
+[94m[Bash][0m Read progress tail and audio module state $ tail -60 .ralph-tui/progress.md && echo ---- && wc -l engine/audio/src/*.cpp engine/audio/src/native...
+The story has an extensive log. Every Linux and Windows gate reportedly passes. The open items are the `linux-gcc` gate and the benchmark. Before deciding whether anything is left to do, I'll check whether the tree changed since the last verification, and whether a GCC 11+ compiler exists on this host now.
+[94m[Bash][0m Check tree changes, compilers, and unload hooks $ grep -rn "engine_bench" --include=CMakeLists.txt . 2>/dev/null | grep -v third_party | head -3
+The tree has not changed since the last recorded verification, and the two blockers are still environmental. I'll log this pass in the progress file, following the convention used by earlier entries, rather than rerun the gates on unchanged code.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-057 (status re-check, still Partial) - Wha...
+US-057 is not complete, so I am not emitting the COMPLETE signal. Most of the audio work was already in the tree from an earlier pass. This pass made no source changes; I only appended a re-check entry to `.ralph-tui/progress.md`.
+
+**What exists:** the `engine_audio` module with WAV and Ogg Vorbis decode, an offline mixer (2D pan, 3D attenuation, looping, buses, streamed music), an optional miniaudio device that falls back to offline, and a Lua `audio` module. Tests are in `tests/src/audio_*` and `script_audio_tests.cpp`, with fixtures in `tests/fixtures/audio`.
+
+**Recorded results (from earlier passes, not rerun today):** the Linux gates (ValidateVendor, linux-dev, linux-debug, linux-unit 22/22, linux-asan build, linux-sanitize) and the Windows gates (ValidateVendor, win-dev, win-debug, win-unit 21/21) pass. I checked that no file under `engine/`, `tests/`, or `cmake/` has changed since that last run, so those results still apply.
+
+**Open items:**
+1. **`linux-gcc` gate and CI job:** not run. The host has only GCC 9.4 and clang 10, and Jolt needs GCC 11+. Someone needs to run this on a machine with GCC 11+.
+2. **`engine_bench --suite acceptance`:** not run. No `engine_bench` target exists in the tree, so the harness (US-074) has to land first.
+3. **World unload does not release voices.** The acceptance criteria require this, but the runtime never calls `AudioEngine::stop_owner` on unload. The streaming hook `on_unloaded` works per cell, and audio emitters are not tied to cells. Wiring it needs a design choice, such as a cell-scoped owner id. I did not make that choice unilaterally, because it changes how emitters are owned.
+
+Item 3 is the one I can address in code. I can wire it if you confirm the cell-scoped owner approach.

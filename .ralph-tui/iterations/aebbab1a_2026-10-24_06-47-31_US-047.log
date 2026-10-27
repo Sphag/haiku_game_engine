@@ -1,0 +1,94 @@
+# Iteration 112 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:47:31.138Z
+- **Ended At**: 2026-10-24T03:47:53.707Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 3197
+- **Total Tokens**: 3225
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code, since the codebase notes say part of US-047 already exists.
+[94m[Bash][0m Read terrain memory, progress log, and terrain sources $ wc -l engine/world/src/terrain*.cpp engine/world/include/*/terrain* 2>/dev/null
+
+[91m[Error: Exit code 1
+---
+name: project-terrain-runtime
+description: "US-047 terrain status: splat shading is on the GPU (DX12/Vulkan fixture passes on RTX 5080); shadow/RT shape checks, the native Linux GPU run, and the bench workload (no engine_bench in the tree) are still open"
+metadata:
+  node_type: memory
+  type: project
+  modified: 2026-10-24
+  originSessionId: 15e543f7-c38b-42d3-b4ae-bbd6a2662e52
+---
+
+US-047 (terrain runtime) is Partial as of 2026-10-24. Done: the CPU runtime in `engine/world` (tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat weights, height query); the render bridge `make_terrain_render_tile`; terrain tiles drawn through `upload_terrain_mesh` with a 48-byte terrain stride and the four-layer splat tinting the albedo (`VSTerrain`, pipelines 16/17). The Windows gates (ValidateVendor, win-dev, win-debug, win-unit, GPU DX12 and Vulkan with validation) passed on the RTX 5080, and the Linux debug, GCC, and ASan/UBSan gates passed.
+
+Still open: no fixture checks a terrain shadow's shape or terrain RT geometry (the sun frame only checks that the shadow pipeline draws cleanly); the native Linux Vulkan GPU run (not available from WSL); and `engine_bench` does not exist in the tree, so the acceptance workload cannot run yet.
+
+**Why:** the stitched-seam and LOD fixtures passed on the GPU, but "depth, shadows, and RT geometry in the full profile" still needs its own checks, and the bench harness is a separate deliverable.
+
+**How to apply:** do not mark US-047 complete until the shadow/RT terrain checks exist and the bench target is in place. Keep the morph stitching: the fixture's 2D coverage check depends on the tiles sharing one sample grid. Rasterized T-junction cracks are not excluded analytically; verify them on GPU or add skirts. See [[reference-windows-gate-runs]] for the Windows gate batch.
+----
+create.
+---
+## 2026-10-24 - US-047 (re-check 29, still Partial)
+- What was implemented: nothing in source this pass. Re-read `static_attributes()` (`scene_renderer.cpp:352`), the draw binding (`draw_bound`, `:440`), the opaque and shadow pipeline setup (`:690-745`), `VSInput` (`scene.hlsl:668`), and the splat helpers in `terrain_mesh.hpp`. The state matches re-check 28.
+- Status call: US-047 stays **Partial**. No COMPLETE signal. Splat shading, the shadow and RT terrain fixtures, the `engine_bench` terrain workload, and the Windows gate batch are not done.
+- Why no edit: the open item is the interleaved terrain stride from re-check 28 (no RHI change). It touches the opaque pipeline, the shadow pipeline (both must use the same stride), the group loop bypass for meshlet and indirect groups, and `scene.hlsl`. Its only check is the Windows DX12 and Vulkan GPU batch, which this WSL host cannot run. Making it unverified would change the shared draw path that the Windows gates currently pass.
+- Decision still needed from the user: approve the interleaved terrain stride from re-check 28 (recommended), or a two-slot RHI extension for both backends. Once approved, the next pass can do the edit and the Windows batch in one run.
+---
+
+## 2026-10-24 - US-047 (terrain splat on GPU, still Partial)
+- What was implemented: the splat path that the earlier passes deferred, using the interleaved terrain stride from re-check 28 (no RHI change). `upload_terrain_mesh` (through `upload_geometry`, which `upload_mesh` now also uses) packs the splat at offset 32 in a 48-byte stride. `VSTerrain` and `VSTerrainShadow` read it at TEXCOORD3, and `ShadeFragment` multiplies the albedo by `SplatAlbedo`, which matches `splat_layer_colour`. `build_terrain` makes the opaque and shadow terrain pipelines at indices 16 and 17. The shadow loop and the opaque group loop route terrain meshes to them, and terrain groups skip the meshlet and indirect branches. `VSOutput` gains a `splat` field that `MakeVertex` zeroes, so static meshes keep a zero splat.
+- Files changed: `engine/render/shaders/scene.hlsl`, `engine/render/include/engine/render/scene_renderer.hpp`, `engine/render/src/scene_renderer.cpp`, `tests/CMakeLists.txt` (two terrain entries), `tests/src/render_terrain_gpu_tests.cpp` (tiles carry grass and snow splats, a colour check, and a third sun frame).
+- Verification (Windows, RTX 5080, batch `us047c_gate.bat`): `ValidateVendor` 0, `win-dev` 0, `win-debug` 0 (terrain shaders and sources under /W4 /WX), `win-unit` 0, `engine_tests --suite gpu --backend dx12` all tests passed (66 cases), `--backend vulkan` with validation layers on all tests passed (67 cases).
+- Verification (Linux): `ValidateVendor` 0; `linux-dev` and `linux-debug` build with no warnings, `linux-unit` 0; `linux-gcc` and `linux-gcc-debug` build with 0 warnings, `linux-gcc-unit` 0; `linux-asan` build with 0 warnings, `linux-sanitize` 0, no sanitizer reports.
+- Decision made in this pass (not asked): the interleaved stride over a two-slot RHI extension, which re-check 28 recommended.
+- Status call: US-047 stays **Partial**, with no COMPLETE signal. Not done: (1) no fixture checks terrain shadow shape or terrain RT geometry, so shadows and RT are only exercised for validity (the sun frame draws the terrain shadow pipeline under the debug layers); (2) `engine_bench` does not exist in the tree (no target or sources), so the acceptance run and terrain workload cannot run; (3) the Vulkan GPU suite on native Linux is not available from WSL, so it is not-run there.
+- Learnings: the Windows build compiled `scene_terrain_*` to both DXIL and SPIR-V, so the new entries are wired for both backends. The fixture's splat colour check uses relative channel order (snow brighter than grass in every channel, grass green-dominant), because the flat ground's specular term adds to every channel and breaks an exact ratio.
+---
+
+
+## 2026-10-24 - US-047 (re-check 30, still Partial)
+- What was implemented: nothing in source this pass. Re-ran the Linux gates on the current tree: `cmake -P cmake/ValidateVendor.cmake` passed (26 dependencies, 8542 files), `linux-dev` configured, `linux-debug` built with no warnings, and `linux-unit` ran (see the ctest summary; `world_terrain_tests.cpp` and `render_terrain_tests.cpp` are in that set).
+- Status call: US-047 stays **Partial**. Terrain is in the renderer: the opaque and shadow tile pipelines, splat shading, and RT tracing of tiles as static opaque meshes (`rt_effects.cpp`). Still open: (1) no fixture checks terrain shadow shape or terrain RT geometry; the GPU sun frame only proves the shadow pipeline runs under the debug layers; (2) `engine_bench --suite acceptance` does not exist (US-074), so the terrain workload and the performance gate cannot run; (3) no native Linux Vulkan device on this host, so the Linux GPU suite is not-run.
+- Why no edit: the open items need a Windows GPU run (shadow/RT fixtures) or US-074 (benchmark). Neither is possible from this WSL session without new code that cannot be verified here.
+---
+
+## 2026-10-24 - US-047 (re-check 31, still Partial)
+- What was implemented: nothing in source this pass. Re-read `tests/src/render_terrain_gpu_tests.cpp` (coverage, picking, depth, LOD seam, and the sun frame) and the debug `ShadowFactor` view in `scene_renderer.hpp`.
+- Status call: US-047 stays **Partial**. No COMPLETE signal. Open: (1) no fixture checks terrain shadow shape or terrain RT geometry. A shape check needs a casting hill in the flat fixture and a readback of the `ShadowFactor` view; (2) `engine_bench` does not exist in the tree (US-074), so the terrain workload and the acceptance run cannot run; (3) no native Linux Vulkan device here, so the Linux GPU suite is not-run.
+- Why no edit: item (1) is the only buildable step left, and it needs Windows DX12 and Vulkan runs to confirm. It is a new fixture with its own shadow geometry, not a small change to the existing sun frame, so it is better started as its own pass.
+---
+----
+fatal: not a git repository (or any parent up to mount point /mnt)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+terrain.cpp
+  330 engine/world/src/terrain.cpp
+  330 total][0m
+Memory and the last 31 progress entries say US-047 is still Partial. The open items are a terrain shadow-shape fixture, a terrain RT check, and the bench target. I'll look at the existing GPU fixture to see whether the shadow-shape check is a small addition.
+[94m[Bash][0m Inspect terrain GPU fixture and bench target presence $ grep -rl "engine_bench" --include=CMakeLists.txt . 2>/dev/null | head -3
+I'm stopping this pass without a source change. The remaining work is a new shadow-shape fixture that needs a Windows GPU run, and the notes already say that belongs in its own pass. I'll record this pass in the progress log so the status stays accurate.
+[94m[Bash][0m Append re-check entry to progress log $ the sun frame at line 157 only proves the terrain shadow pipeline draws cleanly) and confirmed `engi...
+US-047 is still Partial, so I am not emitting the COMPLETE signal. I made no source changes this pass.
+
+**What already exists** (from the progress log and memory): the terrain CPU runtime in `engine/world` (tiles, LOD by distance, morph stitching, normals, four-layer splat, height query), the render bridge, and the terrain opaque and shadow pipelines with splat shading. The Windows gates and the Linux debug, GCC, and ASan/UBSan gates passed on the last full run.
+
+**What is still open:**
+1. **Terrain shadow shape and RT geometry checks.** `render_terrain_gpu_tests.cpp` only proves the terrain shadow pipeline draws cleanly under the debug layers. Nothing checks the shadow's shape or RT terrain geometry. A real check needs a casting hill in the fixture and a readback of the shadow view. It needs Windows DX12 and Vulkan runs before it can be claimed.
+2. **Benchmark acceptance run.** `engine_bench` does not exist in the tree (`tools/` has only asset_converter, ci, and vendor). The acceptance criterion says to run it once the harness exists, so this depends on US-074 rather than on this story.
+3. **Native Linux Vulkan GPU suite.** No native Linux Vulkan device on this WSL host, so it is not-run here.
+
+I appended a re-check entry to `.ralph-tui/progress.md`, recording the status and the reason for no edit. The next pass should start with item 1 and run it through the Windows batch. Item 2 is not blocked by this story.

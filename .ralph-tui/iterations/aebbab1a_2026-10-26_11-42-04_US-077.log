@@ -1,0 +1,36 @@
+# Iteration 856 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T08:42:04.369Z
+- **Ended At**: 2026-10-26T08:42:21.676Z
+- **Duration**: 17s
+- **Input Tokens**: 26
+- **Output Tokens**: 2369
+- **Total Tokens**: 2395
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for the physics benchmark and the progress log.
+[94m[Bash][0m Inspect repo layout, benchmark tools, and PRD $ grep -n "US-077" -A60 tasks/prd-open-world-engine.md | head -150
+The progress log shows this story was already implemented and verified on Windows and Linux clang. The one open item is the Linux/GCC gate. I'll confirm the source still covers the acceptance criteria and that nothing changed since the last Windows run.
+[94m[Bash][0m Check physics stress criteria coverage and toolchain $ ls /usr/lib/gcc 2>/dev/null
+[94m[Bash][0m Append status note to progress log $ no GCC 11+ and no way to install one without root. The `linux-gcc*` CI criterion stays unverified an...
+US-077 is not complete, so I'm not emitting the completion signal. The only open item is the Linux/GCC CI gate, which this machine cannot run.
+
+**What's verified**
+- The `physics_stress` source covers the three acceptance criteria. It reports active and sleeping bodies, simulation steps, queries, and catch-up events. It detects lost timesteps, NaN transforms, and out-of-bounds samples. `tests/src/bench_physics_tests.cpp` exists.
+- The earlier logged runs on this tree passed. Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build with no warnings, and `linux-unit` at 30/30. Windows: a batch named `us077` was run, and no file under the story's paths is newer than that report.
+
+**What's blocked**
+- The `linux-gcc*` job needs GCC 11 or newer, because Jolt requires it. The host has only g++-9 and clang++-10. Installing GCC 11 needs root, and `sudo -n` requires a password. I have not reported this gate as passed.
+
+I did not re-run the Linux or Windows gates in this pass. I only re-read the source and probed the toolchain. I appended a status-64 entry to `.ralph-tui/progress.md` with no code changes. To close the story, someone with root on this machine needs to install GCC 11 or newer, or run the `linux-gcc` job in CI.

@@ -1,0 +1,44 @@
+# Iteration 718 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:20:07.406Z
+- **Ended At**: 2026-10-26T02:20:19.886Z
+- **Duration**: 12s
+- **Input Tokens**: 20
+- **Output Tokens**: 1831
+- **Total Tokens**: 1851
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo state, progress log, and benchmark tool $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && gre...
+[94m[Bash][0m Check artifact timestamps and recorded status $ grep -o '"triangles[^,]*' artifacts/bench/us076-dx12-indexed*/*.json 2>/dev/null | head -3
+US-076 is not complete, and I did not signal COMPLETE. The acceptance criteria cannot pass on the current instance placement, and fixing that is a workload change that needs your decision.
+
+I re-checked the artifacts. `render_stress.cpp` was last edited at 04:15:43, and the recorded reports are unchanged. I did not rerun any gates or benchmarks.
+
+**What is done:**
+- The `render_stress` driver, the `--path` and `--disable-mesh-shaders` options, per-run counters, and screenshots are in place.
+- Mesh-shader fallback works. With mesh shaders forced off, the renderer falls back to indirect-indexed draws, and the report marks mesh shaders as disabled rather than enabled. This is true on DX12 and Vulkan.
+- Linux gates pass on the current tree: ValidateVendor, linux-dev, linux-debug build with 0 warnings, and linux-unit at 30/30.
+- Windows gates passed in the last full run: ValidateVendor, win-dev, win-debug build, win-unit at 29/29, engine_tests `--suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and win-release engine_bench.
+
+**What is blocked:**
+1. **Triangle floor and frame budget fail on every indexed, indirect, and mesh-shader run.** The route start sees 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. This happens because instances are spread uniformly over 8192 m, so the start of the route sees only about 330 items. These runs exit 1 with `failed`. That is the measured result, not a harness bug.
+2. **The full_1080 profile is unsupported.** The FSR 2 shader permutation headers are missing from the vendored tree, so only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU, and the linux-gcc gate (GCC 9.4 cannot build Jolt).
+
+**Decisions needed from you:**
+- **Placement:** approve a change to instance placement so the route start sees enough geometry? It changes the workload, so `kWorkloadVersion` must be bumped and `workload_expected.json` regenerated. Or should I keep the contract and close the story as measured with these failures?
+- **Profile:** is it acceptable to close US-076 with full_1080 reported as unsupported, or should it wait for the FSR 2 permutations?
+
+Once you decide, I can make the placement change and rerun the affected reports and gates.

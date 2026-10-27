@@ -1,0 +1,35 @@
+# Iteration 769 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:38:02.040Z
+- **Ended At**: 2026-10-26T02:38:17.118Z
+- **Duration**: 15s
+- **Input Tokens**: 20
+- **Output Tokens**: 1803
+- **Total Tokens**: 1823
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and locate benchmark code $ tail -n 120 .ralph-tui/progress.md && ls tools/benchmark/src tools/benchmark 2>/dev/null && grep -rn...
+[94m[Bash][0m Check source and artifact timestamps for changes $ grep -n "kWorkloadVersion\s*=" -r tools/benchmark benchmarks 2>/dev/null | head -3
+US-076 is not complete, and I did not sign it off. Nothing changed in this pass: the source, workload, and manifest files are the same as in the last recorded run, so I did not rerun the gates or benchmarks.
+
+Three things block completion, and each needs your decision:
+
+1. **Triangle floor and frame budget fail on the route start.** The contract requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The current placement gives 312,068. Frame time is p99 35–47 ms against a 16.7 ms budget. Both the start pose (the camera route, pinned by SHA-256 in the manifest) and the instance placement (seeded, digests pinned) are fixed contract values. Fixing either means bumping `kWorkloadVersion` (currently 1 in `tools/benchmark/include/engine/benchmark/workload.hpp:25`), regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. Should I make that change, or accept the failing measured run as the result and close the story as measured?
+2. **`full_1080` is unsupported.** The FSR 2 shader permutation tables are missing from the vendored tree, so only `native_1080` runs. Which vendoring route do you want for those tables?
+3. **Not run:** native Linux Vulkan GPU (WSL has no usable Vulkan device) and the `linux-gcc` gate (local GCC 9.4 cannot build Jolt).
+
+What is verified: the Linux gates passed on the current tree. ValidateVendor passed, linux-debug built with no warnings, `linux-unit` passed 30/30, and `engine_workload --check` matched all four scenes. The eight `us076-*` benchmark reports exist, and each exits 1 on the frame budget and triangle floor. The Windows gates are not re-run in this pass.
+
+I added no new entry to `.ralph-tui/progress.md`, because the last 20 or so entries repeat the same blocked status. Tell me which option you choose for item 1 and I'll carry it out.

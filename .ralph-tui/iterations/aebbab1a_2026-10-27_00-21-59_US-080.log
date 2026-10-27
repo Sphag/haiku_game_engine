@@ -1,0 +1,40 @@
+# Iteration 1161 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:21:59.123Z
+- **Ended At**: 2026-10-26T21:22:12.724Z
+- **Duration**: 13s
+- **Input Tokens**: 24
+- **Output Tokens**: 1943
+- **Total Tokens**: 1967
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo before deciding what this story can verify here.
+[94m[Bash][0m Read progress log tail and bench artifacts $ tail -c 6000 .ralph-tui/progress.md && echo ---- && grep -n "US-07[5-9]\|US-080" .ralph-tui/progress...
+[94m[Bash][0m Re-check hardware and blocker state $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No source change, ...
+US-080 is not complete, and I did not emit the COMPLETE signal. This host cannot produce the reports the story requires.
+
+**What I checked (unchanged from the last 57 status checks):**
+- **No native Linux Vulkan device:** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42).
+- **FSR 2 cannot build:** `third_party/fsr2` has 0 `*_permutations.h` files. This needs a vendoring decision from you.
+- **Four workloads are unimplemented:** `benchmarks/manifest.json` lists four entries with `implementation: none` (lines 88, 108, 122, 132). A Windows acceptance run would exit 3 (incomplete) until they exist.
+- **No acceptance reports:** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+
+**What's needed to finish:**
+1. The 3×180 s acceptance runs (plus warmup) on the reference RTX 5080 for Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. Each needs raw reports and the separate cold-launch, shader-prep, teleport, and save/load latency reports.
+2. A decision on the FSR 2 permutations route.
+3. Implementations for the four `implementation: none` workloads.
+4. The Windows and Linux quality gates and visual editor smoke tests, run on the reference machine.
+
+I did not run the gates, change the contract, or start a bench run, since a run now would only report incomplete. I appended a status entry to `.ralph-tui/progress.md`. Nothing else changed.

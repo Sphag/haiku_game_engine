@@ -1,0 +1,43 @@
+# Iteration 1116 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:09:28.831Z
+- **Ended At**: 2026-10-26T21:09:43.732Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2321
+- **Total Tokens**: 2343
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether benchmark reports already exist.
+[94m[Bash][0m Check progress log, bench artifacts, and repo state $ git status 2>&1 | head -3
+[94m[Bash][0m Search progress and PRD for US-080 and acceptance notes $ grep -n -i "rtx\|acceptance" tasks/prd-open-world-engine.md | head -40
+[94m[Bash][0m Recheck hardware and fixture blockers $ grep -n '"none"' benchmarks/manifest.json | head
+US-080 is not complete, so I'm not emitting the COMPLETE signal. I re-checked the blockers on this host and made no code or file changes.
+
+**What's blocking sign-off**
+
+1. **No native Linux Vulkan device.** `/dev/dri` is absent. WSL sees the RTX 5080 only through `nvidia-smi`, so the native Linux/Vulkan report cannot be produced here.
+2. **Frame budget is unmet.** Every `render_stress` run in `artifacts/bench/us076-*` has p99 frame time of 35–47 ms against the 16.7 ms target. The PRD says to fix the measured cause in the implementation, not relax the contract. That needs a Windows RTX 5080 profile to find the cause, and no such profile exists yet.
+3. **Missing workloads.** `benchmarks/manifest.json` still has four entries with `implementation: "none"` (lines 88, 108, 122, 132), including `all_features`, physics, and streaming. The acceptance suite cannot cover every scene until these exist.
+4. **`full_1080` needs FSR 2 permutation headers.** `third_party/fsr2` has none of the eight `*_permutations.h` files per backend. Getting them is a vendoring decision for you: pull the generated headers from the upstream archive, or drop FSR 2 from the profile.
+5. **No acceptance run exists.** `artifacts/bench` has no `acceptance` run for DX12, Vulkan, or Linux, so no three-repeat, 30 s warmup, 180 s measured reports exist yet.
+6. **Linux GCC gate can't run here.** The host has GCC 9.4 and Clang 10, and Jolt needs GCC 11+ or Clang 14+.
+
+**What would unblock it**
+
+- Run the acceptance suite on the reference RTX 5080 machine. That covers Windows/DX12, Windows/Vulkan, and native Linux/Vulkan, and needs a native Linux Vulkan driver.
+- Decide the FSR 2 route, and whether `all_features` and the physics/streaming workloads should be implemented before the first sign-off run.
+- Start a profiling pass on the Windows RTX 5080 to find the measured cause of the render_stress frame-time overrun. Fixing it is implementation work and is in scope, but it needs that profile first.
+
+The Linux quality gates passed on this tree in an earlier pass. The Windows gates and the Linux GCC gate were not re-run in this pass. I also did not append another status entry to `.ralph-tui/progress.md`, since the log already records these same blockers across more than 25 repeated checks.

@@ -1,0 +1,43 @@
+# Iteration 264 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:58:17.210Z
+- **Ended At**: 2026-10-24T15:58:31.646Z
+- **Duration**: 14s
+- **Input Tokens**: 20
+- **Output Tokens**: 2026
+- **Total Tokens**: 2046
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read physics memory, progress log, and physics dir $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md && echo -...
+[94m[Bash][0m Find US-052 references in progress and PRD $ grep -n "US-052" -A3 tasks/prd-open-world-engine.md | head -30
+[94m[Bash][0m Check for GCC 11+ and physics file timestamps $ cd /mnt/d/dev/haiku_game_engine && ls -l --time-style=+%H:%M engine/physics/CMakeLists.txt engine/ph...
+US-052 is not complete, so I'm not emitting the completion signal. Nothing in the source changed this pass, and the blockers are environmental.
+
+**What I checked**
+- The physics sources (`engine/physics/CMakeLists.txt` at 13:13, `physics_world.cpp` at 13:05, `tests/src/physics_world_tests.cpp` at 13:06) are unchanged since the last full gate run, so the earlier results still stand.
+- The toolchain is unchanged. `/usr/bin` has only g++-9, gcc-9 and clang++-10. There is no `/opt` compiler, no conda or micromamba, and `sudo -n` still needs a password.
+
+**Status against the acceptance criteria**
+- Passing per the progress log from earlier today:
+  - Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21).
+  - Linux clang: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (22/22).
+  - ASan/UBSan: `linux-asan` build and `linux-sanitize` (22/22).
+- Blocked: `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit`. Jolt needs GCC 11+ for `__builtin_bit_cast`, and the local GCC is 9.4. The separate Linux/GCC CI job is therefore unverified.
+- Not run: `engine_bench --suite acceptance`. No `engine_bench` target exists in a non-vendored CMakeLists.txt; that harness is US-074.
+
+**What closes it**
+- Install GCC 11+ (`sudo apt install g++-11` after refreshing the package lists, or run the job in CI), then run the three `linux-gcc*` presets.
+- The benchmark needs the US-074 harness, so it can't be closed in this story.
+
+I didn't add another progress-log entry. The last several entries record the same state, and a new one would only repeat them. Say if you want one anyway.

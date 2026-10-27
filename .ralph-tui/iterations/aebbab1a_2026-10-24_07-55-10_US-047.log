@@ -1,0 +1,48 @@
+# Iteration 129 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:55:10.788Z
+- **Ended At**: 2026-10-24T05:01:34.034Z
+- **Duration**: 6m 23s
+- **Input Tokens**: 56
+- **Output Tokens**: 7760
+- **Total Tokens**: 7816
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see what US-047 already has.
+[94m[Bash][0m Read progress log and PRD US-047 section $ ls && tail -n 120 .ralph-tui/progress.md && grep -n "US-047" -A3 tasks/prd-open-world-engine.md | he...
+[94m[Bash][0m List terrain-related source files $ grep -rln "terrain" --include=*.cpp --include=*.hpp --include=*.hlsl --include=*.txt --include=*.jso...
+The progress log shows 40+ passes that stopped at the same GPU RT terrain shadow failure, with no source change. I'll look at the fixture and the traced-scene build directly, to find a concrete check I can run rather than re-reading again.
+[94m[Bash][0m Read hill RT fixture and traced-scene hooks $ sed -n 420,500p tests/src/render_terrain_gpu_tests.cpp && echo ---- && grep -n "traced()\|prepare_ra...
+[94m[Bash][0m Read prepare_ray_traced implementation $ sed -n 1580,1740p engine/render/src/scene_renderer.cpp
+The traced-scene build looks right on its face. The CPU test builds its own triangles, so I'll check whether the GPU path's `rt_triangles` for terrain come from the same data.
+[94m[Bash][0m Trace rt_triangles population for terrain $ grep -n "upload_terrain_mesh" -A45 engine/render/src/scene_renderer.cpp | sed -n 1,70p
+The GPU path builds `rt_triangles` from the same mesh data as static meshes, so the static reading holds again. The remaining cause is on the GPU side and needs a Windows readback. I'll re-run the Linux gates to confirm the tree's state before I record anything.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -n 4
+[94m[Bash][0m Summarize unit test result and check engine_bench $ grep -rl "engine_bench" CMakeLists.txt engine tools tests 2>/dev/null | head
+The Linux gates pass. I'll record this pass in the progress log, which the workflow requires, and leave the story Partial.
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: the geometry and build path match the...
+US-047 is still **Partial**, so I am not signalling COMPLETE.
+
+**Passing on Linux this pass:**
+- `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset linux-dev`, and `cmake --build --preset linux-debug` all exit 0, with 0 warnings.
+- `ctest --preset linux-unit --no-tests=error` passes 22 of 22.
+
+**Still open:**
+1. **Traced terrain shadow fails on the GPU.** The fixture `run_terrain_traced_shadow` in `tests/src/render_terrain_gpu_tests.cpp` reports `darkened 0` on both DX12 and Vulkan, with no validation-layer errors. The CPU reference darkens the same hill. I re-read the traced-scene build and the triangle upload. Terrain uses the same path as static meshes, so the cause is not in the geometry or the build by reading. Settling it needs a Windows readback of `RtShadow` for the hill frame. That needs a test-only accessor first, then a Windows GPU batch.
+2. **`engine_bench --suite acceptance` cannot run.** The tree has no `engine_bench` target (`tools/` holds only asset_converter, ci, and vendor). The performance gate depends on US-074, which is not a prerequisite of this story.
+3. **Linux Vulkan GPU suite is not run.** This host has no native Vulkan device.
+
+I did not run the Windows gates or the Linux GCC and ASan presets in this pass. I did not change any source. I appended a re-check entry to `.ralph-tui/progress.md`. No commit was made.
+
+The next step is the `RtShadow` readback on the Windows host. Forty-plus passes have stalled on this same point, so it is the decision that unblocks the story.

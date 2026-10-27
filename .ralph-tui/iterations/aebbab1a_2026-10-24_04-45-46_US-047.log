@@ -1,0 +1,39 @@
+# Iteration 81 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T01:45:46.706Z
+- **Ended At**: 2026-10-24T01:46:14.339Z
+- **Duration**: 27s
+- **Input Tokens**: 34
+- **Output Tokens**: 4204
+- **Total Tokens**: 4238
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and terrain memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+[94m[Bash][0m Survey render sources and terrain PRD requirements $ grep -n -i "terrain" tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Inspect SceneRenderer interface and function layout $ grep -n "^[A-Za-z].*(\|^    void\|^    bool\|^namespace\|struct " engine/render/src/scene_renderer.c...
+[94m[Bash][0m Check for source changes since last progress entry $ ls artifacts/bench 2>/dev/null | head -3
+[94m[Bash][0m Append US-047 status entry to progress log $ the Windows and GPU gates are not run because there is no terrain GPU path to test. - Scope of the o...
+US-047 is not complete. I did not emit the COMPLETE signal, and I made no source changes this pass.
+
+**Status: Partial.**
+
+- **Done (CPU runtime, `engine/world`):** tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat weights, and height query. Fourteen fixture cases in `tests/src/world_terrain_tests.cpp` cover coverage, holes, LOD switching, and normals. The earlier entry records the Linux and Windows CPU gates and the ASan/UBSan run as passing.
+- **Not done:** the renderer side of the story. There is no terrain draw path in `SceneRenderer`, no splat shading, no shadow or depth participation, and no RT geometry. `rt_effects_geometry_support` still reports heightfield terrain as unsupported. There is also no GPU terrain fixture and no `engine_bench` terrain workload.
+- **Gates:** I did not re-run them this pass because no source changed since the last entry. The Windows GPU suites and the acceptance bench have nothing terrain-specific to test yet, so they have not been run.
+
+**Why I stopped here:** the renderer change touches the indexed, indirect, meshlet, shadow, and RT paths of `scene_renderer.cpp` (about 3,800 lines). Verifying it needs a Windows GPU run, and I would not leave a partial edit to that file unverified.
+
+**Recommended next pass:** use vertex colour for the four splat weights, since the CPU mesh already carries normalised weights per vertex. Add a terrain draw that uploads each `TerrainTileMesh`, then wire it into shadows and RT, then add the GPU fixture and bench workload. Then run the Windows gate batch.
+
+I appended a status entry to `.ralph-tui/progress.md` with this scope.

@@ -1,0 +1,72 @@
+# Iteration 197 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T12:45:13.455Z
+- **Ended At**: 2026-10-24T12:54:45.077Z
+- **Duration**: 9m 31s
+- **Input Tokens**: 74
+- **Output Tokens**: 5471
+- **Total Tokens**: 5545
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since memory notes say much of US-052 may already exist.
+[94m[Bash][0m Inspect physics directory and progress log tail $ ls engine/physics/ && tail -c 6000 .ralph-tui/progress.md && (git status --short 2>&1 | head -30)
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The story is already implemented and marked Partial. The open items are the ASan/UBSan gate (passed on an earlier tree, not re-run since the last physics edits) and the `linux-gcc` gate. I'll re-check the compiler situation and run the ASan gate on the current tree.
+[94m[Bash][0m Check GCC versions and run ASan configure, build, and sanitize tests $ grep -ciE 'warning:|error:' /tmp/asan_build.log)
+
+[91m[Error: Exit code 1
+g++-9
+gcc-9
+configure exit 0
+build exit 0
+ctest exit 8
+Total Test time (real) = 109.05 sec
+
+The following tests FAILED:
+	  2 - engine_tests_integration (Failed)                 integration
+Errors while running CTest
+0][0m
+The ASan build is clean, but the sanitizer run has one failing integration suite. I'll find out which case failed.
+[94m[Bash][0m Extract sanitizer failure details from test log $ grep -nE 'ERROR|runtime error|FAILED|SUMMARY|Failing|with expansion|REQUIRE|CHECK|tests cases|assert...
+[94m[Bash][0m Show failing X11 input check and surrounding test code $ sed -n 415,440p tests/src/platform_x11_input_tests.cpp
+The failing case is an X11 focus/keyboard test, which has nothing to do with physics. The non-sanitizer `linux-unit` run passed, so I'll rerun just that case under the ASan build to see whether it's deterministic.
+[94m[Bash][0m Rerun the failing X11 focus test three times under ASan $ done
+[94m[Bash][0m Run integration suite three times under ASan and count failures $ done
+The integration suite passed on all three reruns under ASan. The earlier failure depends on window-manager focus timing, so it's flaky rather than a physics regression. I'll run the full sanitize gate once more for a clean record.
+[94m[Bash][0m Rerun full linux-sanitize ctest and count sanitizer reports $ grep -c 'runtime error\|AddressSanitizer' /tmp/asan_test2.log
+The sanitize gate passes on a clean rerun (22/22, no sanitizer reports). Before I record the result, I'll confirm the benchmark target is still absent, since that decides whether the story can close.
+[94m[Bash][0m Check for engine_bench target and GCC 11+ compilers $ ls /usr/bin | grep -E '^g\+\+-1[1-9]$' || echo "no gcc 11+"
+Neither the benchmark target nor a GCC 11+ compiler exists here, so US-052 stays Partial. I'll record this pass in the progress log and update the memory note.
+[94m[Bash][0m Append US-052 ASan verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate and the benchmark run. ...
+[94m[Write][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m "---
+name: project-physics-jolt
+description: "US-052 Jolt physics adapter status, and the local toolchain limits that block the linux-gcc gate for Jolt-using stories"
+metadata:
+  node_type: memory
+  ty... (1796 chars)"
+US-052 is still Partial, so I am not emitting the completion signal. The adapter was already implemented in earlier passes, and this pass only re-verified it.
+
+**Passed on the current tree (Linux, clang 10):**
+- `linux-asan` configure and build: exit 0, no warnings or errors.
+- `ctest --preset linux-sanitize`: 22/22 passed, no sanitizer reports.
+
+**Flaky, not physics:** the first sanitize run failed `X11 input: losing keyboard focus releases the held key` (`tests/src/platform_x11_input_tests.cpp:437`). That test depends on whether the window manager grants focus. A clean rerun passed, and three integration reruns under ASan also passed.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. Only GCC 9.4 is installed, and Jolt needs GCC 11+. No GCC 11+, conda, or docker is available here.
+- **`engine_bench --suite acceptance`:** blocked. There is no `engine_bench` target in the tree; that harness belongs to US-074.
+
+**Already passing from earlier passes:** the Windows gates (validate, win-dev, win-debug, win-unit) and the Linux clang gates (validate, linux-dev, linux-debug, linux-unit).
+
+I appended a progress entry to `.ralph-tui/progress.md` and updated the physics memory note to record the flaky X11 test and the still-open gates.

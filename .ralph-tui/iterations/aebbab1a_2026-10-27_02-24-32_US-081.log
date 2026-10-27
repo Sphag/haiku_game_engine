@@ -1,0 +1,46 @@
+# Iteration 1252 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:24:32.363Z
+- **Ended At**: 2026-10-26T23:26:34.573Z
+- **Duration**: 2m 2s
+- **Input Tokens**: 36
+- **Output Tokens**: 2912
+- **Total Tokens**: 2948
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and which docs already exist.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ ls tasks
+The progress log says this story was already worked through several passes and is blocked on hardware and environment items. I'll check whether the tree has changed since the last recorded gate run and whether the blockers still hold.
+[94m[Bash][0m Check changes since last gate run and blocker state $ ls artifacts/reports/us081 | head -30
+Only the acceptance doc and the ralph-tui bookkeeping files changed since the gate run. One vendored file (`third_party/dxc/utils/GetCommitInfo.py`) has a newer mtime, so I'll re-run the vendor validation to be sure it still passes.
+[94m[Bash][0m Run vendor manifest validation on Linux $ echo "exit=$?"
+The vendor check passes. Nothing in the engine, tests, or build changed since the last recorded gate run. I'll log this pass in the progress file so the next iteration starts from the same facts.
+[94m[Bash][0m Append status entry to progress log $ not an engine change, and the vendor check still passes. - `cmake -P cmake/ValidateVendor.cmake` pas...
+US-081 is not signed off, so I am not emitting the COMPLETE signal.
+
+**What I checked this pass**
+- Only `docs/acceptance.md` and the `.ralph-tui` bookkeeping files changed since the last recorded gate run (`artifacts/reports/us081/`). No engine, test, or build source changed, so the earlier Linux and Windows results still describe the tree.
+- `cmake -P cmake/ValidateVendor.cmake` passes on Linux (26 dependencies, 8542 files).
+- I did not re-run the other gates, so the Linux and Windows results below are from the earlier pass.
+
+**Still open, and why I can't close them from this machine**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so there is no native Linux GPU report.
+- **linux-gcc:** only GCC 9.4 is installed. Jolt needs GCC 11+.
+- **FSR 2:** none of the `*_permutations.h` files exist in `third_party`, so FSR cannot be built.
+- **LICENSE:** the repo has no LICENSE file. That's a decision for you, not something I can make.
+- **Other items:** the RTX 5080 full acceptance benchmark, visual editor smoke tests on both OSes, the Windows Vulkan editor suite, and sample-game packages built per OS. These need the reference machine.
+
+**Recorded earlier and still valid:** the Linux release build and `ctest --preset linux-release-unit` (30 of 30), and the Windows debug build, GPU, and editor results in `artifacts/reports/us081/`.
+
+I appended a status entry to `.ralph-tui/progress.md`. The next iteration should start from the blocker list above. The LICENSE choice is the one item that needs your input before the story can move forward.

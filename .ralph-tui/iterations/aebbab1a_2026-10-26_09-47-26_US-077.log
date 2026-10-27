@@ -1,0 +1,56 @@
+# Iteration 837 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T06:47:26.008Z
+- **Ended At**: 2026-10-26T07:01:21.274Z
+- **Duration**: 13m 55s
+- **Input Tokens**: 72
+- **Output Tokens**: 5237
+- **Total Tokens**: 5309
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics benchmark and the progress log.
+[94m[Bash][0m Inspect benchmark sources, progress log, and PRD story $ grep -n "US-077" -A40 tasks/prd-open-world-engine.md | head -120
+The progress log says the code is done and only the Linux/GCC gate is unverified. I'll re-check the tree and the local Linux gates rather than trust the log.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ grep -n "lost\|nan\|NaN\|bounds\|sleeping\|catch" tools/benchmark/src/physics_stress.cpp | head -40
+The configure, build, and validation gates pass with zero warnings. The ctest output didn't print, so I'll rerun it on its own.
+[94m[Bash][0m Run linux-unit ctest preset $ tail -5 /tmp/ctest.log
+Linux configure, build, and unit tests pass. This story touches physics, so the sanitizer gate also applies. I'll run it now.
+[94m[Bash][0m Configure and build the ASan preset $ tail -3 /tmp/asan_build.log
+[94m[Bash][0m Run sanitizer ctest preset $ grep -E "tests passed|tests failed|ERROR: |runtime error" /tmp/san.log | head -20
+[94m[Bash][0m Find the failing sanitizer test $ grep -n "Failed\|\*\*\*\|Error\|error" /tmp/san.log | head -30
+[94m[Bash][0m Show the failing test output $ sed -n 5,60p /tmp/san.log | cut -c1-300
+[94m[Bash][0m Locate the actual failure cause in the log $ sed -n 150,172p /tmp/san.log | cut -c1-300
+[94m[Bash][0m Show the failing X11 input assertions and source $ sed -n 325,346p tests/src/platform_x11_input_tests.cpp
+The three failures are X11 keyboard-focus assertions in `platform_x11_input_tests.cpp`, not physics. The same suite passed in the normal build. I'll rerun that one test to see whether it's a focus flake.
+[94m[Bash][0m Rerun the sanitizer integration test once $ grep -c "runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/san2.log
+The X11 failure reproduces deterministically under ASan and is unrelated to physics. I'll record this pass in the progress log and report the status.
+[94m[Bash][0m Append status entry to progress log $ no GCC 11+ or clang 14+ on this machine). Windows results from batch us077 stand (not re-run in this...
+US-077 is not complete yet, so I'm not signalling COMPLETE. The benchmark code was already in place from earlier passes. I re-checked the Linux gates in this pass, and two of them still block the story.
+
+**Verified this pass (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass.
+- `cmake --preset linux-dev`: pass.
+- `cmake --build --preset linux-debug`: pass, 0 warnings.
+- `ctest --preset linux-unit`: 30/30 pass.
+- `cmake --preset linux-asan` and `cmake --build --preset linux-asan`: pass, 0 warnings.
+
+**Blocking:**
+- **`ctest --preset linux-sanitize` fails** (29/30). The failing test is `engine_tests_integration`, with 3 assertions in `tests/src/platform_x11_input_tests.cpp:336-344`: a key press does not reach the focused X11 window. It fails the same way on a rerun. There is no ASan or UBSan report and no physics test failure. I did not touch the X11 code. Its cause is probably the WSL window-manager focus setup, but I have not confirmed that.
+- **`linux-gcc` gate is unverified.** This machine has no GCC 11+ or clang 14+, which Jolt needs. Only the Linux/GCC CI job can settle it.
+
+**Not re-run this pass:** the Windows gates. The earlier Windows batch results (us077) still stand, but I did not repeat them.
+
+**Changes:** I appended a status entry to `.ralph-tui/progress.md`. No code changed.
+
+**Next step:** Fix or waive the X11 focus failure under ASan, then get the `linux-gcc` result from CI. After that, the story can be signalled complete.

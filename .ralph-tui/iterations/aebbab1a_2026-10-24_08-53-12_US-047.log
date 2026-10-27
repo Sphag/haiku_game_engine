@@ -1,0 +1,53 @@
+# Iteration 142 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T05:53:12.743Z
+- **Ended At**: 2026-10-24T05:59:16.953Z
+- **Duration**: 6m 4s
+- **Input Tokens**: 42
+- **Output Tokens**: 3467
+- **Total Tokens**: 3509
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain state against the acceptance criteria.
+[94m[Bash][0m Read progress log tail and US-047 mentions $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-047" .ralph-tui/progress.md | head -5...
+[94m[Bash][0m List repo root, artifacts, and terrain CMake references $ grep -rn "terrain" --include=CMakeLists.txt -l . | head -20
+The log shows US-047 has been Partial for many passes, blocked on two items. I'll confirm those blockers still hold on this host before deciding whether anything in the tree can move.
+[94m[Bash][0m Check Linux GPU device, vulkaninfo, bench target $ grep -n "US-074" tasks/prd.json | head -3
+Both blockers are still present: there is no `/dev/dri` device, no `vulkaninfo`, and no `engine_bench` target. I'll run the Linux gates once against the current tree so the report reflects today's state.
+[94m[Bash][0m Run Linux vendor check, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Confirm ctest pass summary line $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Failed|f...
+Linux gates pass on the current tree. I'll record this pass in the progress log, keeping the status at Partial.
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` with the terrain workload (US-074, not in the tree). - Why no ...
+US-047 is still Partial, so I'm not emitting the COMPLETE signal. The code work is done, but two acceptance items can't be closed on this host.
+
+**Open items**
+1. **Native Linux Vulkan GPU run.** `engine_tests --suite gpu --backend vulkan` needs a native Linux Vulkan device. This WSL host has no `/dev/dri` and no `vulkaninfo`, so it can't run here. WSL is not a substitute.
+2. **`engine_bench --suite acceptance` with the terrain workload.** `engine_bench` exists only in `tasks/prd.json`. It has no CMake target or source, and its story (US-074) isn't implemented.
+
+**Verified on this host today (Linux, current tree)**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: passed.
+- `cmake --build --preset linux-debug`: passed with 0 warnings.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22 of 22.
+
+**Previously recorded (Windows, from the traced-shadow fix entry)**
+- Windows gates passed: ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` (21 of 21).
+- `engine_tests --suite gpu` passed on DX12 (67 cases) and Vulkan (68 cases), with validation layers on.
+- That was the last full Windows run. I did not re-run it today.
+
+**Not re-run today:** the Linux GCC and ASan presets, and the Windows gates. The GCC and ASan results from earlier passes stand for the current tree, since no source changed.
+
+**Change this pass:** I appended a re-check entry to `.ralph-tui/progress.md`. I made no source changes. The log now has many near-identical re-check entries, so it may be worth condensing them.
+
+To close the story, the work needs a native Linux host with a Vulkan device, plus US-074 for the bench harness.

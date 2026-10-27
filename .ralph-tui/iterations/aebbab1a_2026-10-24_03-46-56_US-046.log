@@ -1,0 +1,40 @@
+# Iteration 63 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:46:56.545Z
+- **Ended At**: 2026-10-24T00:47:11.729Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2114
+- **Total Tokens**: 2142
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-046 already has in the tree.
+[94m[Bash][0m Read progress log tail and repo status $ git status 2>&1 | head -3
+The log shows US-046 blocked for many iterations on the FSR 2 shader tables. I'll confirm nothing has changed since the last check.
+[94m[Bash][0m Verify FSR 2 permutation headers and recent changes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-fsr2-permutations-missing...
+Nothing has changed: there are still no permutation headers, and no source file is newer than the log. The remaining work depends on a vendoring decision only you can make, so I'll record this check in the log and stop.
+[94m[Bash][0m Append blocked re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ta...
+US-046 is still blocked, so I am not signalling completion.
+
+**What's blocking it:** FSR 2 needs eight generated `*_permutations.h` headers per backend. They are missing from `third_party/fsr2` and from the pinned upstream archive. Without them FSR cannot link, and both upscale calls return `Unsupported`. I checked again this session: there are still zero such headers, and nothing under the source tree has changed since the last log entry.
+
+**What I did not do:** I did not add stub headers. They would hide the failure until pipeline creation. I also did not switch the full profile to 720p, because without a working upscaler it would ship an unupscaled 720p image.
+
+**Decision needed from you:**
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the no-prebuilt-tools rule.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This takes more work and produces different bytes.
+
+Once you pick one, I can start on it. The rest of the story (profile resolutions, UI after upscale, history reset, and the Windows and Linux gates) depends on it.
+
+I appended a "re-check 13, still blocked" entry to `.ralph-tui/progress.md`. Nothing else in the tree was modified.

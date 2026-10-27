@@ -1,0 +1,45 @@
+# Iteration 1231 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:38:06.884Z
+- **Ended At**: 2026-10-26T22:40:02.868Z
+- **Duration**: 1m 55s
+- **Input Tokens**: 34
+- **Output Tokens**: 2929
+- **Total Tokens**: 2963
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log before touching anything.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The log shows earlier passes on US-081 that stopped short of sign-off. I'll check the acceptance doc and the most recent Windows gate results before deciding what's left.
+[94m[Bash][0m Read progress headings and acceptance doc $ grep -n "^## " .ralph-tui/progress.md | tail -15 && wc -l docs/acceptance.md && sed -n 1,200p docs/a...
+Docs and most gates were done in earlier passes. The remaining items need hardware this WSL machine doesn't have. I'll re-run the fast vendor check to confirm the tree still matches the record.
+[94m[Bash][0m Re-run vendor validator and list bench artifacts $ ls artifacts/bench 2>/dev/null
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - Re-ran `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 fi...
+US-081 is not complete, so I'm not signalling COMPLETE. The docs and feasible gates are done, but the acceptance criteria still need hardware this WSL machine doesn't have.
+
+**Verified this pass**
+- `cmake -P cmake/ValidateVendor.cmake` passes: 26 dependencies, 8542 files.
+- Earlier passes recorded these gates as passing: Linux `linux-dev`, `linux-debug`, `linux-unit` (30/30), and `linux-release` build plus `linux-release-unit` (30/30). They also recorded Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (29/29). I did not re-run the Windows gates or the Linux build and ctest steps in this pass.
+- The README, the architecture, schema, benchmark, and capability docs, and `docs/acceptance.md` were written in earlier passes. I did not re-read or re-check them in this pass.
+
+**Still open (recorded in `docs/acceptance.md`)**
+- GPU reports: DX12 and Vulkan on Windows (RTX 5080), and Vulkan on native Linux. The WSL machine has no usable Vulkan device.
+- Full acceptance benchmark (`engine_bench --suite acceptance`). The render, streaming, all-features, and physics scenes don't yet produce the GPU timestamps and residency the acceptance run needs, so they report `incomplete`.
+- Editor smoke tests with screenshots on both operating systems.
+- `linux-gcc`: the local GCC 9.4 cannot build Jolt, so GCC 11+ is needed.
+- `linux-asan` / `linux-sanitize`, and `win-release`: not run.
+- Clean-directory package smoke tests and the offline clean-copy build: not run.
+- The repository has no license file.
+
+I appended a status entry to `.ralph-tui/progress.md`. No source or doc files changed in this pass.

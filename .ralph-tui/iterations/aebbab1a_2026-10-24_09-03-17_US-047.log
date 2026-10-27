@@ -1,0 +1,38 @@
+# Iteration 154 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:03:17.481Z
+- **Ended At**: 2026-10-24T06:03:37.370Z
+- **Duration**: 19s
+- **Input Tokens**: 28
+- **Output Tokens**: 2354
+- **Total Tokens**: 2382
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see how much of US-047 already exists.
+[94m[Bash][0m Read progress log and locate terrain code $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-047" .ralph-tui/progress.md | head -5...
+The log shows US-047 has been stuck at Partial for many passes. Two blockers are recorded: no native Linux Vulkan device, and no `engine_bench` target. I'll check whether either has changed on this host before deciding anything.
+[94m[Bash][0m Check GPU device, bench target, and PRD status $ grep -n '"id": "US-047"' -A40 tasks/prd.json | grep -i passes
+Both blockers are unchanged on this host, and no source has changed since the last gate run recorded in the log. I'll append a short entry to the progress log so the state is on record.
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` with a terrain workload (depends on US-074). Gate results from...
+US-047 is not complete, so I'm not emitting the COMPLETE signal. The terrain runtime is in place, but two acceptance items cannot run on this host.
+
+**Still open:**
+1. **Native Linux Vulkan GPU run.** `engine_tests --suite gpu --backend vulkan` needs a Vulkan device. This WSL host has no `/dev/dri` and no `vulkaninfo`, so I could not run it.
+2. **`engine_bench --suite acceptance` with a terrain workload.** `engine_bench` has no CMake target or source in the tree. US-074 (Benchmark Harness) is still `passes: false` in `tasks/prd.json`.
+
+**Recorded as done in earlier passes:** the CPU terrain runtime (tiles, LOD and stitching, normals, four-material splat) with its fixtures; the renderer integration; DX12 and Vulkan GPU fixtures for coverage, LOD seam, depth, splat, and the traced shadow; and the Windows and Linux gates. The traced-shadow failure was a fixture problem (ambient light filled the shadow), and that is fixed. I did not re-run the gates this pass because the source has not changed since the last run.
+
+**This pass:** I checked both blockers again and they are unchanged. I appended a short re-check entry to `.ralph-tui/progress.md`. I did not run any builds or tests.
+
+**To close the story:** run the Vulkan GPU suite on a native Linux host with a Vulkan device, and land US-074 so the terrain bench workload can be measured.

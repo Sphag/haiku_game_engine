@@ -1,0 +1,51 @@
+# Iteration 12 Log
+
+## Metadata
+
+- **Task ID**: US-037
+- **Task Title**: GPU Indirect Pipeline
+- **Description**: As a rendering developer, I want GPU-generated draw commands so that I can reduce CPU overhead.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T13:46:54.451Z
+- **Ended At**: 2026-10-23T13:53:01.353Z
+- **Duration**: 6m 6s
+- **Input Tokens**: 74
+- **Output Tokens**: 7592
+- **Total Tokens**: 7666
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m List repo and read progress tail $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && tail -c 6000 .ralph-tui/pro...
+[94m[Bash][0m Search for existing indirect pipeline work and PRD references $ grep -n "US-037" -A3 tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Read US-037 PRD section, prd.json entry, and render files $ ls -la --time-style=+%H:%M engine/render/src | head -30
+[94m[Bash][0m Check test coverage, changed files, and running batches $ ls -la --time-style=+%m-%d_%H:%M /mnt/d/dev/haiku_game_engine/artifacts | tail -15
+[94m[Bash][0m Review gate reports, memory notes, and recent source changes $ find . -newer build/linux-dev -path ./build -prune -o -type f -newermt "2026-10-23 16:00" -print 2>/...
+[94m[Bash][0m Compare Windows test binary age with newest sources $ find engine tests shaders cmake CMakeLists.txt CMakePresets.json -type f -printf '%TY-%Tm-%Td %TH:%T...
+[94m[Bash][0m Look for recent Windows gate logs and running batches $ ps -eo pid,etime,args | grep -i "\.bat" | grep -v grep | head
+[94m[Bash][0m Read the latest Windows gate batch logs $ cat $T/us036_gate.bat | tr -d '\r' | head -40
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Rerun Linux unit tests and native Linux Vulkan GPU suite $ tail -2 /tmp/us037_gpu.log
+[94m[Bash][0m Run Linux Vulkan GPU suite to record its status $ tail -3 /tmp/us037_gpu.log
+[94m[Bash][0m Append US-037 progress entry $ GitHub CI (not pushed). - Files changed: `.ralph-tui/progress.md` only. - **Learnings:**   - When th...
+US-037 was already implemented in the tree from earlier work. This pass verified it and changed no source. I only appended a progress entry to `.ralph-tui/progress.md`.
+
+**What's in place:** Compute culling fills DrawIndexed records and per-group counts for opaque and mask items, plus skinned items. Each group is one `ExecuteIndirect` on DX12 or one `vkCmdDrawIndexedIndirectCount` on Vulkan. The indexed path is the fallback. `tests/src/render_indirect_gpu_tests.cpp` covers the golden scene against the indexed path, culling disabled, group overflow, an empty frame, and skinned draws with motion vectors.
+
+**Gates, this session and the most recent Windows batch:**
+- Linux: `ValidateVendor` passed (26 deps, 8542 files). `linux-dev` configured. `linux-debug` built with 0 warnings and 0 errors. `linux-unit` passed 22/22.
+- Windows (us036 batch, 16:34–16:37, RTX 5080, validation layers on): validate, configure, and build all returned 0 with no `warning C` or `error C` lines. `win-unit` passed 21/21. `gpu dx12` passed 40 cases and `gpu vulkan` passed 41 cases. Those results cover the current tree, because `engine_tests.exe` (14:54) is newer than every source file (latest 14:51).
+
+**Not verified or not run:**
+- Native Linux Vulkan GPU suite: exits 3 (unsupported). This host has no Khronos validation layer. Not a pass.
+- `linux-gcc`, `linux-asan`, and `linux-sanitize`: not re-run this session. Last results from earlier today on the same sources.
+- `engine_bench --suite acceptance`: no bench target exists yet (US-074).
+- GUI check: no application window yet.
+- GitHub CI: not pushed.
+
+**Choices I made:** I did not relaunch the Windows batch, because the existing results cover the same sources. I did not touch `tasks/prd.json`.
+
+<promise>COMPLETE</promise>

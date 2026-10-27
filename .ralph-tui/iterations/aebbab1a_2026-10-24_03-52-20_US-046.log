@@ -1,0 +1,43 @@
+# Iteration 70 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:52:20.976Z
+- **Ended At**: 2026-10-24T00:52:42.265Z
+- **Duration**: 21s
+- **Input Tokens**: 24
+- **Output Tokens**: 2946
+- **Total Tokens**: 2970
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current FSR state, since the memory notes say FSR cannot link yet.
+[94m[Bash][0m Read progress log tail and repo state $ ls
+[94m[Bash][0m Read FSR and Windows gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md
+The notes show US-046 blocked for 17 rounds on one decision: how to produce the FSR 2 shader headers. I'll confirm that's still true and check whether the user has answered since.
+[94m[Bash][0m Verify FSR headers still missing and check profile state $ grep -rn -i "native\|full" engine/render/include/engine/render/*.hpp | grep -i profile | head -20
+US-046 is still blocked, so I have not signaled COMPLETE. Nothing in the source changed this run.
+
+**The blocker is unchanged.** The vendored FSR 2 tree (`third_party/fsr2`) has no `*_permutations.h` files, and `vk/` and `dx12/` shader sources still `#include` eight of them. Without them FSR 2 cannot compile or link on either backend, so the FSR 2 integration, the profile switch, and the UI-after-upscale step can't be finished. Adding stub headers would only hide the failure at pipeline creation, so I didn't do that.
+
+**The decision needs you.** Pick one route to generate the shader tables:
+
+1. **Vendor the outputs of the archive's `tools/sc/FidelityFX_SC.exe`.** Run it once, pin the hash-pinned outputs in the manifest, and document an exception to the no-prebuilt-tools rule. This is the faster route.
+2. **Regenerate the blobs with the engine's pinned DXC** through a first-party generator. This keeps the rule intact but takes much more work, and the bytes will differ from upstream.
+
+I'd recommend option 1 with a documented exception and hash pin. Regenerating FSR's per-pass permutation tables is a large job, and it buys little.
+
+**Not yet done for US-046:**
+- The `SceneRenderer` profile switch (full at 1280×720 with FSR, native at 1920×1080) and composing the UI after upscaling. The full profile at 1280×720 without FSR would be a visible regression, so I left it out.
+- Running the Windows and Linux gates and the GPU suites. The RHI code is wired but cannot link yet.
+- The Linux libc++ compat fixes that vendored FSR needs (`_countof` in `ffx_fsr2.cpp`, `std::wstring_convert` in `vk/ffx_fsr2_vk.cpp`).
+
+I also did not append an eighteenth identical re-check entry to `.ralph-tui/progress.md`. Once you choose a route I'll start with the vendoring change, then the profile switch and the gates.

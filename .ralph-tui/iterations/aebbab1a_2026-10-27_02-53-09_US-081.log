@@ -1,0 +1,49 @@
+# Iteration 1272 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:53:09.723Z
+- **Ended At**: 2026-10-26T23:53:33.367Z
+- **Duration**: 23s
+- **Input Tokens**: 46
+- **Output Tokens**: 4470
+- **Total Tokens**: 4516
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, existing docs, and the progress log.
+[94m[Bash][0m Inspect repo root, docs, and progress log $ ls cmake 2>/dev/null
+The docs MCP tools are not needed for this repo task. Next I'll read the README, the existing docs that US-081 names, and the end of the progress log.
+[94m[Bash][0m Read README and tail of progress log $ tail -c 9000 .ralph-tui/progress.md
+[94m[Bash][0m Check existing docs sizes and US-081 mentions $ grep -n "US-081" -A3 .ralph-tui/progress.md | head -40
+Earlier passes already logged this story as blocked, with the Linux gates green and the open items recorded. Before deciding whether anything new can be done, I'll check whether the tree changed since the last recorded gate run and what `docs/acceptance.md` currently says.
+[94m[Bash][0m Check changes since last gate run and acceptance status $ sed -n 1,60p docs/acceptance.md
+The only files changed since the last gate artifacts are `docs/acceptance.md` and `tasks/prd.json`, so the code is the same as the last recorded runs. I'll read the open-items section and the Windows GPU logs to confirm the blockers.
+[94m[Bash][0m Read open items and Windows GPU logs $ cat artifacts/reports/us081/win-editor-vulkan.log
+The tree is unchanged since the recorded gate runs, and the open items are the same ones the log lists. I'll append one short progress entry for this pass, as the workflow requires.
+[94m[Bash][0m Append US-081 status entry to progress log $ no gate re-run. - Blockers, as in `docs/acceptance.md`: no `/dev/dri` (no native Linux Vulkan device...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. The docs and README were already in place from earlier passes, and the tree has not changed since the last gate runs, so I did not re-run any gates this pass.
+
+**What exists and passes (from `docs/acceptance.md` and `artifacts/reports/us081/`):**
+- README covers OS/SDK requirements, offline CMake setup, editor workflow, Lua API, asset pipeline, native packaging, benchmarks, and tests. The architecture, schema, vendor, benchmark, capability, and acceptance docs are present.
+- Gates passed: `ValidateVendor` on both OSes; `win-dev`, `win-debug`, `win-unit` (29/29), and `win-release`; `linux-dev`, `linux-debug`, `linux-unit` (30/30), `linux-release`, and `linux-asan` / `linux-sanitize` (30/30).
+- The DX12 and Vulkan GPU suites pass on the RTX 5080. The Windows editor suite passes on DX12 and Vulkan.
+- The offline clean-copy build passed.
+
+**What blocks final acceptance:**
+1. **Native Linux Vulkan GPU report.** `/dev/dri` is absent on this machine, so there is no native device.
+2. **Full acceptance benchmark.** `engine_bench --suite acceptance` does not finish on DX12 or Vulkan. The render, streaming, all-features, and physics scenes do not yet produce GPU timestamps, so a run reports `incomplete`. This is engineering work, not a hardware gap.
+3. **`linux-gcc`.** The local GCC 9.4 cannot build Jolt; the gate needs GCC 11 or newer.
+4. **FSR 2.** The vendored tree lacks the generated `*_permutations.h` files. This needs a vendoring route from you.
+5. **Visual editor smoke.** Windows has a launch screenshot only. No action sequence has run, and Linux has no native visual run.
+6. **License.** The repo has no LICENSE file. Choosing one is your decision.
+
+I appended a short status entry to `.ralph-tui/progress.md`. Items 1, 3, and 5 need hardware or a compiler install. Item 2 needs the GPU-timestamp work in the benchmark scenes. Items 4 and 6 need your decisions.

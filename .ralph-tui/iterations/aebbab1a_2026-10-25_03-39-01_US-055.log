@@ -1,0 +1,43 @@
+# Iteration 408 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:39:01.169Z
+- **Ended At**: 2026-10-25T00:39:18.163Z
+- **Duration**: 16s
+- **Input Tokens**: 30
+- **Output Tokens**: 2285
+- **Total Tokens**: 2315
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-055 already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout, progress log, and script module $ ls && tail -60 .ralph-tui/progress.md && ls engine/script 2>/dev/null && find engine/script -type f ...
+The log shows US-055 already implemented and marked Partial, with the `linux-gcc` gate open. I'll read the first US-055 entry to confirm what's done and what's still open.
+[94m[Bash][0m Read the US-055 progress entries $ grep -n "US-055" .ralph-tui/progress.md | head -40 && awk '/## .* - US-055/{f=1} f' .ralph-tui/progr...
+The log shows US-055 is implemented and passing on every local gate. The only open item is the `linux-gcc` gate, which this host cannot run. I'll check whether anything changed since the last entry before I decide whether another full re-run is worth doing.
+[94m[Bash][0m Check for source changes since last progress entry and list compilers $ g++ --version | head -1
+US-055 is not complete. The Lua API is implemented and passes every gate this host can run, but the `linux-gcc` gate cannot run here.
+
+**What exists**
+- A new `engine_script` module (`engine/script/`) on vendored Lua 5.4.7, with bindings for entities, transforms, input actions, assets, physics queries, and events.
+- Destroyed entities are checked on each use and raise a controlled script error. Entities cross to Lua as handles, not raw pointers.
+- Fifteen headless unit cases in `tests/src/script_lua_tests.cpp` cover stack balance, type errors, and Lua exceptions.
+
+**Gates**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, `linux-asan`, and `linux-sanitize` all pass (last recorded in the progress log).
+- Windows: the progress log records `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` as passing. I did not re-run them in this pass.
+- `linux-gcc` / `linux-gcc-debug` / `linux-gcc-unit`: not run. This host has only GCC 9.4, and Jolt needs GCC 11+. The CI Linux/GCC job has to cover this.
+
+**This pass**
+I did not rebuild or re-run the tests. No file under `engine/`, `tests/`, `cmake/`, `docs/`, or the root CMake files is newer than the last progress entry, so the tree is unchanged since the last full pass. I also did not append another "status re-check" entry to `.ralph-tui/progress.md`; the log already has about ten of them with the same content.
+
+I am not emitting the completion signal. The story's acceptance criteria require the `linux-gcc` gate, and that can only be satisfied on a machine with GCC 11+ or in CI.

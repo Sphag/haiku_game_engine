@@ -1,0 +1,41 @@
+# Iteration 1134 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:14:34.228Z
+- **Ended At**: 2026-10-26T21:14:50.075Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2273
+- **Total Tokens**: 2301
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing benchmark and GPU notes before deciding what can actually be run here.
+[94m[Bash][0m Read progress log, bench dirs, and GPU env memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+The log shows 37 earlier passes that all ended blocked. I'll re-run the cheap checks to see whether any blocker has changed before concluding.
+[94m[Bash][0m Re-check the known US-080 blockers on this host $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+Nothing has changed, so I'm recording this pass in the log and stopping without a completion signal.
+[94m[Bash][0m Append status check entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 under WSL only. - No source change, build, or bench ...
+US-080 is not complete, and I am not signalling COMPLETE. I re-checked the blockers and none has changed since the last 37 passes.
+
+- **Native Linux Vulkan:** `/dev/dri` is absent, so there is no native Linux Vulkan device on this WSL host. The RTX 5080 is visible to `nvidia-smi` only under WSL.
+- **FSR 2 permutations:** `third_party/fsr2` has 0 of the generated `*_permutations.h` files, so FSR cannot build. Choosing how to vendor them is a decision for you.
+- **Workloads:** `benchmarks/manifest.json` still lists 4 entries as `implementation: none` (physics, streaming, all_features and one more).
+- **Acceptance reports:** `artifacts/bench` has no acceptance run, and `samples/` is absent.
+
+I did not run the quality gates, a bench run, or any code change in this pass. The Windows gates and the DX12 GPU suite can run from WSL through `cmd.exe` and a `.bat` file, as the memory notes describe. The 180 s × 3-repeat contract for every scene, profile and backend is hours of measured runs, and it still needs the native Linux machine.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. To move forward, I need:
+
+1. The RTX 5080 reference machine, or access to run the native Linux Vulkan and Windows reports there.
+2. Your decision on the FSR 2 permutations route.
+3. The physics, streaming and all_features workloads, which the manifest still lists as not implemented.

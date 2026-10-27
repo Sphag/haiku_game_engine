@@ -1,0 +1,113 @@
+# Iteration 38 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T23:35:04.957Z
+- **Ended At**: 2026-10-23T23:48:29.859Z
+- **Duration**: 13m 24s
+- **Input Tokens**: 242
+- **Output Tokens**: 32815
+- **Total Tokens**: 33057
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-046 work already exists.
+[94m[Bash][0m Inspect repo root and progress log for US-046 $ ls -la && wc -l .ralph-tui/progress.md && grep -n "US-046\|US-045\|FSR\|upscal" .ralph-tui/progress....
+[94m[Bash][0m Search repo for FSR and upscaling references $ ls third_party 2>/dev/null
+Docs tools aren't needed for this story. Next I'll read the end of the progress log and the PRD's upscaling and benchmark requirements.
+[94m[Bash][0m Read progress log codebase patterns and recent entries $ sed -n 380,541p .ralph-tui/progress.md | cut -c1-600
+[94m[Bash][0m Find upscaling constraints in the PRD $ grep -n -i "fsr\|upscal\|frame generation\|native\|full profile\|internal resolution\|jitter\|reacti...
+[94m[Bash][0m Read US-046 and profile table from PRD $ sed -n 840,870p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read most recent progress entries $ tail -n 120 .ralph-tui/progress.md | cut -c1-700
+The log shows US-045 is done with Windows GPU evidence, so US-046 is the next story. Next I'll check the vendored FSR 2 tree and how the renderer is laid out.
+[94m[Bash][0m List vendored FSR2 tree and manifest entries $ [print(x.get('name'), x.get('version'), x.get('path')) for x in (d if isinstance(d,list) else d.get(...
+[94m[Bash][0m Inspect FSR2 manifest entry and render module layout $ cat engine/render/CMakeLists.txt | head -80
+The FSR 2 vendor tree is partial, and the Vulkan folder looks empty. I'll check what the manifest actually vendors and whether the Vulkan shader blobs exist.
+[94m[Bash][0m Check FSR2 vk folder and manifest file list $ grep -c '"path"' third_party/manifest.json
+[94m[Bash][0m Check FSR2 Vulkan shader blobs and CMake wiring $ cat third_party/fsr2/src/ffx-fsr2-api/vk/CMakeLists.txt | head -80
+The vendor tree is complete: DX12 and Vulkan backends plus precompiled shader blobs. Next I'll check how the RHI exposes native handles and what the current TAA/jitter path looks like, to size the integration.
+[94m[Bash][0m Survey RHI headers and render jitter/TAA hooks $ grep -rn -i "jitter\|taa\|profile" engine/render/include/engine/render/scene_renderer.hpp engine/ren...
+The RHI exposes no native handles, so GPU integration needs new backend glue on both APIs, plus Windows GPU runs. That is too large to finish and verify in this turn. Before choosing a scope, I'll check how the vendor is wired into CMake and what the Linux gate baseline looks like.
+[94m[Bash][0m Find FSR2 wiring in build files and third-party targets $ grep -rn "d3d12ma\|D3D12MemoryAllocator" --include=CMakeLists.txt . | grep -v "^./build" | head -5
+Nothing in the build references FSR 2 yet. I'll read the build notes on the vendor and the FSR 2 jitter API, since the CPU-side contract depends on them.
+[94m[Bash][0m Read vendor notes and FSR2 public API declarations $ grep -n "FFX_FSR2_QUALITY_MODE" third_party/fsr2/src/ffx-fsr2-api/ffx_fsr2.h | head
+The FSR 2 jitter and quality functions are CPU-side. I'll read their implementation to decide whether to call them directly or mirror them.
+[94m[Bash][0m Read FSR2 jitter phase and offset implementation $ grep -n "^#include" ffx_fsr2.cpp
+[94m[Bash][0m Read FSR2 quality ratio and jitter sequence code $ cat ffx_fsr2_interface.h | grep -n "fpCreateBackendContext\|fpCreateResource\|fpExecuteGpuJobs\|fpSc...
+The FSR 2 contract is small and CPU-side: quality ratio 1.5 gives 1280×720 from 1920×1080, and jitter uses Halton(2,3) with 18 phases at that ratio. I'll read the existing jitter and TAA reset API so the new code reuses them rather than duplicating them.
+[94m[Bash][0m Read postprocess jitter and TAA reset API $ grep -n "taa_jitter\b\|taa_history_reset" -A14 engine/render/src/postprocess.cpp | head -80
+The existing `taa_jitter` is fixed at 8 phases, but FSR 2 needs 18 at the 1.5× ratio, so I'll add an FSR-specific jitter that reuses the same Halton helper. I'll check the test file conventions before writing code.
+[94m[Bash][0m Check unit test conventions and CMake test registration $ sed -n 1,12p engine/render/include/engine/render/denoiser.hpp
+I'll confirm the vendored Halton matches the existing helper, and check the test tagging convention, before writing the new module.
+[94m[Bash][0m Compare Halton implementations and test tagging $ grep -rn "\[unit\]" tests/src/render_denoise_tests.cpp | head -2
+The Halton helper is the standard radical inverse, so the new module can use the same form. Writing the header now.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/upscaler.hpp[0m "#pragma once
+
+// Temporal upscaling contract (US-046): the two image profiles' fixed resolutions, the FSR 2 Quality ratio that derives the full profile's
+// internal size, the FSR 2 jitter sequence (i... (3796 chars)"
+The header is in place. Next the implementation, which mirrors the vendored FSR 2 formulas and the history rule.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/upscaler.cpp[0m "#include "engine/render/upscaler.hpp"
+
+namespace engine::render {
+
+namespace {
+
+// Radical inverse of `index` in `base`, in [0, 1). The same form as the Halton helper of postprocess.cpp and FSR 2's ow... (2591 chars)"
+Next I'll register the source and header comment in the render library, then add a unit test file.
+[94m[Bash][0m Register upscaler source and test in CMake $ python3 - <<'EOF' import re p='engine/render/CMakeLists.txt' s=open(p).read() s=s.replace("# reflect...
+Now the unit tests. They cover the fixed resolutions, the FSR 2 formulas with hand-computed values, the jitter period, the benchmark policy, and the reset sequence.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_upscaler_tests.cpp[0m "// The temporal upscaling contract (US-046): the two image profiles' fixed resolutions, FSR 2's render size and jitter phase count, the jitter
+// values, the benchmark policy, and the upscaler's histo... (5321 chars)"
+The new tests use designated initializers, so I need to confirm the project's C++ standard allows them. Then I'll run the Linux configure and debug build.
+[94m[Bash][0m Run vendor validation, configure, and debug build on Linux $ grep -n "error" /tmp/us046_build.log | head -20
+Vendor validation, configure, and the debug build all pass with zero warnings. Next, the Linux unit tests, plus a direct run of the new cases to confirm they executed.
+[94m[Bash][0m Run Linux unit ctest and the new upscaler test cases $ "$f" --list-tests 2>/dev/null | grep -c -i "FSR\|upscal\|native profile\|full profile\|jitter phase\...
+The binary takes a `--suite` option rather than a test-name filter, so I'll run the unit suite and look for the new cases.
+[94m[Bash][0m Run unit suite and confirm new upscaler cases execute $ "$f" --suite unit "The upscaler keeps its history across frames and resets it on a size change, cut,...
+The unit suite passes at 578 cases, but my name-based filters were rejected, so I can't yet confirm the new cases are in that count. I'll check how the test binary parses arguments.
+[94m[Bash][0m Find how engine_tests parses suite arguments $ ls tests/src | grep -i main
+[94m[Bash][0m Confirm the new upscaler test cases appear in unit run $ "$f" --suite unit "*" -s 2>/dev/null | grep -i "native profile renders\|full profile renders\|render...
+Neither grep matched, so I can't tell yet whether the suite ran my cases or the flags were ignored. I'll look at the raw output directly.
+[94m[Bash][0m Capture unit run output to check new case names $ sed -n 1,12p /tmp/us046_unit.log | cut -c1-200
+The binary rejects Catch2 flags, so it can't filter by name. I'll confirm my test names are compiled into the binary and carry the `[unit]` tag, which the suite selects on.
+[94m[Bash][0m Verify new test case names are compiled into the binary $ strings "$f" | grep -c "\[unit\]"
+The new cases are compiled in and the unit suite passes. Since the story requires the GCC job too, I'll run its configure, build, and unit tests to check warnings-as-errors under GCC.
+[94m[Bash][0m Configure, build, and test the Linux GCC preset $ tail -3 /tmp/us046_gcc_ctest.log
+GCC configure, build, and unit tests all pass with zero warnings. Next, the docs: I'll find where earlier stories recorded their doc rows in `docs/build.md`.
+[94m[Bash][0m Find existing US-045 entries in build docs $ ls docs | head -50
+[94m[Bash][0m Read the US-045 row format in build docs $ sed -n 197,200p docs/build.md | cut -c1-200
+I'll write the design doc for the contract, stating what is in place and what is still open, then add the US-046 row to the build table.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/upscaling.md[0m "# Temporal upscaling (US-046)
+
+The full profile renders the scene at a fixed 1280×720 and upscales to the 1920×1080 output with FSR 2 Quality. The native profile
+renders at 1920×1080 with TAA and no u... (3345 chars)"
+Next I'll add the build-table row and the progress entry, and record the 18-phase jitter gotcha in the codebase patterns.
+[94m[Bash][0m Add US-046 row to build docs table $ Windows gates, GPU " "suites, and benchmarks not run. Not claimed: any GPU upscale result. |") lines...
+[94m[Bash][0m Append US-046 progress entry and codebase pattern $ grep -n "FSR 2 jitter has 18" .ralph-tui/progress.md | cut -c1-80
+US-046 is **partial**. I implemented and tested the CPU contract, but FSR 2 is not built or called on either backend, so I have not emitted the completion signal.
+
+**Done (verified on Linux, no GPU):**
+- `engine/render/include/engine/render/upscaler.hpp` and `src/upscaler.cpp` add the fixed profile sizes: native 1920×1080 with no upscale, and full 1280×720 derived from the output by FSR 2's 1.5× ratio. They also add the FSR 2 jitter (18 phases at 1.5×, mirroring `ffxFsr2GetJitterOffset`), the benchmark policy that rejects frame generation and dynamic resolution, and an upscaler history with the TAA reset rule.
+- `tests/src/render_upscaler_tests.cpp` has 9 `[unit]` cases.
+- `docs/upscaling.md`, the US-046 row in `docs/build.md`, and a progress entry with a codebase pattern were added.
+
+**Gates:**
+- Linux clang: `ValidateVendor`, `linux-dev` configure, `linux-debug` build (0 warnings), and `linux-unit` ctest all pass. `engine_tests --suite unit` runs 578 cases, all passing.
+- Linux GCC: `linux-gcc` configure, `linux-gcc-debug` build (0 warnings), and `linux-gcc-unit` ctest all pass.
+- Not run: the Windows gates, the DX12 and Vulkan GPU suites, the ASan and sanitize presets, and the benchmark. The ASan and sanitize presets are not needed for this change, which has no memory, ECS, job, streaming, Lua, or physics code.
+
+**Still open, and required by the story:**
+- **FSR 2 GPU integration.** The vendored source includes both backends and their shader blobs, but no CMake target builds it and nothing calls it. The RHI exposes no native device or command list, so this needs a new upscaler entry point in both the DX12 and Vulkan backends, plus the transitions around it.
+- **Inputs.** The reactive mask is new. Depth and jitter must come from the full-profile scene pass at 1280×720.
+- **`SceneRenderer`.** It does not switch to the profile sizes or compose the UI after upscaling.
+- **GPU verification.** No GPU test covers an upscale, so the GPU-suite and Windows-gate criteria are unmet.
+
+Decision for you: the GPU integration is the bulk of the story and needs Windows GPU batches to verify. I can start on it next, or you can split it into a separate story first.

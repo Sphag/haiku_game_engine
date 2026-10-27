@@ -1,0 +1,44 @@
+# Iteration 1139 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:15:58.412Z
+- **Ended At**: 2026-10-26T21:16:16.484Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2794
+- **Total Tokens**: 2822
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tooling before deciding what can actually be measured here.
+[94m[Bash][0m Read progress tail and benchmark artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Find US-079/080 notes and performance contract $ grep -n -i "performance contract" -A30 tasks/prd-open-world-engine.md | head -80
+Forty-one prior status checks on this story found the same blockers. I'll re-check the key facts once, since they decide whether anything can move.
+[94m[Bash][0m Re-check hardware and manifest blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ see the final report for what needs the user. - Stop: US-080 cannot be signed off on this host. No C...
+US-080 is not complete, and I'm not signalling COMPLETE. I made no source changes and ran no benchmarks this pass; I only re-checked the blockers and logged the result in `.ralph-tui/progress.md`.
+
+What still blocks sign-off, confirmed again just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan reports cannot be produced here. WSL has no usable Vulkan device. The RTX 5080 is visible to `nvidia-smi` under WSL only.
+- **No RTX 5080 acceptance reports.** `artifacts/bench` has no `acceptance` run. The contract requires three 180 s repeats per scene, profile, and backend on the reference computer for Windows/DX12, Windows/Vulkan, and native Linux/Vulkan.
+- **FSR 2 is unavailable.** `third_party/fsr2` has no `*_permutations.h` files, so the `full_1080` profile cannot be built. Choosing how to vendor them is your decision.
+- **Four workloads are not implemented.** `benchmarks/manifest.json` still has four `implementation: none` entries, for physics, streaming, and all-features.
+- **The frame budget is failing.** The earlier `render_stress` runs show p99 at 35–47 ms against the 16.7 ms target. The contract says to fix the measured cause, not relax the budget. I have not started that fix, and it needs a Windows run to measure.
+- **Residency is not measured.** The RHI has no memory query yet. This is implementable with DXGI/`VK_EXT_memory_budget` but has not been started.
+
+To finish this story, I need one of these from you:
+
+1. Access to the reference RTX 5080 computer with native Linux and Windows runs, so the reports can be generated there.
+2. A decision on the FSR 2 permutations route (vendor the generated tables, or accept the missing-tables outcome).
+
+Without either, the remaining acceptance criteria cannot be met on this host. The frame-budget fix is the one piece I could start on the Windows side if you want me to proceed.

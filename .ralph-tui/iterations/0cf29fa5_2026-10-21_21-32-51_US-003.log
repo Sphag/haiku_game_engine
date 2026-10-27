@@ -1,0 +1,252 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: US-003
+- **Task Title**: Buildable Shader Toolchain
+- **Description**: As a developer, I want a local shader compiler so that I can produce both GPU formats offline.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-21T18:32:51.563Z
+- **Ended At**: 2026-10-21T19:40:47.402Z
+- **Duration**: 1h 7m 55s
+- **Input Tokens**: 644
+- **Output Tokens**: 110024
+- **Total Tokens**: 110668
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current repo state.
+[94m[Bash][0m Inspect repo layout and progress log $ ls -la && echo --- && cat .ralph-tui/progress.md 2>/dev/null | head -300 && echo --- && ls tasks cma...
+[94m[Bash][0m Read PRD and story list $ [print(s.get('id'),s.get('title'),s.get('passes')) for s in d.get('userStories',d.get('stories',[]))...
+[94m[Bash][0m Inspect build presets, cmake, and vendor layout $ cat CMakeLists.txt CMakePresets.json && echo ---- && cat cmake/EngineTargets.cmake | head -150 && ec...
+The story is large: DXC has to build from vendored sources on both OSes. Next I'll check what DXC scope US-002 vendored, what the build notes say, and which tools exist here.
+[94m[Bash][0m Inspect DXC vendor scope and available tools $ clang++ --version 2>/dev/null | head -1
+Docs tools aren't relevant to this task, so I'll ignore them. Next I need the compiler and SDK situation on Linux and Windows, and what DXC's CMake requires.
+[94m[Bash][0m Check LLVM toolchains and DXC CMake layout $ 
+DXC is pinned at 3.7-era LLVM sources, so the Linux compiler is the first risk. Only clang-10 is installed here. Next I'll check how DXC's CMake wires SPIR-V and the validator, and look at the existing Linux build tree.
+[94m[Bash][0m Find DXC SPIR-V options and validator targets $ ls build/win-dev | head
+The validator and compiler targets are `dxil` and `dxcompiler`, and SPIR-V is opt-in through `ENABLE_SPIRV_CODEGEN`. Next I'll check the SPIR-V wiring, the machine's core count, and whether a DXC source build has been attempted before.
+[94m[Bash][0m Read DXC SPIR-V external wiring and host resources $ ls third_party/dxc/utils/hct 2>/dev/null | head
+DXC's SPIR-V and DirectX-Headers inputs are located through cache variables, so the engine has to pass them explicitly. Next I'll check the repo's own DXC build scripts for the Linux configure flags, then probe a configure with the available clang-10.
+[94m[Bash][0m Find DXC configure flags used by upstream scripts $ grep -n "HLSL_INCLUDE_TESTS\|include(" third_party/dxc/CMakeLists.txt | head -30
+I have enough to probe a Linux configure of DXC in a scratch directory outside the repo, using the pinned SPIR-V and DirectX-Headers paths and clang-10.
+[94m[Bash][0m Probe DXC configure on Linux with clang-10 $ mkdir -p /tmp/dxc-probe/linux && cd /tmp/dxc-probe/linux && R=/mnt/d/dev/haiku_game_engine/third_par...
+The configure stops on a missing `autoconf/config.guess`, which the vendor scope excluded. I'll see whether DXC lets the host triple be set explicitly, which avoids vendoring that script.
+[94m[Bash][0m Inspect host-triple detection in DXC CMake $ grep -n "LLVM_HOST_TRIPLE" cmake/config-ix.cmake | head
+DXC honors `LLVM_INFERRED_HOST_TRIPLE`, so I can set the triple explicitly and skip the missing script. Retrying the configure with that override.
+[94m[Bash][0m Retry DXC Linux configure with explicit host triple $ tail -5 conf.log
+[94m[Bash][0m Read the llvm-build failure details $ sed -n 490,512p /mnt/d/dev/haiku_game_engine/third_party/dxc/CMakeLists.txt
+The configure also needs DXC's `docs/LLVMBuild.txt`, which the vendor catalog dropped with the docs tree. I'll look at the DXC vendor spec to see how to add it.
+[94m[Bash][0m Read DXC vendor spec in vendor.py $ sed -n 1,40p tools/vendor/vendor.py
+The DXC vendor entry needs `docs/LLVMBuild.txt` added. Adding it means re-running the maintainer vendor tool, which downloads from GitHub, so I'll check network access and whether a copy of that file exists locally.
+[94m[Bash][0m Check network access and LLVMBuild.txt sources $ grep -n "LLVMBuild" tools/vendor/vendor.py | head
+The network probe hung, so I'll stop it and rerun the local checks separately.
+[94m[Bash][0m Check local LLVMBuild.txt files and temp dirs $ ls /tmp | head -30
+A local `LLVMBuild.txt` exists at the root, so I'll see what references `docs/`. The `gh` CLI may reach GitHub where raw HTTP hung.
+[94m[Bash][0m Inspect root LLVMBuild.txt and try gh API fetch $ echo rc=$?
+GitHub isn't reachable from this sandbox, so I can't fetch the upstream `docs/LLVMBuild.txt`. The root `LLVMBuild.txt` lists `docs examples` as subdirectories, so the cleanest fix is a recorded patch to that root file. I'll test that on a scratch copy first.
+[94m[Bash][0m Test DXC configure with patched LLVMBuild in scratch copy $ tail -3 conf.log
+That background event was only the earlier network probe finishing. It doesn't change anything. The next missing file is `projects/LLVMBuild.txt`. I'll drop `projects` from the root patch too and see whether the remaining subdirectories resolve.
+[94m[Bash][0m Retry DXC configure dropping projects subdir $ tail -3 conf.log
+The Linux configure now succeeds with the patched root `LLVMBuild.txt`. Next I'll confirm the targets exist and start the real `dxc` build in the background to see whether clang-10 can compile DXC.
+[94m[Bash][0m List DXC targets and start background build $ tail -2 build.log
+There is no `dxil` target. I'll find the validator library's real target name in the tree.
+[94m[Bash][0m Find DXIL validator target names $ cd /tmp/dxc-probe/linux && ninja -t targets all | grep -i "dxil" | head -20
+[94m[Bash][0m Read dxildll target definition $ ninja -t targets all | grep -E "^(dxc|dxil)[: ]" | head
+The validator target is `dxildll`, which produces `libdxil.so` on Linux and `dxil.dll` on Windows. I'll build `dxc`, `dxcompiler`, and `dxildll` in the background.
+[94m[Bash][0m Start background DXC build and check early progress $ tail -c 600 /tmp/dxc-probe/linux/build.log
+The build needs the generated DXIL documentation, which comes from `docs/DXIL.rst`, also excluded from the vendor tree. I'll find who consumes it.
+[94m[Bash][0m Find references to the DXIL docs generator $ 
+[94m[Bash][0m Read hctgen docs generation in DXC CMake $ grep -n "add_hlsl_hctgen" -A30 cmake/modules/*.cmake | head -60
+DXC has an upstream switch, `HLSL_DISABLE_SOURCE_GENERATION`, that skips the HCT docs/source generation. The generated sources are already checked in, so I'll reconfigure with it and build again.
+[94m[Bash][0m Reconfigure without source generation and build DXC $ tail -c 800 /tmp/dxc-probe/linux/build.log
+SPIRV-Tools needs `utils/update_build_version.py` and a `CHANGES` file, both excluded from its vendor spec. Before I change any vendor scope, I'll check whether an earlier US-002 download directory still exists locally, since that would contain the upstream files.
+[94m[Bash][0m Search disk for upstream archives or missing files $ ls -la /tmp | head -80 | awk '{print $NF}' | tr '\n' ' '
+A sibling project on this disk, `gemma_game_egnine_2`, has a full copy of DXC with the excluded `docs`, `utils`, and `projects` trees. Before using any file from it, I need to confirm it's the same pinned upstream revision by comparing hashes against our manifest.
+[94m[Bash][0m Compare sibling DXC copy with pinned manifest $ cat $G/third_party/DirectXShaderCompiler/../manifest.json 2>/dev/null | head -5
+The sibling's `LLVMBuild.txt` matches ours byte-for-byte, but its root `CMakeLists.txt` differs from ours. I'll check the sibling's own vendor manifest for the DXC and SPIRV-Tools revisions and file hashes.
+[94m[Bash][0m Read sibling vendor manifest entries for DXC and SPIRV $ cat $G/update_vendor.sh | head -60
+The sibling project is a `master` clone with its own unpinned revisions, so its files don't match our pins and I won't import from it. Next I'll see exactly how SPIRV-Tools consumes `CHANGES` and `update_build_version.py`, to find out whether that step can be satisfied without guessing upstream content.
+[94m[Bash][0m Trace SPIRV-Tools build-version generation $ ls /mnt/d/dev/haiku_game_engine/third_party/dxc/external/ /mnt/d/dev/haiku_game_engine/third_party/s...
+SPIRV-Tools reads `CHANGES` and `utils/update_build_version.py` unconditionally, so those upstream files must be vendored. Before I give up on them, I'll retry GitHub with explicit timeouts, since the earlier handshake failures may have been transient.
+[94m[Bash][0m Retry GitHub and PyPI connectivity with timeouts $ timeout 30 curl -sS --max-time 25 -o /dev/null -w "pypi %{http_code}\n" https://pypi.org/simple/ 2>&...
+GitHub is reachable again (about 1 s per request), so the earlier hang was transient. That means I can extend the DXC and SPIRV-Tools vendor specs and re-extract them with the maintainer tool, which keeps the pins and hashes intact. Adding the missing LLVMBuild files and the SPIRV-Tools version inputs:
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: "        "include": ["CMakeLists.txt", "cmake/*", "..." → "        "include": ["CHANGES", "CMakeLists.txt", "..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: "            "CMakeLists.txt", "LICENSE.TXT", "LLVM..." → "            "CMakeLists.txt", "LICENSE.TXT", "LLVM..."
+Running the vendor tool for the two entries in an empty scratch download directory outside the repo:
+[94m[Bash][0m Re-vendor DXC and SPIRV-Tools with added files $ echo rc=${PIPESTATUS[0]}
+Only SPIRV-Tools was processed, so the second `--only` probably overwrote the first. I'll check the argument definition and rerun DXC on its own.
+[94m[Bash][0m Check vendor CLI and re-vendor DXC alone $ echo rc=${PIPESTATUS[0]}
+The DXC archive download dropped mid-transfer, which points to flaky network rather than a tool bug. I'll retry the DXC vendoring a few times.
+[94m[Bash][0m Retry DXC vendoring until the archive downloads $ done
+DXC is re-vendored with three new LLVMBuild files (3,977 → 3,980 files), and no patch is needed. Next I'll configure and build from the real vendored tree in a fresh scratch build directory.
+[94m[Bash][0m Configure DXC from vendored tree without patches $ tail -2 conf.log
+The unpatched tree configures cleanly. I'll start the Linux DXC build in the background and design the CMake integration while it runs.
+[94m[Bash][0m Start DXC Linux build in background $ tail -c 400 /tmp/dxc-probe/linux2/build.log
+Another SPIRV-Tools generator script is missing (`utils/generate_registry_tables.py`). Rather than discover them one at a time, I'll list every `utils/` and `external/` reference in its CMake files.
+[94m[Bash][0m List SPIRV-Tools utils and generator references $ ls external
+SPIRV-Tools' generators read several scripts from `utils/` (registry tables, language headers, vim syntax, ggt). The directory is small, so I'll vendor all of `utils/*` for SPIRV-Tools and re-extract it with retries.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/vendor/vendor.py[0m edit: ""tools/*", "utils/update_build_version.py", "LICEN..." → ""tools/*", "utils/*", "LICENSE"],"
+[94m[Bash][0m Re-vendor SPIRV-Tools with utils directory $ ls third_party/spirv_tools/utils | head -30
+SPIRV-Tools now has its full `utils/` set (969 files). I'll rebuild the Linux probe.
+[94m[Bash][0m Reconfigure and build DXC probe, poll progress $ tail -c 500 /tmp/dxc-probe/linux2/build.log
+[94m[Bash][0m Find first compile errors in DXC build $ grep -n "FAILED" -A3 build.log | head -20
+DXC's source relies on C++ exceptions and RTTI, but the Linux default turns both off. The upstream Windows script sets `LLVM_ENABLE_RTTI` and `LLVM_ENABLE_EH` on, so I'll do the same and reconfigure.
+[94m[Bash][0m Rebuild DXC with exceptions and RTTI enabled $ tail -c 300 /tmp/dxc-probe/linux2/build.log
+The shell call hit its timeout while the build continues in the background. I'll check the build log directly.
+[94m[Bash][0m Check DXC build progress and errors $ pgrep -f "ninja -j32" | head -2
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: grep -c "Building" /tmp/dxc-probe/linux2/build.log grep -n "error:" /tmp/dxc-probe/linux2/build.log head -5 tail -c 300 /tmp/dxc-probe/linux2/build.log echo pgrep -f "ninja -j32" head -2. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check DXC build progress and errors $ pgrep -f "ninja -j32" | head -2
+The Linux DXC build finished with exit 0 and produced `bin/dxc` and `libdxcompiler.so`. Next I'll check that `libdxil.so` is present, then compile a small HLSL fixture to both DXIL and SPIR-V, including a deliberate error to see the diagnostic format.
+[94m[Bash][0m Compile HLSL fixture to DXIL and SPIR-V with probe dxc $ od -A x -t c -N 4 fixture.dxil
+The probe works on Linux: DXIL and SPIR-V both compile, the SPIR-V magic is correct, and diagnostics print `path:line:col`. Before I design the CMake side, I'll read the existing test and target wiring so the new pieces match it.
+[94m[Bash][0m Read test, core target, and build docs structure $ sed -n 1,40p docs/build.md
+That background event is just the DXC rebuild finishing, not new input. I'll check two packaging details next: the Linux RUNPATH of `dxc` (which decides the install layout) and whether the Windows validator target sets an output name.
+[94m[Bash][0m Check dxc RUNPATH and validator output naming $ grep -rn "dxil.dll\|libdxil\|\"dxil\"" tools/clang/tools/dxcompiler/*.cpp tools/clang/tools/dxcompil...
+`RUNPATH` is `$ORIGIN/../lib`, so the staged layout will be `bin/dxc` plus `lib/` on Linux, and DLLs in `bin/` on Windows. Enabling C is needed for DXC's host build, so I'll also add a C compiler to the Linux presets. Now I'll write the shader toolchain module: a preflight check, the separate DXC host build as an ExternalProject, and the shader compile function.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/cmake/ShaderToolchain.cmake[0m "# Host shader toolchain (US-003).
+#
+# DirectXShaderCompiler is built from third_party/dxc as a separate CMake project
+# (ExternalProject). Its compiler, flags, and language level are its own: the
+# en... (8037 chars)"
+The draft has a few leftovers to tidy before I continue: unused variables, a redundant `CMAKE_CXX_STANDARD` pass, and a dlopen probe that's needlessly convoluted. I'll clean those up.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/cmake/ShaderToolchain.cmake[0m edit: "  include(CheckCXXSourceCompiles)
+  include(CheckI..." → "  include(CheckCXXSourceCompiles)
+  if(WIN32)
+    ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/cmake/ShaderToolchain.cmake[0m edit: "  set(dxc_host_cxx_flags_args "")
+  set(dxc_host_a..." → "  set(dxc_host_args
+    -DCMAKE_BUILD_TYPE=Release..."
+Next is the staging script. It copies the compiler, its runtime library, and the validator, fails if any piece is missing, and also stages the DXC license notices.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/cmake/InstallShaderToolchain.cmake[0m "# Stages the built DXC host tools for the engine build.
+#
+#   cmake -DDXC_BINARY_DIR=<dxc build dir> -DDXC_SOURCE_DIR=<third_party/dxc>
+#         -DDXC_INSTALL_DIR=<dir> -P cmake/InstallShaderToolchai... (1607 chars)"
+The install step needs `DXC_SOURCE_DIR` passed through from the ExternalProject call, so I'll add that.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/cmake/ShaderToolchain.cmake[0m edit: "      "-DDXC_BINARY_DIR=<BINARY_DIR>"
+      "-DDXC..." → "      "-DDXC_BINARY_DIR=<BINARY_DIR>"
+      "-DDXC..."
+Now the root `CMakeLists.txt`: enable C (the DXC host build needs a C compiler) and wire in the prerequisite check and the host toolchain build when the option is on.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/CMakeLists.txt[0m edit: "  DESCRIPTION "C++20 single-player open-world game..." → "  DESCRIPTION "C++20 single-player open-world game..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/CMakeLists.txt[0m edit: "include(cmake/EngineTargets.cmake)
+" → "include(cmake/EngineTargets.cmake)
+
+# Host shader ..."
+Next, the Linux presets need a matching C compiler, so the host build doesn't pick up `cc`/gcc by default.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/CMakePresets.json[0m edit: "      "name": "linux-clang",
+      "hidden": true,..." → "      "name": "linux-clang",
+      "hidden": true,..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/CMakePresets.json[0m edit: "      "cacheVariables": {
+        "CMAKE_CXX_COMPI..." → "      "cacheVariables": {
+        "CMAKE_C_COMPILE..."
+Now the fixtures. The compute fixture has a cbuffer and a structured buffer so both backends exercise real resources. The error fixture has one undeclared identifier on a known line. I'll also check, using the probe binary, what distinguishes validator-signed DXIL from unvalidated output, so the test can assert the validator actually ran.
+[94m[Bash][0m Compare validated and unvalidated DXIL output $ $D -dumpbin fx_val.dxil 2>&1 | head -12
+The validator check is decisive: validated DXIL carries a nonzero 16-byte container digest at offset 4, while `-Vd` output is all zeros. The CTest script will assert that digest is nonzero, which proves the staged `libdxil` loaded. Writing the fixtures and the CTest script now.
+[94m[Bash][0m Create HLSL fixture files under tests/shaders $ } EOF ls -la
+I miscounted the lines in the error fixture: the undeclared identifier is on line 7, not 6. I'll fix the header comment so it states the right line, and the test will expect line 7.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/shaders/fixture_error.hlsl[0m edit: "// Shader toolchain diagnostic fixture (US-003): m..." → "// Shader toolchain diagnostic fixture (US-003): m..."
+Now the CTest script. It has two modes: one checks the built DXIL and SPIR-V outputs (container magic, validator digest, SPIR-V magic), and one checks that the error fixture fails with the source path and line in the diagnostic.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/shaders/ShaderFixtureTests.cmake[0m "# Checks the host shader toolchain against the HLSL fixtures.
+#
+#   MODE=outputs     DXIL and SPIRV name the build outputs of the fixture. Checks the
+#                    container and SPIR-V magic an... (2950 chars)"
+Now I'll wire the fixture build outputs and both checks into `tests/CMakeLists.txt`, guarded by the toolchain option so the tests can't reference a missing tool.
+[94m[Bash][0m Append shader tests to tests CMake and validate vendor $ echo validate_rc=$?
+Two problems. First, the Python generators that run during the DXC configure and build write `__pycache__` into the vendored trees, which the validator correctly rejects. Second, the fix has to live in the sub-build commands, because `set(ENV{...})` at configure time doesn't reach the build-time Python scripts. I'll delete those caches (they're ours, from the probe builds) and set `PYTHONDONTWRITEBYTECODE` on the configure and build commands explicitly.
+[94m[Bash][0m Remove Python bytecode caches from vendored trees $ find . -name "*.pyc" -o -name __pycache__ | wc -l
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/cmake/ShaderToolchain.cmake[0m edit: "  ExternalProject_Add(engine_dxc_host
+    SOURCE_D..." → "  # The generators (llvm-build, hctdb, SPIRV-Tools..."
+The validator and configure path should now be clean. I'll confirm the vendor check passes, then run a clean Linux configure, starting from a removed `build/linux-dev`, since the presets changed the compiler set.
+[94m[Bash][0m Validate vendor and run clean Linux configure $ tail -25 /tmp/us003-linux-configure.log
+The clean configure passes with the new preflight and the C compiler enabled. I'll start the `linux-debug` build in the background; it will build the pinned DXC host toolchain and then the engine and tests.
+[94m[Bash][0m Build Linux debug preset including DXC host toolchain $ echo "BUILD_EXIT=$?" >> /tmp/us003-linux-build.log
+While the Linux build runs, I'll prepare the Windows side. The progress log says Windows gates run through a `.bat` outside the repo that calls `vcvars64.bat`, so I'll look for the previous one to reuse.
+[94m[Bash][0m Locate previous Windows gate batch scripts $ cat /tmp/engine_scripts/*.bat 2>/dev/null | head -40
+No earlier gate script survives, so I'll write a new one outside the repo. First I'll confirm the Visual Studio install, `cmake`/`ninja`, and Python are where I expect on the Windows side.
+[94m[Bash][0m Check Windows VS, SDK, CMake, Ninja, and Python $ 
+The Windows side has VS 18 Community with MSVC 14.51, Windows SDK 10.0.22621, CMake, Ninja, and Python. I'll write the gate chain as a `.bat` in `/mnt/d/dev/us003-gates`, outside the repo, with CRLF line endings for cmd.exe. It removes `build\win-dev` first so the Windows configure is also a clean one.
+[94m[Bash][0m Write Windows gate batch script outside repo $ tail -c 400 /tmp/us003-linux-build.log
+The Linux build is nearly done on the engine side. I'll wait for it to finish, then check the DXC host-build steps in the log.
+[94m[Bash][0m Check Linux build result and DXC step lines $ grep -n "engine_dxc_host\|dxc\b" /tmp/us003-linux-build.log | head -10
+
+[91m[Error: <tool_use_error>Blocked: sleep 45 followed by: grep -n "BUILD_EXIT\|FAILED\|error:" /tmp/us003-linux-build.log head -20 grep -n "engine_dxc_host\|dxc\b" /tmp/us003-linux-build.log head -10. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux build result and DXC step lines $ tail -3 /tmp/us003-linux-build.log
+[94m[Bash][0m Show DXC external steps in Linux build log $ ls /mnt/d/dev/haiku_game_engine/build/linux-dev/host-tools/dxc/bin 2>/dev/null
+
+[91m[Error: Exit code 2
+[1/130] Creating directories for 'engine_dxc_host'
+[2/130] No download step for 'engine_dxc_host'
+[3/130] No update step for 'engine_dxc_host'
+[4/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/benchmark/catch_chronometer.cpp.o
+[5/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/benchmark/detail/catch_benchmark_function.cpp.o
+[6/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/generators/catch_generator_exception.cpp.o
+[7/130] No patch step for 'engine_dxc_host'
+[8/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/generators/catch_generators_throw.cpp.o
+[9/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/benchmark/detail/catch_run_for_at_least.cpp.o
+[10/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/benchmark/detail/catch_analyse.cpp.o
+[11/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/reporters/catch_reporter_registrars.cpp.o
+[12/130] Building CXX object third_party/catch2/src/CMakeFiles/Catch2.dir/Debug/catch2/interfaces/catch_interfaces_config.cpp.o][0m
+The DXC host build hasn't started yet; the outer Ninja is still compiling the engine and Catch2 in parallel, and the external steps run after. While that finishes, I'll read the rest of `docs/build.md` to place the shader toolchain documentation correctly.
+[94m[Bash][0m Read remainder of build documentation $ sed -n 40,200p docs/build.md
+I'll update the docs in three places: the SPIRV-Tools and DXC scope decisions (the new vendored files and why), the stale DXC constraint line, and a new shader-toolchain section for the build layout and the Windows/Linux prerequisites.
+[94m[Bash][0m Update build docs with shader toolchain section $ the CTest `engine_shader_*` tests check the magic numbers, that the DXIL validator digest is nonzero...
+Docs are updated. I'll check the Linux build's progress.
+[94m[Bash][0m Check Linux build progress $ ls /mnt/d/dev/haiku_game_engine/build/linux-dev/host-tools/dxc/ 2>/dev/null | head -5
+The engine objects are linked and the DXC sub-build is still running. I'll set a background watcher on the build log so I'm notified when it finishes, rather than polling.
+[94m[Bash][0m Wait for Linux build to finish $ tail -c 300 /tmp/us003-linux-build.log
+While the build runs, I'll check whether this WSL kernel supports a network-less namespace. That would give a real offline check for the clean build instead of only relying on the absence of download steps.
+[94m[Bash][0m Test network-less namespace availability $ echo "curl_rc=$?")' 2>&1 | head -5
+The network-less namespace works (curl fails to resolve the host), so the clean offline build can be verified for real. I'll wait for the current Linux build to finish first.
+[94m[Bash][0m Wait for Linux build to finish $ tail -c 300 /tmp/us003-linux-build.log
+[94m[Bash][0m Wait up to 9 minutes for Linux build completion $ tail -c 300 /tmp/us003-linux-build.log
+The Linux debug build succeeded end to end: the DXC host toolchain, install step, and both fixture outputs. Now I'll run the Linux unit gate and inspect the staged toolchain layout.
+[94m[Bash][0m Run Linux unit tests and inspect staged toolchain $ ls -la build/linux-dev/shaders/
+Linux unit gate passes 10/10, including both shader tests, and the staged layout matches the design. Next is the Windows gate chain, which runs in the background since the DXC MSVC build takes a while.
+[94m[Bash][0m Run Windows quality gate chain via batch script $ echo "WIN_GATE_EXIT=$?" >> /mnt/d/dev/us003-gates/win-gate.log
+While the Windows chain runs, I'll exercise the preflight failure path in a scratch build directory. Pointing `Python3_EXECUTABLE` at a missing interpreter should stop configure at the prerequisite check, before any DXC work starts.
+[94m[Bash][0m Verify preflight fails fast on missing Python $ ls /tmp/us003-preflight/host-tools 2>&1 | head -2
+The preflight fails fast with the intended message and no host-tools directory is created. The Windows chain has already reported completion, which seems quick, so I'll read its log before trusting it.
+[94m[Bash][0m Read Windows gate log output $ tr -d '\r' < /mnt/d/dev/us003-gates/win-gate.log | grep -v "^\s*$" | tail -60
+The Windows chain passed: validator, `win-dev` configure with the SDK/ATL checks, the full `win-debug` build including the MSVC DXC host toolchain, and `win-unit` at 10/10. The C5285 warnings come from vendored DXC headers, which the acceptance criteria exempt from warnings-as-errors. Next is the offline clean rebuild on Linux, run inside a network-less namespace from an empty `build/linux-dev`.
+[94m[Bash][0m Clean offline Linux configure, build, and unit tests $ tail -3 /tmp/us003-linux-offline.log
+While the offline Linux build runs, I'll record the work in `.ralph-tui/progress.md`: new codebase patterns at the top, and the US-003 entry at the bottom with the gate results and what was not run.
+[94m[Bash][0m Append US-003 entry and patterns to progress log $ a plain re-run worked.   - `/mnt/d/dev/gemma_game_egnine_2` holds copies of DXC and SPIRV-Tools from...
+I wrote a build-time figure for the Windows DXC build that I didn't measure. I'll remove that line so the log only states verified facts.
+[94m[Bash][0m Fix unverified claim and wait for offline build $ tail -c 400 /tmp/us003-linux-offline.log
+[94m[Bash][0m Wait for offline Linux build and unit tests $ tail -c 500 /tmp/us003-linux-offline.log
+The clean offline Linux run passed too: configure, build, and all 10 unit tests inside the network-less namespace. Now the final checks: the vendor validator after both platform builds (in case a build wrote into `third_party/`), and the manifest entries for the newly vendored files.
+[94m[Bash][0m Final vendor validation and manifest spot-check $ grep -n "Result is recorded below" .ralph-tui/progress.md
+The manifest lists the new files (SPIRV-Tools 969 files, DXC 3,980) and validation passes with zero `__pycache__` left behind. Last, I'll replace the placeholder in the progress log with the actual offline result.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "and `ctest --preset linux-unit`. Result is recorde..." → "and `ctest --preset linux-unit`. Passed: configure..."
+US-003 is implemented and passes both platforms' quality gates. I did not emit the `<promise>COMPLETE</promise>` signal, because one acceptance criterion (an offline build on Windows) is not met yet. Details are below.
+
+**What works**
+- **Pinned DXC host toolchain:** `engine_dxc_host` builds DirectXShaderCompiler from `third_party/dxc` as a separate CMake project (`cmake/ShaderToolchain.cmake`). It gets its own flags, so engine `-Werror`/`/WX` never reach it. It stages `dxc`, `dxcompiler`, and the DXIL validator, plus license notices, under `build/<preset>/tools/shader-toolchain/`.
+- **Shader compile:** `engine_add_hlsl_shader()` compiles `tests/shaders/fixture.hlsl` to DXIL (`cs_6_0`) and SPIR-V in the default build. Only the staged binary is used, never `dxc` from PATH.
+- **Diagnostics:** `fixture_error.hlsl` fails with `<abs path>:7:` and `error:`. The test asserts this.
+- **Validator proof:** validated DXIL has a nonzero container digest, and `-Vd` output has all zeros. The test asserts the digest is nonzero, which shows the staged validator loaded.
+- **Preflight:** configure stops early with a clear message if Ninja, Python 3.8+, the Windows SDK/ATL, or `dlopen` is missing. I tested the Python case.
+
+**Gates**
+- **Windows (MSVC 14.51):** `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` all pass; unit tests are 10/10. The script is `D:\dev\us003-gates\win-gate.bat`, outside the repo.
+- **Linux (clang 10):** `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` pass; unit tests are 10/10. A clean rebuild inside `unshare -rn` (no network) also passes: configure, build, and tests.
+
+**Vendor changes**
+- Added the DXC `docs`, `examples`, and `projects` LLVMBuild files, which `llvm-build` needs at configure time.
+- Added SPIRV-Tools `CHANGES` and `utils/*`, which its build reads.
+- Both were re-extracted from the pinned SHAs with `tools/vendor/vendor.py`, and the manifest is updated. Validation passes with 26 dependencies and 8,524 files.
+- I did not use `/mnt/d/dev/gemma_game_egnine_2`. Its DXC and SPIRV-Tools copies are `master` clones, not the pinned revisions.
+
+**Other changes**
+- The root project now enables C, and the `linux-clang` and `linux-gcc` presets set matching C compilers. The DXC host build needs a C compiler.
+- `docs/build.md` has a new shader toolchain section, and `.ralph-tui/progress.md` has the US-003 entry.
+
+**Not done**
+- **Offline Windows build:** the Windows clean build was not network-isolated. This is the one open criterion for signalling completion.
+- **GCC and sanitizers:** `linux-gcc`, `linux-asan`, and `linux-sanitize` were not run. This story doesn't touch the sanitizer subsystems, and the GCC job belongs to US-004. GCC 9 has not been tested with DXC, so that job may hit problems.
+- **Other items:** CI, GPU/GUI checks, benchmarks, and release builds are not applicable yet or were not run. I didn't commit, since the engine handles that.

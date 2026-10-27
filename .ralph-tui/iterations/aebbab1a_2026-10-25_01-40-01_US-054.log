@@ -1,0 +1,43 @@
+# Iteration 372 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:40:01.937Z
+- **Ended At**: 2026-10-24T22:40:39.378Z
+- **Duration**: 37s
+- **Input Tokens**: 46
+- **Output Tokens**: 4221
+- **Total Tokens**: 4267
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 is already in the tree, since the character controller and joints may exist from an earlier iteration.
+[94m[Bash][0m Inspect physics module and progress log $ tail -60 .ralph-tui/progress.md
+The progress log shows 17 consecutive "status check" entries, all stopping at the same open item: the Linux/GCC gate. Before writing another status entry, I'll check two things: whether a GCC 11+ toolchain can be installed here, and whether the source changed since the last Windows pass.
+[94m[Bash][0m Check sudo, available compilers, and recent source changes $ find engine tests cmake docs -newer .ralph-tui/progress.md -type f | head
+GCC 11 is in the apt index but installing it needs a sudo password. `apt-get download` and `dpkg -x` don't need root, so I'll try extracting a private GCC 11 toolchain and building the GCC gate with it.
+[94m[Bash][0m Download GCC 11 packages without root $ ls
+[94m[Bash][0m Download GCC 11 core packages and list dependencies $ ls
+[94m[Bash][0m Download g++-11 package alone $ ls
+The apt index here resolves `g++-11` to Ubuntu clang packages, so a private GCC 11 can't be assembled without root. I'll clean up the downloads and record the attempt in the progress log.
+[94m[Bash][0m Remove temp downloads and append progress entry $ `physics_stress` is US-077). No COMPLETE signal. --- EOF tail -3 .ralph-tui/progress.md
+US-054 is not complete, so I'm not signalling COMPLETE. Everything I can verify here passes, but the Linux/GCC gate is blocked on this machine.
+
+**Open items**
+- **Linux/GCC gate (`linux-gcc*`):** Jolt needs GCC 11+, and this host only has GCC/G++ 9. I tried to get GCC 11 without root. `sudo` needs a password, and the local apt index resolves `g++-11` to Ubuntu clang-11 packages, so no GCC 11 binary could be built. Someone with root needs to install `g++-11` (or the CI job needs to run it).
+- **Performance measurement:** the acceptance benchmark (`engine_bench`) is US-074 and `physics_stress` is US-077. Neither exists yet, so this stays open until those stories land.
+
+**Verified in earlier passes (no source change since)**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` passed 21 of 21 on the current tree.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` pass. `linux-sanitize` passed 22 of 22 in check 12; an earlier X11 focus failure did not recur.
+
+**Change this pass**
+- Appended a progress entry to `.ralph-tui/progress.md` recording the GCC 11 attempt. This is the 18th status entry with the same blocker, so the log is now mostly repetition. Nothing else changed.

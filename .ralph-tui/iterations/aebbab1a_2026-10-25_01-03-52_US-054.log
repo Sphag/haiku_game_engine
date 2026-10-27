@@ -1,0 +1,46 @@
+# Iteration 362 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:03:52.314Z
+- **Ended At**: 2026-10-24T22:09:12.072Z
+- **Duration**: 5m 19s
+- **Input Tokens**: 52
+- **Output Tokens**: 5827
+- **Total Tokens**: 5879
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress notes $ git status 2>&1 | head -5
+[94m[Bash][0m Check US-054 log entries and recent file changes $ grep -n "US-054" tasks/prd-open-world-engine.md | head
+[94m[Bash][0m Read earlier US-054 progress entries and PRD section $ ls tasks
+[94m[Bash][0m Search PRD for physics, character, and contract sections $ grep -n -i "character\|joint\|constraint\|physics\|Non-Goal\|Technical Consid\|benchmark\|performanc...
+[94m[Bash][0m Read PRD functional, non-goal, and benchmark sections $ sed -n 808,830p tasks/prd-open-world-engine.md | grep -i -n "jolt\|physics\|fixed\|tick"
+[94m[Bash][0m Review physics documentation headings and coverage $ grep -n -i "^#\|constraint\|character\|benchmark\|physics_stress\|non-goal\|soft" docs/physics.md | ...
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -4 /tmp/ct.log)
+[94m[Bash][0m Append status entry to progress log $ the last Windows pass (21 of 21) followed the last source change. - Status call: US-054 stays **Part...
+US-054 is implemented and the Linux gates pass, but I'm not marking it complete. Two acceptance items can't run in this environment.
+
+**Passing on Linux (this pass):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21)
+
+Earlier passes also recorded `linux-asan` / `linux-sanitize` as green, and the Windows gates (ValidateVendor, win-dev, win-debug build, win-unit 21/21) as passing. I did not rerun the Windows gates this pass. The tree has not changed since that last Windows run, per the log.
+
+**Open:**
+- **`linux-gcc` gate:** the machine has only GCC/G++ 9 and clang 10. Jolt needs GCC 11+, and sudo needs a password, so I can't install it. This needs the CI job or a machine with GCC 11+.
+- **Performance measurement:** `engine_bench --suite acceptance` has no target yet (US-074), and the `physics_stress` scene doesn't exist yet (US-077). The benchmark criterion can't be met until those land.
+
+**Checked this pass:** the PRD's Functional Requirements, Non-Goals, and benchmark/performance contract. `docs/physics.md` already records the `physics_stress` workload and the no-sleeping-bodies rule, and none of the non-goals are touched by this story. I made no source changes.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results.

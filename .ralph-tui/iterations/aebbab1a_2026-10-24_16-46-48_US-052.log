@@ -1,0 +1,49 @@
+# Iteration 214 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T13:46:48.121Z
+- **Ended At**: 2026-10-24T13:52:43.378Z
+- **Duration**: 5m 55s
+- **Input Tokens**: 66
+- **Output Tokens**: 5186
+- **Total Tokens**: 5252
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since the notes suggest US-052 may already be partly implemented.
+[94m[Bash][0m Inspect physics module and progress log $ ls && ls engine/physics && tail -n 80 .ralph-tui/progress.md && grep -n "US-052" -A3 tasks/*.md | he...
+The log says US-052 is Partial: the GCC 11+ gate is blocked locally and there is no `engine_bench` target. The remaining checks I can run here are the ASan/UBSan sanitize gate (never run in the recent passes) and the Windows gates. I'll start with the sanitizer build.
+[94m[Bash][0m Configure and build the ASan/UBSan preset $ tail -3 /tmp/asan_build.log
+[94m[Bash][0m Check ASan configure status and running Windows build tasks $ cmd.exe /c "tasklist" 2>/dev/null | grep -iE "cmake|ctest|msbuild|cl.exe|engine_" | head
+The ASan build configured and built with no warnings. Next I'll run the sanitizer test suite.
+[94m[Bash][0m Run sanitizer CTest suite $ tail -n 25 /tmp/asan_ctest.log
+The sanitizer suite passed 22/22. Now the Windows gates. My memory notes describe the procedure and warn about overlapping batches, so I'll read those first.
+[94m[Bash][0m Read Windows gate run notes from memory $ ls /mnt/d/dev/haiku_game_engine/tools | head -50
+I'll check for any leftover batch first, then write and launch the Windows gate batch (ValidateVendor, configure, build, unit tests) using the procedure in my notes.
+[94m[Bash][0m Write and launch the Windows gate batch $ echo launched
+The batch is running in the background. I'll wait for its DONE marker with a bounded poll.
+[94m[Bash][0m Wait for Windows gate batch to finish $ cat $T/us052_rc.txt | tr -d '\r'
+[94m[Bash][0m Check Windows build and test logs $ ls $T/us052_*
+All Windows gates passed. I'll record this pass in the progress log, as earlier passes did.
+[94m[Bash][0m Append this pass's results to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is still Partial, so I am not emitting the COMPLETE signal. This pass ran the gates I could run, and all of them passed. Two acceptance items are still open.
+
+**Passed this pass (no source changed):**
+- **Windows (MSVC, RTX 5080 host):** `ValidateVendor`, `win-dev` configure, `win-debug` build with no warnings or errors, and `win-unit` CTest at 21/21.
+- **Linux sanitizers (clang 10):** `linux-asan` build with no warnings or errors, and `linux-sanitize` CTest at 22/22.
+- **Linux (clang 10):** the earlier passes already recorded `ValidateVendor`, `linux-dev`, `linux-debug` and `linux-unit` (22/22) on this tree. I did not re-run those here.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. The only local compiler is g++-9, and Jolt needs GCC 11+. This needs a GCC 11+ environment or the CI job.
+- **`engine_bench --suite acceptance`:** not run. No `engine_bench` target exists in the non-vendored CMake files (that is US-074).
+
+I appended this pass to `.ralph-tui/progress.md`. I did not create a commit.

@@ -1,0 +1,41 @@
+# Iteration 765 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:37:00.536Z
+- **Ended At**: 2026-10-26T02:37:13.823Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2103
+- **Total Tokens**: 2125
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and check for existing US-076 work $ grep -n "US-076" -r --include=*.md --include=*.cpp --include=*.hpp --include=*.txt --include=*.json ...
+The log shows US-076 has been blocked on one user decision for many passes. I'll check the latest recorded results so my report matches the tree.
+[94m[Bash][0m Check latest benchmark artifacts, source mtimes, and contract floor $ grep -n "2000000\|2,000,000" tasks/prd-open-world-engine.md | head -5
+US-076 is not complete, and I did not change anything in this pass. The story is blocked on one decision from you, and the acceptance criteria cannot pass until it is made.
+
+**What is in place (from the recorded runs):**
+- `render_stress` is implemented, with eight DX12 and Vulkan reports under `artifacts/bench/us076-*`, covering the indexed, indirect, and meshlet paths, plus a forced no-mesh-shader fallback for each.
+- Linux re-verified in the last pass: `linux-debug` builds, `ctest --preset linux-unit` passes 30/30, and `engine_workload --check` matches all 4 scenes.
+
+**What blocks completion:**
+1. **Route-start triangle floor and frame budget fail.** The contract requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The measured count is 312,068. Frame times are p99 35–47 ms against a 16.7 ms budget. The start pose comes from the SHA-256-pinned camera route in the manifest, and the instance placement comes from the seeded generator, whose digests are pinned. Fixing it means changing a fixed contract: bump `kWorkloadVersion` (currently 1 in `tools/benchmark/include/engine/benchmark/workload.hpp:25`), regenerate `benchmarks/workload_expected.json`, and update the manifest hash. I need your approval for that change.
+2. **`full_1080` is unsupported** until the vendored FSR 2 shader permutations exist. Choosing how to vendor them is your call.
+3. **Not yet run:** native Linux Vulkan GPU tests (WSL has no usable Vulkan device) and the `linux-gcc` gate (the local GCC 9.4 cannot build Jolt).
+
+**Decision for you:**
+- Approve or reject the placement/route change. If approved, I'll make it, regenerate the workload, and rerun the benchmarks and gates.
+- Say whether a failing measured run should close the story as measured, or whether it stays open until the floor is met.
+
+I did not run the Windows gates in this pass, and I did not append another status entry to `.ralph-tui/progress.md`, since the last 20 or so entries repeat the same blocker.

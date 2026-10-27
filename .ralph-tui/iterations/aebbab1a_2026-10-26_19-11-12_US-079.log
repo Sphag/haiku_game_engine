@@ -1,0 +1,47 @@
+# Iteration 1024 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:11:12.507Z
+- **Ended At**: 2026-10-26T16:11:35.041Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 2497
+- **Total Tokens**: 2525
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and whether any of the US-079 work already exists.
+[94m[Bash][0m Inspect repo state and search for all_features $ ls && tail -c 3000 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | gr...
+Prior iterations logged many "status check" entries with no COMPLETE signal. I'll read the earlier US-079 entries and the PRD requirements before deciding what to do this pass.
+[94m[Bash][0m Read US-079 history and PRD section $ ls tests | head -30
+[94m[Bash][0m Check for source changes since last US-079 log $ sed -n 4779,4800p .ralph-tui/progress.md
+US-079 is not complete, and I did not signal COMPLETE. I made no code or log changes this pass. Nothing under `engine`, `tools`, `tests`, `benchmarks`, `docs`, or `cmake` has changed since the last recorded run, so I didn't re-run gates that already passed.
+
+**What exists**
+- The Linux gates passed in the last recorded run: `ValidateVendor` exit 0, `linux-dev` configure, `linux-debug` build with no warnings, and `linux-unit` at 30/30.
+- The Windows gates passed in the last recorded run: `ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` at 29/29, `engine_tests --suite gpu --backend dx12` at 72 cases, and `--backend vulkan` at 73 cases with the validation layer.
+- There are two CPU test files for the combined scene, `all_features_tests.cpp` and `all_features_editor_tests.cpp`. They are marker checks, not a tour of the running app.
+
+**What is blocked**
+1. **`samples/all_features` does not exist.** The benchmark manifest still lists `all_features` as `implementation: none`, with route `all_features_route_v1` as an unapproved proposal. I need your approval of that route before I build the scene and its benchmark runner, because it fixes the benchmark contract.
+2. **GI/RT/upscale profiles and forced geometry paths** cannot be verified. FSR 2's `*_permutations.h` headers are absent from `third_party/fsr2`, so `full_1080` stays unsupported. You need to choose a vendoring route for those headers or accept the unsupported status.
+3. **The tour, editor scenario, and package/relaunch** need a Windows GPU and GUI session. I can't drive the native app from this WSL environment, so screenshots and the action log are not available here.
+4. **Not yet run:** `engine_bench --suite acceptance`, `engine_tests --suite editor` on Windows, `linux-gcc*`, and the `linux-asan` and `linux-sanitize` presets. The host has only GCC 9.4, which can't build Jolt, and I haven't run the sanitizer builds.
+
+Earlier iterations logged about 16 "status check" entries with no code change. They added no progress, so I did not add another.
+
+**What I need from you**
+- Approve or change `all_features_route_v1`.
+- Decide the FSR 2 permutation-header route, or accept `full_1080` as unsupported.
+- Provide a Windows GPU and GUI session for the tour, profiles, editor scenario, and package/relaunch.
+
+Once the route is approved I can build the `all_features` sample and its CPU-side runner, then run the Linux and Windows gates on it.

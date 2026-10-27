@@ -1,0 +1,44 @@
+# Iteration 1186 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:37:41.613Z
+- **Ended At**: 2026-10-26T21:43:54.702Z
+- **Duration**: 6m 13s
+- **Input Tokens**: 30
+- **Output Tokens**: 3135
+- **Total Tokens**: 3165
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress tail and list repo root $ tail -c 6000 .ralph-tui/progress.md && echo ---- && ls && ls benchmarks artifacts 2>/dev/null | head...
+[94m[Bash][0m Find recent progress entries and performance contract $ grep -n "Performance Contract" -A30 tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Re-check blockers: GPU device, FSR files, workloads, changes $ find . -newer .ralph-tui/progress.md -path ./build -prune -o -type f -print 2>/dev/null | grep -v "^...
+[94m[Bash][0m Run Linux vendor validation, configure, build, and unit tests $ tail -5 /tmp/us080_ctest.log) 2>&1 | tail -20
+[94m[Bash][0m Append US-080 status entry to progress log $ logs in /tmp/us080_*.log). - Not run: Windows gates (need cmd.exe batch from WSL), linux-gcc, linux-...
+US-080 is not complete, so I am not emitting the COMPLETE signal. The acceptance run needs hardware and workloads this host does not have.
+
+**What passed on this WSL host (Linux gates):**
+- `cmake -P cmake/ValidateVendor.cmake`: 26 dependencies, 8542 files.
+- `cmake --preset linux-dev` configured.
+- `cmake --build --preset linux-debug` built.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: integration 29 tests, unit 1 test, all passing.
+
+**What is blocked:**
+- **Native Linux Vulkan / RTX 5080:** `/dev/dri` is absent, so there is no native Linux Vulkan device. The RTX 5080 is visible only through WSL `nvidia-smi`.
+- **Acceptance bench:** `benchmarks/manifest.json` still has four `implementation: "none"` workloads, so a 3×180 s batch would exit 3 (incomplete). `artifacts/bench` holds only partial us076/us077/us078/us080 runs, with no acceptance-suite run.
+- **FSR 2:** zero `*_permutations.h` files in the vendored tree. That needs a vendoring decision from you.
+- **Windows gates and linux-gcc / linux-asan:** not run. The Windows gates go through cmd.exe batch files from WSL, and I did not start them in this pass.
+- **Contract questions:** if a frame budget is exceeded, changing the contract needs your decision.
+
+I appended a status entry to `.ralph-tui/progress.md` recording the Linux gate results and the open items. The earlier entries (status checks 69–78) repeat the same blocked state without new work, so I did not add another "no change" line beyond this one.
+
+To finish US-080, the next steps are: run the Windows gates and the RTX 5080 acceptance batch on the reference machine, implement the four missing workloads, and decide the FSR 2 route and any budget changes.

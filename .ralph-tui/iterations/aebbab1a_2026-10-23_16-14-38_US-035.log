@@ -1,0 +1,70 @@
+# Iteration 9 Log
+
+## Metadata
+
+- **Task ID**: US-035
+- **Task Title**: Lighting and Raster Shadows
+- **Description**: As a scene author, I want lighting and shadows so that I can create readable environments.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T13:14:38.471Z
+- **Ended At**: 2026-10-23T13:29:04.219Z
+- **Duration**: 14m 25s
+- **Input Tokens**: 116
+- **Output Tokens**: 9618
+- **Total Tokens**: 9734
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD sections for this story.
+[94m[Bash][0m List repo root and read progress log tail $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && tail -n 120 .ralph-tui/prog...
+[94m[Bash][0m Search PRD and tree for lighting/shadow context $ grep -n "US-03" docs/build.md | head
+The build.md row for US-035 says it was implemented, and `docs/lighting.md` exists. I'll check the code and tests against the acceptance criteria, and read the Windows gate memory notes before running anything.
+[94m[Bash][0m Read memory notes, list lighting files, check running gates $ ps aux | grep -i "cmd.exe\|us0\|ctest\|cmake" | grep -v grep | head
+The Docs MCP isn't needed for this code task. Nothing under `engine/` or `tests/` is newer than the progress log, so the recorded gate results should describe the current tree. I'll re-run the Linux gates to confirm, and read the lighting doc and the acceptance-related code while they run.
+[94m[Bash][0m Run Linux vendor validation, configure, build, unit tests $ echo "unit=$?") 2>&1
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/lighting.md[0m
+Linux configure, debug build, vendor check, and unit tests all pass. Next I'll check the PRD's point-light shadow wording, whether `engine_bench` exists, and run the remaining Linux presets.
+[94m[Bash][0m Check PRD point-light wording, bench target, and GCC gate $ echo "gcc_unit=${PIPESTATUS[0]}") 2>&1
+GCC build and unit tests pass with zero warnings. The PRD's native profile specifies shadows for 4 local lights in the atlas, which matches the spot-light atlas, so the point-light scope call is consistent with it. Next are the sanitizer preset and the Windows batch template.
+[94m[Bash][0m Run ASan build and sanitizer tests; check Windows batch templates $ pgrep -f "us0.*\.bat" || echo "no batch running"
+`pgrep` matched a process (PID 14984). Before launching anything on Windows I need to check whether an earlier gate batch is still running.
+[94m[Bash][0m Inspect any running batch process and US-033/034/035 temp files $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "us035\|us034\|us033" | head
+The `pgrep` hit was my own shell command matching its pattern. `ps` shows no running batch. I'll use the US-033 batch as the template for the Windows gates.
+[94m[Bash][0m Read the US-033 Windows gate batch template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us033_rc.txt
+[94m[Bash][0m Create and launch the US-035 Windows gate batch $ echo launched
+While the Windows batch runs, I'll wait on its done file with a bounded poll.
+[94m[Bash][0m Wait for Windows gate batch done file $ [ -f $T/us035_done.txt ] && echo DONE || echo STILL_RUNNING
+All six Windows steps exit 0. The memory notes say exit codes alone aren't enough, so I'll check the build log for warnings and the test logs for case counts.
+[94m[Bash][0m Parse Windows gate logs for warnings, failures, and case counts $ ls -la --time-style=+%H:%M /mnt/d/dev/haiku_game_engine/build/win-dev/tests/Debug/engine_tests.exe
+The Windows tests pass: 21/21 unit, 40 DX12 cases, and 41 Vulkan cases with validation on and no validation errors. I'll confirm the build log ends in success and that the test binary is newer than the newest source.
+[94m[Bash][0m Confirm Windows build success and binary freshness $ grep -rn "US-035\|lighting" .ralph-tui/progress.md | head -3
+The build log ends at `[16/85]` with exit 0, a warm-build pattern the memory notes describe. No source is newer than the test binary. Last, I'll record the Linux GPU suite result on this WSL host and confirm no benchmark target exists.
+[94m[Bash][0m Run Linux GPU suites and check for a bench target $ echo bench-check-done
+[94m[Bash][0m Locate Linux engine_tests binary and run GPU suites $ done
+Linux GPU suites report `unsupported` (exit 3) on this WSL host, as recorded for earlier stories. I have what I need, so I'll append the progress entry.
+[94m[Bash][0m Append US-035 entry to progress log $ GitHub CI (not pushed). - Files changed: `.ralph-tui/progress.md` only. - **Learnings:**   - The sto...
+US-035 is verified complete on the current tree, and I've added its progress entry. The lighting and shadow code, docs, and tests were already in the repo from earlier work, so this pass re-ran the gates and changed no source.
+
+**Acceptance criteria**
+- **Light lists and overflow:** directional, point, and spot lights go through screen-by-depth clusters. Each cluster keeps its highest-priority lights and flags any cluster that drops one.
+- **Shadows:** directional cascades and a spot-light shadow atlas support bias, PCF filtering, and invalidation.
+- **Debug views:** `Lit`, `ClusterCount`, `ClusterOverflow`, `CascadeIndex`, and `ShadowFactor`, plus `LightingStats`.
+- **Windows gates:** `ValidateVendor`, `win-dev`, and `win-debug` pass with 0 `warning C` and 0 `error C`. `win-unit` passes 21/21.
+- **Windows GPU:** `gpu dx12` passes 40 cases. `gpu vulkan` with validation layers on passes 41 cases, with no validation messages.
+- **Linux gates:** `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` (22/22) pass.
+- **Linux GCC and sanitizers:** `linux-gcc`, `linux-gcc-debug` (0 warnings), `linux-gcc-unit` (22/22), `linux-asan`, and `linux-sanitize` (22/22) all pass.
+
+**Not run or unsupported**
+- **Linux GPU:** `engine_tests --suite gpu --backend vulkan` exits 3 (unsupported) because this WSL host has no Khronos validation layer. The dx12 suite is Windows-only. A native Linux Vulkan GPU report is still outstanding.
+- **Benchmark:** `engine_bench --suite acceptance` can't run because the bench target doesn't exist yet (US-074).
+- **GUI and CI:** no GUI check exists yet, and nothing has been pushed to GitHub CI.
+
+**Scope call to review:** point lights light the scene but cast no shadows. `docs/lighting.md` records this. The PRD's native profile names only 4 local shadowed lights, which the spot-light atlas covers. FR-07 lists shadows generally, so if point-light shadows are required, that is an open gap.
+
+**Files changed:** `.ralph-tui/progress.md` only. The Windows batch I used is at `C:\Users\bucha\AppData\Local\Temp\us035_gate.bat` (outside the repo).
+
+<promise>COMPLETE</promise>

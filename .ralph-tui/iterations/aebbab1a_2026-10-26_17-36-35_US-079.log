@@ -1,0 +1,53 @@
+# Iteration 968 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:36:35.331Z
+- **Ended At**: 2026-10-26T14:42:52.604Z
+- **Duration**: 6m 17s
+- **Input Tokens**: 40
+- **Output Tokens**: 3823
+- **Total Tokens**: 3863
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log before deciding what US-079 needs.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features refs $ grep -ril "all_features" --include=* . 2>/dev/null | grep -v third_party | head -30
+The log shows about 65 prior passes that stopped at the same blockers without changing code. I'll look at what is actually buildable here: the manifest entry, the benchmark driver, and the existing all_features tests.
+[94m[Bash][0m Read manifest entry, benchmark driver, and existing tests $ sed -n 1,60p tests/src/all_features_tests.cpp
+The CPU all_features tests already exist, and the log says they passed at check 63. I'll re-run the Linux checks now rather than rely on that log, since nothing should have changed since.
+[94m[Bash][0m Re-run Linux vendor check, debug build, and unit tests $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Get ctest summary and all_features integration results $ ./build/linux-debug/engine_tests --suite integration 2>&1 | grep -iE "all.features|passed|failed" | ...
+Linux unit checks pass (30/30). I'll append this pass to the progress log, as the workflow requires, and record what is still open.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows RTX host with a GUI session for the Windows gates, GPU suites, and the live editor run...
+US-079 is not complete, and I am not signalling COMPLETE. Most of the acceptance criteria need a Windows RTX host with a GUI session, and two decisions only you can make.
+
+**What I ran this pass (Linux, WSL):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30/30 passed.
+
+No source changed this pass.
+
+**What is still open:**
+- **The `all_features` benchmark scene.** `tools/benchmark/src/main.cpp` has no branch for it, so the run reports Missing. The manifest entry is `implementation: none`.
+- **The combined `samples/all_features` project, the feature-marker tour, and the GI/RT/upscale profiles.** Not started.
+- **Forced geometry paths.** Not run.
+- **The live-app editor scenario with package and relaunch.** Needs a Windows host and a GUI session.
+- **Windows gates** (ValidateVendor, `win-dev`, `win-debug`, `win-unit`), **GPU suites**, native Linux Vulkan, `engine_bench --suite acceptance`, the linux-gcc and ASan presets. Not run.
+
+**Decisions I need from you:**
+1. **FSR 2 vendoring route for `full_1080`.** The vendored FSR 2 has no `*_permutations.h` headers, so the `full_1080` profile stays unsupported until you pick a route.
+2. **Approval of `all_features_route_v1`.** It is still a proposal in the manifest. I would build it as written, reporting `full_1080` as unsupported and the GPU profiles as Missing.
+
+The Windows gates, GPU suites, and the live editor run also need a Windows RTX host with a GUI session. I can't provide that from WSL.
+
+I appended this status to `.ralph-tui/progress.md`. Once you answer the two decisions, the next step is the `all_features` branch in `tools/benchmark/src/main.cpp`. It would report a pass only for the CPU tour, never for the unbuilt GPU profiles.

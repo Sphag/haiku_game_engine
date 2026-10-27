@@ -1,0 +1,50 @@
+# Iteration 859 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T08:42:59.727Z
+- **Ended At**: 2026-10-26T08:45:53.125Z
+- **Duration**: 2m 53s
+- **Input Tokens**: 68
+- **Output Tokens**: 4864
+- **Total Tokens**: 4932
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-077 already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout and progress log $ tail -c 3000 .ralph-tui/progress.md
+The progress log shows US-077 is implemented and that repeated status checks have been blocked on one item: the Linux/GCC gate needs GCC 11+. I'll re-check the toolchain and the scene's source, then run the physics benchmark tests.
+[94m[Bash][0m Probe GCC versions and review physics stress source $ ls tests/src | grep -i bench
+The toolchain is unchanged: only GCC 9 and clang 10 are installed, so `linux-gcc` still cannot run here. I'll rebuild the Linux debug tree and run the unit suite to confirm the physics benchmark tests pass on the current tree.
+[94m[Bash][0m Build linux-debug and run linux-unit ctest $ echo "build exit ${PIPESTATUS[0]}") && ctest --preset linux-unit --no-tests=error --output-on-failur...
+The build is clean and all 30 tests pass. Next I'll run the physics stress scene directly so the criteria are checked against real output, not just the source.
+[94m[Bash][0m Locate bench and test binaries and show usage $ done
+[94m[Bash][0m Find physics benchmark executable $ grep -n "physics" tools/benchmark/CMakeLists.txt | head -5
+[94m[Bash][0m Show bench help and run physics_stress scene $ echo "exit $?"
+The scene isn't a CLI flag; it runs as part of the `smoke` suite. I'll run that into a temp folder outside the repo.
+[94m[Bash][0m Run smoke benchmark suite into temp folder $ grep -o '"[a-z_]*physics[a-z_]*"' /tmp/bench_smoke_us077/report.json | sort -u | head
+The smoke suite only runs a calibration check. I'll confirm the physics benchmark tests are tagged for the CPU suites, and check the manifest's physics_stress entry.
+[94m[Bash][0m Check physics bench tests and manifest entry $ grep -n "physics" tasks/prd-open-world-engine.md | grep -i "US-077\|physics_stress\|benchmark" | hea...
+The physics benchmark tests and the manifest entry are in place, and the Linux unit suite passes. I'll record this check in the progress log, as the previous status entries did.
+[94m[Bash][0m Append status entry to progress log $ `ctest --preset linux-unit --no-tests=error` 30/30 passed (unit 1, integration 29). - Physics benchm...
+US-077 is implemented, but I am not signalling COMPLETE. One gate can't run on this machine: the `linux-gcc` criterion needs GCC 11+, and only GCC 9 and clang 10 are installed.
+
+**Verified in this pass:**
+- **Source:** `tools/benchmark/src/physics_stress.cpp` reports active and sleeping bodies, simulation steps, queries, and catch-up events. It also detects lost timesteps, NaN transforms, and out-of-bounds samples.
+- **Manifest:** `benchmarks/manifest.json` has the `physics_stress` entry with the PRD workload: 2000 active bodies, 200 static colliders, 100 constraints, 20 characters, 1000 raycasts/s, 100 shape casts/s, 60 Hz.
+- **Build:** `cmake --build --preset linux-debug` exits 0.
+- **Tests:** `ctest --preset linux-unit --no-tests=error` passes 30 of 30. `tests/src/bench_physics_tests.cpp` has seven `[unit]` cases inside that run.
+
+**Not verified here:**
+- **`linux-gcc` criterion:** Jolt needs GCC 11+. Installing it needs root, which is not available.
+- **Not re-run this pass:** the Windows gates, `linux-asan`, and `engine_bench --suite acceptance`. The Windows gates passed on the last source change according to the log, and no file under the benchmark or physics code has changed since. The acceptance benchmark needs a Release build on a native backend, and the GPU suite is not part of this pass.
+
+I appended a status entry to `.ralph-tui/progress.md`. The story should be closed on a host with GCC 11+ (or the CI job) that runs the `linux-gcc` presets.

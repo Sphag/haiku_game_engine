@@ -1,0 +1,41 @@
+# Iteration 691 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:12:44.746Z
+- **Ended At**: 2026-10-26T02:13:01.544Z
+- **Duration**: 16s
+- **Input Tokens**: 30
+- **Output Tokens**: 2589
+- **Total Tokens**: 2619
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log.
+[94m[Bash][0m Inspect repo, progress log and benchmark tool $ git status --short 2>/dev/null | head -30
+The log shows 12 earlier passes on this story, each ending blocked on the same user decision. Before adding another, I'll check whether the tree has changed and whether the placement blocker really needs a decision.
+[94m[Bash][0m Check mtimes and placement code for blocker $ grep -n -i "render_stress\|triangle" tasks/prd-open-world-engine.md | head -40
+The blocker is still there. I'll confirm the latest reported counter from the newest artifact before I stop.
+[94m[Bash][0m Read newest US-076 report counters $ grep -o '"[^"]*frame budget[^"]*"[^}]*' "$f" | head -2
+US-076 is not complete, so I am not signalling COMPLETE. The work has stalled on one decision that only you can make, and I did not rerun the gates or benchmarks because nothing has changed since the last recorded run.
+
+**What is blocking it:** the `render_stress` scene does not meet the contract's floor. The PRD requires at least 2,000,000 submitted triangles on the indexed reference path at the starting frame. The newest report (`artifacts/bench/us076-vulkan-meshlets-nomesh/report.json`) shows 312,068 triangles in view on frame 0. Frame budget also fails: p99 is 35–47 ms against 16.7 ms.
+
+**Why I didn't fix it:** instances are placed uniformly over the world, so the start camera sees only a fraction of them. Raising the count in view means changing the workload recipe (`tools/benchmark/src/workload.cpp`). That requires bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`, which changes pinned digests. I did not make that change without your approval.
+
+**Decisions I need from you:**
+1. **Placement:** may I change instance placement (for example, clustering instances around the start route) and bump `kWorkloadVersion`? That is the only path to the 2M floor I can see.
+2. **Failing run:** if placement stays as it is, should the story close as "measured, criteria not met", or stay open?
+
+**Still open regardless of that decision:**
+- `full_1080` is unsupported until the FSR 2 shader permutations exist. Only `native_1080` runs.
+- Native Linux Vulkan GPU tests and the `linux-gcc` gate have not been run.
+- I did not add a new progress entry. The log already has 12 identical "not complete" entries, and another one would add noise without changing the state.

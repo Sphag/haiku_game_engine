@@ -1,0 +1,40 @@
+# Iteration 901 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:31:55.224Z
+- **Ended At**: 2026-10-26T12:32:14.314Z
+- **Duration**: 19s
+- **Input Tokens**: 22
+- **Output Tokens**: 2106
+- **Total Tokens**: 2128
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the `all_features` scene and its prerequisites already exist.
+[94m[Bash][0m Inspect repo state and progress log $ grep -ril "all_features" --include=* . 2>/dev/null | grep -v third_party | head -30
+The progress log shows many earlier passes that verified the tree but made no code change, and the blockers are still listed. I'll check the manifest entry and the latest iteration log before deciding what to do in this pass.
+[94m[Bash][0m Check all_features manifest, FSR2 files, and last log $ tail -n 30 .ralph-tui/iterations/aebbab1a_2026-10-26_15-22-00_US-079.log | cut -c1-300
+US-079 is not complete, so I am not emitting the COMPLETE signal. I made no source changes in this pass.
+
+**Why it's blocked:**
+- **`all_features` has no GPU scene.** `benchmarks/manifest.json` still lists it as `implementation: none`, with no route defined beyond "pending final benchmark scene". Without that, the GI/RT/upscale profiles, the forced indirect/meshlet paths, and `engine_bench --suite acceptance` cannot run.
+- **FSR 2 cannot link.** `third_party/fsr2` still has no `*_permutations.h` headers, so the `full_1080` profile is unsupported. Vendoring those headers is a decision for you, not something I can make by reading the tree.
+- **No tour runner or editor scenario exists.** There is no automated tour with screenshots and an action log, and no end-to-end editor run covering edits, undo/redo, Play/Stop, and package/relaunch.
+- **Some hosts are missing.** This WSL host has GCC 9.4 only, which cannot build Jolt, so `linux-gcc*` and the sanitizer presets are not run. There is also no native Linux Vulkan device or GUI.
+
+**What I checked:** the existing `all_features` CPU tests are in `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp`. The most recent pass re-ran `ValidateVendor`, `linux-debug`, and `linux-unit` with exit 0. I did not re-run those here, and I did not add another status-only entry to `.ralph-tui/progress.md`, because the earlier passes show repeated checks don't move the story.
+
+**What would unblock it:**
+1. Define the `all_features` GPU route in `tools/benchmark` and set its implementation in the manifest.
+2. Decide how to vendor the FSR 2 permutation headers, or accept that `full_1080` stays unsupported.
+3. Build the tour runner and editor scenario, then run them on the Windows GPU host.
+4. Provide a GCC 11+ toolchain for the Linux GCC and sanitizer gates.

@@ -1,0 +1,41 @@
+# Iteration 302 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:21:46.330Z
+- **Ended At**: 2026-10-24T17:22:02.618Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2171
+- **Total Tokens**: 2193
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state first: the progress log, the physics directory, and whether the story is already implemented.
+[94m[Bash][0m Read progress log, physics dir, and Jolt memory $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls engine/physics && echo ---- && cat /home/max/.c...
+The log shows US-052 as Partial across many passes, with the same two blockers each time: `linux-gcc` needs GCC 11+, and the benchmark target doesn't exist. Before I repeat the same recheck, I'll see whether either blocker has changed.
+[94m[Bash][0m Check compilers, bench target, and source mtimes $ date +%H:%M
+US-052 is not complete, and I'm not emitting the completion signal. Nothing changed since the last full check, and both blockers are still in place.
+
+**What's blocking it**
+- **`linux-gcc` gate:** only GCC 9.4 is installed (`g++-9`, `gcc-9`). Jolt needs GCC 11+ for `__builtin_bit_cast`. There's no `/opt` compiler, no conda, micromamba, or docker, and `sudo` needs a password. Until a GCC 11+ environment exists, `cmake --preset linux-gcc`, `linux-gcc-debug` and `linux-gcc-unit` can't run here.
+- **Acceptance benchmark:** no `engine_bench` target exists in any non-vendored CMakeLists.txt. The benchmark is US-074, so `engine_bench --suite acceptance` can't run yet.
+
+**What's already in place**
+- The source is unchanged since the 13:13 CMake edit (`engine/physics/CMakeLists.txt`, `engine/physics/src/physics_world.cpp`, `tests/src/physics_world_tests.cpp`).
+- Per the log and the Jolt memory entry, the Windows gates (validate, win-dev, win-debug, win-unit at 21/21) and the Linux clang gates (validate, linux-dev, linux-debug, linux-unit at 22/22) passed on this source. ASan/UBSan also passed.
+
+**Not done in this pass**
+- I didn't re-run the gates. The earlier results were on this same source, and the progress log already has several identical "Partial" entries.
+- I didn't append another progress entry for the same reason. That's a choice you may want to revisit.
+
+**To finish US-052**
+Install GCC 11+ (`sudo apt install g++-11` after refreshing the lists, or use a CI GCC 11 job), then run the three `linux-gcc` commands. Once they pass, the only open item is the benchmark, which waits on US-074.

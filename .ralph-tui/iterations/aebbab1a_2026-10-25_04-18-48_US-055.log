@@ -1,0 +1,43 @@
+# Iteration 426 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T01:18:48.206Z
+- **Ended At**: 2026-10-25T01:22:01.813Z
+- **Duration**: 3m 13s
+- **Input Tokens**: 36
+- **Output Tokens**: 2799
+- **Total Tokens**: 2835
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the Lua bindings and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and script module $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/script engine/script/* && git status 2>&1 | hea...
+The progress log shows US-055 already implemented and marked Partial, with the only open gate being `linux-gcc`. Before deciding anything, I'll confirm the code and tests are there and check whether a GCC 11+ compiler has appeared on the host.
+[94m[Bash][0m Check Lua sources, test count, and available compilers $ echo done
+The sources and tests are in place, and the host still has no GCC 11+. I'll run the Linux debug build and unit suite once so the result I report is from this session.
+[94m[Bash][0m Validate vendor, build linux-debug, run linux unit tests $ echo "exit=${PIPESTATUS[0]}"
+The Linux debug build and all 22 unit and integration tests pass. The `linux-gcc` gate still can't run on this host, so I'll record that in the progress log and not signal completion.
+[94m[Bash][0m Append status entry to progress log $ no GCC 11+, no container runtime. - Status call: US-055 stays **Partial**. Open: `linux-gcc` gate an...
+US-055 is not complete, so I am not signalling COMPLETE. The Lua API is implemented and the Linux checks I could run pass. The one open gate needs a compiler this host doesn't have.
+
+**Blocked:** the `linux-gcc` gate (`cmake --preset linux-gcc`, `linux-gcc-debug` build, `linux-gcc-unit` ctest). Jolt needs GCC 11+ and this host only has GCC 9.4 and clang 10. It has no container runtime either. Only the CI job or a machine with GCC 11+ can settle it.
+
+**Verified this session (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 passed (integration 21, unit 1).
+
+**Not re-run this session:** the Windows gates, `linux-dev`, `linux-asan`/`linux-sanitize`, and the engine_bench runs. The progress log records earlier passes of the Linux dev and asan/sanitize gates and the Windows ValidateVendor, win-dev, win-debug, and win-unit gates, but I did not re-check those. The GPU and benchmark items are native-hardware runs that I haven't done.
+
+**Changes:** no source changes. I appended one status entry to `.ralph-tui/progress.md`. It is the same Partial status as the earlier re-check entries, so the log now has many near-identical entries.
+
+Next step: run `linux-gcc` on a GCC 11+ machine or the CI job. If it passes, US-055 can be marked complete.

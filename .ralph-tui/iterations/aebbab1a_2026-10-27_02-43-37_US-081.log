@@ -1,0 +1,61 @@
+# Iteration 1267 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:43:37.783Z
+- **Ended At**: 2026-10-26T23:46:12.498Z
+- **Duration**: 2m 34s
+- **Input Tokens**: 88
+- **Output Tokens**: 4879
+- **Total Tokens**: 4967
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and the repo state.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The log shows earlier passes ending "not signed off" on hardware and licence blockers. I'll confirm those blockers still hold, then run the Linux build and unit tests that the last pass skipped.
+[94m[Bash][0m Check blockers and start Linux debug build in background $ echo "BUILD_EXIT=$?" >> /tmp/us081_build.log) & echo started
+[94m[Bash][0m Wait and check build progress $ tail -5 /tmp/us081_build.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -5 /tmp/us081_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for Linux debug build to finish $ tail -5 /tmp/us081_build.log
+[94m[Monitor][0m Wait for build exit marker $ echo done
+[94m[Monitor][0m Wait for build exit marker (retry) $ echo done
+[94m[Bash][0m Check build tail and acceptance doc status $ cd /mnt/d/dev/haiku_game_engine && grep -n "US-081" -A3 docs/acceptance.md | head -40
+[94m[Monitor][0m Wait for build exit marker (second) $ echo done
+[94m[Monitor][0m Wait for build to finish $ echo done
+The Linux debug build is still running. I'll wait for its completion notice before running the unit tests.
+[94m[Monitor][0m Wait for build completion marker $ tail -3 /tmp/us081_build.log
+[94m[Monitor][0m Wait for build completion marker (again) $ tail -3 /tmp/us081_build.log
+[94m[Monitor][0m Wait for build completion marker (third) $ tail -3 /tmp/us081_build.log
+The Linux debug build exited 0. Next I'll run the Linux unit test preset.
+[94m[Bash][0m Run Linux unit test preset $ tail -15 /tmp/us081_ctest.log
+Linux unit tests passed 30/30 and the debug build exited 0. I'll record these results in the acceptance doc and the progress log.
+[94m[Bash][0m Find gate rows in acceptance doc $ tail -c 400 .ralph-tui/progress.md
+The acceptance doc already records these same results, and this run matches them. I'll append a progress entry and stop without a completion signal.
+[94m[Bash][0m Append progress entry for this pass $ no COMPLETE signal) - Blockers re-checked: `/dev/dri` absent, GCC 9.4 only (no g++-11 or clang 14+),...
+I did not sign off US-081, so there is no completion signal. The work it needs is blocked on hardware, a compiler, and two decisions that only you can make.
+
+**Verified this pass (Linux):**
+- `cmake --build --preset linux-debug` exited 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passed 30 of 30 (1 unit, 29 integration).
+- `cmake -P cmake/ValidateVendor.cmake` and `cmake --preset linux-dev` passed in the previous pass; I did not re-run them.
+
+**Still open:**
+- **Native Linux Vulkan GPU suite:** `/dev/dri` is absent. WSL has no usable Vulkan device, so this can't run here.
+- **RTX 5080 benchmark and GPU reports:** the full `engine_bench --suite acceptance` and the Windows/Linux GPU reports need the reference machine.
+- **Visual editor smoke:** Windows has a launch screenshot only. Linux did not run as a visual test.
+- **linux-gcc:** the local compiler is GCC 9.4, and Jolt needs GCC 11+. No g++-11 is installed.
+- **FSR 2:** 0 `*_permutations.h` files exist under `third_party`, so FSR cannot link. This needs a vendoring route from you.
+- **Package from a real sample game:** not built on either OS.
+- **LICENSE:** the repo has no license file. This is a decision for you.
+
+I did not change any source or docs this pass. I appended an entry to `.ralph-tui/progress.md` recording the re-run and the blockers. No commits were made.

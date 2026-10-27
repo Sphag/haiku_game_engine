@@ -1,0 +1,78 @@
+# Iteration 1006 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:37:57.010Z
+- **Ended At**: 2026-10-26T15:47:58.272Z
+- **Duration**: 10m 1s
+- **Input Tokens**: 100
+- **Output Tokens**: 6639
+- **Total Tokens**: 6739
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `all_features` already exists.
+[94m[Bash][0m Check progress log and existing all_features references $ git status 2>&1 | head -3
+The log shows this story has been stopped at the same three blockers for many iterations. Before deciding whether to stop again, I'll check whether any open criterion is runnable here, such as the Linux ASan gate.
+[94m[Bash][0m Check ASan presets and manifest route status $ nproc
+The ASan preset exists and nothing in the log shows it ran, so I'll run the configure, build, and sanitizer tests in the background.
+[94m[Bash][0m Start ASan configure, build, and sanitizer tests in background $ echo "test=$?" >> /tmp/us079_asan_test.log) & echo started
+[94m[Bash][0m Check ASan configure progress $ tail -2 /tmp/us079_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+The background job reports done almost immediately, which is suspicious for a full ASan build. I'll read the logs.
+[94m[Bash][0m Read ASan configure, build, and test logs $ tail -15 /tmp/us079_asan_test.log 2>&1
+
+[91m[Error: Exit code 1
+---
+tail: cannot open '/tmp/us079_asan_build.log' for reading: No such file or directory
+---
+tail: cannot open '/tmp/us079_asan_test.log' for reading: No such file or directory][0m
+The background subshell never wrote its logs, so it did not run. I'll run configure directly to see the real error.
+[94m[Bash][0m Configure the linux-asan preset $ echo "rc=${PIPESTATUS[0]}"
+[94m[Bash][0m Build the linux-asan preset $ tail -3 /tmp/us079_asan_build.log
+[94m[Bash][0m Run linux-sanitize ctest suite $ tail -25 /tmp/us079_asan_test.log
+The sanitizer build compiles, but one integration test fails under ASan/UBSan. I'll look at the failure.
+[94m[Bash][0m Find sanitizer errors and failing assertions $ grep -n -i "runtime error\|AddressSanitizer\|FAILED\|REQUIRE\|CHECK(\|with expansion\|\.cpp:[0-9]*" ...
+[94m[Bash][0m Read the failing integration test output $ sed -n 64,100p /tmp/us079_asan_test.log
+The summary shows one failed test case, but the log does not name it. I'll run the integration suite directly and capture the failure.
+[94m[Bash][0m Run integration suite and capture failing case $ grep -n -B3 -A12 "FAILED:" /tmp/us079_asan_int.log | head -80
+The failing case is an X11 keyboard-focus test. It ran rather than skipping, and the non-sanitizer Linux run passed it. I'll read the test to see whether it depends on timing.
+[94m[Bash][0m Read the failing X11 input test $ sed -n 300,350p tests/src/platform_x11_input_tests.cpp
+The test sends XTEST key events and then drains the queue, so it depends on the server delivering them in time. I'll rerun the integration suite once to see whether the failure is intermittent.
+[94m[Bash][0m Inspect event collection and rerun integration suite $ grep -n "test cases\|assertions:" /tmp/us079_asan_int2.log
+The rerun passed all 1763 assertions, so the earlier failure is a timing flake in the X11 input test, not a sanitizer report. I'll confirm the sanitizers stayed quiet in both runs, then record the result.
+[94m[Bash][0m Check for sanitizer reports and log this run $ (3) a Windows GUI session for the tour and live editor run. - Stop: no COMPLETE signal. --- EOF echo...
+US-079 is not complete, so I have not signalled COMPLETE. This pass ran the Linux sanitizer gate, which the log had not recorded as run, and it found no sanitizer errors.
+
+**What I ran (Linux, clang with ASan + UBSan):**
+- `cmake --preset linux-asan` passed.
+- `cmake --build --preset linux-asan` passed with no errors.
+- `ctest --preset linux-sanitize` ran 30 tests: 29 passed and `engine_tests_integration` failed once.
+- The failure was three X11 keyboard assertions in `tests/src/platform_x11_input_tests.cpp` (lines 336, 337, 344). Events were not collected within the test's 400 ms window. Rerunning `engine_tests --suite integration` under ASan passed all 1763 assertions. I'd call this a timing flake, not a sanitizer finding, but I have not fixed or hardened the test.
+- Because of that failure, I have not reported the `linux-sanitize` gate as a clean pass. The full ctest run was not repeated.
+
+**Still open, and not reported as passed:**
+- `all_features` benchmark branch. The route `all_features_route_v1` is still a proposal in `benchmarks/manifest.json` (line 152). It fixes the benchmark contract, so I did not approve it.
+- `samples/all_features` does not exist.
+- The GI/RT/upscale profiles and the forced geometry paths are not run.
+- The tour has not been run.
+- FSR 2 permutation headers are absent, so `full_1080` stays unsupported.
+- The linux-gcc gate cannot run here (GCC 9.4 cannot build Jolt).
+- `engine_bench --suite acceptance` and the DX12/Vulkan GPU suites are not run.
+- The live editor run with package/relaunch needs a Windows GUI session.
+
+**What I need from you:**
+1. Approve or amend `all_features_route_v1`.
+2. Vendor the FSR 2 permutation headers, or confirm `full_1080` stays unsupported.
+3. Run the Windows GUI session for the tour and the editor scenario.
+
+I appended this pass to `.ralph-tui/progress.md`.

@@ -1,0 +1,41 @@
+# Iteration 747 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:28:35.237Z
+- **Ended At**: 2026-10-26T02:28:47.086Z
+- **Duration**: 11s
+- **Input Tokens**: 20
+- **Output Tokens**: 1729
+- **Total Tokens**: 1749
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect progress log and existing render_stress code $ ls tools/benchmark/src 2>/dev/null
+[94m[Bash][0m Check source and artifact mtimes against the log $ ls -t artifacts/bench 2>/dev/null | head -3
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing in the tree has changed since the last recorded pass, and the remaining work needs your decisions.
+
+**What blocks the story**
+
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` route starts at 312,068 triangles against a floor of 2,000,000. Frame time is p99 35–47 ms against a 16.7 ms budget. Acceptance can't pass on the current instance placement. The fix changes the fixed benchmark workload, so `kWorkloadVersion` (currently 1) must be bumped and `benchmarks/workload_expected.json` regenerated. I haven't made that change because it alters the contract.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so only `native_1080` runs. "Both profiles" is only partly met. Choosing a vendoring route is yours to make.
+3. **Not run:** native Linux Vulkan GPU (WSL has no usable Vulkan device) and the `linux-gcc` gate (local GCC 9.4 can't build Jolt).
+
+**What is done:** the indexed, indirect, and meshlet paths have benchmark reports for DX12 and Vulkan, plus the mesh-shader-disabled fallback runs. The fallback reports show disabled features as not enabled. The Windows and Linux gate results recorded in the progress log still describe the current tree.
+
+**Decisions I need from you**
+
+- Approve or reject a placement change. If approved, I'll bump the workload version, regenerate the expected file, and rerun the acceptance runs.
+- Say whether a measured run that fails the budget should close the story as "measured, failing", or whether it stays open.
+- Pick the FSR 2 route for `full_1080`, or accept it as unsupported for this story.
+
+The progress log already records these same three blockers over many passes with no change, so I've not appended another no-op entry.

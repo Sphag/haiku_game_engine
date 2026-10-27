@@ -1,0 +1,43 @@
+# Iteration 1152 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:19:32.559Z
+- **Ended At**: 2026-10-26T21:19:47.409Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2189
+- **Total Tokens**: 2211
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log tail and bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Find US-079/080 notes and Windows gate memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md | ...
+[94m[Bash][0m Re-verify acceptance blockers on this host $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -1
+[94m[Bash][0m Append status check entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No source change, ...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. This host can't produce the measurements the story requires, and I made no code changes this pass.
+
+I re-checked the blockers just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42), and WSL does not count as a native Linux GPU report.
+- **FSR 2 shader tables are missing.** `third_party/fsr2` has no `*_permutations.h` files, so the FSR upscaler cannot build. Vendoring the generated tables is a user decision.
+- **Workloads are not implemented.** `benchmarks/manifest.json` still has four entries with `implementation: none`: the physics action route, the streaming route, and the teleport/render entries.
+- **No acceptance runs exist.** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+- **The contract cannot be met here.** Acceptance needs three 30 s warmup / 180 s measured repeats per scene, profile, and backend on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. Those runs need the reference machine.
+
+The earlier status-check entries in `.ralph-tui/progress.md` (checks 33–51) record the same blockers. I appended check 52 with the same result.
+
+**What needs you:**
+1. Run the acceptance matrix on the reference computer, or give me a native Linux Vulkan environment.
+2. Decide how to handle the FSR 2 permutations: vendor the generated tables, or accept an FSR-less build for this story.
+3. Confirm whether the physics, streaming, and all-features workloads must be implemented before sign-off.
+
+Once those are settled, I can take the remaining work: the workloads, a render_stress frame-budget fix if the Windows runs show one, and the Windows quality gates through `cmd.exe` as the memory notes describe.

@@ -1,0 +1,43 @@
+# Iteration 1085 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:00:34.191Z
+- **Ended At**: 2026-10-26T21:00:50.980Z
+- **Duration**: 16s
+- **Input Tokens**: 28
+- **Output Tokens**: 2488
+- **Total Tokens**: 2516
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress log tail and bench state $ git status 2>&1 | head -3
+The log shows US-080 blocked across several passes. I'll re-verify the blockers before deciding whether any step is left to take.
+[94m[Bash][0m Re-check hardware, FSR, manifest, and bench blockers $ ls samples 2>&1 | head -1
+The blockers are unchanged, so I'll record this pass in the progress log and stop without a COMPLETE signal.
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I am not signing it off. I made no code change and ran no build or benchmark in this pass.
+
+**Blocked on this host (re-checked):**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so the Linux/Vulkan acceptance runs and GPU suite cannot run here.
+- **FSR 2 permutations:** `third_party/fsr2` has none of the generated `*_permutations.h` files. `full_1080` cannot run until you choose a vendoring route.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still lists 4 entries as `implementation: none`, including `all_features` and the physics and streaming routes.
+- **Acceptance bench:** `artifacts/bench` has only the two `us080-dx12-*readback-off` runs. None of them is a three-repeat acceptance run across all scenes, profiles, and backends.
+
+**Budget miss, still open:**
+- The earlier CPU cost from the per-frame readback was fixed with `SceneRenderer::set_readback`. Native 1080 CPU p50 dropped from 29.7 ms to about 14.5–15 ms.
+- Repeats 2 and 3 still fail on frame p99 over 16.67 ms. About 15 ms of CPU per frame is still unprofiled.
+- Residency is not measured, so `native_1080` cannot pass by design yet.
+
+**Next step that needs no new hardware:** capture a Windows Release RTX 5080 profile of `render_stress` to name the remaining CPU cost before changing code. The fix must follow that capture, not a change to the contract.
+
+I appended this status entry to `.ralph-tui/progress.md`. It is the eighth pass with the same blockers, and the story still needs a hardware path or a decision on the FSR 2 route.

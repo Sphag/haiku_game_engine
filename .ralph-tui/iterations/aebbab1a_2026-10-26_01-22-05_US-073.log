@@ -1,0 +1,61 @@
+# Iteration 639 Log
+
+## Metadata
+
+- **Task ID**: US-073
+- **Task Title**: Game Distribution from the Editor
+- **Description**: As a game creator, I want to build a distributable game so that I can deliver it to users.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T22:22:05.963Z
+- **Ended At**: 2026-10-25T22:37:58.132Z
+- **Duration**: 15m 52s
+- **Input Tokens**: 72
+- **Output Tokens**: 4401
+- **Total Tokens**: 4473
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-073 work already exists.
+[94m[Bash][0m Inspect progress log and search for existing build-game code $ ls engine/editor/src | head -80
+The progress log already has a US-073 entry with Linux and Windows gate results. I'll re-verify the Linux gates on the current tree rather than trust the log.
+[94m[Bash][0m Re-run Linux validation, configure, build, and unit tests $ tail -3 /tmp/ct.log
+[94m[Bash][0m Run editor suite on Linux to confirm distribution tests $ timeout 600 "$T" --suite editor 2>&1 | tail -3
+The editor suite ran 98 cases, but the log says 105. The binary I picked may be stale, so I'll check which one ran and whether the distribution tests are in it.
+[94m[Bash][0m Locate engine_tests binaries and distribution test file $ ls tests/src | grep -i distrib
+[94m[Bash][0m Run current editor suite binary and check Build Game cases $ timeout 900 ./build/linux-dev/tests/Debug/engine_tests --suite editor 2>&1 | grep -c "Build Game"
+The current binary passes all 105 editor cases, including the Build Game tests. The log says ASan was never run for this story, so I'll run the sanitizer preset now.
+[94m[Bash][0m Configure, build, and run ASan/UBSan test preset $ grep -c "ERROR: \|runtime error" /tmp/asan_ct.log
+[94m[Bash][0m Wait briefly and check ASan build progress $ tail -2 /tmp/asan_build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: ls -la /tmp/asan_ct.log tail -2 /tmp/asan_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for the sanitizer test run to finish $ tail -4 /tmp/asan_ct.log
+[94m[Bash][0m Check ASan configure, build, and ctest logs $ grep -c "ERROR: \|runtime error" /tmp/asan_ct.log
+[94m[Bash][0m Confirm sanitizer ctest pass count $ grep -E "tests passed|tests failed|Failed|failed" /tmp/asan_ct.log | tail -3
+The sanitizer run is clean. I'll record the re-verification in the progress log.
+[94m[Bash][0m Append re-verification note to progress log $ `ctest --preset linux-sanitize` 30 of 30 passed, no ASan/UBSan reports. This closes the sanitizer ga...
+US-073 was already implemented in an earlier pass. I re-checked the Linux gates on the current tree and they pass. I didn't change any code this time, only added a re-verification note to `.ralph-tui/progress.md`.
+
+**Re-verified on Linux (clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes.
+- `cmake --preset linux-dev`: passes.
+- `cmake --build --preset linux-debug`: passes with 0 warnings.
+- `ctest --preset linux-unit`: passes.
+- `engine_tests --suite editor`: 105 cases pass, including the Build Game tests (clean-folder launch, refused start scenes, cancellation, rebuild).
+- `linux-asan` configure and build pass, and `ctest --preset linux-sanitize` passes 30 of 30 with no ASan or UBSan reports. The earlier log had not run this step; it now has.
+
+**From the earlier pass, not re-run here:**
+- Windows gates (validate, win-dev, win-debug build, win-unit, and editor on DX12 and Vulkan), recorded in the log as passing on the RTX 5080.
+
+**Not verified:**
+- linux-gcc: the local GCC 9.4 cannot build Jolt.
+- Native Linux Vulkan GPU runs: no usable device under WSL.
+- engine_bench: no benchmark harness exists yet (US-074).
+- The Build Game window has not been driven in a running GUI, so there are no screenshots or action log.
+
+The story is complete against its acceptance criteria within those limits.
+
+<promise>COMPLETE</promise>

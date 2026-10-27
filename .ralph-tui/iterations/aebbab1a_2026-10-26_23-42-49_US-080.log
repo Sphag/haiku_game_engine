@@ -1,0 +1,42 @@
+# Iteration 1079 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:42:49.390Z
+- **Ended At**: 2026-10-26T20:43:10.172Z
+- **Duration**: 20s
+- **Input Tokens**: 28
+- **Output Tokens**: 3272
+- **Total Tokens**: 3300
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo.
+[94m[Bash][0m Read progress log tail and check bench artifacts $ git status 2>&1 | head -3
+[94m[Bash][0m Find US-078/079/080 notes and list repo root $ ls /mnt/d/dev/haiku_game_engine | head -50
+The log shows US-080 has been blocked across many passes. The open items are a frame-budget overrun, no acceptance run, no native Linux GPU, and a few user decisions. I'll check the latest render_stress report to see whether the measured cause is identified yet.
+[94m[Bash][0m Inspect latest DX12 render_stress report $ ls artifacts/bench/us076-dx12-meshlets/ && python3 -I -c " import json,sys r=json.load(open('artifac...
+[94m[Bash][0m Append US-080 status entry to progress log $ `linux-gcc*` needs GCC 11+ or clang 14+. - Next concrete step: a Windows Release RTX 5080 capture of...
+US-080 is not complete, so I'm not signalling COMPLETE. I made no code changes this pass; I only re-read the existing performance evidence and logged the status.
+
+**What the evidence shows:** the latest DX12 `render_stress` run on the RTX 5080 (`artifacts/bench/us076-dx12-meshlets/report.json`) fails the frame budget badly. p99 is 42.4 ms against the 16.7 ms limit, none of the frames meet the 60 FPS threshold, and 21% of frames are over 33.3 ms. The run exits 1. The report also says residency was not measured. The cause of the overrun has not been identified, so I did not attempt a fix.
+
+**Still open for US-080:**
+- **Frame budget:** the measured cause needs a profile on the RTX 5080 first, then a fix in the implementation. Changing the contract needs your decision.
+- **Acceptance run:** `engine_bench --suite acceptance` has not been run with three 180 s repeats per scene, profile, and backend. The only runs in `artifacts/bench` are from US-076 to US-078.
+- **Residency:** the RHI has no memory query yet, so the 12 GiB GPU and 16 GiB host limits cannot be checked.
+- **Native Linux Vulkan:** `/dev/dri` is absent, so there is no native GPU report on this host.
+- **`all_features` and `full_1080`:** `all_features` is still `implementation: none`, and `full_1080` needs FSR 2 permutation headers that the tree does not have. Both need your decisions.
+- **`linux-gcc`:** the host has GCC 9.4 and clang 10, so the GCC 11+ or clang 14+ job cannot run here.
+
+**Gates:** the Windows gates (validate, `win-dev`, `win-debug` build, `win-unit` 29/29) and the Linux gates passed in earlier passes. I did not re-run them this pass because nothing has changed since then.
+
+**Recommended next step:** capture a Windows Release profile of `render_stress` on the RTX 5080 with per-pass GPU timestamps and a CPU/GPU split to find the cause of the overrun. The status entry is appended to `.ralph-tui/progress.md`.

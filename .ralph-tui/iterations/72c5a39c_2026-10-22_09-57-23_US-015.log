@@ -1,0 +1,159 @@
+# Iteration 14 Log
+
+## Metadata
+
+- **Task ID**: US-015
+- **Task Title**: Component Reflection
+- **Description**: As a tool author, I want component metadata so that I can build the inspector and serialization.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T06:57:23.616Z
+- **Ended At**: 2026-10-22T07:13:15.969Z
+- **Duration**: 15m 52s
+- **Input Tokens**: 236
+- **Output Tokens**: 76382
+- **Total Tokens**: 76618
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && cat .ralph-tui/progress.md | head -400 && echo --- && wc -l tasks/prd-open-wor...
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+[94m[Bash][0m Find story references in PRD $ grep -n "US-01[345]\|US-00[1-4]" tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m List progress headings and source files $ find engine tests tools cmake -type f | grep -v build | head -300
+[94m[Bash][0m Read progress codebase patterns and recent entries $ sed -n 281,400p .ralph-tui/progress.md
+[94m[Bash][0m Read PRD sections on quality gates and stories $ awk 'NR>=20 && NR<=240' tasks/prd-open-world-engine.md
+The Docs MCP tools aren't needed for this story. Next I'll read the PRD's remaining constraints (non-goals, technical considerations, performance contract) and the existing ECS code that reflection has to fit with.
+[94m[Bash][0m Locate PRD section headings and reflection-related text $ grep -n -i "reflect\|descriptor\|schema\|type id\|TypeId\|serializ" tasks/prd-open-world-engine.md |...
+[94m[Bash][0m Read registry header, ECS CMake, and ECS docs $ ls tasks
+Now the functional requirements, non-goals, project structure, and the existing test wiring.
+[94m[Bash][0m Read PRD functional requirements, non-goals, and perf contract $ sed -n 884,912p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read tests CMake, presets, and US-015 prd.json entry $ grep -n -B2 -A12 '"US-015"' tasks/prd.json
+The PRD puts reflection under `engine/scene/`, and the story depends only on US-013. Next I'll check the CMake target conventions, the core utilities I'll build on, and how a test file is written.
+[94m[Bash][0m Read top-level CMake, target helpers, guid and result APIs $ cat engine/core/include/engine/core/result.hpp
+[94m[Bash][0m Read test file style, test main, and World API $ cat engine/ecs/include/engine/ecs/world.hpp | head -80
+I have the conventions I need. Before writing code, I'll check the assert macros, the tag style, and whether a Linux build tree already exists so I know how long a gate run takes.
+[94m[Bash][0m Check assert API, test tags, build dirs and tools $ which cmake ninja clang++ g++ 2>&1
+I have enough context to design this. Here is the plan, then the code.
+
+- **Location:** a new `engine_scene` library under `engine/scene/`, the directory the PRD's project structure gives to reflection. It depends only on `engine_core`, since reflection doesn't need the ECS.
+- **Type IDs:** author-chosen dotted names (`engine.transform`), validated, with a pinned FNV-1a 64-bit hash. Nothing comes from `typeid` or compiler output, so IDs stay stable across builds.
+- **Fields:** built with `field<&C::member>(name, default, range)`. A type trait limits the supported member types, and typed getters/setters are generated from the member pointer.
+- **Validation:** one `validate()` covers names, schema version, accessors, constraints, and defaults. The catalog's `add()` adds duplicate-ID, hash-collision, and duplicate-C++-type checks, and leaves the catalog unchanged on failure.
+- **Enforcement:** `set_field` checks the kind and range, so constraints apply to edits as well as defaults.
+
+I'll write the public header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/reflection.hpp[0m "#pragma once
+
+#include "engine/core/guid.hpp"
+#include "engine/core/result.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <optional>
+#incl... (9745 chars)"
+Next, the implementation: name rules, hashing, validation, value checks, and the catalog.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/reflection.cpp[0m "#include "engine/scene/reflection.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <cmath>
+#include <cstdio>
+#include <unordered_set>
+
+namespace engine::scene {
+namespace {
+
+// One segment of a name:... (10607 chars)"
+Now the CMake wiring: a new `engine_scene` target, added to the root build and linked into the test executable.
+[94m[Bash][0m Add engine_scene target and register test source $ grep -rn "TEST_CASE" tests/src/*.cpp | grep -i "reflect\|component descriptor\|catalog" | head
+The CMake wiring is in place. The root file's change on disk is the `add_subdirectory(engine/scene)` line I just added, so it matches what I intended. Before writing the tests, I'll check the FNV-1a test vectors I plan to pin, so a bad constant doesn't go into the test silently.
+[94m[Bash][0m Verify FNV-1a 64 test vectors $ return hex(h) print(f(''), f('a'))"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_reflection_tests.cpp[0m "// Component reflection (US-015): descriptors, validation, the catalog, and value checks. CPU-only; these run on every OS.
+
+#include "engine/scene/reflection.hpp"
+
+#include <catch2/catch_test_macros.h... (16844 chars)"
+Two local names in the tests, `nan` and `infinity`, shadow GCC built-ins. With `-Wshadow -Werror` that breaks the build, so I'll rename them before compiling.
+[94m[Bash][0m Rename locals that shadow built-in names $ s/("armor", infinity)/("armor", unbounded)/' tests/src/scene_reflection_tests.cpp && grep -n "not_a_...
+The rename went through; the notice is only from my own `sed`. Next I'll configure and build the Linux/Clang debug tree, with the output in a log file so only the errors reach my context.
+[94m[Bash][0m Validate vendor, configure, and build Linux debug $ grep -n "error\|warning" /tmp/us015_configure.log /tmp/us015_build.log | head -60
+[94m[Bash][0m Run Linux unit CTest and count reflection cases $ ./build/linux-dev/tests/engine_tests --list-tests 2>/dev/null | grep -c "Reflection\|reflection"
+CTest passes 10/10 on Linux. The binary path I guessed was wrong (multi-config layout), so I'll locate it and confirm the reflection cases actually executed rather than trusting the exit code alone.
+[94m[Bash][0m Locate test binary and run reflection cases $ "$B" --suite unit "*reflect*,*component*,*catalog*,*set_field*,*Reflection*,*float bound*,*Duplicate...
+The full unit suite passes (242 cases, 109,217 assertions). My name-filter run printed the usage text, which means the CLI rejected those extra arguments, so it didn't run anything. I'll check the accepted syntax and run the new cases directly.
+[94m[Bash][0m Show test binary usage and count new cases $ $B --suite unit --list-test-names-only 2>/dev/null | grep -i "reflection\|catalog\|set_field\|float ...
+[94m[Bash][0m Count reflection test cases and check duplicates $ grep -h "^TEST_CASE" tests/src/*.cpp | sort | uniq -d | head
+The 16 cases in my file account for the difference from the previous count (226 → 242), so they all ran. The duplicate names in the grep are existing platform-specific integration tests that never compile together on Linux, and they're not from my change.
+
+Next are the other Linux gates: GCC, and ASan/UBSan, which applies because this story touches a memory-owning type-erased API.
+[94m[Bash][0m Configure, build, and test Linux GCC preset $ tail -3 /tmp/us015_gcc_ctest.log
+[94m[Bash][0m Configure, build, and run ASan/UBSan gates $ tail -4 /tmp/us015_asan_ctest.log)
+ASan/UBSan passes, GCC builds clean, and Linux/Clang still passes. Now the Windows gates. The progress log describes the procedure: write a `.bat` that calls `vcvars64.bat` for the MSVC that configured the cache, then run it through `cmd.exe`. I'll check the cache for the toolchain first.
+[94m[Bash][0m Check Windows toolchain cache and cmd availability $ cmd.exe /c "echo ok" 2>&1 | head -2
+The cache was configured with MSVC 14.51 under VS 18, which matches what the progress notes say. I'll write the gate runner to `C:\Windows\Temp`, with each exit code captured on its own line, and run it.
+[94m[Bash][0m Run Windows MSVC quality gates via batch file $ cat > /mnt/c/Windows/Temp/us015_gates.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual ...
+[94m[Bash][0m Check Windows build warnings and CTest results $ grep -c "scene_reflection" /mnt/c/Windows/Temp/us015_w_build.log
+Windows passes all four gates with zero MSVC warnings, and the test binary ran the reflection cases through `win-unit`. Before the docs, I'll check that `engine_scene` also compiles under NDEBUG, since the Release preset defines it, and look at how `prd.json` records a completed story.
+[94m[Bash][0m Check Release build of scene module and prd.json fields $ grep -n -A30 '"id": "US-015"' tasks/prd.json | grep "passes\|notes\|status\|priority"
+Release builds clean too. Now the documentation (matching `docs/ecs.md`), the `prd.json` status update, and the progress log. I'll read the `prd.json` snippet before editing it.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m edit: "      "priority": 15,
+      "passes": false,
+     ..." → "      "priority": 15,
+      "passes": true,
+      ..."
+[94m[Bash][0m Verify prd.json parses and US-015 is marked $ if isinstance(d,dict) and 'userStories' in d else d print([x['passes'] for x in items if x.get('id')...
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/reflection.md[0m "# Component Reflection
+
+In-house component metadata in `engine_scene` (`engine/scene/`). The inspector (US-062) and the scene format (US-017) read it. No external reflection library is used.
+
+## Piece... (4570 chars)"
+Next I'll update the stale "US-015 not yet" line in `docs/ecs.md`, then add the progress log entry and the reusable pattern. The progress file has to be read with the Read tool before I can edit it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/ecs.md[0m edit: "- Component reflection is US-015." → "- Component reflection (metadata for the inspector..."
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "*Add reusable patterns discovered during developme..."
+Now the progress entry, appended in the format the other stories use.
+[94m[Bash][0m Append US-015 entry to progress log $ GitHub CI (not pushed). - **Learnings:**   - `-Wshadow -Werror` rejects a local named `nan` or `infi...
+The harness flagged that `progress.md` changed on disk after my append. I'll confirm the file is intact and that my entry and pattern each appear once, so nothing was lost or doubled.
+[94m[Bash][0m Verify progress log structure after concurrent change $ wc -l .ralph-tui/progress.md
+US-015 is implemented and every gate I could run passes: Windows/MSVC, Linux/Clang, Linux/GCC, and the Linux ASan/UBSan run. Changes are uncommitted, as the workflow requires.
+
+**What was built**
+
+- **New `engine_scene` library** in `engine/scene/`. The PRD's project structure puts reflection there, and the story depends only on US-013, so the ECS is unchanged.
+- **Stable type IDs:** author-written dotted names such as `engine.transform`, validated and hashed with FNV-1a 64-bit. Nothing comes from `typeid`, so IDs survive rebuilds. The hash vectors are pinned in the tests.
+- **Field binding:** `builder.field<&C::member>(name, default, range)` generates the getter and setter. Unsupported member types fail to compile. Supported types are bool, int32, uint32, float, `std::array<float, 2..4>`, and `Guid`.
+- **Validation:** `build()` and `catalog.add()` reject duplicate type IDs, hash collisions, the same C++ type registered under two IDs, bad names, schema version 0, duplicate field names, missing accessors, non-finite or out-of-range defaults, and bad bounds.
+- **Constraints on edits:** `set_field` applies the same range and finiteness checks and leaves the component unchanged on failure.
+- **Extensibility:** a test registers a game-defined component. A generic "editor" function in the test lists it, and that function never names the type.
+- **Docs and status:** `docs/reflection.md` is new, `docs/ecs.md` points to it, `tasks/prd.json` marks US-015 as passing, and `.ralph-tui/progress.md` has the entry and the reusable pattern.
+
+**Verification (exit codes checked directly)**
+
+| Gate | Result |
+|---|---|
+| Windows/MSVC: ValidateVendor, win-dev, win-debug, win-unit | all 0; 0 MSVC warnings; ctest 10/10 |
+| Linux/Clang: ValidateVendor, linux-dev, linux-debug, linux-unit | all 0; 0 warnings; ctest 10/10; unit suite 242 cases (226 before + 16 new) |
+| Linux/GCC: linux-gcc, linux-gcc-debug, linux-gcc-unit | all 0; 0 warnings |
+| Linux ASan/UBSan: linux-asan build, linux-sanitize | all 0; 10/10, no sanitizer reports |
+| Release: `engine_scene` target | builds with 0 warnings |
+
+**Choices I made**
+
+- Named the library `engine_scene` and put it in `engine/scene/`, following the PRD's project layout. Reflection doesn't depend on the ECS, so it links only `engine_core`.
+- Defaults are not compared with the C++ member initializers. A descriptor can disagree with `T{}`, and I documented that.
+- FR-13 (schema rejection of unsupported formats) is only partly covered. The descriptor carries the schema version. Rejecting unsupported saved formats belongs to US-017.
+
+**Not run or not applicable**
+
+- `engine_bench --suite acceptance`: no harness exists yet, and this story isn't on a measured path.
+- GPU suites and GUI checks: not applicable, since this story has no GPU or UI code.
+- GitHub CI: not run, because nothing was pushed.
+- Full Release test binary: not checked. It has the pre-existing `core_assert_tests.cpp` issue that US-014 recorded.

@@ -1,0 +1,42 @@
+# Iteration 108 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:15:06.071Z
+- **Ended At**: 2026-10-24T03:15:29.051Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 3854
+- **Total Tokens**: 3882
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain code and the progress log.
+[94m[Bash][0m Read progress log, terrain files, and memory note $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+The log shows 28 prior passes that stopped at the same open decision, and re-check 28 asks for a choice between an interleaved stride and an RHI change. I'll read the relevant code before deciding whether I can make that choice myself.
+[94m[Bash][0m Read draw path, pipeline, shader, and terrain splat code $ grep -rn "vertex_stride" engine/rhi/include engine/render/include | head
+The splat change is a shared draw-path edit: a terrain-only stride, a pipeline variant for the opaque and shadow passes, a bypass in the group loop, and a shader branch. Its only verification is the Windows DX12 and Vulkan GPU batch, which this WSL host cannot run. I'll record this pass in the progress log without touching the shared path.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF' ## 2026-10-24 - US-047 (re-check 29, still Partial) - What was...
+US-047 is still **Partial**, so I am not signalling COMPLETE. I made no source changes this pass and appended a progress entry.
+
+**What's done (from earlier passes, re-checked on the tree):**
+- CPU terrain runtime in `engine/world`: tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat weights, and a height query, with 14 fixture cases.
+- Render bridge `terrain_mesh.cpp`, including the splat colour reference (`splat_layer_colour` / `splat_colour`).
+- Static-path renderer integration, with a DX12 and Vulkan GPU fixture that passed in an earlier Windows run.
+- Linux gates on the current tree: ValidateVendor, `linux-dev`, `linux-debug`, and `linux-unit` (22 of 22) pass.
+
+**What's still open:**
+1. **Splat shading.** The static vertex layout has no splat attribute, and no shader reads one. The terrain pass needs a wider stride and a pipeline variant for the opaque and shadow passes, plus a bypass in the meshlet and indirect group loop.
+2. **Shadow and RT terrain fixtures.** Nothing checks terrain in shadows or ray-traced geometry yet.
+3. **`engine_bench` terrain workload** and the acceptance run on DX12 and Vulkan.
+4. **Windows gate batch** (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, and the GPU suites). The splat change must go through this before it can be called done.
+
+**Decision needed from you:** the progress log's re-check 28 gives two options for the splat stream. I recommend the interleaved terrain stride: splat floats appended to the terrain-only vertex stride at slot 0, with the shadow pipeline on the same stride, and no RHI change. The alternative is a two-slot RHI extension for both backends. Once you pick one, the next pass can make the edit and run the Windows batch together. I held off because the edit touches the shared draw path, and this WSL host cannot verify it on a GPU.

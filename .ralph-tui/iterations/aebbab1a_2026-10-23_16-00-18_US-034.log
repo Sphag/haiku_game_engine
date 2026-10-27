@@ -1,0 +1,49 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: US-034
+- **Task Title**: PBR and Transparency
+- **Description**: As a material author, I want physically based materials so that I can control object appearance.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T13:00:18.475Z
+- **Ended At**: 2026-10-23T13:06:18.421Z
+- **Duration**: 5m 59s
+- **Input Tokens**: 66
+- **Output Tokens**: 6684
+- **Total Tokens**: 6750
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo against the US-034 criteria.
+[94m[Bash][0m Inspect repo root, progress log, and US-034 mentions $ ls -la && wc -l .ralph-tui/progress.md && grep -n "US-03[34]" .ralph-tui/progress.md | head -50 && g...
+[94m[Bash][0m Read progress log and list key directories $ cat .ralph-tui/progress.md && ls tasks docs engine tests tools cmake
+The log has no US-034 entry yet, but `docs/materials.md` and `docs/lighting.md` exist. Next I'll check the PRD story, the build.md rows, and what material code is already in the tree.
+[94m[Bash][0m Check US-034 status in docs, PRD, and code $ grep -rniE "pbr|metallic|roughness|ibl|alpha_mask|alphamask|two.?sided|emissive|occlusion|normal_map...
+US-034 already has a full implementation, a docs page, a build.md row, and tests. The job now is to verify it on the current tree rather than rebuild it. I'll check the source timestamps and whether a Windows batch is already running, then run the Linux gates.
+[94m[Bash][0m Compare source mtimes, check running batches, list presets $ grep -o '"name": *"[a-z-]*"' CMakePresets.json | tr -d '"' | sed 's/name: //' | tr '\n' ' '
+No source has changed since the last progress entry, and the newest source file predates the Windows gate runs recorded for US-030 through US-033. I'll re-run the Linux gates on this tree to get a fresh result for US-034.
+[94m[Bash][0m Run Linux ValidateVendor, configure, build, and unit tests $ echo "build exit=${PIPESTATUS[0]}") && (ctest --preset linux-unit --output-on-failure --no-tests=err...
+The build succeeded, but the `ctest` tail didn't show the pass/fail summary. I'll get that and run the material-specific suite directly.
+[94m[Bash][0m Get ctest summary and locate engine_tests binary $ find build/linux-debug -name engine_tests -type f | head -2
+[94m[Bash][0m Locate test binary and run material unit cases $ "$T" "[unit]" "*material*" 2>&1 | tail -3
+[94m[Bash][0m List build dirs and run unit suite $ "$T" --suite unit 2>&1 | tail -3
+The Linux checks pass on the current tree. I'll record the verification in the progress log, since that's the one thing this iteration needs to add.
+[94m[Bash][0m Append US-034 entry to progress log $ GitHub CI (not pushed). - Files changed: `.ralph-tui/progress.md` only. - **Learnings:**   - A story...
+US-034 (PBR and Transparency) was already implemented in the tree from earlier work. This pass verified it and changed no source. The only file I edited is `.ralph-tui/progress.md`, where I appended the US-034 entry.
+
+**What's in place**
+- **Materials:** metallic-roughness factors and maps, plus normal, emissive, and occlusion maps, with defaults and material instances that override a parent's values (`engine/render/`, documented in `docs/materials.md`).
+- **IBL:** diffuse SH and GGX-prefiltered specular from an equirectangular image, plus a BRDF table.
+- **Transparency:** opaque, alpha mask, and alpha blend, plus two-sided rendering. The blended pass sorts back to front by bounding-sphere center, with ties broken by pick ID, and it is documented as not order-independent.
+- **Color spaces:** sRGB base and emissive maps decode to linear, and output is re-encoded to sRGB.
+- **Tests:** CPU tests in `render_material_tests.cpp`, and GPU tests in `render_material_gpu_tests.cpp` that compare DX12 and Vulkan output against the CPU reference pixel by pixel, covering the roughness/metallic extremes and alpha edges.
+
+**Verification**
+- **Linux, re-run this pass:** `ValidateVendor` passed, `linux-dev` configured, `linux-debug` built with 0 warnings or errors, and `linux-unit` passed 22/22. The unit suite ran 480 cases and 146,417 assertions, all passing.
+- **Windows, not re-run:** no source has changed since the US-030 to US-033 Windows gate runs, which were after 14:53 and passed on this code. Those runs cover ValidateVendor, win-dev, win-debug, win-unit 21/21, dx12 GPU 40/40, and Vulkan GPU 41/41 with validation on the RTX 5080. If you want fresh Windows evidence attributed to US-034 specifically, the batch needs to run again.
+- **Not run:** the native Linux Vulkan GPU suite (no usable Vulkan device on this host), `engine_bench` (no bench target yet, US-074), a GUI check (no application window yet), and GitHub CI (nothing pushed).

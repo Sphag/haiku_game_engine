@@ -1,0 +1,43 @@
+# Iteration 764 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:36:48.409Z
+- **Ended At**: 2026-10-26T02:36:59.494Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1646
+- **Total Tokens**: 1664
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ ls && tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && g...
+[94m[Bash][0m Check source mtimes and the triangle contract $ grep -n "2,000,000\|2000000" tasks/prd-open-world-engine.md | head -5
+US-076 is not complete, and I have not signaled COMPLETE. The story is blocked on decisions only you can make, and nothing has changed since the last status check.
+
+**What is stuck**
+
+1. **Route-start triangle floor and frame budget fail.** The PRD requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The measured run submits 312,068. p99 frame time is 35–47 ms against a 16.7 ms budget. The start pose comes from the SHA-256-pinned camera route in the manifest, and the instance placement comes from the seeded generator, whose digests are pinned. Fixing either changes the fixed benchmark contract, so I did not change it. Any fix means bumping `kWorkloadVersion` (currently 1), regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. Your options:
+   - approve that contract change, or
+   - accept the failing measured run as the story's result.
+
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks the generated `*_permutations.h` shader tables, so FSR cannot build. Choosing a vendoring route is your call.
+
+3. **Native Linux Vulkan GPU and linux-gcc have not been run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What I verified this pass**
+
+- Source and workload files are unchanged: `render_stress.cpp` (04:15:43), `workload.cpp` (02:42:31), `workload_expected.json` (02:21:05).
+- I did not rerun the gates. The last Linux run (recorded in `.ralph-tui/progress.md`, status check 23) passed `linux-unit` 30/30 and `engine_workload --check` for 4 scenes.
+
+**What I need from you**
+
+Approve or reject the route-start/placement contract change, and choose a route for FSR 2 permutations. Until then, the acceptance criteria cannot pass as written. I'd recommend approving the contract change: it's the only path to a passing measured run, and the bump is mechanical.

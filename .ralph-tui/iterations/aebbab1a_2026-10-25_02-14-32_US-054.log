@@ -1,0 +1,43 @@
+# Iteration 391 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:14:32.864Z
+- **Ended At**: 2026-10-24T23:19:38.245Z
+- **Duration**: 5m 5s
+- **Input Tokens**: 30
+- **Output Tokens**: 3415
+- **Total Tokens**: 3445
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since US-054 may already be partly implemented.
+[94m[Bash][0m Inspect repo layout and progress log $ tail -80 .ralph-tui/progress.md
+The progress log shows US-054 at status check 28, stuck at Partial for the same two reasons each time: `linux-gcc` needs GCC 11+, which this host lacks, and the benchmark harness is US-074. Before deciding anything, I'll confirm the tree hasn't changed since the last entry and re-run the cheap Linux gates.
+[94m[Bash][0m Check for changes since last log entry and toolchain $ ls artifacts/bench 2>/dev/null | head -3
+[94m[Bash][0m Re-run Linux quality gates and check toolchain $ tail -4 /tmp/ctest.log
+The tree is unchanged since the last log entry, and the Linux gates pass again. I'll record this pass in the progress log, as the workflow requires.
+[94m[Bash][0m Append status entry to progress log $ US-074), `physics_stress` (US-077). Windows gates not rerun (no source change since the last Windows...
+US-054 is still **Partial**, so I'm not signalling COMPLETE. The code is in place and the Linux gates I could run pass. Two acceptance criteria can't be met on this host.
+
+**Passing on this pass (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`
+- `cmake --preset linux-dev`
+- `cmake --build --preset linux-debug`
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 (integration 21, unit 1)
+
+No file under `engine/`, `tests/`, `cmake/`, or `docs/` has changed since the last progress entry, so the earlier Windows result (21 of 21) still stands. I did not rerun the Windows gates or `linux-sanitize`.
+
+**Blocked:**
+- **`linux-gcc` gate.** Jolt needs GCC 11+ and this host only has GCC/G++ 9.4 (and clang 10). Installing a newer compiler needs root, which I don't have. The CI job or a host with GCC 11+ is needed.
+- **Performance measurement.** The acceptance criterion says to run `engine_bench --suite acceptance` once the harness exists. The harness is US-074, which isn't built yet, so the criterion can't be measured now.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results. Finishing US-054 needs one of two things from you: a host with GCC 11+ (or the CI job) to clear the `linux-gcc` gate, or a decision to close US-054 on the current evidence and defer the benchmark to US-074.

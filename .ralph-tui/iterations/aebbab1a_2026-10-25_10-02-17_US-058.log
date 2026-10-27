@@ -1,0 +1,45 @@
+# Iteration 497 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:02:17.511Z
+- **Ended At**: 2026-10-25T07:02:42.396Z
+- **Duration**: 24s
+- **Input Tokens**: 44
+- **Output Tokens**: 3971
+- **Total Tokens**: 4015
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since the prompt says US-058 may already be partly implemented.
+[94m[Bash][0m Inspect repo layout and progress log $ tail -c 3000 .ralph-tui/progress.md
+The log says US-058 is Partial: Windows gates passed, but the Linux GCC gate, a composition check, and a running-app check are still open. I'll check which of those I can close here, starting with the UI tests and available compilers.
+[94m[Bash][0m Find UI tests, compilers, overlay usage $ find tests -iname "*ui*" | head
+The UI tests exist. Next I'll check whether the layout fixtures cover several window sizes and whether any host calls the overlay.
+[94m[Bash][0m List UI test cases and overlay callers $ grep -rln "set_overlay\|ui::Ui\|Ui " engine tools --include=*.cpp | head
+Coverage looks solid: layout is tested at five window sizes and interactions are covered. I'll check the remaining open items: whether a GCC 11+ toolchain exists here, and whether the tree has changed since the last gate run.
+[94m[Bash][0m Check for GCC 11+, sudo, and tree changes $ grep -rn "main(" tools --include=*.cpp -l | head
+I'll record this iteration in the progress log, since the workflow asks for an entry each time.
+[94m[Bash][0m Append status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-058 (re-check, still Partial) - What was i...
+US-058 is still **Partial**, so I did not emit the completion signal. I made no source changes this pass; I only appended a status entry to `.ralph-tui/progress.md`.
+
+What is in place, per the existing tree and the earlier gate runs in the log:
+- **UI runtime (`engine/ui/`)**: canvas and anchors, images, UTF-8 text with Cyrillic (Roboto), buttons, sliders, and Lua callbacks.
+- **Interaction**: hit testing, Tab/arrow/gamepad focus, input capture, and pointer handling.
+- **Tests**: layout is checked at five window sizes (640×360 up to 2560×1080), and the interaction and text suites cover the rest. `ctest --preset linux-unit` passed 22 of 22 on the last run, and `win-unit` passed 21 of 21.
+- **Windows gates**: `ValidateVendor`, `win-dev`, and `win-debug` build passed in the earlier run.
+
+What is still open, and why I could not close it here:
+1. **`linux-gcc` gate and CI job.** The UI sources compile under GCC 9 with `-Werror`, but Jolt needs GCC 11+. Only GCC 9 is installed and `sudo` needs a password. This needs a GCC 11+ toolchain from you.
+2. **Composition after post-processing.** `set_overlay` exists in `PostProcessor` and `SceneRenderer`, but nothing calls it. The only executable with a `main` is `tools/asset_converter`, so there is no application host. Verifying this needs either an app host or a GPU fixture run on Windows and native Linux.
+3. **Running-application check with screenshots.** This depends on the same missing host, so it has not been run.
+
+To finish the story, the simplest path is to provide a GCC 11+ toolchain for the Linux gate and to choose between adding a minimal app host or a GPU fixture for the overlay composition check.

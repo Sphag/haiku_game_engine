@@ -1,0 +1,44 @@
+# Iteration 1041 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:27:53.632Z
+- **Ended At**: 2026-10-26T16:28:21.256Z
+- **Duration**: 27s
+- **Input Tokens**: 32
+- **Output Tokens**: 3062
+- **Total Tokens**: 3094
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the existing `all_features` scene and prerequisites.
+[94m[Bash][0m Inspect repo root, progress log, and US-079 references $ ls && tail -n 120 .ralph-tui/progress.md && grep -rn "all_features\|US-079" --include=* -r . 2>/dev/...
+The log shows this story has been re-verified over 100+ passes with no source change, each ending on the same user-decision blockers. Before deciding whether to repeat that, I'll look at what the existing tests cover and what the manifest actually requires.
+[94m[Bash][0m Check all_features tests, manifest entry, and PRD references $ wc -l tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp && sed -n 130,175p be...
+[94m[Bash][0m Re-check the three open blockers in the tree $ grep -n "^## " .ralph-tui/progress.md | tail -1
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I'm not signalling COMPLETE. This pass changed no source. I re-checked the open blockers and they still hold.
+
+**What exists:** the Linux gates passed on the last full run (check 116, which re-ran `ValidateVendor`, `linux-dev`, `linux-debug` and `linux-unit` at 30/30). The integration suite passed at check 109, including `all_features_tests.cpp` and `all_features_editor_tests.cpp`. Those tests build their content in code.
+
+**What's blocked, and why I stopped rather than building it:**
+1. **Route approval.** `all_features_route_v1` is still a proposal in `benchmarks/manifest.json` (line 152). The benchmark contract depends on it, so I didn't write a runner against a route you haven't approved.
+2. **FSR 2 permutation headers.** None are vendored (`third_party/fsr2` has 0 `*_permutations.h`). The `full_1080` profile stays unsupported until you choose a vendoring route or accept that it stays unsupported.
+3. **`samples/all_features` project.** The `samples/` directory is absent. The runtime component catalog is empty in this build, so a sample scene with components would be refused. This needs a decision, not just code.
+4. **Environment-only work.** The tour with screenshots and an action log, the forced geometry paths, the Windows GPU and GUI runs, the editor scenario with package/relaunch, `engine_bench --suite acceptance`, the `linux-gcc*` presets, and the sanitizer presets all need a Windows GPU/GUI session or tooling not available here.
+
+**Still needed from you:**
+- Approve or change `all_features_route_v1`.
+- Choose the FSR 2 vendoring route, or confirm `full_1080` stays unsupported.
+- Decide how the runtime component catalog should work for the sample scene.
+- Provide a Windows GPU and GUI session for the tour, profiles, and live editor run.
+
+I appended a short status entry to `.ralph-tui/progress.md` recording this pass. Once you answer the decisions above, the all_features runner and the sample project are the next code to write.

@@ -1,0 +1,98 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-009
+- **Task Title**: In-House Windows Input
+- **Description**: As a player, I want Windows input so that I can control the game without a third-party input layer.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T17:51:33.403Z
+- **Ended At**: 2026-10-22T18:04:05.432Z
+- **Duration**: 12m 32s
+- **Input Tokens**: 198
+- **Output Tokens**: 18946
+- **Total Tokens**: 19144
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m Inspect repo layout and progress log $ ls -la && echo ---- && cat .ralph-tui/progress.md | head -300 && echo ---- && wc -l tasks/prd-open-w...
+[94m[Bash][0m Read PRD document $ cat tasks/prd-open-world-engine.md | head -400
+The progress log is empty, so this is the first iteration. Next I'll read the rest of the PRD and check what US-001 through US-007 left in the tree.
+[94m[Bash][0m List PRD sections and existing source files $ cat CMakePresets.json
+A lot of the input stack already exists: `input_win32.cpp`, `input_state.cpp`, `input_router.cpp`, and matching tests. I need to see how complete it is against US-009, so I'll read the Win32 input code and its tests along with the PRD constraints.
+[94m[Bash][0m Read PRD functional, non-goal, and tech sections $ sed -n 732,915p tasks/prd-open-world-engine.md
+[94m[Bash][0m Check platform input file sizes and build config $ wc -l engine/platform/src/win32/*.cpp engine/platform/src/win32/*.hpp engine/platform/include/engine...
+The Win32 input backend is already substantially present. I need to check it against each acceptance criterion, so I'll read the backend, its header, the input state code, and the Windows test, plus the memory note on running Windows gates.
+[94m[Bash][0m Read Win32 input backend and input API header $ cat engine/platform/src/win32/input_win32.cpp engine/platform/src/win32/input_win32.hpp && echo ----...
+The Win32 helpers look complete. Now I need to see whether `platform_win32.cpp` wires them into the message loop (Raw Input, text, focus loss, capture, hotplug), and what the tests cover.
+[94m[Bash][0m Grep Win32 platform for input wiring points $ grep -n "" engine/platform/include/engine/platform/platform.hpp | sed -n 1,87p
+Win32 wiring (Raw Input, WM_CHAR, focus-loss clear, ClipCursor, XInput polling) is in place. Next I'll check test coverage for the replay/Unicode/duplicate criteria, whether `docs/input.md` exists, and what build output is already present.
+[94m[Bash][0m List tests for input and check docs/build state $ grep -rn "US-009\|US-00[7-9]" docs tasks/*.md 2>/dev/null | grep -v prd-open | head -20
+The tree is far ahead of the progress log: US-010 and US-011 code exists too. `docs/build.md` has a status table, so I'll check what it records for US-009 and read `docs/input.md`.
+[94m[Bash][0m Read build status table and input docs $ cat docs/input.md | head -120
+The docs describe US-009 as implemented, but `docs/build.md` has no US-009 verification row, and the progress log is empty. The code and tests look present, so my job is to confirm the acceptance criteria against the code and run the gates. I'll start with the Linux gates.
+[94m[Bash][0m Run Linux quality gates (clang debug) $ tail -40 /tmp/linux_gates.log
+[94m[Bash][0m Find the failing integration test details $ grep -n -B2 -A12 "engine_tests_integration" /tmp/linux_gates.log | sed -n 1,80p
+The one failure is an X11 input integration check (`platform_x11_input_tests.cpp:453`, relative motion), not a Win32 test. I'll read that test to see whether it is an environment focus issue on XWayland or a real defect.
+[94m[Bash][0m Read the failing X11 relative-motion test $ echo $DISPLAY $WAYLAND_DISPLAY
+This test depends on XWayland delivering pointer motion during a grab, and it does not skip when that fails. The docs say XWayland is unreliable for this. Before I decide anything, I'll rerun the integration suite to see whether the failure is flaky.
+[94m[Bash][0m Rerun X11 integration tests three times to check flakiness $ ls build/linux-dev | head
+[94m[Bash][0m Locate engine_tests binary and rerun integration suite $ done
+The X11 integration suite passed in three reruns (98–99 passed, 2–3 skipped), so the earlier failure is intermittent on XWayland. It is in US-010 code, not US-009, so I'll record it as a flaky environment result. I won't change the test to hide it.
+
+Next is the Windows gate. The memory note says to run it through `cmd.exe` with a `.bat` that calls `vcvars64.bat`, so I'll locate that script first.
+[94m[Bash][0m Locate Visual Studio vcvars and Windows temp directory $ ls /mnt/d/dev/haiku_game_engine/build/win-dev | head -5
+The Windows build directory is already configured. I'll write one batch file that runs the four Windows gates in order and logs each step, then launch it through `cmd.exe`.
+[94m[Bash][0m Run Windows quality gates via cmd.exe $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us009_result.txt
+The batch ran, but every exit code came back empty, which points to the batch file's line endings or variable expansion rather than the builds. I'll check the logs to see what actually happened.
+[94m[Bash][0m Inspect Windows gate logs $ done
+The validate, configure, and ctest steps ran, but the build log stops at step 13/62, so I can't tell whether the build succeeded. I'll look at the full build and ctest output before rerunning anything.
+[94m[Bash][0m Check build errors and ctest summary on Windows $ grep -E "tests passed|Failed|Passed|\*\*\*" us009_ctest.log | head -40
+ctest passed 21/21, but the build log is only 11 lines and stops mid-build. A passing ctest on a stale binary doesn't count as a passing build, so I'll rerun the build and capture its real exit code. I'll also write the batch with CRLF line endings, since LF-only batch files likely caused the empty exit codes.
+[94m[Bash][0m Rerun Windows Debug build and ctest with exit codes $ tail -3 /mnt/c/Users/bucha/AppData/Local/Temp/us009_build2.log
+The Windows Debug build exits 0 and `win-unit` passes. The short log is expected because the tree was already built, and ninja says everything is up to date. Next I'll run the Linux/GCC gate that CI requires, since the GCC job is part of the common verification.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests $ tail -3 /tmp/gcc_gates.log
+The GCC gate passes 22/22. I'll rerun the full clang `linux-unit` ctest once more so the gate record reflects a complete run rather than only the integration binary.
+[94m[Bash][0m Rerun Linux clang unit ctest preset $ grep -E "test cases|assertions" /tmp/linux_unit2.log
+The clang `linux-unit` preset now passes 22/22 on a clean rerun. The Win32 input tests only count if they actually execute on Windows and aren't skipped, so I'll run the Windows integration binary directly and check for skips.
+[94m[Bash][0m Run full Windows test binary and check for skips $ grep -n "^[A-Z].*" us009_full_run.log | grep -i "gamepad\|focus\|raw\|cursor\|WM_\|mouse" | head -20
+Exit 2 means the command line was rejected, so `-s` is probably not a supported option in this CLI. I'll rerun with `--suite all` only.
+[94m[Bash][0m Rerun Windows test binary with all suites $ head -c 600 us009_full_run.log
+The full Windows binary passes 478 test cases with zero skips, and that includes the Win32 input tests. All gates are now green except the intermittent XWayland test, which I've documented. Next I'll record the verification in `docs/build.md` and the progress log. First I'll read the exact lines I need to edit.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "| GPU DX12 and Vulkan on Windows, GPU Vulkan on Li..." → "| US-009 Windows input (`engine/platform/src/win32..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "*Add reusable patterns discovered during developme..."
+The progress entry says I updated the Windows gate memory note, so I'll make that edit now.
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+[94m[Edit][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m edit: "- Run one gate batch at a time." → "- The `.bat` needs CRLF line endings: after writin..."
+US-009 is complete. The Win32 input code was already in the tree, along with its tests, so this iteration verified it against the acceptance criteria and recorded the results. I changed no engine source.
+
+**What's in place:** Raw Input mouse, keyboard and `WM_CHAR` text (UTF-8, surrogate pairs, control keys dropped), XInput polling with hotplug, focus-loss release, and `ClipCursor` capture. Replay tests cover pressed/released/held, Unicode, and duplicate suppression.
+
+**Gate results:**
+- **Windows (MSVC):** `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` pass. The full `engine_tests --suite all` binary ran 478 test cases with 0 skipped. The Debug build is a warm rebuild, so I did not re-check warnings in this session.
+- **Linux clang:** `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` pass 22/22 on a clean rerun.
+- **Linux GCC:** `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` pass 22/22.
+
+**One flaky result:** My first clang `linux-unit` run failed one X11 test (`platform_x11_input_tests.cpp:453`, captured relative motion on XWayland). Three integration reruns and a clean `linux-unit` rerun all passed. That test is US-010 code and depends on XWayland pointer behavior. I did not change it to hide the failure.
+
+**Reported as not-run, not passed:**
+- Native GUI and screenshot check: no application window exists yet.
+- Physical XInput pad and hotplug.
+- GitHub CI.
+- `linux-asan`: input is not in the story's list of sanitizer-required subsystems.
+- Benchmarks: input is not measured, and no harness exists.
+- GPU suites: no GPU runner in this environment.
+
+**Files changed:**
+- `docs/build.md`: a US-009 row in the verification table.
+- `.ralph-tui/progress.md`: a US-009 entry, plus two Codebase Patterns notes (Windows gate batch files and XWayland flakiness).
+- My memory note `reference-windows-gate-runs.md`: a CRLF requirement for `.bat` files. LF-only files wrote empty exit codes.
+
+<promise>COMPLETE</promise>

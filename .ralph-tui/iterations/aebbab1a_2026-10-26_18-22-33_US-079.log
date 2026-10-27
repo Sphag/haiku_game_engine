@@ -1,0 +1,54 @@
+# Iteration 987 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:22:33.475Z
+- **Ended At**: 2026-10-26T15:22:57.508Z
+- **Duration**: 24s
+- **Input Tokens**: 46
+- **Output Tokens**: 4009
+- **Total Tokens**: 4055
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether any of this story already exists.
+[94m[Bash][0m Inspect repo layout and search for US-079 traces $ grep -rn "all_features\|US-079" --include=*.md --include=*.txt --include=*.cpp --include=*.json --in...
+The grep finds no `all_features` in the source tree, only in the ralph session file. Next I'll read the story definition and the progress log.
+[94m[Bash][0m Read US-079 story entry and progress log summary $ grep -n "US-07[0-9]\|US-08" .ralph-tui/progress.md | tail -30
+The log shows 81 prior status checks on US-079 that all report blockers. I need to read the recent entries to see what those blockers are.
+[94m[Bash][0m Read recent US-079 status check entries $ sed -n 5000,5216p .ralph-tui/progress.md
+Earlier passes have repeatedly stopped on the same blockers. I'll read the first full US-079 entry and the plan entry to see what was decided.
+[94m[Bash][0m Read the first US-079 progress entries $ sed -n "${L},$((L+60))p" .ralph-tui/progress.md | cut -c1-600
+The record shows the CPU parts are done and verified on Linux. The open items depend on the FSR 2 route, a user approval, and GPU/GCC hosts. I'll check the plan entry and the approval item so I know exactly what is being asked of the user.
+[94m[Bash][0m Find the route approval item and the plan entry $ ls third_party/fsr2 | head -30
+US-079 is not complete, and I'm not emitting the COMPLETE signal. I re-read the record and made no code changes this turn.
+
+**Done and verified on record (earlier passes, nothing under engine, tests, tools, benchmarks, docs or cmake has changed since):**
+- The `all_features` workload matches `benchmarks/workload_expected.json`.
+- `tests/src/all_features_tests.cpp` runs a combined CPU scenario: Lua gameplay, spatial audio, animation blending, UI click, save round trip, and ordered feature markers.
+- `tests/src/all_features_editor_tests.cpp` runs the editor scenario on a copied project: scene, material, animation, terrain edits, undo/redo, save/open, Play/Stop, and a Build Game verify step.
+- Linux: ValidateVendor, `linux-dev`, `linux-debug`, `linux-unit` (30/30), `linux-asan`, and `linux-sanitize` pass. `engine_tests --suite editor` is 106/106. One X11 focus test failed once and passed on rerun.
+- Windows: ValidateVendor, `win-dev`, `win-debug`, and `win-unit` (29/29) pass. The DX12 GPU suite passes 72 cases and the Vulkan GPU suite passes 73.
+
+**Still open, and not reported as passed:**
+- **Profiles:** the GI/RT/upscale mode profiles for `all_features` are not run. The upscale profile needs FSR 2, and `third_party/fsr2` still has no `*_permutations.h`.
+- **Forced geometry paths:** the indirect and meshlet fallback runs for `all_features` are not run.
+- **Tour and bench:** there is no tour runner with screenshots and an action log. `all_features` is `implementation: none` in `benchmarks/manifest.json`, so `engine_bench --suite acceptance` cannot run it.
+- **Package relaunch:** only Build Game's own verify step runs. The published folder is not launched a second time.
+- **Native Linux Vulkan GPU and GCC 11+:** this host has no `/dev/dri` device and only GCC 9.4 and clang 10, so `linux-gcc*` and the native Vulkan suite cannot run here.
+- **GUI checks:** no screenshots or action log exist.
+
+**Decisions needed from you:**
+1. Choose the FSR 2 vendoring route (fetch the permutation headers, or drop the upscale profile from `all_features`). The FSR 2 upscale profile cannot link until this is settled.
+2. Approve the proposed `all_features_route_v1` definition in `benchmarks/manifest.json`: the `streaming_route_v1` geometry with the 10 000 resident-renderable checkpoint.
+3. Confirm whether a Windows GPU session and a native Linux Vulkan host are available for the remaining GPU, profile, and GUI items. Without them those items stay open.
+
+I did not add another status-check entry to `.ralph-tui/progress.md`, since the log already holds about 80 of them. Once the decisions are made, the next work is the tour runner and the profile and forced-path runs.

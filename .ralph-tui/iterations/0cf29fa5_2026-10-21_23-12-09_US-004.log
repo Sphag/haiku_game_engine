@@ -1,0 +1,74 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: US-004
+- **Task Title**: CI and Verification Reports
+- **Description**: As a developer, I want to check changes on both operating systems so that I can detect platform regressions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T20:12:09.773Z
+- **Ended At**: 2026-10-21T20:33:07.955Z
+- **Duration**: 20m 58s
+- **Input Tokens**: 110
+- **Output Tokens**: 8169
+- **Total Tokens**: 8279
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log, then check what US-001 through US-003 already left in the repo.
+[94m[Bash][0m List repo root, PRD/progress sizes, and build/CI files $ find . -path ./.git -prune -o -type f \( -name 'CMakePresets.json' -o -name 'CMakeLists.txt' -o -nam...
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+The progress log already has a US-004 entry, so this may be a verification pass rather than new implementation. I'll check the CI files against the acceptance criteria rather than trust the log.
+[94m[Bash][0m Show CI workflow and offline verify script $ cat .github/workflows/ci.yml && echo ======= && cat .github/workflows/gpu.yml && echo ====== && cat ...
+[94m[Bash][0m Show presets, test CMake, and test layout $ cat CMakePresets.json && echo ====== && cat tests/CMakeLists.txt && echo ===== && ls tests tests/* |...
+The workflows cover the required jobs. Next I'll confirm the scripts they call exist, that first-party code is built with warnings as errors, and that nothing fetches at configure time.
+[94m[Bash][0m Check CI helper scripts, warning flags, configure-time downloads $ ls artifacts artifacts/* 2>/dev/null | head -30
+The helper scripts and the Windows gate script exist. Now I'll check that the unit tests make real assertions rather than only a smoke check, and look at the Windows gate script I'd reuse.
+[94m[Bash][0m Inspect test sources, Windows gate script, status writer $ wc -l tests/src/*.cpp && grep -c "TEST_CASE\|REQUIRE\|CHECK" tests/src/*.cpp && echo ---- && sed -n ...
+The tests have real assertions (29 in `cli_options_tests`, 32 in `lifecycle_tests`), and the warnings-as-errors flags are scoped to first-party targets. The log's gate results are from an earlier session, so I'll re-run both platforms' gates now. Both chains are long, so they run in the background.
+[94m[Bash][0m Start Linux and Windows quality gate chains in background $ echo "LINUX_EXIT=$?") > /tmp/us004_linux.log 2>&1 & cmd.exe /c "D:\\dev\\us004-gates\\win-gate.bat" ...
+The background task reported completion almost immediately, which probably means the `&` detached the chains from the task. I'll check the logs to see whether the gates actually ran.
+[94m[Bash][0m Check gate logs and running processes $ pgrep -fa "ValidateVendor|win-gate|ninja|ctest" | head
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: echo "--- linux" cat /tmp/us004_linux.log tail -20 echo "--- win" cat /tmp/us004_win.log tail -20 echo "--- procs" pgrep -fa "ValidateVendor|win-gate|ninja|ctest" head. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check gate logs and running processes $ pgrep -fa "ValidateVendor|win-gate|ninja|ctest" | head
+Both gate chains are running (the Linux one is still in `ValidateVendor`, the Windows one has started). I'll wait on a completion marker rather than poll.
+[94m[Bash][0m Wait until both gate chains write their final markers $ echo DONE
+[94m[ScheduleWakeup][0m
+The US-004 gates are still running. The Linux and Windows chains (ValidateVendor, configure, build, `ctest --preset linux-unit`/`win-unit`) are in the background, and I'll update the progress log once they finish. Nothing in the repo has changed so far: the CI workflows, offline script, GPU status tooling, and tests from the earlier US-004 pass are already present, and I'm checking them against the criteria rather than rewriting them.
+
+What I've verified by reading the files:
+- `.github/workflows/ci.yml` has Windows/MSVC, Linux/Clang, Linux/GCC, a sanitizer job (`linux-asan` / `linux-sanitize`), and an offline job, each with CTest JUnit output and report upload.
+- `.github/workflows/gpu.yml` holds the GPU jobs, gated on `GPU_RUNNER_ENABLED`. When the gate is off, `gpu-status` writes `not-run` records, so unavailable GPU environments stay visible.
+- `tools/ci/offline_verify.sh` runs under `unshare -rn`, checks that only `lo` exists, and starts from an empty `build/linux-dev`.
+- First-party code gets `-Werror` / `/WX`, scoped away from vendored code (`cmake/EngineTargets.cmake`).
+- The tests have real assertions, not just a smoke check.
+
+Not yet covered: the `engine_bench` acceptance gate doesn't apply, since no benchmark harness exists yet (US-074). GitHub Actions itself hasn't run these workflows, so the hosted runner compiler versions are unverified. The GPU suites are `unsupported`/`not-run` because no GPU runner or GPU suite exists.
+[94m[Bash][0m Read final Linux and Windows gate logs $ tail -40 /tmp/us004_win.log
+Both chains passed: Linux exited 0 and Windows printed `WIN_GATES_PASSED`. I'll record the re-verification in the progress log.
+[94m[Bash][0m Append US-004 verification entry to progress log $ `offline_verify.sh` runs under `unshare -rn`. - Not run here: `linux-gcc`, `linux-asan`/`linux-sanit...
+US-004 is verified. Both platforms' quality gates pass locally, and I recorded the result in `.ralph-tui/progress.md`.
+
+**Gates re-run this session:**
+- **Linux (`linux-dev`/`linux-debug`):** `ValidateVendor`, configure, build, and `ctest --preset linux-unit --no-tests=error` all passed, 10/10 tests.
+- **Windows (`win-dev`/`win-debug`):** `ValidateVendor`, configure, build, and `ctest --preset win-unit --no-tests=error` all passed, 10/10 tests (MSVC 14.51, run via `D:\dev\us004-gates\win-gate.bat`).
+
+**Checked by reading the files, no changes needed:**
+- `.github/workflows/ci.yml` has Windows/MSVC, Linux/Clang, Linux/GCC, ASan/UBSan, and offline jobs, each with CTest JUnit output.
+- `.github/workflows/gpu.yml` holds the GPU jobs, gated on a real GPU runner. Without one, the `gpu-status` job records `not-run`, so the status is never reported as passed.
+- `tools/ci/offline_verify.sh` runs the build under `unshare -rn`, confirms only `lo` exists, and starts from an empty build directory.
+- First-party code is built with `-Werror` / `/WX`, and vendored code is excluded from that.
+
+**Not verified:**
+- **Linux/GCC and the sanitizer job** (`linux-gcc`, `linux-asan`/`linux-sanitize`) were not re-run in this session. The earlier log entry records them as passing locally, but I did not repeat that here.
+- **Hosted GitHub Actions** have never run these workflows, so the runner compiler versions (clang-14, GCC 11, `windows-2022` MSVC) are unconfirmed.
+- **GPU suites** are reported as `unsupported`/`not-run` because no GPU runner or GPU suite exists yet. WSL and software rendering do not count.
+- **`engine_bench --suite acceptance`** does not apply yet because no benchmark harness exists (US-074).
+Nothing is left for this loop to advance. US-004 is verified, no background work is running, and the repo isn't under git, so there's no PR to maintain. I'm ending the loop.
+[94m[ScheduleWakeup][0m
+Autonomous check: nothing to do. US-004 is complete and verified, there's no background work, and the repo isn't under git, so there's no PR to maintain. I've stopped the loop.

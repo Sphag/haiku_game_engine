@@ -1,0 +1,71 @@
+# Iteration 1277 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:55:06.722Z
+- **Ended At**: 2026-10-26T23:55:27.675Z
+- **Duration**: 20s
+- **Input Tokens**: 36
+- **Output Tokens**: 3049
+- **Total Tokens**: 3085
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ ls benchmarks tests 2>/dev/null | head -50
+The log shows US-081 has been re-checked many times and is blocked on hardware and user decisions. I'll check whether anything changed since the last recorded gate run before deciding whether a re-run adds anything.
+[94m[Bash][0m Find files changed since last gate run and read acceptance doc $ sed -n 1,80p docs/acceptance.md
+Nothing has changed since the recorded gate runs, so a re-run would only repeat evidence already in `artifacts/reports/us081/`. I'll read the open-items section so my report matches it.
+[94m[Bash][0m Read open items and check local blockers $ ls LICENSE* 2>&1
+
+[91m[Error: Exit code 2
+9:## Reading the map
+16:## Feature map
+93:## Release gates
+120:## Open items
+## Open items
+
+These block final acceptance. Each one is recorded as incomplete rather than passed.
+
+1. **Native Linux Vulkan GPU report.** The verification machine (WSL2) has no usable Vulkan device. No `engine_tests --suite gpu
+   --backend vulkan` report exists for native Linux.
+2. **Full acceptance benchmark.** `engine_bench --suite acceptance` has not been run to completion on DX12 or Vulkan. The
+   `artifacts/bench` folder holds only the US-076 to US-078 runs and two US-080 readback-off runs. The render, streaming,
+   all-features, and physics acceptance scenes do not yet produce GPU timestamps and residency, so an acceptance run reports
+   `incomplete` (see [benchmarks.md](benchmarks.md)).
+3. **FSR 2.** The vendored tree lacks its generated shader permutations, so temporal upscaling is unavailable (see [vendor.md](vendor.md)).
+4. **Linux GCC.** The local GCC 9.4 cannot build Jolt. The `linux-gcc` gate needs GCC 11 or newer.
+5. **Visual editor smoke test.** No screenshot-backed run of the editor on Windows or Linux exists for US-081.
+6. **Clean-directory checks.** The offline clean-copy build passed. The standalone package test (build from the sample project, then launch from an empty folder) passed in the editor suite on Linux and on Windows (DX12 and Vulkan runs). It is not a separate package-only run, and a package from a real game is not yet built.
+7. **License.** The repository has no license file (see [vendor.md](vendor.md)).
+ls: cannot access '/dev/dri': No such file or directory
+g++ (Ubuntu 9.4.0-1ubuntu1~20.04) 9.4.0
+/usr/bin/clang++
+ls: cannot access 'LICENSE*': No such file or directory][0m
+The blockers are unchanged, so I'll record this pass in the progress log without re-running gates.
+[94m[Bash][0m Append status entry to progress log $ re-run a gate only after `find -newer` shows a change. - Stop: US-081 is not signed off. No COMPLETE...
+US-081 is not signed off, so I'm not emitting the COMPLETE signal. The documentation and Linux gates from earlier passes still hold, but final acceptance needs hardware, a user decision, and some unfinished engine work that this environment cannot supply.
+
+**What I checked this pass**
+- Nothing has changed since the recorded gate runs. The only files newer than `artifacts/reports/us081/` are `docs/acceptance.md`, `tasks/prd.json`, and the editor launch screenshot. I did not re-run any gate, because it would repeat evidence already on record.
+- The environment still lacks what it needs. There is no `/dev/dri`, so no native Linux Vulkan device. The compiler is GCC 9.4, and `linux-gcc` needs GCC 11 or newer. There is no LICENSE file. FSR 2's generated `*_permutations.h` files are still absent.
+- I appended a status entry to `.ralph-tui/progress.md`.
+
+**Still open (per `docs/acceptance.md`, "Open items")**
+1. Native Linux Vulkan GPU report: needs a machine with a real Vulkan device.
+2. Full `engine_bench --suite acceptance` on DX12 and Vulkan: the render, streaming, all-features, and physics scenes do not yet produce GPU timestamps, so an acceptance run reports `incomplete`.
+3. FSR 2 permutations: this is your vendoring decision. Temporal upscaling stays unavailable until it is made.
+4. `linux-gcc`: needs GCC 11+ or clang 14+ on this machine.
+5. Visual editor smoke test: only the launch screenshot exists, not an action sequence with a result log on either OS.
+6. A package built from a real sample game on each OS.
+7. LICENSE file: this is your decision.
+
+**What it would take to sign off:** the Windows gate logs in `artifacts/reports/us081/` already show the debug build, unit ctest, DX12/Vulkan GPU suites, and DX12/Vulkan editor suites passing on the RTX 5080. The remaining items need a native Linux GPU machine, a benchmark that emits GPU timestamps, the FSR and license decisions, and a newer GCC.

@@ -1,0 +1,44 @@
+# Iteration 1096 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:03:45.311Z
+- **Ended At**: 2026-10-26T21:04:01.058Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2601
+- **Total Tokens**: 2627
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tooling.
+[94m[Bash][0m Read progress log and check bench tooling state $ git status --short 2>/dev/null | head -30
+The log shows 17 earlier passes that ended without a COMPLETE signal. Before deciding whether to repeat that, I'll check whether the blockers have changed.
+[94m[Bash][0m Re-check hardware and workload blockers $ clang++ --version | head -1
+[94m[Bash][0m Append status entry to progress log $ host compilers g++ 9.4 and clang 10. - No source change, build, or bench run this pass. Open items a...
+US-080 is not complete, and I am not emitting the COMPLETE signal. I re-checked the blockers and nothing has changed since the last 17 passes, so I made no code changes or builds this time.
+
+**Still blocked on this host:**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent. WSL `nvidia-smi` sees the RTX 5080, but that does not replace the native Linux Vulkan report the story requires.
+- **FSR 2 permutations:** `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` cannot run. Supplying them is a vendoring decision that needs you.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries at `implementation: none`: physics, streaming, `all_features`, and one more. Physics visual, streaming, and `all_features` are the ones I know are missing; I did not confirm the fourth.
+- **Residency:** not measured, so `native_1080` cannot pass by design yet.
+- **Linux GCC gates:** the `linux-gcc*` presets need GCC 11+ or clang 14+; the host has g++ 9.4 and clang 10.
+
+**Open performance issue:** `render_stress` at native_1080 is over budget on repeats 2 and 3 (CPU p99 16.4–17.1 ms against 16.7 ms). The readback fix brought CPU p50 down from 29.7 ms to about 15 ms. The remaining ~15 ms per frame is unprofiled. The next step is a Windows Release capture of per-pass timing and the CPU split, to name the cause before changing code. I did not change the contract.
+
+**Not run:** the three-repeat acceptance bench on DX12, Vulkan, and Linux; the Vulkan and Linux GPU suites; the ASan/UBSan preset; the visual editor smoke tests. I did not re-run the Windows and Linux quality gates this pass.
+
+**Decisions needed from you:**
+1. How to supply the FSR 2 permutation tables (vendor the generated headers, or accept `full_1080` as unsupported).
+2. Whether to run the native Linux Vulkan report on a machine with a `/dev/dri` device, or accept it as not run.
+
+I appended a short status entry to `.ralph-tui/progress.md`.

@@ -1,0 +1,74 @@
+# Iteration 13 Log
+
+## Metadata
+
+- **Task ID**: US-038
+- **Task Title**: Mesh Shader Pipeline
+- **Description**: As a rendering developer, I want meshlet rendering so that I can use a modern GPU geometry pipeline.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T13:53:02.483Z
+- **Ended At**: 2026-10-23T13:55:14.798Z
+- **Duration**: 2m 12s
+- **Input Tokens**: 126
+- **Output Tokens**: 16960
+- **Total Tokens**: 17086
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m List repo root and read progress log tail $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && tail -c 6000 .ralph-tui/pro...
+Progress log ends at US-037. Next I'll check whether any mesh-shader work already exists and read the PRD constraints for this story.
+[94m[Bash][0m Search repo and PRD for mesh shader references $ grep -n -iE "US-038|meshlet|mesh shader|mesh shading" tasks/prd-open-world-engine.md | head -60
+A mesh-shader path already appears to exist, and there's a prior US-038 iteration log. I'll read those to see how far it got.
+[94m[Bash][0m Read prior US-038 log, prd status, and mesh shader doc $ cat docs/mesh-shaders.md | head -150
+A previous iteration implemented US-038 and hit a session limit during the final Windows gate. I need to find out whether that batch finished, and whether the progress entry was written.
+[94m[Bash][0m Check progress and build docs for US-038 and any running gate $ ps aux | grep -iE "cmd.exe|us0[0-9]+_gate|engine_tests|ctest|cmake" | grep -v grep | head
+The progress log has no US-038 entry and `build.md` has no US-038 row, although `docs/mesh-shaders.md` says one exists. I'll check the Windows gate memory notes and look for any US-038 batch output.
+[94m[Bash][0m Check US-038 temp logs and read gate memory notes $ ls artifacts | head
+Several US-038 batch outputs exist in `/tmp`. I'll read the latest ones and the final batch script to see which gates completed.
+[94m[Bash][0m Read latest US-038 batch outputs and check running Windows processes $ cmd.exe /c "tasklist" 2>/dev/null | grep -iE "cmd|engine|ctest|cmake|vulkan|ninja|msbuild" | head
+Three `cmd.exe` processes are still alive. Before anything else I need to know whether one is a stale gate batch, so I'll check their command lines and the last final-batch results.
+[94m[Bash][0m Inspect Temp batch outputs and running Windows gate processes $ powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='cmd.exe' OR Name='...
+The two running `cmd.exe` processes are MCP launchers, not gate batches, so nothing stale is running. The last final batch passed everything except `gpu_vulkan=1`. I'll look at that failure and compare source and binary timestamps.
+[94m[Bash][0m Read Vulkan GPU failure log and check source vs binary mtimes $ find engine tests cmake -newer build/win-dev/tests/Debug/engine_tests.exe -type f 2>/dev/null | head...
+The 11:51 Vulkan failure is the swapchain layout-transition issue from the codebase notes. Later source changes (`vulkan_device.cpp`, 14:51) and the 14:54 binary postdate it, and the US-036/037 Windows batches at 16:34–16:37 reportedly passed 41/41 Vulkan. I'll confirm those results directly, along with the Linux logs.
+[94m[Bash][0m Check recent Windows gate results and Linux gate logs $ done
+The 16:37 Windows batch reports all zeros, including `gpu_vulkan=0`. I'll confirm its Vulkan log shows the layer and meshlet cases, and that no source changed after that batch.
+[94m[Bash][0m Confirm Vulkan gate output and check for newer source edits $ ls -la --time-style=+%H:%M $T/us036_1.log | head -2
+Windows evidence covers the current tree: the 14:54 binary is newer than every source file, and no source changed after the 16:34 batch. Next I'll confirm the Linux logs are clean, then look at the `build.md` table format so I can add the missing US-038 row.
+[94m[Bash][0m Check Linux log warnings and locate build.md table rows $ sed -n 1,12p docs/build.md | cut -c1-200
+The Linux logs are clean (0 warnings, 22/22 on clang, gcc, and sanitizers), and they postdate the last source change. Before writing the records, I'll confirm the meshlet tests are registered in the unit/GPU CTest and engine_tests suites.
+[94m[Bash][0m Confirm meshlet tests are registered and labeled $ grep -n "\[gpu\]\|\[unit\]\|\[integration\]" tests/src/render_meshlet_gpu_tests.cpp | head -3
+The tests are labeled `[unit]` and `[gpu]`, and they're registered in both suites. Next I'll add the missing US-038 row to `build.md` after the US-037 row, matching the existing style.
+[94m[Bash][0m Insert US-038 row into build.md verification table $ file docs/build.md
+The `build.md` row is in place. Now I'll append the US-038 entry to the progress log in the established format, plus a memory update, since the Vulkan layer note still says the swapchain failure is open.
+[94m[Bash][0m Append US-038 entry to progress log $ the forced-fallback check on hardware beyond the RTX 5080 is not applicable. - Files changed: `docs/...
+Last, I'll update the stale memory note that still lists the Vulkan swapchain failure as open.
+[94m[Bash][0m Update stale Vulkan layer memory note $ cd /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory && python3 - <<'EOF' p='reference-...
+US-038 is complete on the current tree. The mesh-shader pipeline was already implemented by an earlier iteration that hit its session limit before recording results. This pass verified it and filled in the missing records. I did not re-run the gates myself; the results below come from the 16:34–16:37 batch and the Linux logs from the same window.
+
+**Verification**
+- **Windows** (RTX 5080, `validation_layers=on software=no`): `ValidateVendor`, `win-dev`, `win-debug` (no warnings), and `win-unit` 21/21 all pass. `engine_tests --suite gpu`: DX12 40 cases and Vulkan 41 cases, all pass, with MeshShaders reported `supported`.
+- **Linux clang:** `ValidateVendor`, `linux-dev`, and `linux-debug` (0 warnings) pass; `linux-unit` is 22/22.
+- **Linux gcc and sanitizers:** `linux-gcc-debug` (0 warnings) and `linux-gcc-unit` 22/22; `linux-asan` (0 warnings) and `linux-sanitize` 22/22, no reports.
+- **Currency:** no source file is newer than the 14:54 test binary, and none changed after the batch started, so these results cover the current tree.
+
+**Not run (reported as such, not as passed)**
+- Native Linux Vulkan GPU suite: this WSL host has no usable Vulkan device.
+- `engine_bench --suite acceptance`: no bench target exists yet (US-074).
+- GUI check: no application window yet.
+- GitHub CI: not pushed.
+
+**Changes this pass**
+- `docs/build.md`: added the US-038 row. `docs/mesh-shaders.md` already pointed to it, but it was missing.
+- `.ralph-tui/progress.md`: appended the US-038 entry.
+- Memory note `reference-vulkan-validation-layer-windows.md`: the Vulkan swapchain failures are marked resolved. They were open in the 11:51 batch and pass in the 16:37 batch.
+
+**Scope calls the docs record**
+- The renderer draws LOD 0 on both paths.
+- Meshes are attached in memory; loading meshlets from the `OWMD` payload into the renderer is not in this story.
+- Skinned, alpha-blended, and shadow-tile items stay on the other paths.

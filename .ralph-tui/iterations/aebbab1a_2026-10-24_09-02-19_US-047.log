@@ -1,0 +1,37 @@
+# Iteration 152 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:02:19.192Z
+- **Ended At**: 2026-10-24T06:02:37.718Z
+- **Duration**: 18s
+- **Input Tokens**: 24
+- **Output Tokens**: 2778
+- **Total Tokens**: 2802
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain state, since the memory notes say much of US-047 is already in place.
+[94m[Bash][0m Read progress log tail and list repo $ ls
+[94m[Bash][0m Read terrain and Windows gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+The progress log already records US-047 as Partial, with the same two blockers repeated across about 60 re-checks. Before adding another entry, I'll confirm whether either blocker has changed on this host.
+[94m[Bash][0m Check GPU device, vulkaninfo, bench target, and recent edits $ find engine tests tools cmake CMakePresets.json -newer .ralph-tui/progress.md 2>/dev/null | head
+US-047 is still Partial, and I'm not signalling COMPLETE. Nothing in the environment has changed since the last full pass.
+
+**Blockers, re-checked just now:**
+1. **Native Linux Vulkan GPU run.** `engine_tests --suite gpu --backend vulkan` needs a native Linux device. This WSL host has no `/dev/dri` and no `vulkaninfo`, so it cannot run here. The criterion requires this to pass on native Linux, so it stays open.
+2. **`engine_bench --suite acceptance` with a terrain workload.** `engine_bench` has no CMake target or source file. It is named only in `tasks/prd.json`, and that story (US-074) is not implemented. The criterion applies "once the benchmark harness and relevant workloads exist", so it is not yet applicable. I'm reporting it as not-run, not passed.
+
+**Source state:** the tree is unchanged since the last full pass. The Windows gates and the Linux debug, unit, GCC, and gcc-unit gates all passed on that tree. The traced terrain shadow now passes on DX12 and Vulkan. Its earlier `darkened 0` failure was a fixture problem: the hill frame kept the default ambient environment, and the fixture now sets a black one.
+
+I did not re-run the gates or append another progress entry. The log already has about 60 identical re-check entries, and re-running them would not change the result. I'd add one entry when there is real progress.
+
+**What closes US-047:** a native Linux host with a Vulkan device, to run `engine_tests --suite gpu --backend vulkan`. The bench harness (US-074) also needs to exist before the performance criterion applies.

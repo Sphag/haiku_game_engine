@@ -1,0 +1,39 @@
+# Iteration 1087 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:01:10.390Z
+- **Ended At**: 2026-10-26T21:01:27.085Z
+- **Duration**: 16s
+- **Input Tokens**: 26
+- **Output Tokens**: 2384
+- **Total Tokens**: 2410
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress tail and benchmark layout $ ls benchmarks 2>/dev/null
+The log shows this story has been blocked across several passes. I'll re-check the blockers the log names so the status I report is current.
+[94m[Bash][0m Re-check GPU device, FSR permutations, manifest, toolchains $ ls artifacts/bench/us080-* 2>/dev/null | head
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I am not emitting the COMPLETE signal. This host cannot produce the reports the story requires.
+
+I re-checked the blockers this pass:
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent, so the native Linux/Vulkan GPU run cannot happen here.
+- **FSR 2 permutations missing:** `third_party/fsr2` has none of the `*_permutations.h` files, so `full_1080` stays unsupported. Choosing how to vendor them is a user decision.
+- **Workloads unimplemented:** four `implementation: none` entries remain in `benchmarks/manifest.json` (physics, streaming, and `all_features`).
+- **Toolchains too old for the Linux/GCC gate:** the host has g++ 9.4 and clang 10. Jolt needs GCC 11+ or clang 14+, so `linux-gcc*` cannot be verified here.
+- **No three-repeat acceptance run:** `artifacts/bench` holds only the two earlier DX12 runs (`us080-dx12-readback-off`, `us080-dx12-meshlets-readback-off`).
+
+The last measured numbers are from the DX12 run with `SceneRenderer::set_readback(false)`. For `render_stress` at native 1080p, CPU p50 fell from 29.7 ms to about 14.5–15.0 ms. CPU p99 is 16.4–17.1 ms, which is still over the 16.7 ms budget on repeats 2 and 3. About 15 ms of CPU per frame is still unprofiled. Residency is not measured. Those are the next engineering steps once a Windows Release capture is taken.
+
+I appended a status entry to `.ralph-tui/progress.md` and made no code or build changes this pass. Finishing US-080 needs the RTX 5080 reference machine's native Linux Vulkan device and the FSR 2 vendoring decision from you.

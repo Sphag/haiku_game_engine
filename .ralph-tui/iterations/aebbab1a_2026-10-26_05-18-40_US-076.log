@@ -1,0 +1,40 @@
+# Iteration 713 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:18:40.954Z
+- **Ended At**: 2026-10-26T02:18:56.756Z
+- **Duration**: 15s
+- **Input Tokens**: 20
+- **Output Tokens**: 1723
+- **Total Tokens**: 1743
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Read progress log and locate render_stress references $ tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -rn "render_stre...
+[94m[Bash][0m Check source and artifact timestamps for changes $ ls -l --time-style=+%H:%M:%S tools/benchmark/src/render_stress.cpp && ls -ld --time-style=+%H:%M:%S ...
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing changed since the last pass: `render_stress.cpp` is unchanged since 04:15:43, and the eight `artifacts/bench/us076-*` reports are still the latest runs. I didn't rerun any gates or benchmarks.
+
+**What is done**
+- The `render_stress` driver runs indexed, indirect, and meshlet paths on DX12 and Vulkan, with a forced mesh-shader-off run for each backend.
+- The forced-off runs fall back correctly: `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, indirect draws active with 338–340 visible items, and meshlet visible count 0. Disabled features are not reported as enabled.
+- Screenshots and submitted/visible counters are recorded under `artifacts/bench/us076-*`.
+- Last recorded gates: Windows validate, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72 cases) and Vulkan (73 cases), and release `engine_bench` all pass. Linux `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30) pass.
+
+**What blocks completion**
+1. **Benchmark contract failures on placement.** The route start sees about 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget, and 0% of frames are within budget. Instances are spread uniformly over 8192 m, so the start of the route sees about 330 items. Fixing this means changing the workload (bump `kWorkloadVersion`, regenerate `workload_expected.json`). The contract does not allow reducing the counts, so this needs your decision.
+2. **`full_1080` profile unsupported.** The vendored FSR 2 is missing its generated permutation headers, so only `native_1080` has run.
+3. **Not run:** native Linux Vulkan GPU suite (WSL has no Vulkan device) and `linux-gcc` (local GCC 9.4 cannot build Jolt).
+
+**Decision needed from you**
+- Approve a placement change that brings the start-of-route triangle count up to the floor, or accept these failures as the measured result?
+- Should the story close as measured with failing contract checks, or stay open until the placement and FSR 2 blockers are resolved?

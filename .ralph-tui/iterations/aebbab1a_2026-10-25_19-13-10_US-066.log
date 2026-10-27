@@ -1,0 +1,212 @@
+# Iteration 621 Log
+
+## Metadata
+
+- **Task ID**: US-066
+- **Task Title**: Asset Browser and Import UI
+- **Description**: As a game creator, I want to manage assets in the editor so that I do not need the CLI for every operation.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T16:13:10.692Z
+- **Ended At**: 2026-10-25T17:03:39.707Z
+- **Duration**: 50m 29s
+- **Input Tokens**: 586
+- **Output Tokens**: 128223
+- **Total Tokens**: 128809
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for the asset browser.
+[94m[Bash][0m Read progress log and list editor sources $ tail -n 80 .ralph-tui/progress.md && ls engine/editor/src | head -100 && ls engine/editor && grep -r...
+[94m[Bash][0m Find US-066 spec and repo layout $ ls
+The Docs tools aren't needed here since the user didn't ask for a doc. Next I'll look at the existing asset pipeline and the editor's project and UI code.
+[94m[Bash][0m List asset modules and editor files $ wc -l engine/editor/src/*.cpp engine/editor/include/engine/editor/*.hpp
+[94m[Bash][0m Read editor CMake and model headers $ cat engine/editor/CMakeLists.txt && cat engine/editor/include/engine/editor/editor_model.hpp && cat ...
+[94m[Bash][0m Read asset project and registry APIs $ ls tools/*/src 2>/dev/null | head -50
+The asset layer already has a registry, sidecar scan, and converter. Next I'll check the converter, watcher, and the inspector's GUID fields, since those decide what the browser can reuse.
+[94m[Bash][0m Inspect converter layout and CMake $ cat tools/asset_converter/include/*/*.hpp 2>/dev/null | head -5
+[94m[Bash][0m Read converter and watch APIs $ sed -n 60,200p tools/asset_converter/CMakeLists.txt
+The converter has everything except cancellation and per-asset progress. Next I'll read the importer interface, the editor UI header, and the scene editor's reference handling to see where the browser plugs in.
+[94m[Bash][0m Read importer, editor UI, and scene editor headers $ cat engine/editor/include/engine/editor/scene_editor.hpp
+Next: the inspector's Guid field and project panel code, plus how existing tests build temporary projects.
+[94m[Bash][0m Read Guid field and project panel code $ grep -n "void EditorUi::guid_field" -A 60 engine/editor/src/editor_ui.cpp | head -90
+[94m[Bash][0m Look at editor tests and test CMake $ grep -n "editor" tests/CMakeLists.txt
+The tests already link the converter and the inspector has a Guid field I can drop onto. Next I'll check how sidecars are parsed and whether the texture importer exposes a decoder I can reuse for thumbnails.
+[94m[Bash][0m Survey sidecar, texture decode, and converter loop $ grep -n "^[a-zA-Z].*(\|thread\|jobs" tools/asset_converter/src/converter.cpp | head -80
+The texture decoder is private to `texture_importer.cpp`, so a preview needs a small exported helper. Next I'll read the converter's `run()` loop to see where cancellation and progress would fit.
+[94m[Bash][0m Read converter run loop and texture decode $ sed -n 300,360p tools/asset_converter/src/texture_importer.cpp
+The converter's job system already takes cancellation tokens, so cancel and progress can be added to `Options` without changing the publish path. Next I'll read the sidecar parser and writer, since editing import settings means rewriting a sidecar.
+[94m[Bash][0m Read sidecar create/write and cancellation token $ grep -n "CancellationToken" -A6 engine/core/include/engine/core/jobs.hpp | head -30
+The sidecar format is simple enough to rewrite from the parsed record. Next I'll check which filesystem helpers core provides for rename and delete, and how `ProjectSession::open` scans.
+[94m[Bash][0m Survey core file and path APIs and project open $ grep -n "ProjectSession::open" -A25 engine/editor/src/project.cpp
+`scan_project` runs on `<project>/assets`, and core has no rename or remove, so the editor will use `std::filesystem` for those. Next I'll read the existing panel code so the new panel matches its style.
+[94m[Bash][0m Read editor UI helpers and panels $ sed -n 150,330p engine/editor/src/editor_ui.cpp
+I have the panel style. Last, I'll read the model implementation I'm about to extend and the viewport panel where a drop target would go.
+[94m[Bash][0m Read editor model and viewport panel $ grep -n "void EditorUi::viewport_panel" -A45 engine/editor/src/editor_ui.cpp
+The model owns the project scan, so the browser should present that scan rather than re-scan on its own. Before writing code I need the workspace panel flags, the content hash type, the test fixture helpers, and any existing PNG fixture.
+[94m[Bash][0m Check workspace panels, hash, fixtures, helpers $ grep -rn "json" engine/assets/src/asset_project.cpp | head -3
+Adding a panel flag would break the workspace format's exact-key check, so the asset panel will always be shown, as Hierarchy and Inspector are. I'll start with the asset-module changes: rewrite a sidecar's settings, and move or remove a source with its sidecar.
+[94m[Bash][0m Read asset_project.cpp preamble and scan start $ sed -n 173,180p engine/assets/src/asset_project.cpp
+[94m[Bash][0m Add sidecar update, move, and remove to asset module $ }  }  // namespace engine::assets ''' s=s[:-len('}  // namespace engine::assets')].rstrip()+'\n'+bod...
+Next, the converter gets three additions: a cancel flag and a completed-asset counter on `Options`, a `Cancelled` diagnostic code, and an exported thumbnail decoder for textures.
+[94m[Bash][0m Add cancel, progress, preview API to converter header $ grep -n "to_string(Command\|kErrorCodeNames\|InternalError" tools/asset_converter/src/converter.cpp
+The script stopped at an include anchor before writing anything, so the header is unchanged. I'll fix that anchor and rerun.
+[94m[Bash][0m Apply converter header edits with corrected anchors $ grep -n "^#include" tools/asset_converter/include/asset_converter/converter.hpp
+The header is in place. Now `run()`: check the cancel flag before each wave and each asset, count finished assets for progress, and report how many were left untouched.
+[94m[Bash][0m Add cancel and progress handling to converter run $ ''') open(cp,'w').write(s) EOF grep -n "^#include" tools/asset_converter/src/converter.cpp
+The dependency-blocked branch in the wave loop also finishes an asset, so it needs a progress increment too. I'll add that and then write the texture preview function.
+[94m[Bash][0m Add texture preview decoder and blocked-count progress $ grep -n "make_texture_importer" tools/asset_converter/include/asset_converter/importer.hpp
+The new decoder sits outside the anonymous namespace but needs the `TexturePreview` declaration, so `texture_importer.cpp` must include `converter.hpp`. I'll add that, then move on to the editor side.
+[94m[Bash][0m Include converter header in texture importer $ ls build/linux-debug 2>/dev/null | head -5
+The converter side is done. Next is the editor: `ProjectSession` needs a `rescan()` so hot reload and edits can refresh the scan the browser shows. I'll read the end of `open()` so the scan can be factored out.
+[94m[Bash][0m Read rest of project open and close $ grep -n "void ProjectSession::close" -A10 engine/editor/src/project.cpp
+[94m[Bash][0m Factor project asset scan into rescan $ } }  ''' s=s.replace(old,new) open(cp,'w').write(s) EOF grep -n "ProjectSession::open" -A25 engine/e...
+I dropped the `InvalidPath` branch from `open()` while factoring it out. I'll restore it so a bad assets path still fails the open the same way.
+[94m[Bash][0m Restore invalid-path branch and declare rescan $ [[nodiscard]] ProjectState state() const noexcept {''') open(hp,'w').write(h) EOF grep -n "rescan" -...
+The project-level pieces are in place. Before writing the browser class I need the `core::Path` and `ComponentCatalog` APIs, plus how the host loop ticks the model.
+[94m[Bash][0m Check Path, ComponentCatalog, Console, host tick APIs $ grep -n "tick_play\|set_dpi\|update_viewport" tools/game_editor/src/main.cpp
+[94m[Bash][0m Check field descriptor, host loop, path parent $ grep -n "parent()" engine/core/include/engine/core/path.hpp
+The host loop never calls `tick_play`, so I'll check where the play tick is driven before I wire the asset tick the same way.
+[94m[Bash][0m Locate tick_play and UI build calls $ grep -n "ImGui::NewFrame\|ui.build\|EditorUi " -n tools/game_editor/src/main.cpp
+`tick_play` runs from `EditorUi::build()`, so the asset tick goes there too. I have what I need, so I'll write the browser header: a catalog, thumbnails, settings, references, rename/delete, and a background import with progress and cancel.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/asset_browser.hpp[0m "#pragma once
+
+// The asset browser (US-066): the project's asset catalog, search, thumbnails, import settings, import with progress and cancel,
+// and the rename and delete commands with the reference... (8534 chars)"
+The header is written. Next is the browser implementation: catalog load that keeps GUID-keyed selection and outcomes, a texture preview cache keyed by content hash, debounced watch polling, and the background cook with progress and cancel.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/asset_browser.cpp[0m "#include "engine/editor/asset_browser.hpp"
+
+#include "engine/core/file_io.hpp"
+#include "engine/core/guid.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <utility>
+
+namespace e... (16630 chars)"
+A few spots construct `IoResult` values by hand, which is fragile. I'll replace those with plain early-return branches before compiling.
+[94m[Bash][0m Simplify file reads in browser $ }         if (lowered(text.value()).find(needle) != std::string::npos) {''') open(p,'w').write(s) EO...
+That edit was my own Python rewrite, so the new content is the intended state. Next is the model integration. I'll confirm the `FieldKind` enumerator name first, since the viewport drop needs it.
+[94m[Bash][0m Check FieldKind enum and model tail functions $ sed -n 150,232p engine/editor/src/editor_model.cpp | grep -n "^[a-z].*EditorModel::"
+[94m[Bash][0m Integrate asset browser into editor model $ }  std::unordered_set<core::Guid> EditorModel::known_assets() const {''') open(cp,'w').write(s) EOF ...
+The placement code has an awkward `Result` conversion for the attach step. I'll restructure it into plain checks and fix the include order.
+[94m[Bash][0m Simplify place_asset attach and set steps $ }''') open(cp,'w').write(s) EOF grep -n "in_place\|#include <variant>" engine/editor/src/editor_mode...
+The model compiles conceptually; I still need the new sources in CMake, the converter linked into the editor, and explicit includes for `std::in_place_type` and reflection.
+[94m[Bash][0m Wire asset browser sources and converter link $ cat engine/runtime/CMakeLists.txt | grep -n "assert_runtime" -A12 | head -30
+CMake and the model are wired. Before writing the Assets panel I'll check which ImGui child and text-input forms the editor already uses, since this ImGui version changed some signatures.
+[94m[Bash][0m Check ImGui API usage in editor UI $ sed -n 527,600p engine/editor/src/editor_ui.cpp | grep -n "GetWindow\|GetItem\|Image\|InvisibleButto...
+[94m[Bash][0m Read viewport canvas and hierarchy drag code $ sed -n 795,830p engine/editor/src/editor_ui.cpp
+Entities already drag as raw GUID bytes, so assets will use the same payload form. I'll now add the Assets panel, its detail and confirmation dialog, the inspector and viewport drop targets, and the tick call.
+[94m[Bash][0m Locate payload constant and Guid field call site $ grep -n "guid_field(entity, descriptor, field, \*guid_value)" -B4 engine/editor/src/editor_ui.cpp
+[94m[Bash][0m Add Assets panel, drop targets, and dialog to editor UI $ }  const char* panel_title(Panel panel) {''') open(cp,'w').write(s) EOF grep -n "#include" engine/ed...
+The first anchor string didn't match the header, so nothing was written. I'll rerun with the corrected anchor. I'm also fixing two things I spotted: the popup must open and close within the Assets window's ID scope, and the duplicated branch in the confirm handler collapses to one.
+[94m[Bash][0m Update editor UI header for Assets panel $ ''') rep('#include <array>\n#include <string>\n\nnamespace engine::editor {','#include <array>\n#inc...
+The header is updated. Now the UI implementation: the same edits to `editor_ui.cpp`, with the popup handled inside the panel's window scope.
+[94m[Bash][0m Apply first batch of editor UI cpp edits $ } ''') start=s.index('void EditorUi::guid_field(') end=s.index('}  // namespace engine::editor') new...
+That partial script never wrote anything, so the file is unchanged. I'll write the new panel functions to a scratch file first, then splice them in with one clean edit script.
+[94m[Write][0m [95m/tmp/us066/assets_panel.inc[0m "void EditorUi::guid_field(const core::Guid& entity, const scene::ComponentDescriptor& descriptor, const scene::FieldDescriptor& field,
+                          const core::Guid& value) {
+    // The t... (12217 chars)"
+The panel code is in scratch. I'll drop the redundant pending flag, declare `assets_body()`, and splice everything into `editor_ui.cpp` in one pass.
+[94m[Bash][0m Splice Assets panel into editor UI source $ grep -n "asset_action_pending_" engine/editor/src/editor_ui.cpp engine/editor/include/engine/editor/...
+[94m[Bash][0m Remove leftover flag and check build dirs $ cat CMakePresets.json | grep -n '"name": "linux' | head
+The leftover flag is gone. Now I'll compile the touched targets through the Linux debug preset, starting with the converter and editor libraries.
+[94m[Bash][0m Build editor and converter targets on Linux $ echo EXIT ${PIPESTATUS[0]}
+Two errors, and the second is probably a knock-on from the first: `Options` has no default constructor because `project` has no default. I'll construct it with all fields in order.
+[94m[Bash][0m Fix Options construction and rebuild targets $ echo EXIT ${PIPESTATUS[0]}
+Both targets compile cleanly under `-Werror`. Next I'll build everything, which includes `game_editor` and `engine_tests`.
+[94m[Bash][0m Full Linux debug build $ echo EXIT ${PIPESTATUS[0]}
+The full build passes. Next are tests. I'll check how existing tests build an `EditorModel` and where the fixture and font paths come from, so the new suite matches.
+[94m[Bash][0m Study editor test patterns and importer settings $ grep -n "settings\|\"" engine/../tools/asset_converter/src/importer.cpp | grep -i "text\|normal" | h...
+The fixtures and test helpers are straightforward. I'll write the editor asset suite: catalog and search, selection across rescans, checked settings, references, rename and delete, background import with cancel, thumbnails, the watch, and placement through the model.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/editor_asset_tests.cpp[0m "// The asset browser (US-066): the catalog and search, the selection across a rescan, import settings that are checked before the sidecar
+// is written, the references a rename or delete affects, rena... (15795 chars)"
+The file has three sloppy assertions I need to fix before compiling: a nonsense `REQUIRE` in the thumbnail test, and a placement check that uses a text asset, which the placeholder field would actually accept. I also need to confirm the scene's component lookup name.
+[94m[Bash][0m Find scene component access API for test $ grep -n "scene()" tests/src/editor_scene_tests.cpp | head -3
+[94m[Bash][0m List Scene accessors for component values $ grep -n "document\|field" tests/src/editor_scene_tests.cpp | grep -i "get_field\|field(" | head -5
+The scene exposes `field(entity, type, name)`, so the test can read the placed reference that way. I'll apply the three fixes.
+[94m[Bash][0m Fix test assertions and register test source $ grep -n "engine_add_converter\|engine_converter" tests/CMakeLists.txt | head -3
+The test file is registered. I'll build `engine_tests` and run the editor suite.
+[94m[Bash][0m Build tests and run editor suite $ ls -la $B && timeout 600 $B --suite editor 2>&1 | tail -80
+The build failed only because `Path` has no default constructor, so `Project` needs its members initialized in the constructor. The suite output above is the stale binary from before the failed build, so I'll rebuild and rerun after the fix.
+[94m[Bash][0m Rebuild tests and run editor suite $ timeout 900 $B --suite editor 2>&1 | tail -120
+Two failures, both test-side. The cancelled run still creates the output directory, which is fine, since the requirement is that nothing is published, so I'll check for absent cooked files instead. The placement test added its JSON source after the browser opened, so the browser never saw it; the source has to exist before `open_project`.
+[94m[Bash][0m Fix test ordering and assertions, rerun suite $ timeout 900 $B --suite editor 2>&1 | tail -30
+The editor suite passes: 81 cases, up from 70, with the 11 new asset cases included. Next I'll run the full build, the vendor check, and the Linux unit preset.
+[94m[Bash][0m Vendor check, full build, and Linux unit tests $ timeout 1500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -15
+Vendor validation, the full debug build, and all 30 Linux unit and integration tests pass. Before the remaining gates, I'll fix two small things I noticed on review: the selection pointer is read before the catalog loop, so a click shows the old asset for one frame, and the CMake comment order is off.
+[94m[Bash][0m Fix selection read order and CMake comment $ grep -n "US-065\|^## \|^### " docs/editor.md | tail -30
+[94m[Bash][0m Read end of editor docs $ sed -n 102,160p docs/editor.md
+I'll add an Asset browser section to `docs/editor.md`, covering the behaviour, the limits, and the test file.
+[94m[Bash][0m Document the asset browser in editor docs $ the browser then logs once and needs a reopen to refresh.  ''' anchor='## Tests\n' assert s.count(an...
+Docs are updated. The story also requires the Windows gates, so I'll read the saved procedure for running them from WSL before deciding how to run them.
+[94m[Bash][0m Read Windows gate run notes $ ls /mnt/d/dev/haiku_game_engine/tools/ci 2>/dev/null | head -30
+The procedure is clear: write a CRLF batch file, launch it from WSL through `cmd.exe`, and read the step codes from the result file. I'll look for the most recent gate batch to reuse as a template, and check that no earlier batch is still running.
+[94m[Bash][0m Find previous gate batch template and check running batches $ ps -eo pid,args | grep -i "gate.bat\|vk.bat" | grep -v grep | head
+[94m[Bash][0m Read the previous Vulkan gate batch template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us065_rc.txt | tr -d '\r' | head -20
+The previous batch shows the pattern. I'll write `us066_gate.bat` with the Windows gate steps: vendor check, `win-dev` configure, `win-debug` build, `win-unit` ctest, the editor suite on DX12 and Vulkan, and the GPU suite on DX12 and Vulkan, with the pinned Vulkan layer. Nothing else is running, so I'll launch it in the background.
+[94m[Bash][0m Write Windows gate batch for US-066 $ ps -eo pid,args | grep "us06.*gate.bat" | grep -v grep | wc -l
+[94m[Bash][0m Launch Windows gate batch in background $ echo launched
+The Windows batch is running. Meanwhile I'll start the ASan preset build on Linux, since the import worker thread touches the job and memory paths the story's sanitizer rule covers.
+[94m[Bash][0m Start ASan preset configure and build in background $ echo started
+While both builds run, I'll look at the top of the progress log so the new reusable patterns go in the right section. I'm holding source edits until the Windows batch finishes, since it reads the same tree.
+[94m[Bash][0m Locate Codebase Patterns section in progress log $ sed -n 1,4p .ralph-tui/progress.md | cut -c1-120
+[94m[Bash][0m Wait briefly and check gate and ASan progress $ tail -2 /tmp/us066/asan_build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us066_rc.txt cat /tmp/us066/asan_rc.txt tail -2 /tmp/us066/asan_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+Foreground sleeps are blocked, so I'll check progress directly instead.
+[94m[Bash][0m Check gate and ASan build status $ ps -eo pid,args | grep "us066_gate.bat" | grep -v grep | wc -l
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Wait for Windows gate batch and ASan build to finish $ cat /tmp/us066/asan_rc.txt
+Both the Windows gate batch and the ASan build are running. I'll wait for the monitor to report them rather than poll.
+The Windows build failed (`build=2`), so the later test steps ran a stale binary and don't count. The ASan build also failed. I'll read both logs.
+[94m[Bash][0m Read Windows build and ASan build errors $ grep -n "error\|FAILED" /tmp/us066/asan_build.log | head -30
+Both failures trace to one edit of mine: I moved the `selected` read after the catalog loop, which still uses it. I'll keep the original read for the list and re-read it for the detail pane.
+[94m[Bash][0m Fix selection variable scope and rebuild editor $ echo BUILD ${PIPESTATUS[0]}
+The fix builds on Linux. Before rerunning the gates I'll also add the exception guards I had planned: a throwing `get()` on the worker future must not escape into the UI tick or the destructor.
+[94m[Bash][0m Add exception guards and rerun Linux build and tests $ build/linux-dev/tests/Debug/engine_tests --suite editor 2>&1 | tail -2
+The Linux build, unit tests, and editor suite all pass after the fix; the assertion count moved by one because the watch test's check is conditional. Next I'll confirm no earlier batch is still running, then relaunch the Windows gate and the ASan build, and wait on both with a monitor.
+[94m[Bash][0m Relaunch Windows gate and ASan build after fix $ echo launched
+[94m[Monitor][0m Wait for relaunched Windows gate and ASan build $ cat /tmp/us066/asan_rc.txt
+Both are running again on the fixed tree. I'll wait for the monitor to report.
+Every Windows step and the ASan build now return 0. Before I trust those numbers I'll check the logs for the test counts, and then run the ASan test preset.
+[94m[Bash][0m Check Windows test counts and run ASan and Linux unit ctest $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep "tests passed...
+The Windows unit, editor, and GPU logs all show full passes. The ASan ctest tail didn't show its pass/fail line, so I'll check that explicitly.
+[94m[Bash][0m Confirm ASan ctest pass count $ timeout 900 ctest --preset linux-sanitize --output-on-failure --no-tests=error 2>&1 | grep "tests pa...
+ASan ctest passes 30 of 30. I'll record the work in the progress log: the new reusable patterns go at the top of the Codebase Patterns section, and the story entry goes at the end.
+[94m[Bash][0m Append US-066 progress entry and patterns $ the rescan path does not own it. --- ''' s=s.rstrip('\n')+'\n'+entry open(p,'w').write(s) PYEOF tail...
+US-066 is implemented, and every gate I could run passes: Linux, ASan/UBSan, and Windows with the RTX 5080. The one thing I could not do is look at the running window, so the drag, drop, popup, and hot-reload behaviour is covered only by automated tests.
+
+**What's in place**
+- **Catalog and search:** every source is listed, with registered assets (importer shown) separated from sources that have no GUID. Search matches path, importer, or GUID, ignoring case.
+- **Previews:** textures get a thumbnail decoded from the source and drawn as coloured cells. Other importers say why they have no preview. Previews rebuild when the source's hash changes.
+- **Import settings:** the importer validates the JSON before the sidecar is written, so a bad value leaves the sidecar untouched.
+- **Import:** runs on a worker thread into `<project>/cooked`, with a progress bar, cancel, and diagnostics shown with their codes. A cancelled run says how many assets were left unconverted. I added a cancel flag and a completed counter to the converter.
+- **Drag and drop:** dragging a registered asset onto an inspector Guid field sets the reference. Dropping it on the viewport places a new entity, using the first catalog component whose Guid field is named after the importer (for example `texture`). If no component has that field, the drop is refused with the reason logged.
+- **Rename and delete:** both list the affected references in a confirmation first. Those are assets that depend on it, plus json or text sources that contain its GUID. A rename keeps the GUID, so those references stay valid.
+- **Hot reload:** a directory watch rescans after changes. Selection is kept by GUID, and only changed sources reload their thumbnails.
+
+**Gates**
+- Linux: vendor check, debug build, and `linux-unit` (30 of 30) pass. The editor suite has 81 cases, 11 of them new. `linux-sanitize` (ASan/UBSan) passes 30 of 30.
+- Windows (MSVC, RTX 5080): vendor check, configure, debug build, and `win-unit` (29 of 29) pass. The editor suite passes on DX12 and Vulkan (82 cases each). The GPU suite passes on DX12 (72 cases) and Vulkan (73 cases).
+
+**Not verified**
+- The running window: no screenshots or action log, so drag, drop, the rename/delete popup, and hot reload are untested by eye.
+- Native Linux Vulkan: WSL has no usable Vulkan device.
+- `linux-gcc`: only GCC 9.4 is installed here.
+- `engine_bench`: no render or physics path changed.
+
+**Choices I made that you may want to change**
+- The viewport drop targets the first component with a Guid field named after the importer. Without such a component, nothing is placed.
+- A drop onto an inspector field is accepted for any registered asset. The kind is not checked.
+- Reference search covers json and text sources only.
+- Delete leaves cooked output in place.
+- Models and materials get no preview.
+
+**Process note:** my first Windows and ASan runs failed on a bad edit I made to the UI (a variable read after the loop that used it). The batch then ran stale test binaries, so I discarded those results and reran on the fixed tree. The final results above are from the fixed tree.
+
+The progress log has the US-066 entry and new codebase patterns. I did not commit anything.

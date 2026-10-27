@@ -1,0 +1,47 @@
+# Iteration 1100 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:04:51.199Z
+- **Ended At**: 2026-10-26T21:05:15.271Z
+- **Duration**: 24s
+- **Input Tokens**: 34
+- **Output Tokens**: 3252
+- **Total Tokens**: 3286
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark and gate tooling.
+[94m[Bash][0m Read progress tail and list artifacts $ ls artifacts/bench 2>/dev/null | head -50
+[94m[Bash][0m Search progress for US-079 and list tools $ ls /mnt/d/dev/haiku_game_engine/tools | head -30
+The log shows 19 prior passes that concluded US-080 cannot be signed off on this host. Before deciding whether to repeat that, I'll check the Windows gate reference and whether the Linux gates still pass.
+[94m[Bash][0m Read Windows gate memory and check GPU devices $ nvidia-smi --query-gpu=name,driver_version --format=csv 2>&1 | head -3
+[94m[Bash][0m Confirm benchmark manifest and FSR blockers $ ls artifacts/bench/us080-dx12-readback-off | head
+[94m[Bash][0m Append status note to progress log $ stop looping until one of these is resolved.' '- Stop: US-080 cannot be signed off on this host. No ...
+US-080 is not complete, and I have not signalled COMPLETE. The acceptance criteria need hardware and decisions that this host does not have, so I made no code changes and ran no benchmarks.
+
+Blockers, re-checked this pass:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. WSL sees the RTX 5080 through `nvidia-smi` only, which does not count as native Linux/Vulkan. The Linux Vulkan GPU report can't be produced here.
+- **FSR 2 permutations are missing.** `third_party/fsr2` has 0 `*_permutations.h` files, so the `full_1080` profile can't build. Restoring them is a vendoring decision for you.
+- **Unimplemented workloads.** `benchmarks/manifest.json` has four `implementation: none` entries (lines 88, 108, 122, 132). Physics, streaming, and all_features are not measured, so the acceptance suite can't pass as specified.
+- **No acceptance run.** `artifacts/bench` has only the two earlier `us080-dx12-*readback-off` runs, not the required three-repeat, 180 s runs.
+- **Open frame-budget issue.** Earlier `render_stress` native_1080 runs had CPU p99 above 16.7 ms on repeats 2 and 3. That was never fixed, and the contract forbids lowering the budget to pass.
+
+I did not run the Windows or Linux quality gates this pass, and the GPU suites, ASan run, and editor smoke tests remain not run. The earlier log entries also show the story was re-checked many times with no change. I appended a short status note to `.ralph-tui/progress.md` rather than another full repeat.
+
+Decisions that would unblock this:
+
+1. Provide a native Linux host with a working Vulkan device for the RTX 5080, or confirm that native Linux is out of scope for this story.
+2. Choose how to get the FSR 2 permutation tables: vendor the generated headers, or drop `full_1080` from acceptance.
+3. Confirm whether physics, streaming, and all_features must be implemented before sign-off, or whether they should be marked unsupported.
+
+Once those are settled, the next step is a Windows DX12 run through the `.bat` gate route in the memory notes, then the Vulkan runs.

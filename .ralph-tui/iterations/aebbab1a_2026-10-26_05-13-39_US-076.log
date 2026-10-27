@@ -1,0 +1,44 @@
+# Iteration 694 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:13:39.446Z
+- **Ended At**: 2026-10-26T02:14:00.919Z
+- **Duration**: 21s
+- **Input Tokens**: 22
+- **Output Tokens**: 3627
+- **Total Tokens**: 3649
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `render_stress` already exists.
+[94m[Bash][0m Inspect progress log and benchmark tool directory $ ls && tail -n 120 .ralph-tui/progress.md && ls tools/benchmark/src tools/benchmark 2>/dev/null && gi...
+The log shows this story has been blocked on the same user decision for many passes. Before deciding whether to stop again, I'll check whether the PRD constrains instance placement.
+[94m[Bash][0m Search PRD and manifest for placement and render_stress rules $ grep -n -i "render_stress" -A12 benchmarks/manifest.json | head -80
+US-076 is not complete, and I did not re-run any gates or benchmarks this pass. The source tree has not changed since the last recorded run, so the earlier results still describe it.
+
+**What is blocked:** the PRD requires at least 2,000,000 submitted triangles on the indexed path's starting frame. The current placement gives 312,068. Instances are spread uniformly over the 8192 m world, so the route start sees about 330 of the 20,000 instances. Frame budget also fails: p99 is 35–47 ms against 16.7 ms on every indexed run.
+
+**What is done:**
+- `render_stress` counts match the contract. `engine_workload --check` passes.
+- The indexed, indirect, and meshlet paths ran on DX12 and Vulkan, with screenshots and counters under `artifacts/bench/us076-*`.
+- The forced mesh-shader-off run falls back to indirect-indexed and reports mesh shaders as disabled.
+- The Linux gates pass on the recorded tree. The Windows gates passed on the last full run.
+
+**What is not done:**
+- The "both profiles" requirement is only partly met. `full_1080` is unsupported because the FSR 2 shader permutations are missing.
+- Native Linux Vulkan GPU and linux-gcc were not run.
+
+**Decision needed.** I can't close this without a change to the benchmark definition, so I've stopped rather than make it. The options:
+1. **Change instance placement** for `render_stress` (for example, cluster instances near the route start). Counts stay the same, but this changes the scene definition: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and re-run all eight reports. This is my recommendation, since I estimate uniform placement cannot reach 2M from any start point.
+2. **Keep the contract as written** and record the 312,068 result as the measured failure. Then US-076 closes as failed on the triangle floor and frame budget.
+
+Whichever you choose, the `full_1080` FSR blocker stays open, and the native Linux Vulkan and linux-gcc runs still need to be done.

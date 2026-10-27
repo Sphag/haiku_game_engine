@@ -1,0 +1,49 @@
+# Iteration 1167 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:23:31.536Z
+- **Ended At**: 2026-10-26T21:32:40.502Z
+- **Duration**: 9m 8s
+- **Input Tokens**: 42
+- **Output Tokens**: 3387
+- **Total Tokens**: 3429
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current benchmark state before deciding what this story can actually deliver here.
+[94m[Bash][0m Read progress log and benchmark artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Check PRD contract, GPU availability, platform $ uname -a
+The log shows 62 prior passes that each stopped at the same blockers. Before I repeat that conclusion, I'll confirm the blockers still hold and check whether the Linux gates, which don't need the GPU, can be run now.
+[94m[Bash][0m Verify blockers and list Linux presets $ grep -o '"name": "linux-[a-z-]*"' CMakePresets.json | head -20
+The blockers still hold. I'll run the three Linux quality gates that don't need a GPU.
+[94m[Bash][0m Run Linux validate, configure, and debug build gates $ echo "build=${PIPESTATUS[0]}"
+[94m[Bash][0m Run Linux unit test suite via ctest $ echo "ctest=${PIPESTATUS[0]}"
+The Linux gates pass. I'll record this run in the progress log, which the workflow requires, and then stop.
+[94m[Bash][0m Append progress entry for this pass $ `ctest --preset linux-unit --no-tests=error` (30/30 passed, 1 unit + 29 integration). - Not run this...
+US-080 is not complete, and I'm not emitting the COMPLETE signal. The acceptance criteria need RTX 5080 measurements on three OS/backend combinations, and this host can't produce them.
+
+**What I ran this pass (all passed):**
+- Linux: `cmake -P cmake/ValidateVendor.cmake` (26 dependencies, 8542 files), `cmake --preset linux-dev`, `cmake --build --preset linux-debug`, and `ctest --preset linux-unit --no-tests=error` (30/30 passed).
+
+**What is still blocked:**
+- **Native Linux Vulkan:** `/dev/dri` is absent. `nvidia-smi` sees the RTX 5080 only through WSL, which the PRD does not accept as a reference report.
+- **Benchmark workloads:** `benchmarks/manifest.json` still has four entries marked `implementation: none` (physics, streaming, and the teleport/render entries). A 3×180 s acceptance batch would exit 3 (incomplete) until they exist.
+- **FSR 2:** `third_party/fsr2` has no `*_permutations.h` files, so FSR cannot build. Picking a vendoring route is a user decision.
+- **Frame budget:** earlier notes say `render_stress` p99 exceeds 16.7 ms. Fixing that needs profiling and Windows runs, and the PRD bars relaxing the contract to pass.
+- **Windows gates:** I did not run the four Windows gates or the Linux GCC/ASan presets this pass.
+
+**What you need to decide or provide:**
+1. Access to the reference RTX 5080 machine (or a native Linux install with a Vulkan device) for the three acceptance reports.
+2. A decision on the FSR 2 permutations route.
+3. Whether to implement the four missing workloads before acceptance runs start.
+
+I appended this pass to `.ralph-tui/progress.md`. Earlier passes repeated the same blockers without new progress, so I did not repeat that check again here.

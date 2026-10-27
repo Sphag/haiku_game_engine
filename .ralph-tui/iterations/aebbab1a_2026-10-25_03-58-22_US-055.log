@@ -1,0 +1,37 @@
+# Iteration 417 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:58:22.272Z
+- **Ended At**: 2026-10-25T00:58:41.242Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2412
+- **Total Tokens**: 2440
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and script module $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/script 2>/dev/null && find engine/script -type ...
+[94m[Bash][0m Check US-055 history, sanitizer presets, toolchains, and memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+[94m[Bash][0m Read the first US-055 progress entry and gcc preset info $ grep -n "linux-gcc" CMakePresets.json | head -5
+[94m[Bash][0m Search for a GCC 11+ or other newer compiler on the host $ find / -xdev -name "g++-1[1-4]*" -type f 2>/dev/null | head -3
+US-055 is not complete. The Lua API is implemented and every gate this machine can run passes, but the Linux/GCC gate cannot run here, so I have not emitted the completion signal.
+
+**Done (from the existing implementation and the last progress entry):**
+- Lua 5.4.7 integration in a new `engine_script` module (`engine/script/`), with globals for `entity`, `transform`, `input`, `assets`, `physics`, and `events`. Entities cross as handles, and each use checks that the entity is alive.
+- Headless unit tests in `tests/src/script_lua_tests.cpp` (15 cases) cover stack balance, type errors, and Lua exceptions.
+- Passing gates per the last recorded run: `ValidateVendor` on Linux and Windows, `linux-dev`, `linux-debug` build, `linux-unit`, `linux-asan` build, `linux-sanitize`, and on Windows `win-dev`, `win-debug` build, and `win-unit`.
+
+**Still open:**
+- `cmake --preset linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit`. The host has only GCC 9.4 (`g++-9`), and Jolt needs GCC 11+. I checked `/usr/bin`, `/usr/local/bin`, `/opt`, and the filesystem for a newer compiler and found none. This needs the CI job or a host with GCC 11+.
+- `engine_bench --suite acceptance` is not run. The benchmark harness does not exist yet (US-074 in the progress notes), so this criterion is not applicable to this story yet.
+
+**Not done in this pass:** I did not re-run the gates or append another "status re-check" entry to `.ralph-tui/progress.md`. The last several entries repeat the same outcome with no source change, so another would add noise without new information. The last recorded run's results still stand, and the tree has no source change since then.

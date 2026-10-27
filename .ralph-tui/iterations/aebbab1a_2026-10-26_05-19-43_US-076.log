@@ -1,0 +1,48 @@
+# Iteration 717 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:19:43.041Z
+- **Ended At**: 2026-10-26T02:20:06.365Z
+- **Duration**: 23s
+- **Input Tokens**: 22
+- **Output Tokens**: 2948
+- **Total Tokens**: 2970
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and find existing render_stress code $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls tools/benchmark/src 2>/dev/null && grep -rn "r...
+The log shows this story has stalled on the same blocker through about a dozen status passes. Before deciding whether anything has changed, I'll confirm the source state and check what the PRD says about placement.
+[94m[Bash][0m Check source mtimes, artifacts, and PRD placement rules $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/manifest.json tools/benchmark/src/w...
+US-076 is not complete, and I have not signaled COMPLETE. The blocker is still the same one the progress log records, and nothing in the tree has changed since the last measured run.
+
+**Blocked on your decision: the triangle floor and frame budget fail on instance placement.**
+- The contract (PRD line 875, `benchmarks/manifest.json` `min_submitted_triangles_indexed_start_frame`) requires at least 2,000,000 submitted triangles on the indexed path at the starting frame.
+- Measured on every indexed run: 312,068 triangles at the route start. Only about 330 items are visible from the start camera, because the 20,000 instances are placed uniformly over the 8192 m world.
+- Frame time also fails: p99 is 35–47 ms against a 16.7 ms budget.
+- Fixing placement is a workload change. It means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and changing the generator. The contract forbids reducing the workload, so I won't make that change without your approval.
+
+**Options:**
+1. **Keep the contract and close the story as measured.** The acceptance failures stand and get reported as the result.
+2. **Change placement** (cluster or concentrate instances near the route, within the same counts). This is a workload change and needs your approval.
+3. **Move the route start** to a denser area. This stays inside the route, which I defined, but I doubt it reaches 2M: draw distance caps visible instances at about 957 of 20,000, so I'd expect it to fall short too. I have not tested this.
+
+**Other open items, unchanged:**
+- `full_1080` is unsupported until the FSR 2 shader permutations exist. Only `native_1080` runs.
+- Native Linux Vulkan GPU and `linux-gcc` have not been run. WSL has no Vulkan device, and GCC 9 cannot build Jolt.
+
+**Current state (verified by mtime this pass, not rerun):**
+- Source and manifest are unchanged since the last edits (`render_stress.cpp` at 04:15:43).
+- All eight `artifacts/bench/us076-*` reports postdate those edits.
+- The last Windows and Linux gate results recorded in the progress log describe the current tree.
+
+Tell me which option to take. If it's option 1, I'll record the story as measured and mark it complete with the failures stated. If it's option 2, I'll bump the workload version, regenerate the expected file, and rerun the eight reports.

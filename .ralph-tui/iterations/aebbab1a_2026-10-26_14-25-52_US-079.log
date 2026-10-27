@@ -1,0 +1,42 @@
+# Iteration 876 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:25:52.988Z
+- **Ended At**: 2026-10-26T11:26:13.949Z
+- **Duration**: 20s
+- **Input Tokens**: 28
+- **Output Tokens**: 2906
+- **Total Tokens**: 2934
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state: the progress log, whether `all_features` exists yet, and the prerequisite stories.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp -...
+The log shows US-079 is partly done: the CPU combined scenario and the editor scenario exist and pass on Linux and Windows. The acceptance items still open are the tour runner with screenshots, GI/RT/upscale profiles, forced geometry paths, package relaunch, GUI checks, native Linux Vulkan, the acceptance bench, and linux-gcc. Before deciding anything, I'll confirm the tree has not changed since the last recorded gate run.
+[94m[Bash][0m Check source mtimes, toolchain, and FSR permutation headers $ find third_party -name "*permutations*" | head -2
+The tree is unchanged since the last recorded gate run, and the host still lacks the things the open items need. I'll record that in the progress log and stop here rather than add another duplicate status entry.
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*`. - No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/progress.md
+US-079 is not complete, so I am not signalling COMPLETE. I made no code changes this turn; I only checked the state and appended a status entry to `.ralph-tui/progress.md`.
+
+**What exists and passed in earlier runs**
+- `tests/src/all_features_tests.cpp`: the `all_features` workload matches `benchmarks/workload_expected.json`, and a combined CPU scenario covers Lua gameplay, spatial audio, animation blending, UI click, save round trip, and a material graph.
+- `tests/src/all_features_editor_tests.cpp`: scene, material, animation, and terrain edits with undo/redo, save/open, Play/Stop, and a Build Game run on the project's assets.
+- Recorded results on this tree: Linux `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (30/30), and `linux-asan` / `linux-sanitize` pass. Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (29/29), and the DX12 and Vulkan GPU suites pass.
+
+**Still open (not reported as passed)**
+- The automated tour runner with screenshots and an action log. The current tour is only a CPU test.
+- GI/RT/upscale profiles and forced indirect/meshlet geometry paths for `all_features`. FSR 2 cannot link because `third_party` has no `*_permutations.h`.
+- Relaunch of the published package. Only Build Game's own verify step runs.
+- GUI checks, native Linux Vulkan GPU, and `engine_bench --suite acceptance`. `all_features` is still `implementation: none` in the benchmark manifest.
+- `linux-gcc*`. The host has only g++ 9.4 and clang 10, and no `/dev/dri` device.
+
+Finishing these needs a Windows GPU session, a native Linux Vulkan device, a GCC 11+ host, and the FSR 2 permutation headers. None of those are available in this environment.

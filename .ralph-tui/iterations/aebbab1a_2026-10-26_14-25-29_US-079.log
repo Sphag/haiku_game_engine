@@ -1,0 +1,43 @@
+# Iteration 875 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:25:29.953Z
+- **Ended At**: 2026-10-26T11:25:51.943Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 2858
+- **Total Tokens**: 2886
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log before changing anything.
+[94m[Bash][0m Inspect repo layout, progress log, and existing US-079 references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features\|US-079" --include=* -l . 2>/dev/n...
+The progress log already records US-079 as partial, with the remaining items blocked on hardware this host lacks. I'll check whether anything changed since the last recorded run before deciding what to do.
+[94m[Bash][0m Check for changes since last US-079 run and host toolchain $ ls /mnt/d/dev/haiku_game_engine/tests/fixtures/pack 2>/dev/null
+Nothing under the source trees has changed since the last recorded US-079 run, and the host still has only GCC 9.4 and no GPU device. I'll log this status check and leave the story open.
+[94m[Bash][0m Append status-check entry to progress log $ `linux-gcc*`. - No COMPLETE signal: the acceptance items above are unmet on this host. --- EOF tail ...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last recorded run, and this host cannot satisfy the remaining acceptance items.
+
+**What already exists (from earlier iterations, unchanged in this one):**
+- `tests/src/all_features_tests.cpp`: the `all_features` workload matches `benchmarks/workload_expected.json`, plus a CPU scenario combining Lua gameplay, audio emitters, animation blending, a UI button callback, a save round trip, and a cooked-style material graph evaluation. Feature markers are checked in order.
+- `tests/src/all_features_editor_tests.cpp`: an editor scenario covering scene, material, animation, and terrain edits with undo/redo, Play/Stop, and a Build Game package on a copy of the fixture assets.
+- Last recorded results: Linux `ValidateVendor`, `linux-debug`, `linux-unit` 30/30, and `linux-sanitize` pass; Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, and the DX12 and Vulkan GPU suites pass; `engine_tests --suite editor` 106/106.
+
+**What is still open, and why I can't close it here:**
+- **Automated tour runner with screenshots and an action log.** The CPU test checks markers, but no runner or GUI capture exists. This needs a native GUI session.
+- **GI/RT/upscale profiles and forced indirect/meshlet geometry paths** for `all_features`. FSR 2 cannot link because the vendored permutation headers are missing, and the RT/GI profiles need a Windows GPU session.
+- **Relaunch of the published package.** Only Build Game's own verify step runs today.
+- **`engine_bench --suite acceptance`.** `all_features` still has `implementation: none` in the manifest, so there is nothing to run.
+- **Native Linux Vulkan GPU suite.** WSL has no usable Vulkan device.
+- **`linux-gcc*` gates.** The host has only GCC 9.4, and the physics code needs GCC 11+.
+
+I appended a status-check entry to `.ralph-tui/progress.md` recording this. Finishing the story needs a Windows GPU session, a native Linux Vulkan device, a GCC 11+ host, and the FSR 2 permutation headers. The next iteration should start from one of those, or from a manifest decision on whether `all_features` should get a real acceptance runner.

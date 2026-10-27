@@ -1,0 +1,44 @@
+# Iteration 356 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T21:43:13.764Z
+- **Ended At**: 2026-10-24T21:49:13.655Z
+- **Duration**: 5m 59s
+- **Input Tokens**: 42
+- **Output Tokens**: 3167
+- **Total Tokens**: 3209
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since US-054 builds on earlier stories.
+[94m[Bash][0m Inspect repo layout and progress notes $ ls engine/physics
+The character controller source already exists, and the progress log has no US-054 section yet. I'll look at the current character code, its tests, and the end of the progress log.
+[94m[Bash][0m Check physics sources, tests, and progress tail $ git status 2>&1 | head -3
+Prior passes left US-054 at Partial, blocked on the Linux/GCC gate and the benchmark. Before repeating that status, I'll check whether a newer compiler is now installed and re-run the Linux gates on the current tree.
+[94m[Bash][0m Check compilers, validate vendor, build and run Linux unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -5
+[94m[Bash][0m Get ctest pass summary $ ls artifacts | head
+The Linux gates pass on the current tree. I'll record this pass in the progress log, then stop, since the remaining blockers can't be cleared in this environment.
+[94m[Bash][0m Append US-054 status entry to progress log $ US-074) and the `physics_stress` scene (US-077). - Status call: US-054 stays **Partial**. No COMPLET...
+US-054 is still **Partial**, so I'm not emitting the COMPLETE signal. The character controller, joints, and cell fixture were already in the tree from earlier passes. This pass only re-checked them.
+
+**Passing on the current tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8,542 files).
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug`: pass.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 pass.
+
+**Not verified:**
+- **Linux/GCC gate:** only GCC/G++ 9 and clang 10 are installed, and Jolt needs GCC 11+. The `linux-gcc` preset and its build and test steps can't run here; the CI job has to cover them.
+- **Linux/ASan gate:** not run this pass. The previous pass recorded a clean `linux-sanitize` run, but that is not repeated here.
+- **Windows gates:** not rerun this pass. No source changed after the earlier Windows run, but that run is not repeated here.
+- **Acceptance benchmark:** there is no `engine_bench` target yet (US-074), and the `physics_stress` scene (US-077) isn't built. The performance criterion can't be measured.
+
+I appended a status entry for this pass to `.ralph-tui/progress.md`. No source files changed, and I did not create a commit.

@@ -1,0 +1,220 @@
+# Iteration 17 Log
+
+## Metadata
+
+- **Task ID**: US-018
+- **Task Title**: Asset Registry
+- **Description**: As a game creator, I want stable resource references so that renaming does not break scenes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T08:11:13.816Z
+- **Ended At**: 2026-10-22T08:28:55.003Z
+- **Duration**: 17m 41s
+- **Input Tokens**: 450
+- **Output Tokens**: 87129
+- **Total Tokens**: 87579
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m Inspect repo root, progress log, and PRD $ ls -la && echo --- && cat .ralph-tui/progress.md 2>/dev/null | head -400 && echo --- && ls tasks && ...
+[94m[Bash][0m List PRD user stories and size $ wc -l tasks/prd-open-world-engine.md && grep -n "US-0" tasks/prd-open-world-engine.md | head -80
+The docs tools aren't needed for this task. Next I'll read the US-018 section, the PRD constraints, and the progress log.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd-open-world-engine.md[0m
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd-open-world-engine.md[0m
+[94m[Bash][0m Get progress log size and section headers $ wc -l .ralph-tui/progress.md && grep -n "^## " .ralph-tui/progress.md
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+The log is partial. I still need the US-015 to US-017 entries, which hold the most recent patterns.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Bash][0m List engine source files and core CMake setup $ find engine tests docs cmake tools -type f | grep -v build | sort && echo --- && cat CMakeLists.txt ...
+The engine already has GUIDs, file IO, JSON scene format, and reflection. Next I'll read the core APIs I'll build on, plus the scene module's CMake and the existing atomic-write code.
+[94m[Bash][0m Read core GUID, file IO, path, and result headers $ cat ../cmake/EngineTargets.cmake | head -80
+The registry will sit next to the scene code, so I need the scene headers and any existing hashing helpers.
+[94m[Bash][0m Search for hash helpers and read scene headers $ cat engine/core/include/engine/core/status.hpp | head -60
+Before designing the module, I need the PRD's project-structure and asset-registry wording so the new code lands where the PRD expects.
+[94m[Bash][0m Grep PRD for asset, metadata, and section headings $ grep -niE "registry|engine/assets|assets/|sidecar|\.meta|GUID|content hash|non-goal|## " tasks/prd-o...
+[94m[Bash][0m Read PRD tail: non-goals, technical considerations, structure $ sed -n 600,915p tasks/prd-open-world-engine.md | grep -v "^$" | head -220
+The PRD puts this in `engine/assets/`, which doesn't exist yet. Before writing anything I need three details: how tests are tagged for `--suite`, how scene_format.cpp uses nlohmann, and whether `tasks/prd.json` exists.
+[94m[Bash][0m Check test tagging, nlohmann usage, and toolchain $ ls build
+[94m[Bash][0m Inspect prd.json entries and suite tag logic $ cat tests/src/scene_tests.cpp | sed -n 1,30p
+Two facts settle the design. The PRD names `engine/assets/` as the registry home, and `tasks/prd.json` tracks story status. Next I'll check the path normalization rules I need, the `.gitignore`, and confirm the SHA-256 test vectors with Python's hashlib rather than from memory.
+[94m[Bash][0m Check path normalization, gitignore, and SHA vectors $ print([ (s['id'],s.get('passes')) for s in d['userStories']][15:20])"
+I have the verified vectors. Now I'll write the module, starting with the hash and the registry.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/content_hash.hpp[0m "#pragma once
+
+// SHA-256 digest of a byte sequence (FIPS 180-4). The registry compares digests to detect a changed source. It is not a
+// security boundary, and it does not need to be one.
+
+#include <... (1049 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/src/content_hash.cpp[0m "#include "engine/assets/content_hash.hpp"
+
+#include <algorithm>
+#include <cstddef>
+
+namespace engine::assets {
+namespace {
+
+constexpr std::array<std::uint32_t, 64> kRoundConstants = {
+    0x428a2f98, ... (4966 chars)"
+Next, the registry itself: the header with its API and the implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_registry.hpp[0m "#pragma once
+
+// The asset registry (US-018): one record per asset, keyed by persistent GUID, with its source path, importer, importer
+// settings, content hash, and the GUIDs it depends on.
+//
+// Ref... (4280 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/src/asset_registry.cpp[0m "#include "engine/assets/asset_registry.hpp"
+
+#include <algorithm>
+#include <set>
+#include <utility>
+
+namespace engine::assets {
+namespace {
+
+using core::Guid;
+using core::Path;
+using core::Result;
+usi... (5594 chars)"
+The registry compiles conceptually, but I used `std::optional` without including it, and `describe_guid` is a pointless wrapper. Fixing both.
+[94m[Bash][0m Drop wrapper helper and add missing include $ }  ''','') s=s.replace('#include <algorithm>\n#include <set>\n#include <utility>','#include <algorit...
+My sed also rewrote the `describe_guid` definition itself, so the Python removal didn't match. Let me look at that region and repair it.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/src/asset_registry.cpp[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/src/asset_registry.cpp[0m
+The registry file is clean now. Next is the project layer: sidecar parsing, the tree scan, and asset metadata creation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_project.hpp[0m "#pragma once
+
+// Project scan (US-018): builds an AssetRegistry from the sidecar metadata files under a project directory.
+//
+// Each source "<name>" has a sidecar "<name>.meta" beside it. The sidecar... (3528 chars)"
+Now the implementation. I'm checking the nlohmann version first, since whether `parse` accepts `string_view` depends on it.
+[94m[Bash][0m Check vendored nlohmann/json version $ grep -n "NLOHMANN_JSON_VERSION_MAJOR\|NLOHMANN_JSON_VERSION_MINOR" third_party/nlohmann_json/single_...
+nlohmann 3.11.3 is vendored. I'll pass `std::string` to `parse` to be safe, and avoid `ends_with` since GCC 9 is in the CI matrix.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/src/asset_project.cpp[0m "#include "engine/assets/asset_project.hpp"
+
+#include "engine/assets/content_hash.hpp"
+
+#include "engine/core/file_io.hpp"
+#include "engine/core/guid.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cstdd... (11307 chars)"
+The file has a few problems I want to fix before compiling. The dependency loop has a convoluted `Result` construction, `std::move(x).error()` is not an rvalue overload on `Result`, and two includes are missing.
+[94m[Bash][0m Fix dependency parsing and Result error access $ }''' assert s.count(old)==1 s=s.replace(old,new) n=s.count('std::move(sidecar_file).error()')+s.coun...
+Those edits are mine. Next I'll wire the module into CMake and clarify in the header that `source` in `create_asset_metadata` is project-relative.
+[94m[Bash][0m Add engine_assets target and clarify header $ grep -n "project-relative" engine/assets/include/engine/assets/asset_project.hpp
+Now the fixture project and its sidecars. The Cyrillic material name exercises UTF-8 paths end to end.
+[94m[Bash][0m Create fixture project with sidecars $ cat -A textures/brick.tex.meta | head -2
+Fixture is in place. Now the tests. I'm writing the hash and in-memory registry checks as `[unit]`, and the fixture-tree checks as `[integration]` since they touch the file system.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/assets_registry_tests.cpp[0m "// Asset registry (US-018), in memory: SHA-256 digests, record validation, GUID and path conflicts, dependency edges, removal,
+// moves, and closures. CPU-only; these run on every OS.
+
+#include "engin... (9731 chars)"
+I left three sloppy lines in that file: a nonsense `find(nil.ok() ? ...)` check, a leftover `move` call in the closure test, and a double-remove assertion. Fixing those now.
+[94m[Bash][0m Clean up three sloppy assertions in registry tests $ '''), ] for a,b in reps:     assert s.count(a)==1, a[:40]     s=s.replace(a,b) open(p,'w').write(s) ...
+Now the fixture-project tests. Each test works on a fresh copy of the fixture in a scratch directory, so deletions and renames never touch the checked-in files.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/assets_project_tests.cpp[0m "// Asset registry (US-018) on a project tree: the fixture project under tests/fixtures/assets/registry_project is copied to a
+// scratch directory for each case, so deletion, renaming, and bad sidecar... (13036 chars)"
+Reviewing that file turned up a few real problems. There's a duplicate `rename` that would throw on the second call, an unused helper that breaks `-Werror`, and a `CHECK` whose braced initializer contains a comma, which the preprocessor splits. Also `std::find` needs `<algorithm>`. Fixing them all.
+[94m[Bash][0m Fix duplicate rename, unused helper, and macro comma $ echo scan-done
+Now I'll wire the test sources and the `engine_assets` link into `tests/CMakeLists.txt`, then configure and build on Linux.
+[94m[Bash][0m Register test sources and engine_assets link $ print([p['name'] for p in d['testPresets']])"
+[94m[Bash][0m Validate vendor, configure, and build on Linux $ tail -3 /tmp/us018_build.log
+The configure and build are running in the background, and the memory note warns that `/mnt/d` builds are slow. While they run I'll write the module doc, matching the existing `docs/` style.
+[94m[Bash][0m Check style of an existing docs page $ head -30 docs/scene-format.md
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/asset-registry.md[0m "# Asset Registry
+
+The asset registry (US-018) gives every source asset a stable GUID, so a rename or move does not break a scene or another asset that refers to it. Code is in `engine/assets/`: `asset... (3993 chars)"
+[94m[Bash][0m Check background validate/configure/build progress $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4cc03ab0-14bf-4e0b-ab4e-2c80d4f1c49c/tasks/b4kt49x...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4cc03ab0-14bf-4e0b-ab4e-2c80d4f1c49c/tasks/b4kt49x69.output tail -5. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read background command output tails $ tail -3 /tmp/us018_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+-- Vendor validation passed: 26 dependencies, 8524 files
+validate=0
+---][0m
+Validation passed. The configure is still going, so I'll check on it directly.
+[94m[Bash][0m Check configure log and running build processes $ pgrep -fa "cmake|ninja" | head -5
+The configure is still running and is slow on `/mnt/d`. I'll load the Monitor tool and wait on a condition instead of polling by hand.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Signal when Linux configure and debug build finish $ grep -n "error" /tmp/us018_build.log | head -20
+The Linux configure and debug build are still running in the background. I'll pick up the results when the monitor reports.
+[94m[Bash][0m Read configure and build logs for warnings and errors $ grep -n "warning\|error" /tmp/us018_build.log | head -30
+The build failed because `failure` and `success` live in `engine::core` and I used them unqualified. I'll add the using-declarations to both new sources and rebuild.
+[94m[Bash][0m Fix unqualified failure/success and rebuild Linux debug $ tail -2 /tmp/us018_build.log
+`ScanErrorCode` has no `PathConflict` enumerator, even though the scan code maps to it. I'll add it to the header.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_project.hpp[0m edit: "    GuidConflict,       // two sources claim the s..." → "    GuidConflict,       // two sources claim the s..."
+[94m[Bash][0m Rebuild Linux debug after header fix $ tail -2 /tmp/us018_build.log
+The Linux debug build is clean with no warnings. Next I'll run the new cases directly, then the full ctest preset.
+[94m[Bash][0m Run unit and integration suites on Linux $ echo "exit=$?"
+[94m[Bash][0m Show details of the failing unit case $ timeout 110 $B --suite unit 2>&1 | grep -B3 -A12 "FAILED" | head -60
+The abort comes from `make_record`'s `REQUIRE(path.ok())` at line 30, which points at the empty-path case. I'll check what `Path::from_utf8("")` returns.
+[94m[Bash][0m Check how Path handles empty input $ sed -n 66,100p engine/core/src/path.cpp | grep -n "empty\|return" | head
+[94m[Bash][0m Read the empty-path return in Path $ sed -n 94,100p engine/core/src/path.cpp
+`Path` normalizes an empty string to `"."`, so an empty path can't exist. The registry should still reject `"."`, since it names no file. I'll make `check_path` reject it and change the test to use `"."`.
+[94m[Bash][0m Fix empty-path handling and rebuild $ grep -c "warning\|error:" /tmp/us018_build.log
+[94m[Bash][0m Rerun unit and integration suites after fix $ timeout 110 $B --suite integration 2>&1 | tail -3
+The unit suite passes all 291 cases, and the integration run shows no failures, with the skips coming from the X11 cases. Now the Linux ctest gate.
+[94m[Bash][0m Run Linux unit ctest preset $ tail -6 /tmp/us018_ctest.log
+The Linux Clang gate passes. Next are the GCC job, which is the GCC 9 compatibility check, and the ASan/UBSan preset. Both take a long time on `/mnt/d`, so I'll run them in the background.
+[94m[Bash][0m Start Linux GCC configure, build, and ctest in background $ echo "ctest=$?" >> /tmp/us018_gcc_ctest.log' > /dev/null 2>&1 & echo started
+While those run, I'll set up the Windows gates. The notes say the cache was configured with VS 18 and that the gate must run from a `.bat` that calls the matching `vcvars64.bat`. I'll find the linker path in the cache first.
+[94m[Bash][0m Find MSVC linker from the Windows build cache $ ls /mnt/c/Users/ 2>/dev/null
+[94m[Bash][0m Write Windows gate runner batch file $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" && ec...
+The batch file is written, and the `vcvars64.bat` path checks out. I'll start the Windows gates in the background.
+[94m[Bash][0m Launch Windows gate batch in background $ cat /tmp/us018_gcc_cfg.log 2>/dev/null | tail -2
+[94m[Monitor][0m Signal on Linux GCC build or test completion or failure $ grep -c "warning:\|error:" /tmp/us018_gcc_build.log 2>/dev/null
+[94m[Monitor][0m Signal when Windows gate summary is written $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us018_w_summary.txt
+Both monitors are armed. I'll wait for the GCC and Windows results before writing the progress entry or flipping `passes` in `prd.json`.
+[94m[Monitor][0m Signal when Linux GCC chain finishes or fails $ echo "GCC chain done: cfg=$(grep -o 'cfg=[0-9]*' /tmp/us018_gcc_cfg.log) build=$(grep -o 'build=[0-9...
+Waiting on the GCC chain and the Windows gates. I'll report once both finish.
+The Windows gate summary reads `validate=0 configure=0 build=0 ctest=0`. I'll check the logs for warnings and confirm the ctest counts.
+[94m[Bash][0m Check Windows build warnings, ctest results, and GCC progress $ tail -2 /tmp/us018_gcc_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+0
+100% tests passed, 0 tests failed out of 10
+Total Test time (real) =   1.88 sec
+unit           =   0.58 sec*proc (1 test)
+
+Total Test time (real) =   1.88 sec
+---][0m
+Windows: zero MSVC warnings and 10 of 10 ctest passing. The GCC chain is still going, so I'll wait for its monitor.
+[94m[Monitor][0m Signal when Linux GCC chain finishes or fails $ echo "GCC chain: cfg=$(grep -o 'cfg=[0-9]*' /tmp/us018_gcc_cfg.log) build=$(grep -o 'build=[0-9]*' /...
+The Windows gates are done. I'm still waiting on the Linux GCC chain before I write the progress entry.
+The GCC chain passed: configure, debug build, and the GCC unit ctest all returned 0. I'll confirm the GCC build has no warnings, then record the story.
+[94m[Bash][0m Check GCC warnings, ctest totals, and mark US-018 passing $ python3 - <<'EOF' import json p='/mnt/d/dev/haiku_game_engine/tasks/prd.json' d=json.load(open(p)) f...
+All gates are green. The last step is the progress log: a codebase-pattern entry at the top and a story entry at the bottom.
+[94m[Bash][0m Append US-018 learnings and codebase pattern to progress log $ ` or it fails to compile.   - A sidecar scan returns the registry only after every sidecar is valid....
+US-018 (Asset Registry) is implemented and every quality gate I was able to run passes. The only remaining item is the ASan/UBSan preset, which I did not run (details below).
+
+**What was built**, in a new `engine_assets` library under `engine/assets/`:
+- **Registry** (`AssetRegistry`): one record per GUID holding the source path, importer type, canonical importer settings, SHA-256 content hash, and sorted dependency GUIDs. It rejects nil GUIDs, GUID and path conflicts, absolute or `.` paths, empty importers, and self-dependencies. It also provides removal (which reports dependents), path-only moves, dependents, missing dependencies, and a cycle-safe dependency closure.
+- **Project scan** (`scan_project`): reads `<source>.meta` sidecars, which are the only place a GUID is stored. A moved or renamed source keeps its GUID. A copy with its sidecar fails as a GUID conflict. The scan is all-or-nothing, so a bad sidecar leaves nothing behind. `create_asset_metadata` writes a new sidecar atomically.
+- **SHA-256** (`ContentHash`), checked against FIPS vectors at the padding boundaries.
+- **Fixture project** (`tests/fixtures/assets/registry_project`, with a Cyrillic source name). Integration tests copy it to a scratch directory per case and cover deletion, renaming, moving a folder, orphaned sidecars, GUID conflicts, malformed sidecars, and metadata creation.
+
+**Verification**
+
+| Gate | Result |
+|---|---|
+| `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | pass, 0 MSVC warnings, 10/10 |
+| `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` | pass, 0 warnings, 10/10; unit suite 291 cases |
+| `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | pass, 0 warnings, 10/10 |
+| `linux-asan` / `linux-sanitize` | **not run** |
+| `engine_bench`, GPU suites, GUI, Release builds | not run (no harness, GPU backend, UI, or Release gate for this story) |
+
+The integration suite's X11 cases skip on this WSLg display, as in earlier stories. Nothing was committed.
+
+**Choices to review**
+- **ASan skipped:** the PRD lists memory, ECS, jobs, streaming, Lua, and physics as the trigger for the sanitizer preset. The registry touches none of those directly, so I did not run it. If you want it anyway, it is one configure and build away.
+- **Dependencies come from the sidecar**, written by whatever imports the source (US-019). The registry does not derive them from source bytes.
+- **Cycles are allowed** in the registry; the closure terminates on them. The cooker should reject them.
+- **`tasks/prd.json`** was re-serialized with `indent=2` to set `US-018` to `passes: true`. The file is not under git here, so I could not diff it. Its formatting may differ from the original.
+- **Docs and log:** `docs/asset-registry.md` and a new `.ralph-tui/progress.md` entry, plus a codebase-pattern note about `failure`/`success` needing qualification in `engine::assets`.
+That monitor was an early Linux configure-and-build watch, and its work finished long ago. I didn't re-arm it. The results are already in: the Linux debug build is clean and the Linux Clang, Linux GCC, and Windows gates pass. The ASan/UBSan preset was not run.

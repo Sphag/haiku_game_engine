@@ -1,0 +1,64 @@
+# Iteration 5 Log
+
+## Metadata
+
+- **Task ID**: US-008
+- **Task Title**: In-House Linux Windowing
+- **Description**: As a Linux user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T02:24:09.687Z
+- **Ended At**: 2026-10-22T02:32:10.591Z
+- **Duration**: 8m 0s
+- **Input Tokens**: 92
+- **Output Tokens**: 9532
+- **Total Tokens**: 9624
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD, then check the current state of the code.
+[94m[Bash][0m Inspect repo root and progress log $ ls -la && echo --- && cat .ralph-tui/progress.md 2>/dev/null | head -400 && echo --- && wc -l tasks/...
+[94m[Bash][0m Check git status and list project files $ find . -path ./.git -prune -o -type f -print | grep -v '/vendor/' | head -300
+The progress log already has a US-008 entry, so this may be a re-run. I'll check whether the X11 files are actually in the tree and what the PRD requires.
+[94m[Bash][0m Check X11 files and PRD references $ grep -n -i "US-008\|windowing\|x11\|xwayland\|headless" tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Inspect X11 source tree and story JSON $ python3 -c " import json d=json.load(open('tasks/prd.json')) for s in d.get('userStories',d.get('sto...
+The X11 backend and tests are in the tree. Next I'll check the PRD's US-008 section and the Technical Considerations, then build and test on Linux to confirm the claims hold.
+[94m[Bash][0m Read PRD US-008 and technical constraints $ sed -n 760,830p tasks/prd-open-world-engine.md | cut -c1-400
+[94m[Bash][0m Check toolchain, display, and windowing doc $ cat docs/windowing.md | head -150
+The docs describe a complete backend. I'll verify it by running the Linux gates, writing each log to a file so exit codes stay accurate.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -5 /tmp/us008/lin-unit.log
+[94m[Bash][0m Summarize Linux unit test results $ ls build/*/ 2>/dev/null | head -30
+Linux unit gates pass. Next I'll run the X11 integration suite against the live display, plus the GCC and sanitizer gates.
+[94m[Bash][0m Run X11 integration suite and missing-display probe $ tail -3 /tmp/us008/nodisp.log
+[94m[Bash][0m Run GCC configure, build, and unit tests $ tail -2 /tmp/us008/gcc-unit.log
+Integration suite: 27 pass, 2 skip (window-manager dependent, per the log). GCC gates pass with zero warnings. My missing-display probe used the wrong flag, so I'll check the NoDisplay test directly. I'll also look at the two skip sites.
+[94m[Bash][0m Inspect NoDisplay test and skip sites $ grep -n -A3 "SKIPPED" /tmp/us008/integ.log | head -20
+[94m[Bash][0m Locate Windows gate scripts and cache toolchain $ grep -n "CMAKE_LINKER\|CMAKE_CXX_COMPILER:" build/win-dev/CMakeCache.txt | head -4
+The NoDisplay test is in the suite and passes; the two skips are documented window-manager dependencies. Now the Windows gates. I'll confirm the VS 18 vcvars path and then run the sequence through a `.bat` file, as the progress log describes.
+[94m[Bash][0m Run Windows quality gates via vcvars batch file $ cat /tmp/us008/win-gates.out | tr -d '\r'
+All four Windows gates return 0. I'll check the Windows build log for warnings and the unit test summary, since a zero exit code alone doesn't show the tests ran.
+[94m[Bash][0m Check Windows build warnings and unit test summary $ grep -i "test #\|tests passed" us008_unit.log | tr -d '\r' | tail -3
+Every Windows and Linux gate passes, with zero warnings and the full unit and integration suites run. The backend needed no code changes this pass, so I'll record the re-verification in the progress log, as the earlier US-007 re-check did.
+[94m[Bash][0m Append US-008 re-verification entry to progress log $ logs in `/tmp/us008` and `C:\Windows\Temp\us008_*.log`):   - Windows/MSVC (VS 18, matching the `win-...
+US-008 is implemented, and I re-verified it this pass. No code changed: the X11 backend from the earlier US-008 entry was already in the tree, so I ran the gates against it and logged the results.
+
+**Passed in this environment**
+- **Windows/MSVC** (VS 18, matching the `win-dev` cache): `ValidateVendor`, `win-dev`, `win-debug` build with 0 warnings and 0 errors, and `win-unit` ctest 10/10.
+- **Linux/Clang**: `ValidateVendor`, `linux-dev`, `linux-debug` build with 0 warnings, and `linux-unit` ctest 10/10.
+- **Linux/GCC**: `linux-gcc`, `linux-gcc-debug` with 0 warnings, and `linux-gcc-unit` ctest.
+- **X11 integration on XWayland** (WSLg, `DISPLAY=:0`): 29 cases, 27 pass and 2 skip. The skips are window-manager dependent (focus grant and minimize), and the skip messages say so.
+- **Missing display**: the `NoDisplay` case passes, and CPU code runs without a `Platform`.
+
+**Not verified, reported as not-run**
+- **Native X11 session**: only WSLg/XWayland is available here, so native X11 is unverified.
+- **GUI/screenshot check**: no editor or application UI exists yet.
+- **`linux-asan` / `linux-sanitize`**: not run. Windowing is not in the story's memory/ECS/jobs/streaming/Lua/physics list, so it is not required.
+- **Benchmarks**: not run. This story does not change performance.
+- **GitHub CI**: not run, since nothing was pushed.
+
+**Files changed:** `.ralph-tui/progress.md` only, with a US-008 re-verification entry.
+
+I did not emit the completion signal in the intended form. The X11 code and tests are complete. The one open item is native X11 verification, which this machine cannot run.

@@ -1,0 +1,48 @@
+# Iteration 1030 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:16:33.868Z
+- **Ended At**: 2026-10-26T16:16:53.471Z
+- **Duration**: 19s
+- **Input Tokens**: 22
+- **Output Tokens**: 2175
+- **Total Tokens**: 2197
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for `all_features`.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rl "all_features" --include=* . 2>/dev/null | gre...
+The log shows this story has been stuck for over 100 status checks on the same three blockers. Before deciding whether to repeat that, I'll verify them directly.
+[94m[Bash][0m Verify blockers: samples, manifest route, FSR2 headers $ grep -n "all_features_route\|approv" benchmarks/manifest.json docs/*.md tasks/prd-open-world-engine....
+US-079 is not complete, and I did not change any code this pass. The three blockers recorded in the progress log are still real when I check them directly:
+
+- **No `samples/all_features` project.** `samples/` does not exist. The PRD requires that project, and the integration tests build their content in code instead of reading it.
+- **The benchmark route is still a proposal.** `benchmarks/manifest.json` line 152 defines `all_features_route_v1`, and the `all_features` entry is still `implementation: none`. The route fixes the benchmark contract, so I have not marked it approved.
+- **FSR 2 shader tables are missing.** `third_party/fsr2` has 0 `*_permutations.h` files, so the `full_1080` profile and forced upscale paths cannot be built or run.
+
+The remaining acceptance criteria need things this WSL session cannot provide:
+
+- The automated tour, with screenshots and an action log, requires a native Windows GUI session.
+- The DX12 and Vulkan GPU suites, and the native Linux Vulkan run, require GPU hardware.
+- `engine_bench --suite acceptance` requires a Release run on a native OS and backend.
+- The editor scenario covering Play/Stop and package/relaunch requires the GUI.
+- The linux-gcc and sanitizer presets are not yet run for this story.
+
+The last full checks in the log were a Linux debug build with 30/30 unit tests and 131 integration tests passing. Those results stand, but they do not establish the story's acceptance.
+
+To move forward I need you to decide three things:
+
+1. Approve `all_features_route_v1` as written, or tell me what to change. Once approved, I can build the `samples/all_features` project and the benchmark scene on the existing code.
+2. Choose whether to vendor the FSR 2 permutation headers, or keep `full_1080` reported as unsupported as `render_stress` does.
+3. Provide a Windows session with a GPU and GUI for the tour, profiles, editor scenario, and acceptance runs.
+
+I'm not emitting the completion signal, because the story would be reported complete while its acceptance criteria are unmet.

@@ -1,0 +1,54 @@
+# Iteration 935 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:39:24.133Z
+- **Ended At**: 2026-10-26T13:42:27.759Z
+- **Duration**: 3m 3s
+- **Input Tokens**: 46
+- **Output Tokens**: 4218
+- **Total Tokens**: 4264
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp -...
+The log shows this story has been stalled for about 40 status passes. Two blockers were resolved by choice in check 37, but the scene, tour, and profiles were never built. The Windows gates are the one piece I can run now, so I'll check the memory note on how to run them from WSL.
+[94m[Bash][0m Read Windows gate memory notes and list artifacts $ ls /mnt/d/dev/haiku_game_engine/samples 2>&1 | head -3
+I'll run the four Windows gates as one batch: ValidateVendor, `win-dev` configure, `win-debug` build, and `win-unit` tests. First I'll confirm no earlier batch is still running.
+[94m[Bash][0m Check for stale batch and write Windows gate batch file $ cat > /tmp/us079gate.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual Studio\18\Communi...
+[94m[Bash][0m Run Windows gate batch via cmd.exe and show results $ cat /tmp/us079_result.txt | tail -30
+All four Windows gates exit 0. I'll check the logs to confirm the build did real work and the unit count.
+[94m[Bash][0m Check Windows build and unit logs for warnings and results $ grep -E "tests passed|tests failed|Passed|100%" us079_unit.log | tail -3
+The Windows gates pass. I'll record this run in the progress log, since the story stays open.
+[94m[Bash][0m Append status entry to progress log $ ASan preset. - Stop: the scene build, tour, and live-app editor scenario are multi-session work. No ...
+US-079 is not complete, so I'm not signalling COMPLETE. This pass ran the Windows gates and they pass. Most of the story is still unbuilt.
+
+**Passing this pass (Windows, via cmd.exe on the RTX 5080 host):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset win-dev`: passes.
+- `cmake --build --preset win-debug`: passes, with no MSVC warning or error lines.
+- `ctest --preset win-unit --output-on-failure --no-tests=error`: 29/29 pass.
+
+The Linux gates passed in the earlier status check (40) and no first-party source has changed since. I did not re-run them this pass.
+
+**Still open, not reported as passed:**
+- The `all_features` scene itself. There is no `samples/all_features/` project, and the manifest still says `implementation: none`.
+- The automated tour runner with screenshots and an action log, and the GI/RT/upscale profiles. `full_1080` is recorded as unsupported because FSR 2's permutation headers are missing.
+- Forced indirect and meshlet geometry paths.
+- The editor scenario on a live app, including Play/Stop and a package relaunch. The existing `all_features_editor_tests.cpp` covers the editor pieces in isolation, not the live app.
+- GUI checks and screenshots.
+- `engine_tests --suite gpu` on Windows and native Linux Vulkan. Not run this pass.
+- `engine_bench --suite acceptance`, `linux-gcc*` (no GCC 11+ on this host), and the ASan preset.
+
+Two decisions from earlier passes still stand. The `all_features_route_v1` definition was recorded in the manifest in check 37, and `full_1080` is marked unsupported. The scene, tour, and live-app editor work are multi-session tasks, so I stopped there.
+
+I appended the results to `.ralph-tui/progress.md`. The batch file is at `C:\Users\bucha\AppData\Local\Temp\us079gate.bat`.

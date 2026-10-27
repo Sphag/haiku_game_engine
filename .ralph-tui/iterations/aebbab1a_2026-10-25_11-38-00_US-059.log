@@ -1,0 +1,38 @@
+# Iteration 518 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:38:00.002Z
+- **Ended At**: 2026-10-25T08:39:39.501Z
+- **Duration**: 1m 39s
+- **Input Tokens**: 28
+- **Output Tokens**: 2331
+- **Total Tokens**: 2359
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ ls engine/save 2>/dev/null && git status 2>&1 | head -3
+[94m[Bash][0m Rebuild Linux debug and run unit tests $ ls /usr/bin/g++* 2>/dev/null
+[94m[Bash][0m Run Linux unit test suite $ tail -n 4 /tmp/us059_unit.log
+[94m[Bash][0m Append re-check entry to progress log $ no GCC 11+, so `linux-gcc` cannot run here. - Status: US-059 stays **Partial**, no COMPLETE signal. ...
+US-059 is not complete, so I'm not emitting the COMPLETE signal. The save code is in place and the Linux and Windows gates that can run here pass, but three acceptance items are blocked.
+
+**Verified in this pass (Linux):**
+- `cmake --build --preset linux-debug` exits 0 with no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` exits 0 (integration 21 tests, unit label present).
+- Earlier passes also recorded these as passing: `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset linux-dev`, the ASan/UBSan build and `linux-sanitize` run, and the Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`).
+
+**Blocked:**
+- **`linux-gcc` gate and CI job:** only g++-9 is installed, and Jolt needs GCC 11+. I could not install a newer compiler without sudo.
+- **`engine_bench --suite acceptance`:** the benchmark harness does not exist yet (it is US-074), so the performance item has not been run.
+- **Runtime save/load through a host:** there is no application host yet (US-060), so only the library paths are tested, not a play session.
+
+I appended a re-check entry to `.ralph-tui/progress.md` recording these results. No source changes were made in this pass.

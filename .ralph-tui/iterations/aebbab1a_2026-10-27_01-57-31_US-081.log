@@ -1,0 +1,48 @@
+# Iteration 1238 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:57:31.824Z
+- **Ended At**: 2026-10-26T23:03:28.357Z
+- **Duration**: 5m 56s
+- **Input Tokens**: 30
+- **Output Tokens**: 2404
+- **Total Tokens**: 2434
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress log $ ls cmake | head -50
+[94m[Bash][0m Check README sections and acceptance doc status $ ls /dev/dri 2>&1 | head -2
+[94m[Bash][0m Run vendor validation, Linux debug build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Confirm ctest summary and read open items $ sed -n 40,200p docs/acceptance.md | grep -n -i -A40 'open items' | head -60
+[94m[Bash][0m Append US-081 status entry to progress log $ `ctest --preset linux-unit --no-tests=error` 30 of 30 passed. - No source or doc changes. `/dev/dri`...
+US-081 is not complete, so I am not emitting the COMPLETE signal. The documentation is in place, and the Linux gates I could run here pass. The remaining acceptance items need hardware or decisions that this machine does not have.
+
+**Re-verified on the current tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0 (26 dependencies, 8542 files).
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --no-tests=error`: 30 of 30 passed.
+
+I made no source or doc changes. I appended a status entry to `.ralph-tui/progress.md`.
+
+**Already in the repo:** `README.md` covers OS/SDK requirements, offline CMake setup, the editor workflow, the Lua API, the asset pipeline, native packaging, benchmarks, and tests. `docs/` has the architecture, schema, vendor, benchmark, and capability-matrix pages. `docs/acceptance.md` maps each story to its tests and artifacts. The offline clean-copy build and the Linux editor-suite package check also passed in earlier runs.
+
+**Still open, so US-081 cannot be signed off:**
+1. **Native Linux Vulkan GPU report.** `/dev/dri` is absent, so there is no Vulkan device here.
+2. **RTX 5080 reports.** These are `engine_tests --suite gpu` on DX12 and Vulkan under Windows, and the editor suite on Windows. They have not been run for this story.
+3. **Full acceptance benchmark.** `engine_bench --suite acceptance` does not yet run to completion on any backend. The render, streaming, all-features, and physics scenes report `incomplete`.
+4. **Visual editor smoke test with screenshots** on both operating systems.
+5. **Linux GCC gate.** The local GCC 9.4 cannot build Jolt; GCC 11 or newer is needed.
+6. **FSR 2.** The vendored tree lacks its generated shader permutations.
+7. **Clean-directory package smoke test** built from a real sample game on each OS.
+8. **LICENSE.** The repository has no license file, and choosing one is your decision.
+
+Items 1–4 need the reference RTX 5080 machine. Item 5 needs GCC 11 or newer. Item 8 needs your decision. Items 6 and 7 need a sample-game package and a clean-directory run on each OS.

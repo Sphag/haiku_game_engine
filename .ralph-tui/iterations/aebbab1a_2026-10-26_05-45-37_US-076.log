@@ -1,0 +1,47 @@
+# Iteration 791 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:45:37.419Z
+- **Ended At**: 2026-10-26T02:45:56.079Z
+- **Duration**: 18s
+- **Input Tokens**: 22
+- **Output Tokens**: 2271
+- **Total Tokens**: 2293
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark code.
+[94m[Bash][0m Check progress log and benchmark sources $ grep -n "US-076\|render_stress" -r --include=*.md --include=*.cpp --include=*.hpp --include=*.json -...
+The log shows 28 prior passes, all blocked on a fixed-contract decision. I'll confirm the blocker still holds against the current files before deciding anything.
+[94m[Bash][0m Verify file state and PRD blocker lines $ 870,880p' tasks/prd-open-world-engine.md
+US-076 is not complete, and I did not signal COMPLETE. The blocker is still a fixed-contract decision that only you can make.
+
+**What's blocking it**
+
+- **Triangle floor at the route start:** The PRD's `render_stress` row requires at least 2,000,000 submitted triangles on the indexed reference path at the starting frame. The current scene submits 312,068 there. The start pose comes from the camera route, which is pinned by SHA-256 in the manifest. The instance placement comes from the seeded generator, whose digests are pinned. Raising the count means changing either the route, the placement, or both. That bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The PRD (around line 722) reserves that for a separate user decision, so I did not make the change.
+- **Frame budget:** The measured p99 is 35–47 ms against the 16.7 ms budget. The US-080 criteria say a budget miss must be fixed in the measured cause, not by changing the contract.
+- **full_1080:** Unsupported until the FSR 2 `*_permutations.h` tables exist. That is a vendoring issue, not something this story can fix.
+- **Not run:** The native Linux Vulkan GPU run and the linux-gcc gate.
+
+**What I checked this pass**
+
+- The source, workload, and manifest files are unchanged since the previous passes (`render_stress.cpp` 04:15:43, `workload.cpp` 02:42:31, `workload_expected.json` 02:21:05, `manifest.json` 02:43:31). `kWorkloadVersion` is still 1.
+- The three `us076-*` artifact directories are present, so the mesh-shader fallback and indexed/indirect/meshlet runs were already recorded.
+- I did not rebuild or rerun the Windows gates in this pass. The log records earlier Linux results: `linux-debug` builds, `linux-unit` passes 30/30, and `engine_workload --check` matches 4 scenes.
+
+**What I need from you**
+
+Choose one of these:
+1. Approve a route-start or placement change that reaches 2,000,000 triangles. I'll bump the workload version, regenerate the expected file and manifest hash, and rerun the acceptance suite.
+2. Accept the measured failing run as the US-076 result, and record the 312,068-triangle shortfall and the frame-budget miss as known failures.
+
+Whichever you pick, the remaining steps are the Windows gates, the Linux native Vulkan GPU run, and the linux-gcc gate. I'll run them after your decision.

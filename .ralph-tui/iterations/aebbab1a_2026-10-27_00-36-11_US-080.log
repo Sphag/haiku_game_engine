@@ -1,0 +1,41 @@
+# Iteration 1180 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:36:11.385Z
+- **Ended At**: 2026-10-26T21:36:26.560Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2243
+- **Total Tokens**: 2269
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress log and check bench artifacts $ git status 2>/dev/null | head -5
+The log shows this story has been re-checked many times with no change. I'll confirm the current blockers with two cheap checks before deciding anything.
+[94m[Bash][0m Check GPU device, FSR permutations, and unimplemented workloads $ grep -n -B3 '"implementation": "none"' benchmarks/manifest.json | grep '"id"\|name'
+[94m[Bash][0m Append status entry to progress log $ manifest has implementation "none" for physics_action_sequence_v1 (line 119 route), streaming_route_...
+US-080 is not complete, and I'm not signalling COMPLETE. I can't meet the acceptance criteria from this WSL host, and I made no code or build changes this pass.
+
+**What's blocking sign-off (re-verified just now):**
+- **No native Linux Vulkan GPU.** `/dev/dri` is absent. The RTX 5080 is visible only to WSL `nvidia-smi`, which doesn't count as a native Linux report.
+- **FSR 2 permutations missing.** `third_party/fsr2` has 0 `*_permutations.h` files. FSR cannot build until you choose a vendoring route.
+- **Four workloads unimplemented.** `benchmarks/manifest.json` marks them `implementation: "none"`, including `physics_action_sequence_v1` and `streaming_route_v1`. An acceptance run would exit 3 (incomplete) rather than pass.
+- **Reference-machine runs not done.** The 3×180 s runs on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan need the RTX 5080 reference machine. Only partial runs exist in `artifacts/bench` (us076, us077, us078, us080).
+
+**What I did:** appended one status entry to `.ralph-tui/progress.md`. The prior log already has 75 identical entries, so I did not start a build or benchmark batch that would only exit 3.
+
+**Decisions needed from you:**
+1. The FSR 2 vendoring route: obtain the generated permutation headers, or drop FSR from this build.
+2. Whether the four unimplemented workloads should be built now. That is substantial work, and I can take it on if you want it.
+3. The frame-budget question: if a budget is exceeded on the RTX 5080, the contract cannot be changed without your separate decision.
+4. Access to the RTX 5080 Windows machine, or a native Linux GPU host, for the final reports.

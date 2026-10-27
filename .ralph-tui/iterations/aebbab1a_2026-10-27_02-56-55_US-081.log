@@ -1,0 +1,61 @@
+# Iteration 1282 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:56:55.482Z
+- **Ended At**: 2026-10-26T23:57:15.747Z
+- **Duration**: 20s
+- **Input Tokens**: 22
+- **Output Tokens**: 2472
+- **Total Tokens**: 2494
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress log $ git status 2>&1 | head -3
+[94m[Bash][0m Check for changes since last gate and blocker status $ ls LICENSE* COPYING* 2>&1
+
+[91m[Error: Exit code 2
+./docs/acceptance.md
+./tasks/prd.json
+./artifacts/reports/us081/win-editor-smoke-launch.png
+./third_party/dxc/utils/GetCommitInfo.py
+---
+ls: cannot access '/dev/dri': No such file or directory
+g++ (Ubuntu 9.4.0-1ubuntu1~20.04) 9.4.0
+/usr/bin/clang++
+---
+4:are still open. Source of the story list: `tasks/prd-open-world-engine.md` and `tasks/prd.json`.
+6:**Final acceptance is incomplete.** The reasons are in [Open items](#open-items). Nothing on this page should be read as
+91:| US-080 | RTX 5080 performance acceptance | Acceptance suite (see Open items) | `artifacts/bench/us080-*` (readback-off runs only) |
+115:| `engine_bench --suite acceptance --backend <dx12\|vulkan> --output artifacts/bench/<run-id>` | Windows (DX12, Vulkan), native Linux (Vulkan), Release | not run; see Open items |
+118:| Visual editor smoke test with screenshots | Windows, Linux | Windows: launch only. `game_editor.exe` (Release) started and drew its panels (Project, Assets, Hierarchy, Viewport, Inspector, Console, Errors), with the console at "no project is open". Screenshot in `artifacts/reports/us081/win-editor-smoke-launch.png`. No project was opened and no action sequence ran, so the full smoke test is still open. Linux: not run as a visual test. On the WSL2 verification machine (WSLg display present), `game_editor` (Release, `build/linux-dev`) exits at start with `cannot create the vulkan device: no hardware Vulkan 1.2 adapter` and draws nothing. This is WSL without a Vulkan device, so it does not stand in for a native Linux smoke test |
+120:## Open items
+122:These block final acceptance. Each one is recorded as incomplete rather than passed.
+129:   `incomplete` (see [benchmarks.md](benchmarks.md)).
+ls: cannot access 'LICENSE*': No such file or directory
+ls: cannot access 'COPYING*': No such file or directory][0m
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. Nothing in the tree changed in a way that needs a new gate run, and the remaining items need hardware or a decision only you can make.
+
+**What's in place:** The README and `docs/` cover the required items: OS/SDK requirements, offline CMake, the editor, Lua API, asset pipeline, packaging, architecture, schemas, vendor notices, benchmarks, the capability matrix, and the acceptance map (`docs/acceptance.md`). The Linux unit suite passed 30 of 30 and the Windows gate logs are in `artifacts/reports/us081/`, both recorded in earlier passes.
+
+**What's still open (recorded in `docs/acceptance.md`):**
+- **Native Linux Vulkan GPU suite:** `/dev/dri` is absent here, so `engine_tests --suite gpu --backend vulkan` cannot run on this machine.
+- **Full acceptance benchmark on the RTX 5080:** the acceptance scenes do not yet produce GPU timestamps, so the benchmark cannot be verified.
+- **Visual editor smoke on both OSes:** Windows has a launch-only screenshot. No project was opened and no action sequence ran. Linux is not run; WSL has no Vulkan device.
+- **linux-gcc:** only GCC 9.4 is installed, and Jolt needs GCC 11+.
+- **FSR 2:** the `*_permutations.h` shader tables are absent from vendored code, so FSR cannot build. Vendoring it is your decision.
+- **LICENSE:** the repo has no LICENSE or COPYING file. Choosing the license is your decision.
+- **Clean-copy offline build and a package built from a real sample game:** not yet done.
+
+**Decisions I need from you:** the LICENSE, and how to vendor the FSR 2 permutation tables. Once those are set, the remaining work is the hardware runs on the RTX 5080 and the Windows and Linux smoke tests.
+
+I appended a status entry to `.ralph-tui/progress.md`. No source, test, or build files changed in this pass.

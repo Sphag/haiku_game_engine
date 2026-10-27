@@ -1,0 +1,53 @@
+# Iteration 930 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:17:06.643Z
+- **Ended At**: 2026-10-26T13:20:09.322Z
+- **Duration**: 3m 2s
+- **Input Tokens**: 56
+- **Output Tokens**: 4584
+- **Total Tokens**: 4640
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD's constraints, and what already exists for this story.
+[94m[Bash][0m Read progress log tail and search for US-079 references $ grep -n "US-079\|all_features\|all-features" -r --include=*.md --include=*.txt --include=*.cmake --i...
+The log shows 35 prior status checks that stopped on the same two items. Before deciding whether to repeat that, I'll check whether those blockers are real and what code already exists.
+[94m[Bash][0m Inspect repo layout, all_features tests, and manifest entry $ git status 2>&1 | head -2
+The two test files exist. Next I'll check whether they're wired into the build and whether the Linux debug build and unit suite pass.
+[94m[Bash][0m Check test wiring and build linux-debug preset $ (timeout 580 cmake --build --preset linux-debug -j8 2>&1 | tail -25)
+The build output ends after the DXC host step, so I can't tell whether the full build finished. I'll check the exit status and the unit suite.
+[94m[Bash][0m Run linux-debug build and capture exit status $ grep -c "error" /tmp/us079_build.log
+[94m[Bash][0m Run linux-unit ctest preset and summarize $ grep -i "all.feature\|Failed\|FAILED" /tmp/us079_unit.log | head -20
+The Linux unit preset passes, 30 of 30. I'll confirm the all_features cases are among those that ran.
+[94m[Bash][0m List all_features test cases and ctest entries $ ctest --preset linux-unit -N | grep -i feature
+The Linux debug build and the unit suite pass, and both all_features test cases are wired in. The rest of US-079 is not done, so I'll record the verified state in the progress log rather than mark the story complete.
+[94m[Bash][0m Append status entry to progress log $ neither is resolved by source changes here. --- EOF echo ok
+US-079 is not complete, so I'm not signalling COMPLETE. The Linux build and unit gate pass, but most of the story is still open.
+
+**Verified on Linux**
+- `cmake --build --preset linux-debug` exits 0 with no errors.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 30 of 30 (29 integration, 1 unit).
+- The two all_features test files (`tests/src/all_features_tests.cpp`, `all_features_editor_tests.cpp`) are wired into `tests/CMakeLists.txt`. Their two CPU cases are covered by the integration suite that passed.
+
+**Still open**
+- No `samples/all_features/` project exists.
+- `benchmarks/manifest.json` still has `all_features` at `implementation: none`, with the route definition "pending final benchmark scene".
+- No tour runner, screenshots, GI/RT/upscale profiles, or forced geometry paths.
+- No editor scenario run on a live app, and no GUI checks.
+- Not yet run: the Windows gates, the native Linux Vulkan GPU suite, `engine_bench --suite acceptance`, the `linux-gcc*` presets, and the ASan preset.
+
+**Two decisions block the rest**
+1. FSR 2 permutation headers are missing from `third_party/fsr2`, so the `full_1080` profile can't build. Either vendor them or record that profile as unsupported. I didn't pick one, because recording it as unsupported changes the benchmark contract.
+2. The `all_features_route_v1` definition is still a placeholder. The earlier status entries proposed reusing the `streaming_route_v1` geometry; I haven't applied that, since it changes the fixed benchmark contract.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results and blockers. The previous 35 entries repeated the same stop without new work, so I didn't add another one that only restated them.

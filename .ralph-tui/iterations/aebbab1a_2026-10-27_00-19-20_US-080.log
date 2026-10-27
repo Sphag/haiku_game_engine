@@ -1,0 +1,41 @@
+# Iteration 1151 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:19:20.504Z
+- **Ended At**: 2026-10-26T21:19:31.517Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1510
+- **Total Tokens**: 1528
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress log and benchmark directory state $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Recheck the four acceptance blockers on this host $ ls artifacts/bench | grep -ci acceptance
+US-080 is not complete, and I can't finish it on this machine. I made no code changes and ran no builds or benchmarks.
+
+**What blocks sign-off**
+- **No native Linux Vulkan device.** `/dev/dri` is absent under WSL, so the native Linux/Vulkan reports can't be produced here.
+- **No RTX 5080 reference reports.** The acceptance criteria need three 180 s repeats per scene, profile, and backend on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. The GPU is visible to WSL only, and no `acceptance` run exists in `artifacts/bench`.
+- **FSR 2 is not vendored in full.** `third_party/fsr2` has 0 of the 8 `*_permutations.h` per backend, so FSR can't build. Vendoring a complete copy is a user decision.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` has four entries marked `implementation: none`: the physics action route, the streaming route, and the teleport/render entries.
+- **Possible frame-budget overrun.** The progress log records a `render_stress` start-frame p99 above 16.7 ms. Fixing it needs profiling and Windows reruns.
+
+The progress log already records the same conclusion over about 50 prior runs, so I did not add another identical entry. I also did not add a COMPLETE signal, since the criteria aren't met.
+
+**What you need to decide or provide**
+1. Run the acceptance workflow on the reference RTX 5080 machine, or give me access to a host with a native Linux Vulkan device.
+2. Choose how to get the FSR 2 permutation headers (regenerate them from source, or accept an FSR-free build for this story).
+3. Confirm whether the four `implementation: none` workloads should be built for this story or moved to a later one.
+
+Once those are settled, the next step is the Windows and Linux gate runs followed by the 3×180 s acceptance runs.

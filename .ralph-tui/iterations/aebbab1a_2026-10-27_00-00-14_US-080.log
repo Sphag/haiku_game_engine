@@ -1,0 +1,51 @@
+# Iteration 1084 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:00:14.687Z
+- **Ended At**: 2026-10-26T21:00:33.141Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2962
+- **Total Tokens**: 2990
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the PRD's performance contract, then see what the benchmark harness and gates already provide.
+[94m[Bash][0m Read progress log and PRD story context $ ls benchmarks 2>/dev/null
+The log shows US-080 blocked on several items. I'll re-verify the key ones in one pass: the Linux GPU device, the readback fix in the tree, the manifest's unimplemented scenes, and the FSR permutations.
+[94m[Bash][0m Verify hardware and scene blockers in the tree $ ls samples 2>&1 | head -2
+The blockers are unchanged, so I'll record this status pass in the progress log and stop there.
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*` needs GCC 11+ or clang 14+. - Stop: US-080 cannot be signed off on this host. No COMPLE...
+US-080 is not complete, so I have not emitted the COMPLETE signal. This pass found nothing new and changed no code.
+
+**What is blocking sign-off**
+- **Native Linux/Vulkan GPU:** `/dev/dri` is absent, so there is no native Linux Vulkan device to measure on.
+- **Acceptance run:** there is no `engine_bench --suite acceptance` report with three 180 s repeats per scene, profile, and backend. The only reports are the us076–us080 runs.
+- **Frame budget:** `render_stress` native_1080 still misses the 16.7 ms p99 on repeats 2 and 3, with about 15 ms of CPU per frame unprofiled. The readback fix (`SceneRenderer::set_readback`) halved CPU p99 from 42 ms to about 17 ms, but it is not enough.
+- **Missing workloads:** the manifest still has four `implementation: none` entries, including the physics action sequence, the streaming route, and `all_features`. `samples/` does not exist.
+- **FSR 2 `full_1080`:** `third_party/fsr2` has no `*_permutations.h` files, so that profile stays unsupported.
+- **Linux GCC:** the `linux-gcc*` presets need GCC 11+ or clang 14+; this host has g++ 9.4 and clang 10.
+
+**Verified earlier, not re-run this pass**
+- Windows gates (validate, win-dev, win-debug build, win-unit) pass.
+- The DX12 GPU suite passes 72 cases, and the Vulkan suite passes 73/73 on the pinned validation layer.
+- Linux gates pass.
+
+**Decisions only you can make**
+- Approve the `all_features` route (`all_features_route_v1`) and the implementation of the physics and streaming workloads.
+- Decide how to supply FSR 2 permutation headers, or accept `full_1080` as unsupported.
+- Provide a native Linux GPU, or accept Linux/Vulkan as not run.
+- Provide GCC 11+ or clang 14+ for the `linux-gcc*` presets.
+
+**Next engineering step:** profile the remaining CPU cost per frame in `render_stress` on the RTX 5080 (Release, per-pass timestamps). That names the cause before any fix. Even with that, the blockers above keep the story open.
+
+I appended a status entry to `.ralph-tui/progress.md`.

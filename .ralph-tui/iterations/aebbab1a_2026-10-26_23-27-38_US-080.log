@@ -1,0 +1,50 @@
+# Iteration 1076 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:27:38.418Z
+- **Ended At**: 2026-10-26T20:33:49.988Z
+- **Duration**: 6m 11s
+- **Input Tokens**: 40
+- **Output Tokens**: 4056
+- **Total Tokens**: 4096
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the environment notes, since the GPU and Linux gates depend on what this WSL setup can actually run.
+[94m[Bash][0m Read progress log tail and benchmark layout $ ls tools/benchmark/src 2>/dev/null
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environment.md[0m
+The log shows the open blockers: a frame budget miss (p99 35–47 ms against 16.7 ms), no native Linux Vulkan device, and missing FSR 2 permutations. Next I'll check the latest bench artifacts and the PRD's US-080 section to see whether anything has changed since.
+[94m[Bash][0m Inspect bench artifacts, PRD US-080, and host tools $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "bat\|rc" | tail -10
+The bench artifacts stop at US-076/077/078, and nothing has been run for US-080 itself. I'll re-run the Linux gates that this host can run so the progress entry reflects the current tree.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -3 /tmp/us080_ctest.log
+The Linux gates still pass. I'll record this pass in the progress log so the next iteration starts from the real state.
+[94m[Bash][0m Append US-080 status entry to progress log $ this host has g++ 9.4 and clang 10. - Not run here: the Windows gates (validate, win-dev, win-debug ...
+US-080 is not complete, so I am not signalling COMPLETE. The RTX 5080 acceptance runs that define this story have not been produced, and the frame budget is currently failing.
+
+**What I verified this pass (Linux, on this WSL host):**
+- `cmake -P cmake/ValidateVendor.cmake` passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug` passed.
+- `ctest --preset linux-unit --no-tests=error` passed.
+
+I made no source changes. I appended a US-080 entry to `.ralph-tui/progress.md`.
+
+**What is blocking sign-off:**
+1. **Frame budget fails.** The `render_stress` runs in `artifacts/bench/us076-*` show p99 of 35–47 ms against the 16.7 ms budget. The PRD says to fix the implementation first, so this is open implementation work. It needs a profile on the RTX 5080 to find the measured cause before any fix.
+2. **No acceptance runs exist for US-080.** The bench artifacts stop at US-076 to US-078. The required `engine_bench --suite acceptance` runs with three 180 s repeats per scene, profile, and backend have not been done.
+3. **No native Linux Vulkan device.** `/dev/dri` is absent, and the installed lavapipe is too old for the backend.
+4. **`all_features` is not implemented.** Its manifest entry is `implementation: none`, and the `full_1080` profile needs FSR 2 permutation headers that the tree does not have.
+5. **No GCC 11+ or clang 14+.** The `linux-gcc*` gates cannot run on this host (only g++ 9.4 and clang 10).
+
+**Not run here:** the Windows gates, the DX12 and Vulkan GPU suites, the ASan/UBSan preset, and the editor smoke tests.
+
+Items 1 and 2 are the next real work: profile `render_stress` on the Windows host (via the `.bat` route in the memory notes), fix the measured cause, then run the full acceptance matrix. Items 3 to 5 need hardware or toolchains this host lacks, so they stay open until they are available.

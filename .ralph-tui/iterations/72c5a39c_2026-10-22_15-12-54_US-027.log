@@ -1,0 +1,375 @@
+# Iteration 26 Log
+
+## Metadata
+
+- **Task ID**: US-027
+- **Task Title**: DX12 Device and Presentation
+- **Description**: As a Windows user, I want DX12 output so that I can run the engine through DirectX.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T12:12:54.529Z
+- **Ended At**: 2026-10-22T12:43:24.794Z
+- **Duration**: 30m 30s
+- **Input Tokens**: 730
+- **Output Tokens**: 221920
+- **Total Tokens**: 222650
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD sections this story depends on.
+[94m[Bash][0m List repo root and progress/PRD sizes $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read progress log $ cat .ralph-tui/progress.md
+[94m[Bash][0m Read the tail of progress log $ tail -n 150 .ralph-tui/progress.md
+[94m[Bash][0m Find US story references and list source files $ find engine tests tools cmake -type f | grep -v build | head -300
+The story depends on the RHI contract from US-026, which exists. Next I'll read the PRD's US-027 entry and the constraint sections, and the RHI headers the backend has to implement.
+[94m[Bash][0m Read PRD functional requirements and constraints $ sed -n 1,131p tasks/prd-open-world-engine.md | cut -c1-600
+[94m[Bash][0m Read US-027 entry and GPU-related PRD lines $ grep -n -i "dx12\|direct3d\|gpu\|vsync\|present\|benchmark\|performance contract\|Non-Goal" tasks/pr...
+[94m[Bash][0m Read PRD technical considerations, non-goals, perf contract $ sed -n 884,900p tasks/prd-open-world-engine.md | cut -c1-500
+[94m[Bash][0m Read RHI device and types headers $ cat engine/rhi/CMakeLists.txt
+The RHI contract is clear. Before planning, I need the command list, capabilities, error, and handle headers, plus the size of the reference device and the platform window API.
+[94m[Bash][0m Read command list, capabilities, error headers $ cat include/engine/rhi/command_list.hpp include/engine/rhi/capabilities.hpp include/engine/rhi/error...
+[94m[Bash][0m Read device.cpp, handle header, window header $ cat engine/platform/include/engine/platform/window.hpp | head -150
+The contract has no clear color, no texture readback, and no swapchain, so DX12 presentation needs contract additions as well as the backend. Next I'll check the test suites, presets, and the Validation device's internals, since any new virtual has to be implemented there too.
+[94m[Bash][0m Read test CMake and main entry $ cat tests/src/main.cpp | head -120
+[94m[Bash][0m Read presets, root CMake, CI tooling $ cat tools/ci/gpu_run.py | head -60
+The suite and CI plumbing is in place, so I can see where a `gpu` suite plugs in. I'll check the CLI suite options, the Validation device header, and whether a Windows SDK and toolchain are reachable from WSL.
+[94m[Bash][0m Read CLI suite handling and validation device header $ cat engine/rhi/include/engine/rhi/validation_device.hpp
+[94m[Bash][0m Check Windows SDK, Windows interop, build dirs $ ls /mnt/d/dev/haiku_game_engine/.github/workflows 2>&1
+The Windows SDK and `cmd.exe` are both reachable. I'll check the memory index for notes on how earlier iterations drove the Windows gates, and read the GPU workflow.
+[94m[Bash][0m Check memory index, GPU workflow, and prior Windows gate scripts $ ls /mnt/c/Users/*/AppData/Local/Temp 2>/dev/null | grep -i "\.bat\|gate" | head
+Earlier iterations ran Windows gates through a `.bat` file. I'll read one to reuse the same approach.
+[94m[Bash][0m Read prior Windows gate batch script $ ls -d /mnt/c/Users/*/AppData/Local/Temp | head -3
+That gives me the Windows verification route. Next is the platform API, since the smoke test and the swapchain need a real HWND.
+[94m[Bash][0m Read Platform API and CMake for platform module $ cat engine/core/include/engine/core/performance_contract.hpp | head -40
+I have enough of the platform and build layout to plan. Two more reads before I commit to a design: the US-029 scope boundary, so I know which Device calls belong to later stories, and the Validation device's method layout, since any new pure virtual has to be implemented there.
+[94m[Bash][0m Read US-029 and validation device function list $ cd engine/rhi/src && grep -n "^[A-Za-z].*ValidationDevice::\|^class\|^struct\|^[a-z].*(" validation_...
+US-029 owns upload/readback, allocation, and deferred destruction, but US-027's smoke test cannot read back a clear without a readback path, so I'll implement the minimum for that and leave the rest to US-029. Before changing the contract, I'll read the parts of the Validation device I have to extend: buffer and texture creation, submit, render pass, copy, and close.
+[94m[Bash][0m Read validation device types and state $ sed -n 325,345p validation_device.cpp
+[94m[Bash][0m Read buffer/texture creation and submit path $ sed -n 769,870p validation_device.cpp
+[94m[Bash][0m Read render pass, copy, and close recording code $ sed -n 1302,1367p validation_device.cpp
+The Validation device enforces the contract closely, so the DX12 backend has to match it. I need the state-rule helpers and transition checks I'll share, plus the CLI parser, the warning flags, and the UTF-8 helpers.
+[94m[Bash][0m Read state rule helpers and transition checks $ cat rhi_types.cpp | head -42
+[94m[Bash][0m Read CLI parser, warning flags, utf8 and log APIs $ grep -n "log\|void\|enum" engine/core/include/engine/core/log.hpp | head -20
+I have the full picture now. My plan:
+
+- **Contract additions (`engine/rhi`):** a clear color on render passes, a texture-to-buffer copy with DX12-compatible row pitch, a `CpuRead` readback buffer with `read_buffer`, a `Swapchain` interface, a debug-message check, and a `DeviceLost` error code. The shared state-rule helpers move out of the Validation device so both backends use one copy.
+- **DX12 backend (`engine/rhi/src/dx12/`, Windows only):** adapter selection, debug layer, three queues with timeline fences, a swapchain with per-buffer frame fences, and deferred destruction keyed by queue timeline.
+- **Gates:** a `gpu` suite in `engine_tests` that reports `unsupported` (exit 3) on hosts without the backend, and a DX12 smoke test that reads back a clear color.
+
+Starting with the contract headers.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "#include <cstdint>
+#include <optional>
+#include <s..." → "#include <array>
+#include <cstdint>
+#include <opti..."
+That `error.hpp` include isn't needed in `types.hpp`, so I'll take it back out before continuing.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "#include <vector>
+
+#include "engine/rhi/error.hpp"" → "#include <vector>"
+Now the format helpers, the `CpuRead` usage bit, the copy alignment constants, and the clear color on render passes.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "[[nodiscard]] constexpr bool is_depth_format(Forma..." → "[[nodiscard]] constexpr bool is_depth_format(Forma..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "    CopySource = 1u << 6,
+    CopyDestination = 1u..." → "    CopySource = 1u << 6,
+    CopyDestination = 1u..."
+Next, the shared state rules and the render pass clear color.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "    CopyDestination,
+    Present,
+};
+
+enum class I..." → "    CopyDestination,
+    Present,
+};
+
+// Whether a..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "struct RenderPassDesc {
+    std::vector<TextureHan..." → "struct RenderPassDesc {
+    std::vector<TextureHan..."
+The `ResourceState` comment says every resource starts in `Common`, which is no longer true for readback buffers. I'll correct it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "// Every resource carries one tracked state. A tra..." → "// Every resource carries one tracked state. A tra..."
+Now the error code and the capability report field.
+[94m[Bash][0m Add DeviceLost error code and validation_layers flag $ grep -n validation_layers capabilities.hpp
+Next, the new swapchain header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/swapchain.hpp[0m "#pragma once
+
+#include "engine/rhi/error.hpp"
+#include "engine/rhi/handle.hpp"
+#include "engine/rhi/types.hpp"
+
+#include <cstdint>
+#include <optional>
+
+namespace engine::rhi {
+
+// Presentation policy.... (2569 chars)"
+Now the command list gets its texture-to-buffer copy, and `device.hpp` gets the swapchain, readback, and debug-message entry points.
+[94m[Bash][0m Extend command list and device interfaces $ """ assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF grep -n "include" device.hp...
+Next, the shared state rules move into `rhi_types.cpp`, with the `CpuRead` restriction added.
+[94m[Bash][0m Move state rules into shared types source $ grep -n "Present\b" ../include/engine/rhi/types.hpp | head -3
+The validation device now uses the shared rules. Next I'll look at its `Recorder` declaration so I can add the new copy and the new device overrides.
+[94m[Bash][0m Locate Recorder class members for copy_buffer $ grep -n "copy_buffer" validation_device.cpp
+I'll make the Validation device changes in one scripted pass: the new copy with the same checks as the DX12 path, the `CpuRead` starting state, and the new device overrides.
+[94m[Bash][0m Extend CPU reference device with the new contract operations $ grep -n "validation_device.hpp\|device.hpp" include/engine/rhi/validation_device.hpp
+The Validation device now matches the new contract. Before writing the DX12 backend I need the `core::Result` API it will return.
+[94m[Bash][0m Read core Result API $ grep -n "Unit" engine/core/include/engine/core/result.hpp | head -3
+`core::Result` has `ok()`, `value()`, and `error()`, and `RhiStatus` is `Result<Unit, RhiError>`. Now the DX12 backend, starting with the shared Windows includes and helpers.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_common.hpp[0m "#pragma once
+
+// Shared Windows and DirectX headers for the DX12 backend. Only first-party code in engine/rhi/src/dx12 includes these; the
+// public RHI headers stay free of OS and DirectX types.
+
+#if... (1106 chars)"
+Next the internal device header. It holds the object records, a generational table matching the Validation device's handle rules, a CPU descriptor pool for RTVs and DSVs, and the `Dx12Device` declaration.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_device.hpp[0m "#pragma once
+
+// DX12 backend internals (US-027). Nothing here is public: the RHI headers in engine/rhi/include stay free of DirectX types, and
+// the rest of the engine reaches this backend only thro... (9318 chars)"
+The header has a few problems I can see already: `Retained` is only forward-declared while the vector member needs it, the debug-layer interfaces need `d3d12sdklayers.h`, and the friend declaration and `debug_` member aren't needed. I'll fix those now.
+[94m[Bash][0m Fix header declarations for device internals $ """) open(p,'w').write(s)  p='dx12_common.hpp' s=open(p).read() s=s.replace("#include <d3d12.h>\n#in...
+The header edits are in place. The `dx12_common.hpp` change the system reported is my own edit, so it stands. Next is the common helper implementation: HRESULT text, UTF-8 conversion, and the format and state mappings.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_common.cpp[0m "#include "dx12/dx12_common.hpp"
+
+#include <cstdio>
+
+namespace engine::rhi::dx12 {
+
+std::string hresult_text(HRESULT hr) {
+    char number[16];
+    std::snprintf(number, sizeof number, "0x%08lX", stati... (3211 chars)"
+Next, the command list. It records against the device's tracked state, mirroring the Validation device's rules, and emits real D3D12 commands.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_command_list.hpp[0m "#pragma once
+
+#include "dx12/dx12_device.hpp"
+
+#include "engine/rhi/command_list.hpp"
+
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace engine::rhi::dx12 {
+
+// ... (3463 chars)"
+The command list needs shared ownership of objects it references, but the table only returns raw pointers. Making `ObjectBase` enable `shared_from_this` solves that without a second lookup, so I'll adjust the header to match.
+[94m[Bash][0m Make objects shareable from raw pointers $ ") open(p,'w').write(s) EOF grep -n "enable_shared\|void use" dx12_device.hpp dx12_command_list.hpp
+Next, the command list implementation. Parameters that a command doesn't use are left unnamed, because MSVC's `/W4 /WX` treats unused parameters as errors.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_command_list.cpp[0m "#include "dx12/dx12_command_list.hpp"
+
+#include "engine/rhi/validation_device.hpp"
+
+#include <array>
+
+namespace engine::rhi::dx12 {
+namespace {
+
+void transition_barrier(ID3D12GraphicsCommandList* list... (16522 chars)"
+The command list has three things to fix before it compiles cleanly: a convoluted `close()` error path, two write-only pass fields that clang's `-Wunused-private-field` would flag under `-Werror`, and an unneeded include.
+[94m[Bash][0m Simplify close error path and drop unused pass fields $ """) open(p,'w').write(s) EOF echo ok
+The command list is consistent with the header now. Next is the core of the backend, `dx12_device.cpp`. It covers adapter selection, the three queues with timeline fences, buffers and textures, timestamps, submission with deferred destruction, readback, and debug-message collection. First, `hresult_error` has to be declared in the common header so every file shares one error mapping. That replaces the `device_removed_status` member I had planned.
+[94m[Bash][0m Add shared HRESULT error mapping and drop member $ echo done
+The shared error mapping is in place. Now the main device implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_device.cpp[0m "#include "dx12/dx12_device.hpp"
+
+#include "dx12/dx12_command_list.hpp"
+#include "dx12/dx12_swapchain.hpp"
+
+#include "engine/core/result.hpp"
+
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+... (35115 chars)"
+The device implementation is written. Three things are still missing: the `release_descriptors` declaration in the header, the swapchain class, and the `adopt_back_buffer` and `release_back_buffer` members. I'll add the declaration first, then write the swapchain.
+[94m[Bash][0m Declare descriptor release helper in device header $ \n") open(p,'w').write(s) EOF grep -n "release_descriptors" dx12_device.hpp
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_swapchain.hpp[0m "#pragma once
+
+#include "dx12/dx12_device.hpp"
+
+#include "engine/rhi/swapchain.hpp"
+
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+namespace engine::rhi::dx12 {
+
+// Flip-model swapchain on ... (1734 chars)"
+Now the swapchain implementation, including `create_swapchain` and the back-buffer adoption helpers on the device.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_swapchain.cpp[0m "#include "dx12/dx12_swapchain.hpp"
+
+#include "engine/core/result.hpp"
+
+#include <string>
+#include <utility>
+
+namespace engine::rhi::dx12 {
+namespace {
+
+constexpr std::uint32_t kMinBufferCount = 2;
+con... (9770 chars)"
+The swapchain compiles conceptually, but I can see issues from the `[[nodiscard]]` on `Result`. Under MSVC's `/WX`, every discarded `RhiStatus` is an error, so those calls need explicit `static_cast<void>`. `adopt_buffers` also needs to be public, and the back-buffer format should follow the swapchain format rather than being hardcoded.
+[94m[Bash][0m Fix discarded results and swapchain format handling $ """), ]) EOF grep -n "static_cast<void>" *.cpp | head
+[94m[Bash][0m Inspect swapchain header member layout $ grep -n "present_settings\|adopt_buffers\|private:" dx12_swapchain.hpp
+[94m[Bash][0m Apply swapchain and discard fixes $ """), ]) print("ok") EOF
+The swapchain fixes are in. Next, `device.cpp` needs to dispatch to the DX12 backend on Windows and report `Unsupported` elsewhere.
+[94m[Bash][0m Dispatch DX12 creation on Windows only $ #endif ''' assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF cat src/device.cpp |...
+The dispatch is in place. Now the CMake wiring: the DX12 sources are compiled and linked only on Windows, and the `src` directory has to be on the private include path so `dx12/...` includes resolve.
+[94m[Bash][0m Update RHI CMake and configure the Linux preset $ echo "configure=$?")
+The Linux configure is clean. I'll build the RHI target now to catch errors in the shared and Validation code before adding the rest.
+[94m[Bash][0m Build the RHI target on Linux $ tail -3 /tmp/rhi_linux.log
+The RHI library compiles cleanly on Linux. Next is the test harness: a `gpu` suite with a `--backend` option. I'll read the existing CLI unit tests first, since they pin the current behaviour.
+[94m[Bash][0m Read CLI unit tests, contract script, RHI test header $ sed -n 1,60p src/rhi_contract_tests.cpp
+The RHI tests already have a `take()` helper, which I'll reuse. Now the CLI: add the `gpu` suite and a `--backend` option, with `--suite all` excluding GPU tests so the CPU gates never open a GPU.
+[94m[Bash][0m Add gpu suite and backend option to CLI parser $ """), ]) print("ok") EOF grep -n "suite_tag_expression" -r /mnt/d/dev/haiku_game_engine/tests /mnt/d...
+The parser is done. Next: the CLI unit tests need updating for the new suite and the tag expressions. In `main.cpp` the `gpu` suite exits with 3 when its backend is unavailable. A Catch failure count of 3 would be indistinguishable from that, so GPU test failures will map to exit 1.
+[94m[Bash][0m Update CLI unit tests and engine_tests main $ }"""), ]) print("ok") EOF
+The CLI and `main.cpp` changes are done. Before writing the CPU tests for the new contract operations, I'll look at how the existing RHI tests are structured so the new ones match.
+[94m[Bash][0m Read RHI test helpers and first test cases $ sed -n 60,140p src/rhi_contract_tests.cpp
+I'll check the factory test, because on Windows `create_device(Dx12)` now really creates a device and that test would no longer hold.
+[94m[Bash][0m Read factory test and last RHI test $ sed -n 548,575p src/rhi_contract_tests.cpp
+The factory test has to change: on Windows, `create_device(Dx12)` now creates a real device, so the `Unsupported` assertion only holds off Windows. I'll make that check platform-specific and append the CPU tests for the new contract operations.
+[94m[Bash][0m Add CPU contract tests and make factory test platform-aware $ } """ open(p,'w').write(s) EOF grep -n "SwapchainDesc\|array" src/rhi_contract_tests.cpp | head
+Now the GPU smoke-test suite. It clears an offscreen target and reads it back, presents frames and reads back the swapchain back buffer, exercises resize, minimize, and restore, and checks fences and timestamps. Every test is tagged `[gpu][dx12]`, so it runs only through the `gpu` suite.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/rhi_dx12_gpu_tests.cpp[0m "// GPU tests for the DX12 backend (US-027). Tagged [gpu][dx12], so only `engine_tests --suite gpu --backend dx12` runs them, on a
+// Windows machine with a hardware adapter and a desktop session. Each... (16796 chars)"
+Reading back the new test file, I see four problems to fix before compiling. The feature-name print is garbage. A fence check is written as a meaningless `CHECK(... == false)`. The present-skipped test records a transition and then tries to restore it with a mismatched state, and the recorded-but-unsubmitted transition would leave the device's tracked state out of step with the GPU. I'll rewrite that test to submit each step, so the tracked state and the GPU agree.
+[94m[Bash][0m Fix GPU test file and register it in CMake $ """) open(p,'w').write(s) print("ok") EOF cd /mnt/d/dev/haiku_game_engine/tests && python3 - <<'EOF'...
+The test file and CMake registration are in place. I'll build the Linux debug target and see what the compiler says across the whole tree.
+[94m[Bash][0m Build the Linux debug preset $ tail -3 /tmp/build_linux.log
+The build passed the two-minute mark and moved to the background. I'll wait for it to finish before reading the log.
+[94m[Bash][0m Check progress of Linux build $ grep -c "" /tmp/build_linux.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -c 600 /tmp/build_linux.log echo grep -c "" /tmp/build_linux.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read current Linux build output and errors $ grep -E "error|warning:" /tmp/build_linux.log | head -40
+The build is still running, now on the DXC host toolchain, and I'll get a notification when it finishes. Meanwhile I'll prepare the Windows gate script, following the pattern earlier iterations used.
+[94m[Bash][0m Stage Windows gate script in user temp directory $ ls /mnt/d/dev/haiku_game_engine/build/win-dev 2>/dev/null | head -3
+The gate script is staged. `gpu_run.py` still assumes there is no `gpu` suite yet, which is no longer true, so I'll update it: exit 3 maps to `unsupported`, and everything else except 0 is `failed`.
+[94m[Bash][0m Read rest of GPU run script $ cd /mnt/d/dev/haiku_game_engine/tools/ci && sed -n 60,80p gpu_run.py
+[94m[Bash][0m Update GPU run script for the real gpu suite $ rm -rf __pycache__
+One correction: unsupported should return 0 from the script, as the original did, so the job records the status without failing. Only `failed` should return 1.
+[94m[Bash][0m Make unsupported non-fatal in GPU run script $ tail -c 300 /tmp/build_linux.log
+The Linux build is still on the DXC toolchain. Meanwhile the first Windows gate run can start in the background, since it's the one most likely to surface compile errors in the DX12 code.
+[94m[Bash][0m Start Windows gate run in background $ echo started
+While both builds run, I'll look at the existing RHI doc so the DX12 notes match its structure.
+[94m[Bash][0m Inspect RHI documentation structure $ sed -n 1,20p rhi.md
+[94m[Bash][0m Read rest of RHI documentation $ sed -n 21,56p rhi.md
+I'll update the RHI doc with the new contract operations and the backend status, then write a DX12-specific doc.
+[94m[Bash][0m Update RHI documentation for new operations $ python3 - <<'EOF' p='rhi.md' s=open(p).read() def rep(old,new):     global s     assert s.count(old)...
+The RHI doc is updated. I'll check on the Linux build and the Windows run.
+[94m[Bash][0m Check Linux build and Windows gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us027_win_result.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+fatal: not a git repository (or any parent up to mount point /mnt)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+[5/9] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/rhi_dx12_gpu_tests.cpp.o
+[7/9] Performing install step for 'engine_dxc_host'
+[8/9] Completed 'engine_dxc_host'
+
+---][0m
+Neither result is in yet. I'll check whether the processes are still alive before reading more output.
+[94m[Bash][0m Check running build processes and gate logs $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us027 | head
+The Linux build is linking `engine_tests` and the Windows gate has started. I'll wait for the Linux build to finish before I run its tests.
+[94m[Bash][0m Wait for Linux build to finish $ grep -E "error:|warning:" /tmp/build_linux.log | head -20
+The Linux debug build completes with no errors or warnings. Next I'll run the Linux CPU suite and check that the GPU suite reports `unsupported` with exit 3 on this host.
+[94m[Bash][0m Run GPU suite probe and Linux CPU ctest $ tail -n 25 /tmp/ctest_linux.log
+Linux passes 23 of 23 CTest entries, and the GPU suite reports `unsupported` with exit 3 on both backends. I'll confirm the new CPU RHI tests actually ran, then check the Windows gate.
+[94m[Bash][0m Confirm unit run and check Windows progress $ tail -c 600 /mnt/c/Users/bucha/AppData/Local/Temp/us027_w2.log 2>/dev/null
+Every Windows gate reports exit 0, including the GPU run. A clean build this fast is suspicious, though, so I'll read the actual logs before trusting those codes, starting with the GPU output.
+[94m[Bash][0m Read Windows GPU suite output $ cd /mnt/c/Users/bucha/AppData/Local/Temp && tr -d '\r' < us027_w5_gpu.log | tail -n 60
+The GPU suite passes on the real NVIDIA GeForce RTX 5080 with the D3D12 debug layer and GPU-based validation enabled: 8 test cases, 71 assertions. Next I'll check the Windows build and CTest logs for warnings and confirm the counts.
+[94m[Bash][0m Check Windows build warnings and ctest summary $ tr -d '\r' < us027_w4.log | tail -n 12
+The Windows build is clean: 39 of 39 steps, no warnings or errors, and CTest passes 22 of 22. I'll confirm the DX12 translation units were in that build and not skipped, and check the gate exit codes against the logs.
+[94m[Bash][0m Verify DX12 sources compiled on Windows $ cat us027_win_result.txt | tr -d '\r'
+The DX12 sources all compiled on Windows, and the GPU suite ran against real hardware. Next are the remaining Linux gates the story requires: `ValidateVendor`, the GCC job, and the ASan/UBSan job, since US-026 ran both. These are long builds, so they go in the background as one chain.
+[94m[Bash][0m Validate vendor tree and start GCC gate chain $ 
+While the GCC chain runs, I'll check how the task tracker records US-027 so I can update it the same way earlier stories did.
+[94m[Bash][0m Inspect task tracker entries for US-027 $ python3 -c " import json d=json.load(open('prd.json')) print(type(d), list(d.keys())[:10] if isinsta...
+US-027 is currently `passes: false`. I'll set it true only after the GCC and ASan gates pass. Meanwhile I'll write the DX12 doc: what the backend does, what it leaves to later stories, and how to run the GPU suite.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/dx12.md[0m "# DX12 Device and Presentation
+
+US-027 adds the DirectX 12 backend of the RHI contract (`docs/rhi.md`). It lives in `engine/rhi/src/dx12/` and is built only on Windows. It calls the Windows SDK's `d3d... (4843 chars)"
+One sentence in the lifetime bullet is muddled, so I'll tighten it.
+[94m[Bash][0m Tighten lifetime sentence; check GCC chain status $ tail -c 200 /tmp/gcc_build.log 2>/dev/null
+The GCC build failed inside a GLM header, which may or may not be related to my change. I'll read the full error to see which first-party file triggered it.
+[94m[Bash][0m Locate GCC build failure $ grep -n "FAILED" /tmp/gcc_build.log | head
+The GCC errors are in `types.hpp`, at the flag-enum operators, which `concept` is now being used for. Earlier notes say US-026 deliberately moved away from concepts for GCC 9. I'll check what the file contains now, since my edits to it didn't touch that section.
+[94m[Bash][0m Inspect flag-enum operator section of types.hpp $ ls -la types.hpp
+The file now has the `enable_if` form, but the GCC log points at line 33 using `concept`. I'll check for a stale copy and re-run the GCC compile of that one file to see whether the error still reproduces.
+[94m[Bash][0m Re-check GCC compile of rhi_types directly $ echo "direct_gcc_exit=${PIPESTATUS[0]}"
+The GCC log is from 15:02, before the file's last modification at 15:16, so it's likely stale. The direct compile failed only because `g++` takes `-std=c++2a`, not `c++20`. I'll re-run the check with the right flag.
+[94m[Bash][0m Compile RHI sources directly with GCC $ done
+All three RHI sources compile cleanly under GCC with `-Werror`, so the earlier failure came from a stale compile and not from the current code. I'll re-run the GCC chain and then the ASan chain from scratch, in the background, and record each exit code.
+[94m[Bash][0m Run GCC and ASan gate chain in background $ echo launched
+While the chain runs, I'll record the one non-obvious thing from this session in memory: the working Windows gate route and the fact that the GPU suite really runs on this machine's RTX 5080.
+[94m[Bash][0m Save reference memory for Windows gate workflow $ mkdir -p /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory && cat > /home/max/.claude/p...
+While the GCC and ASan builds run, I'll check the chain status and the first few log lines.
+[94m[Bash][0m Check GCC and ASan chain status $ echo
+CMake is re-configuring the GCC tree. I'll wait in short polls until the first stage reports.
+[94m[Bash][0m Poll GCC build progress $ echo
+The GCC build now passes cleanly. The earlier validate task also completed, and I'll check its log for the vendor result. Next I'll keep polling the GCC tests and the ASan stages.
+[94m[Bash][0m Check vendor validation and GCC ctest result $ tail -n 4 /tmp/gcc_ctest.log 2>/dev/null
+[94m[Bash][0m Check GCC ctest totals and ASan build progress $ tail -c 200 /tmp/asan_build.log 2>/dev/null
+The GCC job passes all 23 CTest entries, and the ASan configure succeeded. I'll poll the ASan build and sanitizer run.
+[94m[Bash][0m Poll ASan build and sanitizer test progress $ echo
+[94m[Bash][0m Poll ASan sanitizer ctest results $ grep -ci "AddressSanitizer\|runtime error\|LeakSanitizer" /tmp/asan_ctest.log 2>/dev/null
+Every gate passes. The ASan/UBSan run is clean, with zero sanitizer reports across 23 tests. Here is the full set:
+
+- **Linux, Clang:** `ValidateVendor`, `linux-dev`, `linux-debug` build with no warnings, `linux-unit` 23/23.
+- **Linux, GCC:** build with no warnings, `linux-gcc-unit` 23/23.
+- **Linux, ASan/UBSan:** build, `linux-sanitize` 23/23.
+- **Windows, MSVC:** `ValidateVendor`, `win-dev`, `win-debug` build with no `warning C`, `win-unit` 22/22, and the DX12 GPU suite on the RTX 5080.
+
+I'll mark US-027 as passing in the tracker, using the same fields the earlier stories use.
+[94m[Bash][0m Prepare US-027 pass update in task tracker $ print(json.dumps(json.load(open('/mnt/d/dev/haiku_game_engine/tasks/prd.json.new')),indent=1,sort_ke...
+The only differences are the two intended fields, so I'll move the new file into place.
+[94m[Bash][0m Commit tracker update in place and verify $ ls /mnt/d/dev/haiku_game_engine/tasks
+Last is the progress log. I'll add the reusable patterns to the Codebase Patterns section at the top, then append the US-027 entry at the end.
+[94m[Bash][0m Locate Codebase Patterns section boundaries $ sed -n 8,9p progress.md | cut -c1-120
+[94m[Bash][0m Add Codebase Patterns and US-027 progress entry $ this story is not on a measured frame path), the Vulkan GPU suite (US-028), the editor, Release buil...
+Two learnings in that entry overstate what I actually verified. I didn't set a break-on-error mode, and I can't say the first GCC failure was a stale compile. I'll correct both lines to match what happened.
+[94m[Bash][0m Correct two learnings to match verified facts $ python3 - <<'EOF' p='progress.md' s=open(p,encoding='utf-8').read() def rep(old,new):     global s  ...
+Before reporting, I'll confirm that no C++ source changed after the Windows and Linux gates ran, so the verification covers the final code.
+[94m[Bash][0m Compare source edit times with gate run times $ ls -l --time-style=+%H:%M:%S /tmp/asan_ctest.log | awk '{print $6}'
+US-027 is done. The DX12 device, swapchain, fences, and present are implemented, and the DX12 GPU smoke test passes on the RTX 5080. Every required gate passes on both operating systems, with the remaining items listed under "Not run" below.
+
+## What was built
+
+- **Backend (`engine/rhi/src/dx12/`, Windows only):** hardware adapter selection (WARP skipped), D3D12 debug layer with GPU-based validation, graphics/compute/copy queues with timeline fences, a flip-model swapchain whose back buffers wait on the frame that last presented them, and readback through `copy_texture_to_buffer` and `read_buffer`.
+- **Presentation:** resize, minimize, and restore. A zero size empties the surface and acquire returns nothing. `PresentSettings` controls VSync and tearing, and `present_settings()` reports the effective policy.
+- **Shutdown:** the device waits for every queue. Destroyed objects stay alive until the queue timelines that used them complete.
+- **Contract additions:** `Swapchain`, `copy_texture_to_buffer`, `read_buffer`, `create_swapchain`, `check_debug_messages`, a clear color on render passes, a `CpuRead` buffer usage, and `DeviceLost`. The state rules moved into shared code so the reference device and DX12 use one copy.
+- **Tests:** 8 GPU cases tagged `[gpu][dx12]` and 5 CPU contract cases. The CLI gained `--suite gpu` and `--backend`.
+
+## Gates
+
+| Gate | Result |
+|---|---|
+| Windows: `ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` | all exit 0, no MSVC warnings, unit 22/22 |
+| Windows GPU: `engine_tests --suite gpu --backend dx12` | passed on NVIDIA GeForce RTX 5080, debug layer on, 8 cases, 71 assertions |
+| Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` | all pass, unit 23/23 |
+| Linux/GCC: `linux-gcc-debug`, `linux-gcc-unit` | pass, 23/23 |
+| Linux ASan/UBSan: `linux-asan`, `linux-sanitize` | pass, 23/23, no sanitizer reports |
+
+## Not run
+
+- `engine_bench --suite acceptance`: no benchmark harness exists yet.
+- The Vulkan GPU suite (US-028). On Linux, the DX12 and Vulkan GPU suites report `unsupported` (exit 3), not `passed`.
+- Editor, Release builds, and GitHub CI, since nothing was pushed.
+
+## Decisions to confirm
+
+- **Scope boundary:** pipelines, descriptor sets, and draws return `Unsupported` with a message naming US-029. I did implement the minimal buffer and texture allocation, since the smoke test needs readback. Upload heaps, suballocation, and descriptor pools remain for US-029.
+- **`CpuRead` buffers start in `CopyDestination`** and allow no other state. Readback heaps in DX12 accept no other state, so this is the only valid choice there.
+- **Exit codes:** the GPU suite exits 3 when a backend can't run here. A GPU run maps any test failure to 1, so a failure count of 3 can't be confused with "unsupported."
+- **`IndirectCount` and `RayTracing`** are reported from hardware capability. The commands for them come in US-037 and US-041, so the report describes the adapter, not what the engine can do yet.
+
+## One unresolved item
+
+The first GCC build reported a `concept` error at `types.hpp`, but the current file only mentions "concept" in a comment. A rebuild and a direct GCC compile of the RHI sources both pass. I couldn't determine the cause, and it's recorded in the progress log.
+
+I didn't commit anything, per the workflow. I updated `tasks/prd.json` (US-027 `passes: true`), `docs/rhi.md`, a new `docs/dx12.md`, `tools/ci/gpu_run.py`, and `.ralph-tui/progress.md`. I also saved a memory note on running the Windows gates from WSL.

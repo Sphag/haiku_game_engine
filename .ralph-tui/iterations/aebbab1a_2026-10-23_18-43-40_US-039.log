@@ -1,0 +1,68 @@
+# Iteration 17 Log
+
+## Metadata
+
+- **Task ID**: US-039
+- **Task Title**: HDR, TAA, and Postprocessing
+- **Description**: As a player, I want stable imagery so that motion does not cause flickering or incorrect exposure.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T15:43:40.648Z
+- **Ended At**: 2026-10-23T15:53:15.606Z
+- **Duration**: 9m 34s
+- **Input Tokens**: 82
+- **Output Tokens**: 8742
+- **Total Tokens**: 8824
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-039 work already exists.
+[94m[Bash][0m Inspect repo root, progress log, and existing HDR/TAA code $ ls -la && wc -l .ralph-tui/progress.md && tail -n 120 .ralph-tui/progress.md && grep -rIl -i "taa\|b...
+Two earlier US-039 iterations are logged: a CPU reference and then the GPU post pass with a Windows batch. Next I'll check whether any source changed after that batch and whether a gate is still running.
+[94m[Bash][0m Check running gates, file mtimes, and recent artifacts $ ls artifacts | head
+The source is older than the last test binary (18:39), so the gates may still cover the current tree. I'll confirm that against the gate logs, check the GPU test coverage for the acceptance criteria, and look at the story's status in `prd.json`.
+[94m[Bash][0m Check gate report timestamps, GPU test cases, and US-039 status $ for s in d.get('userStories',d.get('stories',[])):   if s.get('id')=='US-039': print(json.dumps(s,in...
+The report directory is stale, so the Windows results need a different source. I'll find the us046 batch output and its timestamp.
+[94m[Bash][0m Locate the us046 gate batch logs and their timestamps $ grep -n "us046\|validation_layers\|gpu_vulkan\|gpu_dx12" .ralph-tui/iterations/aebbab1a_2026-10-23_1...
+[94m[Bash][0m Read the us046 batch run details and temp log timestamps $ ls -la --time-style=full-iso /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "us04\|gat...
+The us046 batch started at 18:39:51, after the newest source edit (18:38), so its results should cover the current tree. I'll check the batch's own exit codes and summary lines rather than rely on the transcript.
+[94m[Bash][0m Read us046 gate exit codes and summary lines, and the build.md row $ grep -n "US-039" /mnt/d/dev/haiku_game_engine/docs/build.md | cut -c1-300
+The Windows batch checks out: every step's exit code is 0, `win-unit` is 21/21, and the GPU suites pass 44/44 (DX12) and 45/45 (Vulkan). Last, I'll confirm the Linux binaries postdate the last source edit so the Linux results also cover the current tree.
+[94m[Bash][0m Compare Linux test binary times with newest source edit $ ls build | head -20
+The GCC and ASan binaries (17:45 and 17:50) predate the 18:38 test-file edit, so the progress entry's claim about those two builds is not backed by the current tree. I'll rebuild and rerun both to make the record accurate.
+[94m[Bash][0m Rebuild linux-gcc-debug and run linux-gcc unit tests $ (cmake --build --preset linux-gcc-debug 2>&1 | tail -3) && (ctest --preset linux-gcc-unit --output-o...
+[94m[Bash][0m Rebuild linux-asan, count warnings, and run sanitizer unit tests $ true) && (cmake --build --preset linux-asan 2>&1 | tail -2) && (ctest --preset linux-sanitize --outp...
+Both builds finished, but the tail output cut off the pass/fail summary line. I'll rerun both test suites and capture that line.
+[94m[Bash][0m Rerun gcc and sanitizer ctest to capture pass summaries $ ctest --preset linux-sanitize --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|test...
+Both suites pass 22/22 on the current tree. I'll append this iteration's entry to the progress log, recording the rebuild and the correction.
+[94m[Bash][0m Append re-verification entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-23 - US-039 (re-verification, final) - What was im...
+US-039 is implemented and its gates pass on the current tree, with the exceptions listed below. This iteration changed no source. It re-checked the gates, and it corrected an earlier log entry.
+
+**What's in the tree**
+- Linear HDR scene target, manual EV100 exposure, 9-tap bloom, ACES tone map, and TAA with ping-ponged history and motion vectors. These run as compute passes in `PostProcessor` (`engine/render/src/post_processor.cpp`, `shaders/postprocess.hlsl`).
+- History resets on first frame, resize, camera cut, and teleport. Jitter is applied to rasterized position only, so motion vectors stay unjittered.
+- GPU tests cover NaN/Inf sanitizing, overlay independence at two exposures, a moving block's history, and the scene path with post on. They run on DX12 and Vulkan.
+
+**Gate results**
+- **Windows** (us046 batch, started after the last source edit, RTX 5080, validation on, `software=no`): every step exits 0. `win-unit` is 21/21, `gpu dx12` is 44/44 cases, and `gpu vulkan` is 45/45 cases.
+- **Linux clang:** `linux-dev` and `linux-debug` (0 warnings) and `linux-unit` 22/22 pass. The `linux-dev` binary is newer than all source.
+- **Linux GCC and sanitizers:** the earlier log said these covered the current tree, but their binaries predated the last test edit. I rebuilt both. `linux-gcc-debug` has 0 warnings and `linux-gcc-unit` is 22/22. `linux-asan` has 0 warnings and `linux-sanitize` is 22/22.
+
+**Not run**
+- Native Linux Vulkan GPU suite: this WSL host has no usable Vulkan device.
+- `engine_bench --suite acceptance`: no bench target exists until US-074.
+- GUI check: no application window yet.
+- GitHub CI: not pushed.
+
+**Choices to review**
+- Post is opt-in (`post.enabled`, default off). The default 8-bit path is unchanged, so the golden fixtures stay the same.
+- Exposure is manual on the GPU. Automatic exposure exists in the CPU reference only.
+- Alpha-blended items write no motion vector, so moving transparent objects can ghost.
+- Bloom and TAA run at full resolution, with no upscale (that belongs to US-046).
+
+I appended a re-verification entry to `.ralph-tui/progress.md` with the corrected gate facts. I did not commit.
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,40 @@
+# Iteration 729 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:23:21.638Z
+- **Ended At**: 2026-10-26T02:23:42.825Z
+- **Duration**: 21s
+- **Input Tokens**: 26
+- **Output Tokens**: 3691
+- **Total Tokens**: 3717
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the render stress code.
+[94m[Bash][0m Inspect progress log and PRD story $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-076" -A60 tasks/prd-open-world-engine.md | ...
+[94m[Bash][0m List benchmark tool files and status $ ls benchmarks
+The progress log shows 14 prior status checks, all stopped on the same blocker. Before deciding whether to repeat that, I'll check whether the blocker is really a user decision or a bug I can fix.
+[94m[Bash][0m Find earlier notes on the triangle placement blocker $ grep -n -i "placement\|triangle floor\|312,068\|floor" .ralph-tui/progress.md | head -40
+[94m[Bash][0m Locate render_stress contract in PRD $ grep -n "render_stress" -A40 tasks/prd-open-world-engine.md | sed -n 1,80p
+US-076 is not complete, and I did not change any code this pass. The blocker is a decision only you can make, and the notes show the same blocker has been logged in 14 passes with no new evidence.
+
+**Stuck on your decision:**
+
+1. **Triangle floor fails on placement.** The contract requires at least 2,000,000 submitted triangles on the starting frame of the indexed path. The current `render_stress` generator spreads 20,000 instances uniformly over 8192 m, so the route start submits about 312,068 triangles. Fixing it means changing the placement recipe, which needs `kWorkloadVersion` bumped from 1 and `workload_expected.json` regenerated. My recommendation is to approve that change. The placement is an implementation choice in the generator, not one of the contract's numbers. Say so and I'll make the change and rerun the DX12 and Vulkan indexed runs.
+2. **Frame budget fails on the measured data.** On DX12 and Vulkan, p99 is 35–47 ms against the 16.7 ms budget, and 0% of frames are within budget. That is a real measured result, and the budget belongs to US-080. I'd record it as the measured result rather than tune the workload to pass.
+3. **`full_1080` profile is unsupported.** It needs the FSR 2 `*_permutations.h` tables, which the vendored tree lacks. Only `native_1080` runs. Choosing how to vendor those tables is your call.
+
+**Not run, and must stay unreported as passed:** native Linux Vulkan GPU, and the `linux-gcc` gate (GCC 9.4 cannot build Jolt).
+
+**Already recorded in earlier passes:** the mesh-shader-off fallback runs (`mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, indirect active with 338–340 visible items), the screenshots, and the submitted and visible counters, all under `artifacts/bench/us076-*`. The Windows and Linux quality gates were last run before the most recent render-stress changes, so they should be rerun once the placement decision is made.
+
+I did not signal completion, because the acceptance criteria cannot pass on the current placement. I also did not append another "no change" entry to `.ralph-tui/progress.md`, since the log already has fourteen of them.

@@ -1,0 +1,50 @@
+# Iteration 647 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T01:52:05.330Z
+- **Ended At**: 2026-10-26T01:52:37.918Z
+- **Duration**: 32s
+- **Input Tokens**: 46
+- **Output Tokens**: 5589
+- **Total Tokens**: 5635
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark tooling and the progress log.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && wc ...
+[94m[Bash][0m Read US-076 section of the PRD $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -150
+The last progress entry says US-076 was measured but blocked on a user decision about instance placement. Before deciding whether anything is left, I'll check that the artifacts and the workload check still hold on the current tree.
+[94m[Bash][0m Check acceptance artifacts and source mtimes $ ls build 2>/dev/null | head -30
+`render_stress.cpp` is newer than the first report, so I need to see whether the runs predate that edit.
+[94m[Bash][0m Compare edit times with report times and summarize statuses $ done
+Four of the eight reports (DX12 indexed/indirect/meshlets and Vulkan indexed) were written before the last source edit. I need to see what that edit changed for those paths.
+[94m[Bash][0m Inspect mesh attach and fallback logic in driver $ grep -n "attach_meshlets\|geometry_path\|forced off\|fell back" -B3 -A6 tools/benchmark/src/render_s...
+The edit is behaviour-neutral for the reports already on disk. `attach_meshlets` only runs when `path == Meshlets` and the renderer's resolved path is `Meshlets`, so the indexed and indirect runs never reached it, and the mesh-shader-on meshlet runs take the same branch as before. I'll record that in the progress log so the next reader doesn't re-run the eight benchmarks.
+[94m[Bash][0m Append status-check entry to progress log $ (2) the indexed/indirect/meshlet DX12 and Vulkan runs fail the triangle floor (312,068 of 2,000,000)...
+US-076 is not complete. The driver, route, and fallback evidence are in place, but two acceptance points are still open: the full profile did not run, and the benchmark contract fails.
+
+**What is in place**
+- The `render_stress` counts match the benchmark contract: 20,000 instances, 200 meshes, 100 characters with 64 bones each, 100,000 particles, 128 lights, 4 shadowed, 1 sun. `engine_workload --check` passes.
+- `render_route_v1` is defined, and the driver records per-frame submitted and visible counters and screenshots.
+- Eight acceptance reports exist under `artifacts/bench/us076-*`: indexed, indirect, and meshlets on DX12 and Vulkan, plus meshlets with mesh shaders forced off.
+- The forced-off runs report `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with indirect draws active and zero meshlet visible items. The fallback works and is not reported as enabled.
+
+**What is still open**
+- **Full profile not run.** `full_1080` reports unsupported because the FSR 2 shader permutations are missing from the vendored tree. The acceptance criterion asks for both profiles, so this is a gap, not a pass.
+- **Contract failures are the measured result.** On every indexed run the start frame submits 312,068 triangles against the 2,000,000 floor. The p99 frame time is 35–47 ms against a 16.7 ms budget. The contract forbids reducing workloads, so I did not change anything.
+- **Placement needs your decision.** Instances are spread uniformly over the 8192 m world, so the route start sees only about 330 items. Fixing that means changing the instance placement, which is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and rerun. Do you want that, or should the failures stand as the result?
+
+**Checks I made**
+- Four of the eight reports predate the last driver edit (`render_stress.cpp`, 04:15). That edit only guards `attach_meshlets`, which the indexed and indirect paths never reached and the mesh-shader-on meshlet path still runs unchanged. The reports remain valid, so I did not rerun them.
+- I did not re-run the Windows or Linux quality gates in this pass. The most recent recorded gate run on this tree was clean, per the progress log.
+
+I appended a status entry to `.ralph-tui/progress.md`. I did not emit the completion signal, because the full profile is missing and the benchmark contract fails.

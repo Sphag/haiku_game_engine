@@ -1,0 +1,39 @@
+# Iteration 766 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:37:14.865Z
+- **Ended At**: 2026-10-26T02:37:26.986Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1847
+- **Total Tokens**: 1865
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and US-076 status $ git status --short | head -30
+[94m[Bash][0m Check US-076 progress notes on Windows gates $ ls -la --time-style=+%H:%M artifacts/bench 2>/dev/null | tail -5
+US-076 is not complete, and I did not signal completion. Nothing I can do without you changes that, so I made no edits and ran no gates in this pass.
+
+**What is stuck (needs your decision):**
+
+1. **Route-start triangle floor and frame budget fail.** The `render_stress` route start has 312,068 submitted triangles against the contract's 2,000,000 minimum on the indexed path. The measured p99 frame time is 35–47 ms against a 16.7 ms budget. The fix changes the fixed workload contract, either the instance placement or the route start. That means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. Options:
+   - Approve a placement or route-start change, and I'll make it and re-run.
+   - Accept the failing measured run as the story's result, and I'll record it as failed.
+2. **`full_1080` is unsupported.** Vendored FSR 2 lacks its generated `*_permutations.h` tables, so that profile cannot run. Which vendoring route to take is your call.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and the `linux-gcc` gate (local GCC 9.4 cannot build Jolt).
+
+**What is verified on the current tree** (from the most recent run, 03:11 build; file mtimes are unchanged since):
+- Windows: ValidateVendor, `win-dev`, `win-debug` build (0 warnings), `win-unit` 29/29, `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and a Release `engine_bench` build.
+- Linux: ValidateVendor, `linux-dev`, `linux-debug` build (0 warnings), `linux-unit` 30/30, and `engine_workload --check` matching 4 scenes.
+- Eight acceptance reports (indexed, indirect, meshlets on DX12 and Vulkan, plus meshlets with mesh shaders forced off) exist under `artifacts/bench/us076-*`. The mesh-shader-off runs show the fallback working.
+
+I did not append another "status check" entry to `.ralph-tui/progress.md`, since nothing new would be recorded. Tell me which option you choose for item 1 and whether to vendor FSR 2 for item 2, and I'll continue from there.

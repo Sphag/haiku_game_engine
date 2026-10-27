@@ -1,0 +1,45 @@
+# Iteration 251 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:23:20.847Z
+- **Ended At**: 2026-10-24T15:23:43.689Z
+- **Duration**: 22s
+- **Input Tokens**: 48
+- **Output Tokens**: 3255
+- **Total Tokens**: 3303
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state first. Memory notes say the US-052 adapter was already built in an earlier pass, so I want to confirm what's on disk before doing anything else.
+[94m[Bash][0m Inspect physics directory and progress log $ ls engine/physics/ && grep -n "US-052" .ralph-tui/progress.md | tail -20 && tail -60 .ralph-tui/prog...
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The progress log shows this story has been re-verified many times and held at Partial, because the `linux-gcc` gate needs GCC 11+. I'll check once more whether a GCC 11+ compiler has appeared, since that's the only thing that could change the status.
+[94m[Bash][0m Check for GCC 11+ compilers on this machine $ apt-cache policy g++-11 g++-12 2>/dev/null | grep -E 'g\+\+-1[12]:|Candidate' | head -4
+apt now lists a GCC 11 candidate, which my memory notes say wasn't there before. Installing it needs root, so I'll check whether passwordless sudo works.
+[94m[Bash][0m Check whether passwordless sudo is available $ sudo -n true 2>&1 && echo SUDO_OK || echo SUDO_NEEDS_PASSWORD
+The docs tools aren't relevant here, since the user didn't ask for a doc. The status is unchanged apart from the GCC 11 availability. I'll log this pass in the progress file and correct the stale memory.
+[94m[Bash][0m Check progress file length and ending $ wc -l .ralph-tui/progress.md && tail -n 3 .ralph-tui/progress.md | cat -A | cut -c1-80
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Bash][0m Append this pass's status entry to progress log $ printf '%s\n' '' '## 2026-10-24 - US-052 (toolchain recheck, status Partial)' '- What was implemente...
+[94m[Edit][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m edit: "The host is Ubuntu 20.04: apt has no gcc-11/g++-11..." → "The host is Ubuntu 20.04. Earlier on 2026-10-24 ap..."
+US-052 is still Partial, so I'm not emitting the COMPLETE signal. The adapter is in the tree and the Windows and Linux clang gates passed in earlier passes. The `linux-gcc` gate is still blocked on this machine.
+
+**What changed this pass**
+- `apt-cache` now lists a `g++-11` candidate (`1:11.0.0-2~ubuntu20.04.1`). My memory notes said there was none, so I corrected the memory file.
+- It isn't installed. Only g++-9 is present, and `sudo -n` requires a password, so I couldn't install it.
+- No source files were edited. I appended a status entry to `.ralph-tui/progress.md`.
+
+**What's still open**
+1. **`linux-gcc` gate:** run `sudo apt install g++-11` in this WSL, then I can run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit`. Jolt needs GCC 11+ for `__builtin_bit_cast`.
+2. **`engine_bench --suite acceptance`:** no harness exists yet (it's US-074), so this can't be run for US-052.
+
+Once the GCC 11 gate passes, the only remaining item is the benchmark, which is blocked on US-074.

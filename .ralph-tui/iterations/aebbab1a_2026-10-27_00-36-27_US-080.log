@@ -1,0 +1,42 @@
+# Iteration 1181 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:36:27.605Z
+- **Ended At**: 2026-10-26T21:36:39.097Z
+- **Duration**: 11s
+- **Input Tokens**: 20
+- **Output Tokens**: 1491
+- **Total Tokens**: 1511
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current progress log and the benchmark state before deciding what this story can verify here.
+[94m[Bash][0m Read progress log tail and benchmark artifacts $ git status 2>/dev/null | head -3
+The log has 76 prior status checks, all concluding this story is blocked. I'll re-check the key blockers once so my report reflects the current state.
+[94m[Bash][0m Re-check Vulkan device, manifest stubs, FSR tables $ ls artifacts/bench | grep -c acceptance
+US-080 is not complete, and I can't complete it on this machine. I made no code changes and did not run any builds or benchmarks.
+
+The blockers, re-checked just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan leg cannot run here. The RTX 5080 is visible to WSL through `nvidia-smi`, but that does not count as a native Linux report.
+- **Unimplemented workloads.** `benchmarks/manifest.json` still has four entries with `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run would exit 3 (incomplete) until those are built.
+- **FSR 2 is not vendored.** Zero `*_permutations.h` files exist, so FSR cannot be built. Choosing how to vendor them is a user decision.
+- **No acceptance run exists.** `artifacts/bench` has only partial us076/us077/us078 runs.
+
+Two things need your decision before this story can close:
+
+1. **The FSR 2 vendoring route**, or whether FSR stays out of this acceptance.
+2. **What to do if a budget is exceeded.** The story requires fixing the measured cause, and it forbids changing the contract without your approval.
+
+The remaining work is a Windows acceptance batch and a native Linux/Vulkan run on the RTX 5080 machine, using the full 30 s warmup and 180 s measured contract with three repeats. The Windows gates can run from WSL through `cmd.exe`. The native Linux leg has to run on a machine with a real Vulkan device.
+
+I'm not emitting the COMPLETE signal. The progress log already records 76 earlier checks reaching the same conclusion. I added nothing to it this turn, to avoid another no-op entry.

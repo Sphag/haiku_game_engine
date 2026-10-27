@@ -1,0 +1,41 @@
+# Iteration 297 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:20:17.537Z
+- **Ended At**: 2026-10-24T17:20:36.472Z
+- **Duration**: 18s
+- **Input Tokens**: 30
+- **Output Tokens**: 2683
+- **Total Tokens**: 2713
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the physics memory note, since the work may already be done from an earlier iteration.
+[94m[Bash][0m Read progress log and physics module state $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -n "US-052" .ralph-tui/progress.md | tail -n ...
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The log shows US-052 was already recorded as Partial many times, with the same two blockers. I'll run one cheap check of those blockers and the source timestamps before deciding anything.
+[94m[Bash][0m Check compilers, sudo, source timestamps, bench target $ grep -rn "engine_bench" --include=CMakeLists.txt . | grep -v third_party | head -n3
+Nothing has changed since the last recorded pass. I'll append a short entry to the progress log and stop, rather than signal completion.
+[94m[Bash][0m Append recheck entry to progress log $ the earlier 2026-10-24 entries record passing Windows and Linux clang gates on this source. - Status...
+US-052 is still **Partial**, so I'm not emitting the completion signal. The adapter and its tests were finished in earlier passes, and nothing in the source has changed since then.
+
+**What's in place (from the earlier passes, not re-run this time):**
+- The Jolt adapter in `engine/physics/`, with 13 test cases in `tests/src/physics_world_tests.cpp`.
+- Windows gates (validate, win-dev, win-debug, win-unit) passed on 2026-10-24 after the last CMake edit, 21/21.
+- Linux clang gates (validate, linux-dev, linux-debug, linux-unit) passed, 22/22.
+- ASan/UBSan (linux-asan build and linux-sanitize ctest) passed, 22/22.
+
+**What is still open:**
+- **`linux-gcc` gate: blocked by the environment.** Only GCC 9.4 is installed, and Jolt needs GCC 11+ for `__builtin_bit_cast`. No `/opt` compiler, conda, micromamba or docker is available, and `sudo -n` needs a password. This gate needs a GCC 11+ install or a CI job, so I haven't reported it as passed.
+- **`engine_bench --suite acceptance`: not applicable yet.** No `engine_bench` target exists in the tree; that comes with US-074.
+
+I appended a recheck entry to `.ralph-tui/progress.md` recording this state. Once GCC 11+ is available, the `linux-gcc` gate is the one to run next.

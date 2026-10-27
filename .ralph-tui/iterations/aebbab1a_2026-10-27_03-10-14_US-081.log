@@ -1,0 +1,52 @@
+# Iteration 1298 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:10:14.616Z
+- **Ended At**: 2026-10-27T00:12:18.570Z
+- **Duration**: 2m 3s
+- **Input Tokens**: 42
+- **Output Tokens**: 3791
+- **Total Tokens**: 3833
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the existing docs.
+[94m[Bash][0m Inspect repo root, docs, and progress log $ ls tasks 2>/dev/null
+The log shows US-081 was already checked several times and held open on hardware and user decisions. Before deciding anything, I'll check what changed since the last recorded gate run.
+[94m[Bash][0m Find files changed since last US-081 gate report $ clang++ --version 2>/dev/null | head -1
+Only docs, the PRD status file, a screenshot, and one vendored file's mtime changed since the last gate run. I'll re-check the vendor manifest, since that file is the one that could be a real change.
+[94m[Bash][0m Validate vendor manifest and read acceptance open items $ grep -n -i "status\|open\|incomplete\|not run\|unsupported" docs/acceptance.md | head -60
+[94m[Bash][0m Read gate table and open items; check US-081 status $ print(s[0].get('passes'), s[0].get('notes','')[:300] if s else 'none')" 2>&1 | head -5
+Nothing in the tree changed since the last gate pass except docs, bookkeeping, and an mtime-only vendor file, and `ValidateVendor` just confirmed that file's hash is unchanged. I'll record this pass in the progress log and stop there.
+[94m[Bash][0m Append US-081 status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not finished, so I'm not emitting the COMPLETE signal. The documentation deliverables exist, but several acceptance gates still need hardware or decisions only you can make.
+
+**What I checked this pass**
+- Since the last gate run, the only changes are docs, the PRD status file, a Windows launch screenshot, and an mtime-only change to `third_party/dxc/utils/GetCommitInfo.py`.
+- `cmake -P cmake/ValidateVendor.cmake` passed again: 26 dependencies, 8542 files. The vendor file's hash is unchanged.
+- I did not re-run any build or test gate, because no source or CMake file changed. The Linux gates were already re-run in the previous pass.
+- I appended this pass to `.ralph-tui/progress.md`.
+
+**What remains open (recorded in `docs/acceptance.md`)**
+1. **Native Linux Vulkan GPU report.** This WSL2 machine has no `/dev/dri`, so there is no native Linux Vulkan device.
+2. **Full acceptance benchmark.** The acceptance scenes do not yet produce GPU timestamps, so `engine_bench --suite acceptance` reports `incomplete`. This is engineering work, not an environment problem.
+3. **FSR 2.** The vendored tree lacks its generated shader permutations. Choosing a vendoring route is your decision.
+4. **`linux-gcc`.** The local GCC is 9.4, and Jolt needs GCC 11 or newer.
+5. **Linux visual editor smoke test.** It needs a native Linux Vulkan device, which this machine lacks.
+6. **Package from a real game.** The packaging test uses the sample project only.
+7. **LICENSE file.** The repo has none. Which license to use is your call.
+
+**Decisions I need from you**
+- Whether to implement GPU timestamps for the render, streaming, all-features, and physics acceptance scenes, so the benchmark can complete.
+- Which FSR 2 vendoring route to take, or whether to leave temporal upscaling unavailable.
+- Which license applies.
+- Whether a native Linux machine with a Vulkan GPU is available to run the GPU and editor smoke checks.

@@ -1,0 +1,41 @@
+# Iteration 419 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:58:58.993Z
+- **Ended At**: 2026-10-25T01:04:07.476Z
+- **Duration**: 5m 8s
+- **Input Tokens**: 22
+- **Output Tokens**: 1878
+- **Total Tokens**: 1900
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state of the Lua bindings and the progress log first, since the task may already be partly done.
+[94m[Bash][0m Inspect script module and progress log $ tail -30 .ralph-tui/progress.md
+The log shows US-055 already implemented and at status Partial. The only open gate is `linux-gcc`, which this host cannot build. I'll confirm the current tree still passes the local Linux gates before deciding anything.
+[94m[Bash][0m Run local Linux gates and list compilers $ ls /usr/bin | grep -E '^(g\+\+|gcc|clang\+\+)-'
+US-055 is not complete, so I'm not emitting the COMPLETE signal. The Lua API is implemented and every gate this host can run passes, but the `linux-gcc` gate can't be run here.
+
+**Passed on this tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (integration 21 tests, unit 1 suite, 15 Lua cases in the unit suite)
+
+**Earlier passes, not rerun this session:**
+- Linux `linux-asan` build and `linux-sanitize` tests passed with no sanitizer reports.
+- Windows `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` passed on the same source, as recorded in the progress log.
+
+**Open:**
+- `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11 or newer, because Jolt needs C++20 and `__builtin_bit_cast`. The host has only GCC 9.4 and clang 10. The CI job or a machine with GCC 11+ has to settle this gate.
+
+I did not append another progress entry. The log already holds eight identical "status re-check" entries, and this pass made no source change.

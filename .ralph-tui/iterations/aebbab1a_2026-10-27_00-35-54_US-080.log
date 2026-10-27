@@ -1,0 +1,44 @@
+# Iteration 1179 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:35:54.651Z
+- **Ended At**: 2026-10-26T21:36:10.359Z
+- **Duration**: 15s
+- **Input Tokens**: 24
+- **Output Tokens**: 2273
+- **Total Tokens**: 2297
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and benchmark artifacts $ ls tools/benchmark/src 2>/dev/null
+[94m[Bash][0m Find US-079/080 notes and performance contract in PRD $ grep -n -i "performance contract" -A 30 tasks/prd-open-world-engine.md | head -n 80
+[94m[Bash][0m Re-verify GPU, FSR, manifest, and bench blockers $ find engine tools tests benchmarks -newer .ralph-tui/progress.md -type f 2>/dev/null | head -n 5
+[94m[Bash][0m Append status entry to progress log $ a run here would exit 3 (incomplete). - Stop: US-080 cannot be signed off on this host. Needs the us...
+US-080 is not complete, and I have not signaled COMPLETE. This host cannot produce the acceptance evidence, and the blockers are the same ones recorded across the previous status checks.
+
+I re-checked them just now:
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`), which does not count as native Linux/Vulkan.
+- **FSR 2 is not buildable:** `third_party/fsr2` has no `*_permutations.h` files, so `ENGINE_FSR2_AVAILABLE` stays off.
+- **Workloads are unimplemented:** `benchmarks/manifest.json` still has four `implementation: "none"` entries (lines 88, 108, 122, 132).
+- **No acceptance run exists:** `artifacts/bench` contains only partial us076/us077/us078/us080 runs, no `acceptance` suite.
+
+I did not run the quality gates or a benchmark batch this pass. A 3×180 s acceptance run here would exit 3 (incomplete) while those workloads are missing, so it would produce no usable evidence. I appended a status entry to `.ralph-tui/progress.md` recording this.
+
+Four things are needed before this story can close:
+
+1. **Reference machine:** actual GPU reports for Windows/DX12, Windows/Vulkan, and native Linux/Vulkan on the RTX 5080 computer. Nothing in this environment can substitute for them.
+2. **FSR 2 vendoring route:** a user decision. The generated permutation headers are missing, so `full_1080` cannot be measured.
+3. **Four unimplemented workloads:** these need implementing before the acceptance suite can run.
+4. **Frame budget:** the `render_stress` start frame has p99 of 35–47 ms against the 16.7 ms budget. Per the PRD, the fix belongs in the implementation first, and any relaxation of the contract needs your explicit approval.
+
+Tell me which FSR 2 route you want and whether to fix the frame-budget cause in the implementation. I can work on the implementation and the residency accessor (DX12 `QueryVideoMemoryInfo` and Vulkan `VK_EXT_memory_budget`) now, without waiting for hardware.

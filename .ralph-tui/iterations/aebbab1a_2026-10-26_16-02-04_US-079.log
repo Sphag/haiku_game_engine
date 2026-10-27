@@ -1,0 +1,45 @@
+# Iteration 911 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:02:04.687Z
+- **Ended At**: 2026-10-26T13:02:21.056Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 1401
+- **Total Tokens**: 1415
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log before deciding what US-079 still needs.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls && tail -c 3000 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | gr...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. I didn't change any code this pass.
+
+**What's still open (from the progress log, which I checked):**
+
+- **Blocking decisions:** `all_features` has no route defined yet (`benchmarks/manifest.json` still says `implementation: none`). The FSR 2 vendoring route is also undecided, and `third_party/fsr2` still has no `*_permutations.h` headers, so the `full_1080` profile can't be built or measured.
+- **Needs a GUI or Windows GPU session:** the tour runner with screenshots and an action log, the GI/RT/upscale profiles, forced indirect/meshlet geometry paths, and the editor scenario with package/relaunch.
+- **Needs native Linux Vulkan:** the host has no `/dev/dri`, so that GPU run can't happen here.
+- **Needs GCC 11+:** the `linux-gcc*` presets can't run on this host's GCC 9.4, which Jolt needs to compile.
+- **Not run:** the `linux-asan` / `linux-sanitize` preset and `engine_bench --suite acceptance`.
+
+**What the last gate run did show:**
+
+- Linux `linux-dev`, `linux-debug` build, and `linux-unit` ctest all pass (30/30), and `cmake -P cmake/ValidateVendor.cmake` passes.
+- Windows `win-dev`, `win-debug`, `win-unit`, and `engine_tests --suite gpu --backend dx12` all exit 0.
+- Windows `engine_tests --suite gpu --backend vulkan` passes 73/73 with 0 validation errors, once the batch sets `VK_LAYER_PATH` to the pinned 1.4.363 layer.
+
+**Decisions needed from you to unblock:**
+
+1. Pick the FSR 2 route: vendor the generated permutation headers, or accept that `full_1080` stays unsupported for now.
+2. Define the `all_features` route. Without it, the tour, profiles, and acceptance bench have nothing to run against.
+
+Once those are settled and the native GPU/GUI/GCC sessions are available, the remaining items can be run and recorded in `.ralph-tui/progress.md`.

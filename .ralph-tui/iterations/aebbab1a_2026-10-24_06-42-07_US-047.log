@@ -1,0 +1,45 @@
+# Iteration 110 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:42:07.083Z
+- **Ended At**: 2026-10-24T03:47:00.732Z
+- **Duration**: 4m 53s
+- **Input Tokens**: 42
+- **Output Tokens**: 3974
+- **Total Tokens**: 4016
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain code and the progress log.
+[94m[Bash][0m Check progress log and terrain code state $ grep -rln "terrain" engine --include=*.cpp --include=*.hpp --include=*.hlsl --include=CMakeLists.txt...
+The log says US-047 is still Partial. Before deciding what's left, I'll check which terrain tests exist and whether the Linux gates still pass.
+[94m[Bash][0m List terrain tests and bench target $ ls build* -d 2>/dev/null
+Most of the terrain work and its fixtures already exist. The open items are the shadow and RT participation. I'll check how far RT and shadows already reach terrain.
+[94m[Bash][0m Check terrain in RT and bench references $ grep -n "US-04[0-9]" .ralph-tui/progress.md | grep -i "bench" | head
+The story's remaining gaps are external: `engine_bench` doesn't exist (US-074), no native Linux Vulkan device is available here, and the last Windows batch was recorded as passed. I'll re-run the Linux gates on the current tree to confirm the recorded state still holds.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -4 /tmp/us047_unit.log
+[94m[Bash][0m Summarize ctest result and append progress entry $ (3) no native Linux Vulkan device on this host, so the Linux GPU suite is not-run. - Why no edit: th...
+US-047 is not complete, so I'm not emitting the COMPLETE signal. The terrain runtime is in place, but the story still has gaps this session cannot close.
+
+**What exists and was re-verified on Linux this pass:**
+- `cmake -P cmake/ValidateVendor.cmake` passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` configured and `cmake --build --preset linux-debug` built with zero warnings.
+- `ctest --preset linux-unit` passed 22/22, including the terrain CPU fixtures in `world_terrain_tests.cpp` and `render_terrain_tests.cpp` (tile boundaries, no holes, LOD switching, stitching).
+- The renderer has the terrain opaque and shadow pipelines, splat shading, and RT tracing of tiles as static opaque meshes.
+- The last recorded Windows batch (`us047c_gate.bat`) passed the Windows gates and the DX12 and Vulkan GPU suites. I did not re-run it, and the tree has no changes since that batch.
+
+**What is still open:**
+1. **Terrain shadow and RT fixtures.** No test checks terrain shadow shape or terrain RT geometry. The sun frame only shows the shadow pipeline runs under the debug layers. Closing this needs a Windows GPU run.
+2. **`engine_bench --suite acceptance`.** The binary does not exist, because the benchmark harness is US-074, which is not built. The terrain workload and the performance gate cannot run.
+3. **Native Linux Vulkan GPU suite.** This WSL host has no usable Vulkan device, so it is not-run here.
+
+I did not change any source this pass. The remaining items need a Windows GPU run or US-074, and neither can be verified from this session. I appended a re-check entry to `.ralph-tui/progress.md` recording the Linux results and the status call.

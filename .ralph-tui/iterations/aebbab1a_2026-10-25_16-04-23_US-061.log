@@ -1,0 +1,41 @@
+# Iteration 600 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T13:04:23.543Z
+- **Ended At**: 2026-10-25T13:08:45.351Z
+- **Duration**: 4m 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 2352
+- **Total Tokens**: 2380
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and editor directory state $ tail -n 80 .ralph-tui/progress.md && ls engine/editor && git status 2>&1 | head -5
+The progress log shows many "Partial" passes with the same open items. I'll check the current state before deciding whether anything has changed.
+[94m[Bash][0m Run Linux gates and check Windows lock state $ (timeout 60 powershell.exe -NoProfile -Command "Get-Process LogonUI,LockApp -ErrorAction SilentlyCon...
+[94m[Bash][0m Confirm linux-unit ctest pass summary $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests pas...
+[94m[Bash][0m Append status check entry to progress log $ only GCC 9.4 installed). --- EOF echo ok
+US-061 is not complete. I'm stopping here with it Partial, so I'm not emitting the COMPLETE signal.
+
+**Verified on this tree (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+- `cmake --build --preset linux-debug` exits 0 with no `warning:` or `error:` lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` reports 100% passed, 30 of 30.
+
+**Still open:**
+- **Windows gates:** `cmake --preset win-dev`, `cmake --build --preset win-debug`, and `ctest --preset win-unit` were not re-run this pass. The progress log records them as passing from an earlier pass, but I did not re-verify them.
+- **Unlocked-desktop GUI check:** the Windows session is still locked (`LogonUI` and `LockApp` are running), so there is no `game_editor.exe` screenshot or action log. The script is `artifacts/ui/us061/run_ui.ps1`, and this needs the desktop unlocked by you.
+- **Native Linux Vulkan editor suite:** WSL has no Vulkan adapter, so `engine_tests --suite editor --backend vulkan` has to run on native Linux.
+- **linux-gcc job:** only GCC 9.4 is installed, and the job needs GCC 11+.
+- **Benchmark:** `engine_bench` is not part of this story's build and was not run.
+
+I did not change any source files. I appended a status-check entry to `.ralph-tui/progress.md`. The earlier entries repeat the same open items, so more passes without the desktop unlocked or a GCC 11+ and Vulkan machine will not move the story forward. Unlocking the Windows session and running `artifacts/ui/us061/run_ui.ps1` is the next step that would change the status.

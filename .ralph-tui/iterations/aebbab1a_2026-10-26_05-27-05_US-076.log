@@ -1,0 +1,39 @@
+# Iteration 742 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:27:05.178Z
+- **Ended At**: 2026-10-26T02:27:19.410Z
+- **Duration**: 14s
+- **Input Tokens**: 18
+- **Output Tokens**: 1528
+- **Total Tokens**: 1546
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress notes and existing benchmark code $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.md --include=*.json --i...
+[94m[Bash][0m Check source mtimes and latest benchmark artifacts $ grep -c "status check" .ralph-tui/progress.md
+US-076 is not complete, and I have not changed anything in this pass. The source, workload, and manifest files are unchanged since the last recorded run, so re-running the gates would only reproduce the same results.
+
+**What is blocked, and why I can't finish it alone:**
+
+1. **Triangle floor and frame budget fail on instance placement.** The `render_stress` route starts at 312,068 triangles against the contract's 2,000,000, and p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing this changes the workload: it needs a `kWorkloadVersion` bump (currently 1), a regenerated `benchmarks/workload_expected.json`, and a new run. The notes say the contract reserves that change for your decision.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so the upscale profile cannot be built or measured until those are supplied.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not been run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Decisions I need from you:**
+
+- Approve a placement change that bumps `kWorkloadVersion` and regenerates the expected workload file, or
+- Close US-076 as measured, recording that the triangle floor and frame budget fail on the current placement.
+
+Once you decide, I can make the change and re-run the eight `us076-*` benchmark combinations and the Windows and Linux gates. The FSR 2 tables and a native Linux GPU run remain external dependencies either way.
+
+I did not add another "status check" entry to `.ralph-tui/progress.md`. The previous fifteen entries already record the same state.

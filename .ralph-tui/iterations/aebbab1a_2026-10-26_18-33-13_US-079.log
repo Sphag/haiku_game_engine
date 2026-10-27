@@ -1,0 +1,59 @@
+# Iteration 1001 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:33:13.535Z
+- **Ended At**: 2026-10-26T15:36:18.363Z
+- **Duration**: 3m 4s
+- **Input Tokens**: 68
+- **Output Tokens**: 6081
+- **Total Tokens**: 6149
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the prerequisite features and `all_features` scene already exist.
+[94m[Bash][0m Check progress log and all_features references $ ls
+The log shows this story has been blocked across many passes, with the same open items each time. Before deciding anything, I'll check the Windows gate reference so I can see whether the Windows gates can run from here.
+[94m[Bash][0m Read Windows gate reference notes and check running jobs $ ps aux | grep -i -E "cmd.exe|gate|ctest|cmake" | grep -v grep | head
+The Windows gates can run from WSL through `cmd.exe`. I'll check the Windows presets and Temp directory, then launch the four Windows gates as one batch and wait for the result.
+[94m[Bash][0m Check Windows presets, temp dir, and running batches $ ls "/mnt/c/Program Files/Microsoft Visual Studio/" 2>/dev/null
+[94m[Bash][0m Read an earlier gate batch as a template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us010_gates.bat | tr -d '\r' | head -40
+[94m[Bash][0m Run the four Windows quality gates via cmd.exe $ cat $T/us079_result.txt
+All four Windows gates exit 0. Before reporting them as passed, I'll read the logs for the real test counts and any warnings.
+[94m[Bash][0m Read Windows gate logs for test counts and warnings $ tr -d '\r' < $T/us079_validate.log | tail -2
+The build log's last line is a mid-build progress line, which is odd for an exit-0 build. I'll check for `FAILED` and the final step count.
+[94m[Bash][0m Confirm build finished with no failures $ wc -l $T/us079_build.log
+The build log stops at 33/171 yet the exit code was 0, which doesn't add up. I'll rerun the build to get its real end state.
+[94m[Bash][0m Rerun Windows debug build and capture its exit code $ tr '\r' '\n' < $T/us079_build2.log | grep -c -E "FAILED|error"
+The Windows debug build passes with `rc=0` and no errors. The earlier truncated log was only the ExternalProject install step. I'll record this pass in the progress log.
+[94m[Bash][0m Append this pass's results to the progress log $ (3) a Windows GUI session for the editor run and tour. - Stop: no COMPLETE signal. --- EOF tail -3 ....
+US-079 is not complete, so I am not emitting the COMPLETE signal. The Windows quality gates pass in this pass, but the feature scene and its verification are still missing.
+
+**Passed this pass (Windows, run through `cmd.exe`):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0 (26 dependencies, 8542 files).
+- `cmake --preset win-dev`: exit 0.
+- `cmake --build --preset win-debug`: exit 0. A re-run returned `rc=0` with no `FAILED` or error lines. The first log looked short because the `engine_dxc_host` install step writes its own output.
+- `ctest --preset win-unit --output-on-failure --no-tests=error`: exit 0, 29/29 passed.
+
+**Not done, and not reported as passed:**
+- `samples/all_features` does not exist.
+- The `all_features` benchmark branch is missing. The manifest has `implementation: none`, and the route `all_features_route_v1` is still a proposal.
+- The GI, RT, and upscale profiles, the forced geometry-path runs, and the automated tour have not run.
+- FSR 2 permutation headers are missing, so `full_1080` is unsupported.
+- The Linux ASan and GCC gates, `engine_bench` acceptance, and the DX12 and Vulkan GPU suites have not run in this pass.
+- The live editor run with edits, Play/Stop, package and relaunch, and screenshots has not run.
+
+**What I need from you:**
+1. Approve `all_features_route_v1`. It fixes the benchmark contract, so I did not decide it myself.
+2. Either supply the FSR 2 permutation headers or confirm that `full_1080` stays unsupported.
+3. Provide a Windows GUI session for the editor run and the tour.
+
+I appended this pass to `.ralph-tui/progress.md`. I made no source changes.

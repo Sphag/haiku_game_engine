@@ -1,0 +1,262 @@
+# Iteration 16 Log
+
+## Metadata
+
+- **Task ID**: US-017
+- **Task Title**: Scene Format and Prefabs
+- **Description**: As a game creator, I want to save scenes and reuse object groups.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T07:34:29.639Z
+- **Ended At**: 2026-10-22T08:11:12.762Z
+- **Duration**: 36m 43s
+- **Input Tokens**: 598
+- **Output Tokens**: 150993
+- **Total Tokens**: 151591
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log.
+[94m[Bash][0m List repo and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+[94m[Bash][0m Locate stories and progress sections $ grep -n "^## \|^### " .ralph-tui/progress.md | tail -60
+[94m[Bash][0m Read codebase patterns and US-016 notes $ sed -n 364,420p .ralph-tui/progress.md
+The prior story (US-016) left a scene graph, reflection, and ECS. Next I'll read the PRD's constraint sections and the existing scene and ECS code this story builds on.
+[94m[Bash][0m Read PRD constraints, non-goals, technical sections $ sed -n 800,930p tasks/prd-open-world-engine.md
+[94m[Bash][0m Inspect scene/ecs layout and test CMake $ ls engine
+Now the APIs I'll build on: reflection, scene graph, file IO, GUID, and status/result.
+[94m[Bash][0m Read reflection header $ cat engine/scene/include/engine/scene/reflection.hpp
+[94m[Bash][0m Read scene graph header $ cat engine/scene/include/engine/scene/scene_graph.hpp
+[94m[Bash][0m Read core file IO, GUID, result, status $ cat engine/core/include/engine/core/file_io.hpp engine/core/include/engine/core/guid.hpp engine/core...
+The scene format needs JSON, atomic writes, and reflection-based field values. I'll check the Transform type, how the vendored JSON library is wired, and the existing test helpers.
+[94m[Bash][0m Inspect Transform, JSON usage, path API $ cat engine/core/include/engine/core/path.hpp | head -60
+The ECS world already tracks persistent GUIDs, but `SceneGraph` owns a private registry without them. I'll check how `EntityHandle` hashes and how the existing JSON profile code is written, so the scene code matches it.
+[94m[Bash][0m Check EntityHandle and JSON profile style $ ls engine/platform/include/engine/platform | head -40
+I'll read the rest of the profile reader's format and version handling, since the scene format should follow the same conventions.
+[94m[Bash][0m Read profile header and format handling $ cat docs/reflection.md | head -60
+I have enough of the API surface to design this. Before writing code I need three more details: the assert macro, how existing tests create temp directories, and the test-file style.
+[94m[Bash][0m Check assert macros, temp dir patterns, test style $ grep -n "TEST_CASE" tests/src/scene_*.cpp | head -40
+I have the conventions. Here is the design I'm going with:
+
+- **Format layer** (`scene_format.hpp/.cpp`): versioned JSON for scenes and prefabs, nlohmann kept private to the `.cpp`, atomic writes through `write_file_atomic`.
+- **Runtime layer** (`scene.hpp/.cpp`): `Scene` wraps `SceneGraph` and maps GUIDs to nodes. Loads are validate-first, then commit, so a failed load never touches the live scene.
+- **Prefabs**: an instance stores only its prefab GUID, root transform, and field overrides. Instance node GUIDs are derived deterministically from the instance and prefab-local GUIDs, so references survive reload.
+
+I'll write the format header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene_format.hpp[0m "#pragma once
+
+// The versioned scene and prefab files (US-017). Both are JSON with a format name and an integer version, and both are
+// read against a ComponentCatalog, because a field's JSON type co... (7201 chars)"
+Next is the format implementation. Parsing follows the action-profile reader's pattern: `Json::parse` with exceptions off, then a strict key and type check at every level.
+[94m[Bash][0m Check JSON parse call and to_string style $ grep -n "to_string(StatusCode\|to_string(IoErrorCode" -A3 engine/core/src/*.cpp | head -12
+I left an unused parameter in `check_header`. I'll remove it before moving on.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_format.cpp[0m edit: "std::optional<SceneError> check_header(const Json&..." → "std::optional<SceneError> check_header(const Json&..."
+[94m[Bash][0m Update check_header call sites $ s/check_header(doc, kPrefabFormat, "")/check_header(doc, kPrefabFormat)/' engine/scene/src/scene_for...
+The file changed on disk after I wrote it. I'll read the current version before going further so I'm working from what's actually there.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_format.cpp[0m
+The file is intact; the change was my own `sed` edit. Next is the runtime `Scene` header, which holds the prefab library and the instance and override records.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene.hpp[0m "#pragma once
+
+// Runtime scene (US-017): the entities of a document as SceneGraph nodes, their reflected component values, and prefab
+// instances. Entities are addressed by persistent GUID; the graph... (8675 chars)"
+Now the implementation. Every validation runs before the graph is touched, so a failure can't leave a half-built scene.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene.cpp[0m "#include "engine/scene/scene.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <cstdint>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+
+namespace engine::scene {
+namespace {
+
+SceneErr... (5680 chars)"
+I left a placeholder line at the end of that file, and it doesn't compile. The expansion helper also can't name `Scene::Pending` because that type is private. I'll move the shared record types into a `detail` namespace in the header, then rewrite the implementation file in full.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene.hpp[0m edit: "class Scene {
+public:
+    // The catalog and the l..." → "namespace detail {
+
+struct PrefabLink {
+    core::..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene.hpp[0m edit: "private:
+    struct PrefabLink {
+        core::Gui..." → "private:
+    struct Node {
+        ecs::EntityHand..."
+The header now has the shared types. Next I'll rewrite `scene.cpp` in full, with the expansion helper, the ordering pass, and every mutator checking before it touches the graph.
+Before compiling, one problem stands out. Several parameters are named `parent` or `field`, which shadow the `Scene::parent` and `Scene::field` member functions. The progress log records that `-Wshadow -Werror` rejects exactly this. I'll rename them.
+[94m[Bash][0m Rename shadowing parameters in scene files $ /' \  -e 's/std::string(field)})/std::string(field_name)})/' \  src/scene.cpp && grep -n "parent\b\|...
+The rename is done. The remaining `parent` and `field` hits are free functions, which don't shadow anything. Next I'll wire the new sources and the vendored JSON into the `engine_scene` target, following how `engine_platform` does it.
+[94m[Bash][0m Update scene CMake target and list presets $ cat CMakePresets.json | grep -n '"name"' | head -40
+The sources and the vendored JSON are wired in. Next are the tests. Format tests come first: round trips, each rejection path, and file IO with an atomic-write check. I'm keeping the catalog helpers local to each file, so the TEST_CASE names stay unique across the binary.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_format_tests.cpp[0m "// Scene and prefab files (US-017): round trips, the rejection of unknown or invalid input with an error that names the
+// problem, and atomic file IO. The parsing tests are CPU-only and run on every ... (13822 chars)"
+The format tests are in place. The runtime tests need to address prefab-interior entities by GUID, and those GUIDs are derived, so I'll expose the derivation as a public function. Otherwise no caller could ever address an override target.
+[94m[Bash][0m Expose derived instance GUID helper in header $ }  namespace {  // Checks a prefab template and returns it with defaults filled in.""" # place publi...
+My script left `scene.cpp` unchanged, which is what I wanted: the public wrapper goes after the anonymous namespace closes. I'll add it there.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene.cpp[0m edit: "}  // namespace
+
+core::Result<core::Unit, SceneErr..." → "}  // namespace
+
+core::Guid instance_entity_guid(c..."
+Next is the runtime test file: hierarchy round trips, missing references, failed loads, the prefab library, instancing, overrides, and refused edits.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_tests.cpp[0m "// Runtime scene (US-017): loading and saving documents, missing references, failed loads that leave the scene unchanged,
+// the prefab library, instances, and overrides. CPU-only; these run on every ... (14573 chars)"
+Both test files are written. I'll register them with the test target, confirm the new TEST_CASE names don't collide with existing ones (Catch aborts at startup on duplicates), and then start the Linux build.
+[94m[Bash][0m Register tests, check names, build Linux debug $ (cmake --build --preset linux-debug 2>&1 | tail -60)
+The build is running in the background. I'll read its output file to see progress and whether the test registration went through.
+[94m[Bash][0m Check background build output $ grep -n "scene_" /mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4df83d53-cca8-4166-8524-340f84fbc5e9/tasks/b8llcals3.output tail -80 grep -n "scene_" /mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Show build output tail and test registration $ grep -n "scene_" /mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt
+The TEST_CASE names are unique, and the test sources are registered. The build hasn't finished yet, so I'll wait on it.
+[94m[Bash][0m Wait for Linux debug build to finish $ pgrep -fa "cmake --build" | head -3
+The Linux debug build finished with exit code 0. I'll check the log for compiler warnings, since first-party code must build with `-Werror`.
+[94m[Bash][0m Check build warnings and run scene tests $ ls build
+No warnings. The test binary's CLI takes `--suite`, not a Catch tag filter, so I'll run the full unit suite and look at the failures.
+[94m[Bash][0m Run unit test suite on Linux $ timeout 110 ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -80
+Five failures. The first one is a real bug in `expand_instance`. Children of the instance root get their parent GUID derived from the prefab-local root GUID, but the root's own GUID is the instance GUID. So every child is attached to a parent that doesn't exist. The fix is to resolve the root's local GUID to the instance GUID everywhere.
+
+For the prefab re-parse failure I need the actual error message, so I'll make that check report it.
+[94m[Bash][0m Fix parent GUID resolution and rebuild $ }""" assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF (timeout 115 cmake --build...
+The `scene.cpp` fix was applied, but my pattern for the test file didn't match. I'll look at the exact text.
+[94m[Bash][0m Locate re-parse lines and confirm scene fix $ grep -n "resolve" engine/scene/src/scene.cpp | head -3
+The `scene.cpp` replacement also didn't apply. The expansion helper's parameter is still named `parent`, not `parent_node`, so my pattern didn't match. I'll apply both edits by exact text.
+[94m[Bash][0m Find expansion parent assignment lines $ grep -n "is_root ?" engine/scene/src/scene.cpp
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene.cpp[0m edit: "        pending.guid = is_root ? instance : derive..." → "        pending.guid = resolve(entity.guid);
+     ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene.cpp[0m edit: "    std::vector<detail::Pending> batch;
+    batch...." → "    // The root keeps the instance GUID, so its ch..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_format_tests.cpp[0m edit: "    const auto again = engine::scene::parse_prefab..." → "    const auto again = engine::scene::parse_prefab..."
+Both fixes are applied. I'll rebuild and rerun the unit suite.
+[94m[Bash][0m Rebuild Linux debug after fixes $ echo "build-exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Rerun unit suite on Linux $ timeout 110 ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -60
+The remaining failure is a real bug in the parser. JSON writes a non-negative integer as an unsigned number, so `Int32` fields reject their own serialized output. I'll make the `Int32` branch accept both signed and unsigned JSON integers and range-check each.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_format.cpp[0m edit: "        case FieldKind::Int32: {
+            if (!..." → "        case FieldKind::Int32: {
+            // A ..."
+That version has a wrap-around edge case: an unsigned value above `INT64_MAX` casts to a negative number that passes the lower bound. I'll range-check the unsigned case directly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_format.cpp[0m edit: "            // A non-negative integer parses as un..." → "            // A non-negative integer parses as un..."
+I'll rebuild and rerun the unit suite.
+[94m[Bash][0m Rebuild and run unit suite again $ timeout 100 ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -4
+All 282 unit cases pass. The log line `io: disk is slow` comes from an existing test. Before the GCC build I want to remove one risk: `ComponentData` uses a defaulted `operator==`, and GCC 9 is CI's compiler and may not support that. I'll write it out explicitly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene_format.hpp[0m edit: "    friend bool operator==(const ComponentData& lh..." → "    friend bool operator==(const ComponentData& lh..."
+Now the quality gates. The Linux gates run as one background script that records each step's exit code, so I can collect the results without fighting the 120-second foreground limit.
+[94m[Bash][0m Write Linux quality-gate script outside repo $ } : > /tmp/us017/linux_summary.txt run validate_vendor cmake -P cmake/ValidateVendor.cmake run linux...
+[94m[Bash][0m Start Linux gates in background $ nohup /tmp/us017/linux_gates.sh > /tmp/us017/linux_gates.out 2>&1 & echo started
+While the Linux gates run, I'll prepare the Windows side. My notes say the Windows gates run from WSL through a `.bat` that loads `vcvars64.bat` from the VS version the cache was configured with. I'll check which VS that is.
+[94m[Bash][0m Find the MSVC toolchain the Windows cache uses $ ls /mnt/c/Users/ 2>/dev/null
+[94m[Bash][0m Show Linux gate results so far $ tail -3 /tmp/us017/linux_gcc_build.log 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+The summary file is missing, so the script may have failed right away. I'll check its output.
+[94m[Bash][0m Inspect gate script state and output $ tail -c 1500 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/4df83d53-cca8-4166-8524-340f84fbc5e9/task...
+The script was killed when its shell call returned, which left the validator's log empty. I'll relaunch it detached with `setsid`.
+[94m[Bash][0m Relaunch Linux gates detached and confirm running $ pgrep -fa "ValidateVendor|linux_gates" | head -3
+The Linux gates are running. Meanwhile I'll write the Windows gate script, following the notes: every step on its own line, a summary file, and a `vcvars64.bat` matching the VS 18 cache.
+[94m[Bash][0m Write Windows gate batch file to Temp $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+While the gates run, I'll write the docs. First I'll check how `tasks/prd.json` records a finished story, since US-016 set the pattern.
+[94m[Bash][0m Inspect prd.json story entries for US-016/017 $ python3 -c " import json d=json.load(open('tasks/prd.json')) print(type(d), list(d.keys()) if isinst...
+[94m[Bash][0m Read passes/status fields for stories $ grep -n '"passes"' tasks/prd.json | head -3
+I'll write the format doc now. It records the rules a future author needs: versioning, what counts as an error, the derived-GUID rule, and the v1 limits.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/scene-format.md[0m "# Scene Format and Prefabs
+
+The scene format (US-017) is the saved form of a scene, and prefabs are reusable groups of entities. Code is in `engine/scene/`: `scene_format.hpp` reads and writes the fil... (4464 chars)"
+[94m[Bash][0m Check Linux gate progress $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: cat /tmp/us017/linux_summary.txt. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux gate progress $ ls /tmp/us017/
+The validator is still hashing the vendor tree. I'll run a background wait that completes when the script writes DONE, so I'm notified instead of polling.
+[94m[Bash][0m Wait for Linux gate script to finish $ cat /tmp/us017/linux_summary.txt
+While the gates run, I'm collecting review notes so I can batch the fixes once the run finishes. Editing sources mid-run would make the results mix two versions.
+
+Two items so far:
+- `Scene::load` silently ignores components on a prefab instance entity. It should reject them.
+- The docs say "changing a prefab doesn't rewrite overrides", but the actual rule is that library entries can't be replaced at all. The doc should state that.
+
+I'll wait for the run to finish.
+[94m[Bash][0m Check Linux gate summary $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Check Linux gate summary again $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Read gate summary via task output $ ls /tmp/us017
+The summary is still empty. I'll check whether the validator process is alive or stuck.
+[94m[Bash][0m Check whether vendor validation is still running $ ps -o etime,pid,cmd -C cmake | head -5
+There are two `ValidateVendor` processes. The first launch may still be alive, which would have two scripts writing to the same summary file. I'll check the process tree.
+[94m[Bash][0m List gate script processes $ ps -ef | grep -E "linux_gates|ValidateVendor" | grep -v grep | head
+Two copies of the gate script are running against the same build directories. Their results would be meaningless, so I'll stop both and start a single clean run.
+[94m[Bash][0m Kill duplicate gate runs and relaunch once $ echo relaunched
+
+[91m[Error: Exit code 144][0m
+[94m[Bash][0m Confirm gate processes stopped $ ls /tmp/us017/
+The `pkill` pattern matched my own shell command, which is why it exited 144. The two cmake children are still alive, so I'll kill them by PID and relaunch.
+[94m[Bash][0m Kill leftover validator PIDs and relaunch gates $ echo relaunched
+[94m[Bash][0m Wait for single Linux gate run to finish $ cat /tmp/us017/linux_summary.txt
+The gate run is going. I'll keep waiting in bounded chunks until the summary shows DONE.
+[94m[Bash][0m Wait up to two minutes for gate summary $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Continue waiting for gate summary $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Continue waiting for gate summary $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Continue waiting for gate summary $ tail -3 /tmp/us017/linux_unit.log
+The GCC build and tests pass so far. The ASan/UBSan stages are next.
+[94m[Bash][0m Continue waiting for gate summary $ cat /tmp/us017/linux_summary.txt
+[94m[Bash][0m Wait for sanitizer run and count warnings $ grep -c "warning" /tmp/us017/linux_debug_build.log /tmp/us017/linux_gcc_build.log /tmp/us017/linux_a...
+All Linux gates pass: vendor validation, dev configure, debug build, linux-unit 10/10, the GCC build and 10/10, the ASan build, and the sanitizer run. Now I'll apply the two pending fixes: reject components on a prefab-instance entity in `Scene::load`, and correct the docs.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene.cpp[0m edit: "        const PrefabDocument* prefab = prefabs_->f..." → "        if (!entity.components.empty()) {
+        ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/scene-format.md[0m edit: "- Changing a prefab after instances exist does not..." → "- A prefab library entry cannot be replaced, so an..."
+Both background waits have now completed. Since the sources changed, the gates need to run again. First I'll add a test for the new rejection, then start the Linux and Windows gates together.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_tests.cpp[0m edit: "    SceneDocument orphan;" → "    // An instance that carries components of its ..."
+Now I'll launch both gate runs: Linux through its detached script, and Windows through the batch file.
+[94m[Bash][0m Launch Linux and Windows gate runs detached $ echo launched
+[94m[Bash][0m Check Windows and Linux gate progress $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+The Windows gates all exited 0. Before trusting that, I'll check the logs: the build should have no `warning C` or `error C` lines, and the unit run should show a real test count.
+[94m[Bash][0m Inspect Windows gate logs for warnings and tests $ grep -n "Linking\|scene" us017_build.log | head -5
+The build is clean: no warning or error lines, and the new files compiled. I'll confirm the unit test result line.
+[94m[Bash][0m Confirm Windows ctest pass counts $ cat us017_configure.log | tail -2
+Windows: 10/10 pass, and that includes the scene unit suite, which was rebuilt from the current sources. Now I'll wait for the Linux run.
+[94m[Bash][0m Wait for Linux gate run progress $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+[94m[Bash][0m Continue waiting for Linux gate run $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+[94m[Bash][0m Continue waiting for Linux gate run $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+[94m[Bash][0m Continue waiting for Linux gate run $ cat /tmp/us017/linux_summary.txt 2>/dev/null
+[94m[Bash][0m Continue waiting for Linux gate run $ cat /tmp/us017/linux_summary.txt 2>/dev/null | tail -4
+Every Linux step exits 0. I'll confirm the pass counts and check the sanitizer logs for reports, since a sanitizer finding can pass a test run without failing it.
+[94m[Bash][0m Confirm pass counts and sanitizer silence $ grep -c "warning:" linux_debug_build.log linux_gcc_build.log linux_asan_build.log
+All three builds have zero warnings, every unit run is 10/10, and the sanitizer logs are clean. Next I'll mark US-017 as passing in `tasks/prd.json`. I'll edit only the one line rather than re-serializing the whole file, so the diff stays minimal.
+[94m[Bash][0m Locate US-017 passes field in prd.json $ sed -n "$n,$((n+40))p" tasks/prd.json | grep -n '"passes"\|"notes"' | head -3
+[94m[Bash][0m Set US-017 passes to true $ print([s['passes'] for s in d['userStories'] if s['id']=='US-017'])"
+The PRD task is marked done. Next is the progress log. I'll add the reusable patterns to the top section and a story entry at the end, following the existing format.
+[94m[Bash][0m Append US-017 progress and reusable patterns $ GitHub CI (not pushed). - **Learnings:**   - The derived GUID for a prefab's root is the instance GU...
+One learning line in that entry overstates the result, so I'll correct it to what the tests actually show.
+[94m[Bash][0m Correct overstated learning line in progress log $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() old="  - Validate the whole document b...
+Last, I'll check that the only repository files I touched are the intended ones.
+[94m[Bash][0m List repository files changed this session $ find . -path ./build -prune -o -path ./third_party -prune -o -type f -mmin -240 -print | grep -v "^....
+US-017 is implemented and all the required quality gates pass on Windows and Linux. The benchmark, GPU, GUI, Release, and CI checks were not run, as explained below. I didn't create a commit.
+
+**What was built**
+- **Format** (`engine/scene/src/scene_format.cpp`): `engine.scene` and `engine.prefab` version 1 as JSON, read against the component catalog. Writes go through `write_file_atomic`.
+- **Runtime** (`engine/scene/src/scene.cpp`): `Scene` holds the entities as `SceneGraph` nodes, addressed by GUID, with their reflected component values. `PrefabLibrary` holds validated prefab templates.
+- **Prefab instances** store only the prefab GUID, the root transform, and the overrides that differ from the prefab. Inner entities get GUIDs derived from the instance and prefab-local GUIDs, so references survive a save and reload.
+- **Docs**: `docs/scene-format.md`. Tests: 12 format cases in `tests/src/scene_format_tests.cpp` and 8 runtime cases in `tests/src/scene_tests.cpp`.
+
+**Choices I made where the story was open**
+- Unknown component types, unknown fields, schema mismatches, and unknown format versions reject the whole file. Nothing is loaded partially.
+- A Guid field naming an asset that isn't known loads and is kept, so a save doesn't drop it. `missing_references()` lists it.
+- A missing prefab is an error, because the instance has no structure without it.
+- Load validates the whole document before it creates any node. A failed load leaves the previous scene in place, and the tests check that.
+- Version 1 limits: instances can't gain or lose components, inner entities can't be moved or re-transformed, and plain entities can't be children of an instance. Prefab library entries can't be replaced.
+
+**Gate results**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` (10/10) pass. Zero warnings.
+- Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (10/10) pass. Zero warnings.
+- Linux/GCC: `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` (10/10) pass. Zero warnings.
+- Linux ASan/UBSan: `linux-asan` build and `linux-sanitize` (10/10) pass, with no sanitizer reports.
+
+**Not run**
+- `engine_bench --suite acceptance`: no benchmark harness exists yet, and the scene format isn't on a measured path.
+- GPU suites and GUI checks: no GPU backend or UI exists in this story.
+- Release builds and GitHub CI: not checked in this story, and nothing was pushed.
+
+`tasks/prd.json` marks US-017 as passing, and the progress log has the story entry and the new reusable patterns.

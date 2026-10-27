@@ -1,0 +1,37 @@
+# Iteration 352 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T20:32:28.721Z
+- **Ended At**: 2026-10-24T20:32:42.816Z
+- **Duration**: 14s
+- **Input Tokens**: 20
+- **Output Tokens**: 1826
+- **Total Tokens**: 1846
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-053 is already implemented, since the codebase patterns already describe `collision_cells.cpp` and the query API.
+[94m[Bash][0m Inspect physics module and progress log for US-053 $ grep -n "US-053" .ralph-tui/progress.md | tail -5
+[94m[Bash][0m Check for source changes since last log and list GCC versions $ ls /usr/bin | grep -E '^(g\+\+|gcc)-[0-9]+$'
+US-053 is not complete, so I'm not signalling `<promise>COMPLETE</promise>`. I didn't change any source or add a progress entry this pass.
+
+**Current state:** The colliders, queries, filters, triggers, collider replacement, rebase-aware queries, streamed collision cells, and terrain tile cells are already in the tree (`engine/physics/src/physics_world.cpp`, `collision_cells.cpp`). The progress log records the story as **Partial**, and nothing under `engine/`, `tests/`, or `cmake/` has changed since the last log entry, so those recorded results still describe the tree.
+
+**What blocks completion:**
+- **`linux-gcc` gate:** Jolt needs GCC 11+. Only GCC/G++ 9.4 is installed here (`/usr/bin` has `gcc-9` and `g++-9` only). The acceptance criteria require this job to pass, so it needs GCC 11+ or the CI job.
+- **Acceptance benchmark:** `engine_bench --suite acceptance` has no target yet (US-074).
+- **Terrain streaming:** the world streamer does not load terrain tiles. A caller loads `terrain_tile_cell` directly, which the progress log lists as an open item.
+- **Flaky Windows test:** the intermittent `engine_tests_cli_help` capture failure is recorded in the log and still unresolved.
+
+**Not run this pass:** I did not re-run the Linux or Windows gates. The last Linux run (`ctest --preset linux-unit`, exit 0, 22 of 22) is recorded in the log and the tree is unchanged since then. Repeating it would not change the status.
+
+**What would settle it:** install GCC 11+ (or run the CI `linux-gcc` job), add the US-074 benchmark target, and decide whether terrain tile streaming belongs to US-053 or a later story. Until then the story stays Partial.

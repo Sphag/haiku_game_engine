@@ -1,0 +1,40 @@
+# Iteration 382 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:04:58.697Z
+- **Ended At**: 2026-10-24T23:05:38.628Z
+- **Duration**: 39s
+- **Input Tokens**: 22
+- **Output Tokens**: 2494
+- **Total Tokens**: 2516
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 is already partly implemented, since the codebase notes already mention `character.cpp`.
+[94m[Bash][0m Check repo state and progress notes for US-054 $ grep -n "US-054" -r --include=*.md --include=*.txt --include=*.cpp --include=*.hpp --include=*.txt ....
+The progress log already records 24 status passes on US-054, all ending "Partial". Before deciding anything, I'll check whether the two blockers have changed: a newer GCC, and whether `engine_bench` now exists.
+[94m[Bash][0m Check compilers, bench target, and recent edits $ find engine tests cmake docs -newer .ralph-tui/progress.md -type f 2>/dev/null | head
+US-054 is still **Partial**, and I'm not signalling COMPLETE. Nothing has changed since the last status pass, so I made no edits.
+
+**What I checked**
+- **Source:** no file under `engine/`, `tests/`, `cmake/` or `docs/` is newer than the last progress entry.
+- **Compilers:** `/usr/bin` still has only GCC/G++ 9.4 and clang/clang++ 10. No GCC 11+ is present under `/usr/local/bin` or `/opt`.
+- **Benchmark:** no `engine_bench` target exists in any CMake file. The benchmark criterion applies once the harness exists, and US-074 is what creates it.
+
+**What's blocking the story**
+1. **`linux-gcc` gate (criterion: `linux-gcc` preset, build and unit tests).** Jolt needs GCC 11+ (`__builtin_bit_cast`), and this machine has GCC 9.4. This can only be cleared by installing GCC 11+ (needs root) or by the CI job.
+2. **Acceptance benchmark.** `engine_bench --suite acceptance` can't run until US-074 creates the harness. It's a dependency, not something this story can finish.
+
+**Gates from earlier passes**
+The last full pass recorded `ValidateVendor`, `linux-dev`, `linux-debug` and `linux-unit` (22 of 22) as passing. The Windows gates passed on an earlier tree with no later source change. I didn't re-run them now, since the tree is unchanged.
+
+Nothing else is outstanding for this story. Once a GCC 11+ toolchain is available, `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug` and `ctest --preset linux-gcc-unit` are the commands that would settle the story.

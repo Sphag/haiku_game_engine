@@ -1,0 +1,44 @@
+# Iteration 826 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-26T04:56:26.311Z
+- **Ended At**: 2026-10-26T04:56:46.581Z
+- **Duration**: 20s
+- **Input Tokens**: 18
+- **Output Tokens**: 2552
+- **Total Tokens**: 2570
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and benchmark tree $ tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "render_str...
+[94m[Bash][0m Locate residency fields and any memory-query code $ grep -rn "memory_budget\|QueryVideoMemoryInfo\|IDXGIAdapter3" engine third_party --include=*.cpp --i...
+US-076 is not complete, and I did not signal `<promise>COMPLETE</promise>`. I made no source changes in this pass, because the remaining gaps need your decision or a Windows run I can't do from here.
+
+The last recorded state (progress entries 33 to 36) still stands. Nothing in the repo has changed since then, and I did not re-run the gates.
+
+**What's in place**
+- The `render_stress` fixture is seeded, with table counts pinned in `benchmarks/workload_expected.json` (`kWorkloadVersion` 2). The start frame submits 3,202,690 triangles on the indexed path, which meets the 2,000,000 floor.
+- The indexed, indirect, and meshlet paths each run as their own invocation. Each run writes 6 screenshots and records submitted and visible counters.
+- The forced-off fallback works: `--disable-mesh-shaders` reports `disabled: forced off`, meshlets fall back to indirect-indexed draws, and 0 meshlets are visible. Meshlet runs report `enabled`/`active`.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (29/29), and `engine_tests --suite gpu` on dx12 (72 cases) and vulkan (73 cases) all passed in the earlier `us076e` batch.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (30/30) passed in the last check.
+
+**What blocks the story**
+1. **Frame budget (needs your decision).** Every `render_stress` run exits 1 because start-frame p99 is 35–47 ms against the 16.7 ms budget. US-080 owns the fix. Either that fix lands first, or you agree a contract change. I won't change the contract on my own.
+2. **Residency not measured (implementable, not started).** The RHI has no memory query, so every run reports "GPU residency is not measured". The fix is DX12 `QueryVideoMemoryInfo`, Vulkan `VK_EXT_memory_budget`, and the host working set, behind one RHI accessor. It touches all three backends, and I can only compile the Vulkan and reference paths here. Even with it, the run still fails on frame time.
+3. **`full_1080` (needs your decision).** It is reported unsupported because `ENGINE_FSR2_AVAILABLE` is off. FSR 2 needs its generated permutation headers, and you need to choose how to vendor them.
+4. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and `linux-gcc` (GCC 9.4 cannot build Jolt).
+
+**Decisions I need from you**
+- Accept the frame-budget failure as the result, approve the contract change, or have me wait for US-080.
+- Should I implement the residency accessor now? I would verify the Linux side here, and you would need to run the Windows gates for DX12.
+- How should the FSR 2 permutation headers be vendored?

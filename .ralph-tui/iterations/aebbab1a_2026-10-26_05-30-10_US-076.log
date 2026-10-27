@@ -1,0 +1,45 @@
+# Iteration 753 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:30:10.321Z
+- **Ended At**: 2026-10-26T02:30:34.130Z
+- **Duration**: 23s
+- **Input Tokens**: 34
+- **Output Tokens**: 2962
+- **Total Tokens**: 2996
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Inspect progress log and existing benchmark code $ ls tools/benchmark tools/benchmark/src 2>/dev/null
+The log shows US-076 has been stalled on user decisions for many passes. I'll read the earlier substantive US-076 entries and the workload contract before deciding what can move.
+[94m[Bash][0m List US-076 progress entries $ grep -n "^## " .ralph-tui/progress.md | tail -5
+[94m[Bash][0m Read the substantive US-076 progress entries $ sed -n 4169,4212p .ralph-tui/progress.md
+The log is consistent: the implementation is in place, and the remaining failures need user decisions. I'll run one cheap check that the recorded artifacts and workload contract are still as described, rather than re-running 10-minute benchmarks.
+[94m[Bash][0m Check recorded US-076 artifacts and workload version $ grep -n "kWorkloadVersion = " tools/benchmark/src/workload.cpp include/*/*.hpp tools/benchmark/inclu...
+US-076 is not complete, and I did not add a completion signal. The remaining failures need your decision, and I did not re-run the 10-minute benchmarks.
+
+**Blocked on you:**
+
+1. **Triangle floor and frame budget fail on DX12 and Vulkan.** The start frame submits 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the 60° view at the route start sees about 330 items. Fixing this means changing instance placement, which changes the fixed workload contract (bump `kWorkloadVersion` from 1, regenerate `workload_expected.json`). The contract forbids reducing workloads, so I did not make that change. Options:
+   - (a) Keep the contract and report these failures as the measured result.
+   - (b) Approve a placement change, and I'll bump the version, regenerate the expected file, and re-run.
+2. **full_1080 is unsupported.** FSR 2's generated `*_permutations.h` tables are missing from the vendored tree, so the second profile cannot run. Choosing a vendoring route is your call.
+3. **Native Linux Vulkan GPU and linux-gcc were not run.** WSL has no usable Vulkan device, and GCC 9.4 cannot build Jolt.
+
+**What the log records (from earlier passes, not re-run now):**
+- The render_stress driver, `render_route_v1`, `--path`, `--disable-mesh-shaders`, counters, and screenshots are in place.
+- The eight acceptance reports (DX12 and Vulkan, indexed, indirect, meshlets, meshlets with mesh shaders forced off) are under `artifacts/bench/us076-*`. They exit 1 on the budget and triangle floor, which is a measured result. I confirmed all eight report files exist.
+- The forced mesh-shader-off run falls back to indirect-indexed. It reports "disabled: forced off" and "fell back", not as enabled.
+- Windows gates: validate, win-dev, win-debug build, win-unit (29/29), and the GPU suites all passed. Linux gates: validate, linux-dev, linux-debug build, and linux-unit (30/30) all passed.
+
+I did not append another progress entry, since the last 19 "status check" entries carry the same blockers and adding one more would only duplicate them. Once you choose options 1 and 2, the work is short to finish.

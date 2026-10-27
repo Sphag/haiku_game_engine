@@ -1,0 +1,201 @@
+# Iteration 24 Log
+
+## Metadata
+
+- **Task ID**: US-025
+- **Task Title**: Changed Asset Updates
+- **Description**: As a game creator, I want to see source changes so that I can iterate quickly.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T11:10:32.358Z
+- **Ended At**: 2026-10-22T11:47:30.626Z
+- **Duration**: 36m 58s
+- **Input Tokens**: 446
+- **Output Tokens**: 96264
+- **Total Tokens**: 96710
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the PRD section for this story.
+[94m[Bash][0m List repo root and check progress/PRD sizes $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read progress log $ cat .ralph-tui/progress.md
+[94m[Bash][0m Show progress log section headers and recent entries $ grep -n "^## " .ralph-tui/progress.md | tail -40 && echo ---- && tail -n 150 .ralph-tui/progress.md
+[94m[Bash][0m Locate story and section headers in PRD $ grep -n "US-02[0-5]\|US-01[0-9]\|^## \|^### " tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m Read PRD overview, gates, and US-025 section $ sed -n 1,80p tasks/prd-open-world-engine.md && echo ..... && sed -n 276,284p tasks/prd-open-world-en...
+Now the Non-Goals and Technical Considerations, plus the current converter and asset code.
+[94m[Bash][0m Read Non-Goals, tech considerations, and asset module layout $ sed -n 764,830p tasks/prd-open-world-engine.md && echo ..... && find engine/assets tools/asset_conve...
+The story needs a file watcher, a debounced re-convert loop, and a safe swap into the runtime handles. Next I'll read the converter API, the CLI, and the handle code, and check for any existing watcher.
+[94m[Bash][0m Read converter header, CLI main, and search for watcher code $ echo "watch-grep-done"
+No watcher exists yet, so I'm building one. Before designing the swap, I need the handle/entry internals and the project API.
+[94m[Bash][0m Read asset handle header $ cat engine/assets/include/engine/assets/asset_handle.hpp
+[94m[Bash][0m Read project API, assets CMake, core layout, tests CMake $ cat engine/assets/include/engine/assets/asset_project.hpp && cat engine/assets/CMakeLists.txt && ls ...
+Before designing, I'll confirm the Linux baseline builds and passes, so I know what state I'm starting from.
+[94m[Bash][0m Run Linux baseline gates: validate, configure, build, unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -8) 2>&1
+Baseline is green on Linux. Next I'll look at the core file-IO and CMake conventions, since the watcher's platform code has to fit them.
+[94m[Bash][0m Read file IO header, core CMake, and platform guards $ cat engine/core/include/engine/core/file_io.hpp && cat engine/core/CMakeLists.txt && grep -n "_WIN32...
+The design I'm going with:
+
+- **Converter (tool side):** a debounced watch session. Each pass compares a content snapshot of the project against the last one and only runs a cook when it changed. The cook itself is incremental through the existing cache, and output-dir events are ignored. That makes the snapshot comparison the loop guard. OS backends are inotify on Linux and ReadDirectoryChangesW on Windows.
+- **Runtime (engine/assets):** `AssetHandle::reload()` loads the new file on a job and stages the result. `commit_reload()` swaps it in at a safe point. A failed reload keeps the old payload and records the error.
+
+I need the hashing, job, and test-helper APIs before writing code.
+[94m[Bash][0m Read content hash, job API, handle test helpers, tasks dir $ cat engine/assets/include/engine/assets/content_hash.hpp | sed -n 1,40p && grep -n "class JobHandle\...
+[94m[Bash][0m Read handle test helpers and find scratch-dir pattern $ print([ (s.get('id'),s.get('passes')) for s in d.get('userStories',d.get('stories',[]))][-6:])" 2>&1...
+I have what I need. I'll start with the runtime side in `asset_handle.hpp`, which is self-contained. Reloads stage into the entry and only become visible through an explicit commit.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "// Threads. One thread calls request(), close(), a..." → "// Reloads (US-025). reload() decodes the cooked f..."
+Next, the entry: the destructor cancels a reload in flight, and the reload state lives under the same lock as the payload.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "    ~AssetEntry() {
+        if (job_.valid()) {
+  ..." → "    ~AssetEntry() {
+        if (job_.valid()) {
+  ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "    // The payload when Ready, otherwise the fallb..." → "    // The payload when Ready, otherwise the fallb..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "    LoadState state_ = LoadState::Loading;
+    std..." → "    LoadState state_ = LoadState::Loading;
+    std..."
+Now the handle methods and the manager: `reload()`, the safe-point `apply_reloads()`, and `close()` cancelling reloads.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "    [[nodiscard]] core::Guid guid() const {
+      ..." → "    [[nodiscard]] core::Guid guid() const {
+      ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "        auto path = cooked_root_.join(guid.to_stri..." → "        auto path = cooked_path(guid);
+        if ..."
+Next, the `cooked_path` helper, `close()` cancelling reloads, and the private helper declaration.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "        for (const auto& entry : live) {
+         ..." → "        for (const auto& entry : live) {
+         ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/assets/include/engine/assets/asset_handle.hpp[0m edit: "private:
+    core::JobSystem& jobs_;
+    core::Pat..." → "private:
+    [[nodiscard]] core::Result<core::Path..."
+The runtime side is in place. Before writing its tests I'll look at an existing manager test to copy its setup.
+[94m[Bash][0m Read handle test setup and test case list $ sed -n 130,200p tests/src/assets_handle_tests.cpp && grep -n "TEST_CASE" tests/src/assets_handle_tes...
+I'll append the reload tests to the existing handle test file so they reuse its scratch-dir, gate, and decoder helpers.
+[94m[Bash][0m Append runtime reload tests to handle test file $ grep -n "cannot open" engine/assets/src/cooked_container.cpp | head -3
+I guessed the missing-file message in the test. I'll check the real text before relying on it.
+[94m[Bash][0m Check missing-file error message text $ grep -n "describe\|to_string(IoErrorCode" -A3 engine/core/src/file_io.cpp | head -20
+[94m[Bash][0m Build and run the asset reload tests on Linux $ find build -name engine_tests -type f | head -2
+The build is clean and the integration suite passed, though that run was the whole suite. I'll run the reload cases by name to confirm they executed.
+[94m[Bash][0m Run integration suite and confirm reload cases ran $ ./build/linux-dev/tests/Debug/engine_tests --help 2>&1 | head -5
+All 98 integration cases pass, including the four new reload cases. Now the converter side. I'll write the public header first: the change-source interface, the debouncer, the snapshot, and the session.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/include/asset_converter/watch.hpp[0m "#pragma once
+
+// Source watching (US-025): the converter converts a project again when its sources change, so an editor or a game
+// creator sees the result without a manual command.
+//
+// Passes. A s... (5945 chars)"
+Next, the portable half: the debouncer, the snapshot walk, and the session loop.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/watch.cpp[0m "// Source watching (US-025): the portable half. The OS notification backends are in watch_linux.cpp and watch_win32.cpp.
+
+#include "asset_converter/watch.hpp"
+
+#include "engine/assets/content_hash.hpp... (6489 chars)"
+I left two rough spots in that file: `inside_output` is unused, and the symlink check is hard to read. Fixing both.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/watch.cpp[0m edit: "        // Links are not followed, so a link canno..." → "        // Links are not followed, so a link canno..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/watch.cpp[0m edit: "    for (const std::string& path : events.paths) {..." → "    for (const std::string& path : events.paths) {..."
+Now the Linux backend. It uses inotify, adds a watch for each directory in the tree, and adds watches for new directories as they appear. Directory moves and deletions set the overflow flag so the next pass rescans everything.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/watch_linux.cpp[0m "// Source watching (US-025): the Linux backend, on inotify. inotify watches one directory at a time, so the backend adds a
+// watch for every directory in the tree and for each directory created or mo... (5670 chars)"
+Next, the Windows backend, which uses ReadDirectoryChangesW over an overlapped read on the project root with subtree watching. The Windows compile is checked later through the Windows gate.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/watch_win32.cpp[0m "// Source watching (US-025): the Windows backend, on ReadDirectoryChangesW. One overlapped read covers the whole tree, so new
+// directories need no extra watch.
+
+#define WIN32_LEAN_AND_MEAN
+#define N... (5287 chars)"
+Now I'll register the new sources in the converter's CMake, with the backend chosen per platform.
+[94m[Bash][0m Register watch sources in converter CMake $ python3 - <<'EOF' import re p='tools/asset_converter/CMakeLists.txt' s=open(p).read() s=s.replace(""...
+Next is the CLI. I'm adding a `watch` command that reuses the existing summary and report output. It also takes `--max-passes`, which bounds the run for scripts and tests.
+[94m[Bash][0m Add watch command and --max-passes to asset_converter CLI $ ''') open(p,'w').write(s) EOF grep -n "write_report\|print_pass" tools/asset_converter/src/main.cpp ...
+`run_watch` calls `write_report` before it is declared, and `print_pass` is a pointless wrapper. I'll move the function below the helpers and call `print_summary` directly.
+[94m[Bash][0m Move run_watch below helpers and drop print_pass wrapper $ ') marker='}  // namespace\n\nint main(' assert s.count(marker)==1 s=s.replace(marker, block+marker)...
+Now the tests. Unit tests cover the debouncer, the snapshot rules, and the session driven by a scripted notification source. Integration tests use the real OS watcher, including the case where the output directory sits inside the project.
+Before building I'm fixing two things in the tests: the rename case shouldn't pin `UpToDate` before I know what the cache reports, and one test name is misleading.
+[94m[Bash][0m Register watch tests, reconfigure, and build on Linux $ echo build=${PIPESTATUS[0]}
+The build passed. The watch test file changed on disk after I wrote it, so before I rely on it I'll read the current version.
+[94m[Bash][0m Check current state of watch test file $ date
+The file matches what I intended, so nothing there conflicts with my edits. Running the watch tests now.
+[94m[Bash][0m Run unit and integration suites with watch tests $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -3
+Two failures. The unit suite has one failing case, and the rename integration test segfaults. I'll get the unit detail, then reproduce the crash alone.
+[94m[Bash][0m Get unit failure detail and backtrace for rename crash $ cd build/linux-dev && which gdb >/dev/null && timeout 120 gdb -batch -ex run -ex bt --args tests/Deb...
+The crash is in the dependency-deletion test (line 312), which is a unit case, and the rename crash is in an integration case. I'll get a backtrace from the unit suite under gdb.
+[94m[Bash][0m Backtrace of unit-suite segfault under gdb $ timeout 300 gdb -batch -ex run -ex bt --args tests/Debug/engine_tests --suite unit 2>&1 | grep -A25 ...
+Found it, and it's my bug, not the converter's. `WatchSession` stores a reference to the importer registry, and the tests pass a temporary from `ImporterRegistry::builtin()`, so the reference dangles. The session should own its registry. I'll check whether the registry is movable before changing the signature.
+[94m[Bash][0m Check ImporterRegistry ownership and copy semantics $ cd /mnt/d/dev/haiku_game_engine && grep -n "class ImporterRegistry" -A25 tools/asset_converter/inclu...
+The registry is move-only, so the session will take it by value and own it. I'll update the header, the constructor, and the CLI call site.
+[94m[Bash][0m Fix dangling registry reference and rerun watch tests $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -2
+Those notices are from my own scripted edits. The unit suite reports 6.9 million assertions, which means `run_for` spins: the scripted source returns instantly instead of waiting. I'll make it wait out the timeout like the real backend does, then look at the one failing assertion.
+[94m[Bash][0m Make scripted source wait and rerun unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+The status is `Failed` (4), not `Blocked` (5). A missing dependency is the dependent's own error in this converter, so the dependent is failed and not converted. The test should assert that it was not converted, which is the actual requirement.
+[94m[Bash][0m Fix dependency-deletion expectation and rerun both suites $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -2
+Both suites pass now, including the watch cases on the real OS watcher. Next I'll add CLI contract tests for `watch`, covering the missing-output usage error and a bounded run that prints a valid report.
+[94m[Bash][0m Add watch CLI contract tests and run full Linux unit gate $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -12
+The full Linux unit gate passes, 19 of 19. Next I'll check the real CLI end to end: run `watch` in a scratch project, edit a source, and confirm a single pass and a clean exit.
+[94m[Bash][0m Manually run watch CLI against a scratch project and edit a source $ grep -c '"cooked"' /tmp/wrep.json
+The CLI behaves as intended: the first pass cooks, the edit starts exactly one more pass, and the process exits with the bounded pass count. One thing to note: with the output inside the project, the existing scan reports the output files as unregistered sources on each pass. These are warnings only and cause no loop, but I'll document that the output should sit outside the project. Next I'll repeat the integration suite to check the timing-based watch tests for flakiness.
+[94m[Bash][0m Repeat integration suite four times to check for flakiness $ done
+All four repeats pass; the varying assertion counts are just the number of polling iterations. Next are the GCC and sanitizer gates, which the memory, jobs, and asset-handle changes require.
+[94m[Bash][0m Run Linux GCC configure, build, and unit gate $ ctest --preset linux-gcc-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Fail...
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitize tests $ grep -n "ERROR: \|runtime error\|LeakSanitizer" /tmp/asan_test.log | head -5) 2>&1
+[94m[Bash][0m Inspect which sanitizer test failed and why $ grep -n -B5 -A25 "FAILED:" /tmp/asan_test.log | head -80
+The one failure is in the X11 keyboard input tests. The progress log records that same XWayland flake for earlier stories, and there are no AddressSanitizer, UBSan, or LeakSanitizer reports. I'll rerun the sanitize gate to confirm it's intermittent and not caused by my changes.
+[94m[Bash][0m Rerun sanitize gate twice and count sanitizer reports $ done
+The X11 keyboard flake is intermittent: one run passed and the next failed, with no sanitizer reports either time. Next, the Windows gates. The log says they run through a `.bat` file with `vcvars64.bat`, so I'll find how that was set up.
+[94m[Bash][0m Find prior Windows gate invocation method $ ls /mnt/c/Program\ Files/Microsoft\ Visual\ Studio 2>/dev/null | head -3
+[94m[Bash][0m Locate VS 18 vcvars64 and user temp dir from WSL $ ls -d /mnt/c/Users/*/AppData/Local/Temp 2>/dev/null
+The repo is at `D:\dev\haiku_game_engine` on the Windows side, and the VS 18 `vcvars64.bat` exists. I'll write the gate sequence to a `.bat` in the user's temp directory, with CRLF line endings and each `echo` of an exit code on its own line, then run it through `cmd.exe`.
+[94m[Bash][0m Run Windows quality gates through vcvars and cmd.exe $ tail -5 /mnt/c/Users/bucha/AppData/Local/Temp/gate_test.log | tr -d '\r'
+The Windows gates all exit 0. I'll confirm the test count from the log, so I'm not relying on the exit code alone.
+[94m[Bash][0m Confirm Windows unit test count from log $ grep -i "Win32\|MSVC" /mnt/c/Users/bucha/AppData/Local/Temp/gate_cfg.log | tr -d '\r' | head -3
+The Windows unit gate passes 19 of 19, with the Win32 watch backend exercised by the integration cases. Next, the documentation: a new page for source watching, plus pointers in the converter and runtime-asset docs. I'll check the existing headings first.
+[94m[Bash][0m Check docs headings and PRD JSON entry for US-025 $ print(k, [s for s in d[k] if s['id']=='US-025'][0])"
+I'll read the parts of the converter doc I need to extend: the command list and the "Not in this story" section.
+[94m[Bash][0m Read converter and runtime-asset doc sections to extend $ sed -n 1,40p docs/runtime-assets.md
+Now the three doc edits: a new `docs/source-watch.md`, plus `watch` and reload notes in the two existing pages.
+[94m[Bash][0m Write source-watch doc and update converter and runtime docs $ cat > docs/source-watch.md <<'EOF' # Source watching (US-025)  `asset_converter watch` converts a pr...
+I made two claims in that doc that I haven't verified: the rename-cache explanation and the Windows `PUBLISH_FAILED` behavior. I'll check the converter's publish path and soften the wording to match what I actually know.
+[94m[Bash][0m Verify converter publish error path and rename usage $ grep -n "rename" tools/asset_converter/src/converter.cpp | head -5
+[94m[Bash][0m Read rename retry logic in converter publish $ sed -n 100,125p tools/asset_converter/src/converter.cpp
+The converter already retries the Windows rename a few times before reporting `PUBLISH_FAILED`. I'll correct the doc to say that, and remove the unverified cache claim.
+[94m[Bash][0m Correct two doc claims to match verified behavior $ python3 - <<'EOF' p='docs/source-watch.md' s=open(p).read() def rep(old,new):     global s     asser...
+Next is the PRD tracker. I'll flip only the US-025 `passes` flag with a targeted text edit, so the rest of `prd.json` keeps its formatting.
+[94m[Bash][0m Mark US-025 passing in PRD tracker and verify JSON $ print([x['passes'] for x in d['userStories'] if x['id']=='US-025']) EOF grep -n "^## 2026-10-22 - US...
+Last, the progress log: a reusable-pattern entry at the top and a US-025 section at the end.
+[94m[Bash][0m Append US-025 progress entry and reusable patterns $ the watch and the reload are not on a measured runtime path), GPU suites and GUI checks (no GPU back...
+The progress entry says 9 unit cases for the watch test file, but the file has 11. I'll correct that count, then run one last Linux unit gate on the final tree to confirm nothing drifted.
+[94m[Bash][0m Fix test count in progress log and rerun Linux unit gate $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep "tests passed\|tests fail...
+US-025 is implemented and every local gate passes on both platforms. The story is marked `passes: true` in `tasks/prd.json`, following the convention of earlier stories. GitHub CI has not run, since nothing was pushed.
+
+**What was built**
+
+- **Watch command (converter):** `asset_converter watch --project <dir> --output <dir> [--max-passes <n>] [--report <file|->]`. It does a first cook, then re-cooks when the sources change. Each pass prints the summary and diagnostics.
+- **Debounced, incremental passes:** a pass starts after 300 ms without changes, or after 2 s of pending changes. Each pass is a normal cook, so the existing cache converts only the changed assets and their dependents.
+- **OS backends:** ReadDirectoryChangesW on Windows, inotify on Linux.
+- **Loop guard:** a pass runs only if a content snapshot of the sources differs from the last pass's. Events under the output directory are dropped. This covers renames, bursts, touches, and dependency deletion.
+- **Safe-point replacement (runtime):** `AssetManager::reload(handle)` decodes on a job while the old payload stays visible. The result is applied only by `commit_reload()` or `apply_reloads()`. A failed reload keeps the old payload and records `reload_error()`.
+- **Failures:** a failed source keeps its previous `.cooked` file. The failure goes into the report and stderr.
+
+**Verification**
+
+- Windows (VS 18, `win-dev` cache): `ValidateVendor`, `win-dev`, `win-debug` (0 `warning C`), and `win-unit` (19/19) all pass.
+- Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` (19/19) pass. The integration suite passed four runs in a row.
+- Linux/GCC: `linux-gcc`, `linux-gcc-debug` (0 warnings), and `linux-gcc-unit` (19/19) pass.
+- ASan/UBSan: `linux-asan` builds with 0 warnings. `linux-sanitize` failed once and passed once. Both runs had no sanitizer reports. The failure was in the X11 keyboard tests, the known XWayland flake from earlier stories.
+
+**Not run**
+
+- `engine_bench --suite acceptance`: there is no benchmark harness in the repo yet.
+- GPU and GUI checks: no GPU backend or UI exists yet.
+- Release builds and GitHub CI.
+
+**Choices I made**
+
+- The runtime reload is an API in `engine/assets`, but nothing calls it yet. The converter reports which GUIDs were converted, and an editor or frame loop would call `reload` for them. That consumer doesn't exist yet.
+- A missing dependency fails the dependent with `MISSING_DEPENDENCY`. It does not mark it `BLOCKED`, which the converter reserves for a dependency that already failed.
+- The docs tell users to keep the output directory outside the project. Inside the project, the existing scan lists each cooked file as an unregistered source on every pass. These are warnings only, and nothing loops. Fixing that means changing the US-018 scan.
+
+**Files**
+
+- New: `tools/asset_converter/include/asset_converter/watch.hpp`, `tools/asset_converter/src/{watch,watch_linux,watch_win32}.cpp`, `tests/src/converter_watch_tests.cpp`, `docs/source-watch.md`.
+- Changed: `engine/assets/include/engine/assets/asset_handle.hpp`, `tests/src/assets_handle_tests.cpp`, `tools/asset_converter/CMakeLists.txt`, `tools/asset_converter/src/main.cpp`, `tests/CMakeLists.txt`, `docs/asset-converter.md`, `docs/runtime-assets.md`, `tasks/prd.json`, `.ralph-tui/progress.md`.

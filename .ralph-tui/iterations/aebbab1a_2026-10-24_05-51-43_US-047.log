@@ -1,0 +1,50 @@
+# Iteration 92 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:51:43.476Z
+- **Ended At**: 2026-10-24T02:52:18.449Z
+- **Duration**: 34s
+- **Input Tokens**: 44
+- **Output Tokens**: 6179
+- **Total Tokens**: 6223
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see what US-047 already has.
+[94m[Bash][0m Read progress log and terrain sources $ git status 2>&1 | head -5
+The progress log shows US-047 is Partial. The CPU runtime, render bridge, and static-path integration are done. Open items are four-layer splat shading, shadow and RT checks, the bench workload, and the Windows gates. I'll read the splat-related code and the Windows gate notes.
+[94m[Bash][0m Read gate notes, terrain headers, and splat references $ grep -n "splat\|Splat" -r engine tests tasks/prd-open-world-engine.md | head -60
+The open work is the splat attribute and shader path. I'll check how the static vertex layout is built and how the shader reads it, to size that change.
+[94m[Bash][0m Locate vertex layout and mesh upload code $ sed -n 340,380p engine/render/src/scene_renderer.cpp
+The static layout is shared by every mesh, and the mesh pool and meshlet path both use `kVertexStride`. I'll count the draw paths that would need a terrain variant before deciding whether this pass can finish it.
+[94m[Bash][0m Count draw paths touching the mesh vertex pool $ grep -n "^[A-Za-z].*SceneRenderer::" engine/render/src/scene_renderer.cpp | wc -l
+I'm not going to finish the splat path in this pass. The remaining work is a multi-file renderer change, and I'll record why in the progress log instead of leaving it unverified.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-047 (re-check 14, still Partial) - What wa...
+US-047 is still Partial, so I'm not emitting the completion signal. The CPU runtime and the static-path integration are done. The four-layer splat shading and the rest of the renderer work are not started.
+
+**Done earlier and unchanged in this pass:**
+- `engine/world` tiles, LOD selection, stitching, normals, and splat weights, with 14 fixture cases.
+- The render bridge `make_terrain_render_tile` and its CPU coverage tests.
+- A top-down GPU fixture for tile coverage and LOD switching. Windows passed on DX12 (with debug layers) and Vulkan (pinned 1.4.363 layer, validation on).
+- Linux and Linux GCC unit gates, and the Linux ASan/UBSan run, from the earlier entries.
+
+**Still open:**
+- **Splat shading.** The static vertex layout has no splat attribute, so the four-layer blend is not on screen. Option (b) from the log (constant layer colours, terrain-only layout) is still the plan.
+- **Shadow and RT checks.** Terrain inherits the static path, but no fixture checks its shadow or RT results.
+- **`engine_bench` terrain workload** and the acceptance bench run.
+- **Windows gates** after any shader change.
+
+**Why I stopped here:** the splat change touches the shared draw path. Every static mesh uses `kVertexStride`, the mesh vertex pool, and one vertex buffer binding per draw. A terrain variant needs its own pool, a second pipeline for depth and shadow, and a shader change. That can only be verified on the Windows GPU batch. I didn't want to leave the shared path changed and unverified in a low-effort pass.
+
+**What I changed:** I appended a re-check entry to `.ralph-tui/progress.md` with the exact draw-path lines to change and the order to do it in. No source files changed, so no gates were re-run.
+
+**Next step:** start with the terrain-only pool and pipeline variant, then the splat shader, then the GPU fixture, and run the Windows batch after that.

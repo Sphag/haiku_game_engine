@@ -1,0 +1,42 @@
+# Iteration 759 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:32:01.666Z
+- **Ended At**: 2026-10-26T02:35:41.438Z
+- **Duration**: 3m 39s
+- **Input Tokens**: 32
+- **Output Tokens**: 2697
+- **Total Tokens**: 2729
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo, progress log, and US-076 PRD section $ ls && tail -c 3000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-0...
+The progress log shows 22 earlier passes, all blocked on user decisions. Before deciding anything, I'll confirm the current state of the workload check and the Linux build.
+[94m[Bash][0m Check build outputs and workload verification state $ (test -x build/linux-dev/tools/benchmark/engine_workload && build/linux-dev/tools/benchmark/engine_w...
+[94m[Bash][0m Verify workload digests and run Linux build and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Re-run workload check and summarize unit test result $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Failed|P...
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal. --- EOF tail -3 .ralph-tui/...
+US-076 is not complete, and I have not signalled COMPLETE. The blocker needs your decision, not more code.
+
+**Blocked on you:**
+1. **Triangle floor and frame budget.** The contract requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The current placement submits 312,068. p99 is 35–47 ms against a 16.7 ms budget. Fixing this means changing the pinned camera route or the seeded placement. Either change bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The PRD (US-080) treats any contract change as a separate user decision, so I have not made it.
+2. **full_1080 profile.** It stays unsupported until the vendored FSR 2 permutation headers exist (see `project-fsr2-permutations-missing`).
+3. **Native Linux Vulkan GPU run and linux-gcc.** Neither has run here. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. The Windows gates and the RTX 5080 suite also still need to run.
+
+**Verified in this pass (Linux):**
+- `cmake --build --preset linux-debug` builds.
+- `ctest --preset linux-unit` passes 30/30.
+- `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes match.
+
+I did not change any source, workload, or manifest. I appended a status entry to `.ralph-tui/progress.md`.
+
+**Decision needed:** approve a route-start or placement change (and I'll make it, bump the workload version, and regenerate the expected digests), or accept the current failing measured run as the story's result.

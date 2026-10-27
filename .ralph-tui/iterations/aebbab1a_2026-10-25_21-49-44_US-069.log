@@ -1,0 +1,53 @@
+# Iteration 626 Log
+
+## Metadata
+
+- **Task ID**: US-069
+- **Task Title**: Animation State Machine Runtime
+- **Description**: As a character author, I want a state graph so that I can connect animation to gameplay.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T18:49:44.473Z
+- **Ended At**: 2026-10-25T18:54:51.572Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 46
+- **Output Tokens**: 3094
+- **Total Tokens**: 3140
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and whether any animation state machine code already exists.
+[94m[Bash][0m Inspect repo layout and animation module $ grep -n "US-069" -r --include=*.md . | head -20
+The progress log already has a US-069 entry, so this may have been implemented in an earlier iteration. I'll read that entry and check the code against the acceptance criteria.
+[94m[Bash][0m Read US-069 progress entry and find related files $ find . -path ./build -prune -o -name "*state*" -print | grep -v third_party | head -30
+The log says the story was implemented and gated in an earlier iteration. Before I signal completion, I'll re-run the Linux build and unit tests to confirm the tree still matches that record.
+[94m[Bash][0m Validate vendor, build Linux debug, run unit tests $ echo EXIT=$?
+[94m[Bash][0m Summarize ctest results and locate engine_tests $ find build -name engine_tests -type f | head -3
+Linux unit gate passes (30/30). I'll also run the animation-specific tests directly to confirm the state machine fixtures pass.
+[94m[Bash][0m List animation test cases and run them $ ./build/linux-dev/tests/Debug/engine_tests "[animation]" 2>&1 | tail -3
+[94m[Bash][0m Run unit suite and animation test filters $ ./build/linux-dev/tests/Debug/engine_tests --suite unit "*animation*" 2>&1|tail -2
+US-069 was already implemented in an earlier iteration, and I re-verified it on Linux in this session. No code changes were needed.
+
+**What's in place**
+- `engine/animation/src/state_graph.cpp` and `state_machine.cpp` implement a versioned JSON state graph (`engine.animation_graph`, version 1). It has float, bool, and trigger parameters, conditions, an explicit default state, explicit per-source priorities, and timed blends.
+- The Lua `animation` module in `engine_script` sets and reads parameters.
+- Tests: 25 cases in `tests/src/animation_state_machine_tests.cpp` and `tests/src/script_animation_tests.cpp`. They cover transitions, priority, loop and finish events, root motion through a blend, and Lua parameter changes.
+- `docs/animation.md` is updated.
+
+**Re-verified in this session (Linux, clang, debug)**
+- `cmake -P cmake/ValidateVendor.cmake`: passed.
+- `cmake --build --preset linux-debug`: passed.
+- `ctest --preset linux-unit --no-tests=error`: 30 of 30 passed.
+- `engine_tests --suite unit`: 938 test cases, 256945 assertions, all passed.
+
+**Not re-run here**
+- The Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) are recorded as passed in `.ralph-tui/progress.md`. I did not re-run them in this session.
+- `linux-asan`/`linux-sanitize` and `linux-gcc` were also recorded in the earlier entry (ASan passed, GCC blocked by GCC 9.4 and Jolt). I did not repeat them.
+- `engine_bench` and the GPU suites are not run. No benchmark workload covers the state machine yet, and no GPU path changed.
+
+I did not add a new entry to `progress.md`, since the US-069 entry from the earlier iteration is already there.
+
+<promise>COMPLETE</promise>

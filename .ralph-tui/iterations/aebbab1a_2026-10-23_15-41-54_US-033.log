@@ -1,0 +1,92 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: US-033
+- **Task Title**: Scene Rendering and Picking
+- **Description**: As a scene author, I want to see objects and select them in the viewport.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T12:41:54.859Z
+- **Ended At**: 2026-10-23T13:00:17.366Z
+- **Duration**: 18m 22s
+- **Input Tokens**: 158
+- **Output Tokens**: 10403
+- **Total Tokens**: 10561
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and checking the repo layout.
+[94m[Bash][0m Inspect repo root and progress log $ ls -la && wc -l .ralph-tui/progress.md && tail -n 120 .ralph-tui/progress.md && git status 2>&1 | he...
+[94m[Bash][0m Survey engine tree, tests, PRD and build docs for US-033 $ ls engine engine/* | head -150 && ls tests tests/* | head -80 && grep -n "US-033" -A12 tasks/prd-ope...
+The build log already has a US-033 row, and later stories cite it. Before I trust it, I'll confirm the files exist and read the Windows-gate memory notes.
+[94m[Bash][0m Verify US-033 files exist and read Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+The Docs MCP isn't needed here, so I'll ignore it. Next I'll check the specific acceptance points: entity-deletion golden tests, and whether the snapshot holds any ECS pointers.
+[94m[Bash][0m Check scene tests for deletion cases and snapshot ECS coupling $ grep -n "US-033\|scene" .ralph-tui/progress.md | head
+The implementation and its tests exist, including the deletion cases. What's missing is fresh evidence, so I'll rerun the gates. I'll start with the Linux gates.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ echo "unit=${PIPESTATUS[0]}"
+[94m[Bash][0m Confirm unit pass count and Linux Vulkan GPU status $ ls build/linux-debug/tests 2>/dev/null | head -3
+[94m[Bash][0m Locate engine_tests and run Linux GPU and unit checks $ "$B" "[unit]" 2>&1 | tail -2
+[94m[Bash][0m Find the Linux build output directory $ find / -name engine_tests -type f -newer CMakePresets.json 2>/dev/null | head -5
+[94m[Bash][0m Check preset binary directory setting $ ls build/linux-dev | head
+
+[91m[Error: Exit code 144][0m
+[94m[Bash][0m Check preset binary directory and engine_tests location $ find build/linux-dev -maxdepth 3 -name "engine_tests*" | head -3
+[94m[Bash][0m Run Linux Vulkan GPU suite to record its status $ tail -3 /tmp/us033_vk.log
+The Linux Vulkan GPU suite reports `unsupported` (exit 3) on this host, which matches the existing notes. Next are the GCC and sanitizer presets.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests $ echo "gcc_unit=${PIPESTATUS[0]}")
+[94m[Bash][0m Inspect the failing GCC integration case $ ctest --preset linux-gcc-unit --output-on-failure --no-tests=error -R engine_tests_integration 2>&1 ...
+The integration failure didn't reproduce on rerun. It's the same flaky X11 focus case already recorded in earlier entries. Next are the sanitizer presets.
+[94m[Bash][0m Run ASan build and sanitizer unit tests $ grep -E "tests passed|Failed" /tmp/us033_san.log)
+Linux is green across the gates. The Windows gates need the batch runner. I'll check that no earlier batch is still running, then look for the reusable template.
+[94m[Bash][0m Check for running batches and read the reusable template $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/us038_final.bat" 2>/dev/null | tr -d '\r' | head -60
+No batch is running, so I'll create a US-033 copy of the template and launch it in the background.
+[94m[Bash][0m Create and launch the US-033 Windows gate batch $ echo launched
+While the batch runs, I'll wait on its done file in the background.
+[94m[Bash][0m Wait for Windows gate batch to finish $ ls /mnt/c/Users/bucha/AppData/Local/Temp/us033_done.txt 2>/dev/null
+[94m[Bash][0m Check interim Windows batch progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us033_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+[94m[Bash][0m Check Windows batch result file progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us033
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us033_rc.txt echo "--" ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us033. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for US-033 Windows batch done file $ echo BATCH_DONE
+[94m[Monitor][0m Wait for Windows gate batch result $ echo BATCH_DONE
+The Windows gate batch is running. I'll wait for its result before writing the progress entry.
+
+The Linux gates pass. The Windows batch (`us033_gate.bat`) is still running. Its result will come back through the monitor, and I'll record the results in `.ralph-tui/progress.md` once they arrive.
+[94m[Bash][0m Read Windows gate batch result codes $ pgrep -f us033_gate.bat | head -2
+All six Windows gate steps returned 0. Before I record them, I'll check the build log for warnings and pull the GPU case counts.
+[94m[Bash][0m Check Windows build warnings and GPU test counts $ ls .ralph-tui
+Everything is green and the build log has no warnings. I'll append the progress entry.
+[94m[Bash][0m Append US-033 entry to progress log $ GUI check (no editor or application window yet, so no screenshots or action log). - Files changed: `...
+US-033 (scene rendering and picking) was already implemented in the tree from earlier work. I made no source changes this pass; I re-ran the gates against the current tree, and they pass apart from the items noted below.
+
+**Linux (native-host WSL, Clang and GCC):**
+- `ValidateVendor`, `linux-dev`, and `linux-debug` pass with 0 warnings or errors.
+- `linux-unit` passes 22/22.
+- `linux-gcc-debug` builds with 0 warnings. `linux-gcc-unit` failed once on `engine_tests_integration`, from the known X11 focus flake. It passed on rerun.
+- `linux-asan` builds with 0 warnings, and `linux-sanitize` passes 22/22.
+- `engine_tests --suite gpu --backend vulkan` exits 3 (`unsupported`) because there is no Khronos validation layer on this host. Not run.
+
+**Windows (RTX 5080, via the batch runner):**
+- `ValidateVendor`, `win-dev`, and `win-debug` pass with 0 `warning C` and 0 `error C` lines.
+- `win-unit` passes 21/21.
+- `engine_tests --suite gpu --backend dx12`: 40 cases, 17733 assertions, all pass.
+- `engine_tests --suite gpu --backend vulkan` with validation layers: 41 cases, 17745 assertions, all pass.
+
+**Acceptance criteria:**
+- The golden deletion tests are in `render_scene_tests.cpp` and `render_scene_gpu_tests.cpp`. They cover transforms, depth, and picking after an entity is deleted, on both APIs.
+- The frame snapshot holds values and handles only, with no ECS pointers.
+
+**Not run:**
+- `engine_bench --suite acceptance`: the bench target does not exist yet (US-074).
+- GUI check: there is no editor or application window yet, so there are no screenshots or action log.
+- GitHub CI: nothing was pushed.
+
+I appended the US-033 entry to `.ralph-tui/progress.md`. No commit was made, per the workflow.
+
+<promise>COMPLETE</promise>

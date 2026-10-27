@@ -1,0 +1,51 @@
+# Iteration 1247 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:23:06.498Z
+- **Ended At**: 2026-10-26T23:23:31.708Z
+- **Duration**: 25s
+- **Input Tokens**: 44
+- **Output Tokens**: 3123
+- **Total Tokens**: 3167
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the current state of the docs and build presets.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ git status 2>&1 | head -5
+The log shows this story has been through many passes with the same open blockers. Before deciding anything, I'll check whether those blockers have changed on this machine.
+[94m[Bash][0m Check blockers and acceptance open items $ find . -newer artifacts/reports/us081 -type f -not -path './build/*' -not -path './.ralph-tui/*' 2>/...
+The blockers are unchanged: no `/dev/dri`, GCC 9.4 only, no LICENSE file. Two files are newer than the recorded gate reports, so I'll check whether they changed the recorded results.
+[94m[Bash][0m Compare timestamps of acceptance doc and reports $ grep -n "US-081" tasks/prd.json | head -3
+Nothing has drifted: the acceptance doc and the report logs were written in the same pass, and `prd.json` is the loop's own bookkeeping. I'll record this check in the progress log and stop without a COMPLETE signal.
+[94m[Bash][0m Append blocker-check entry to progress log $ no COMPLETE signal) - Checked the blockers against the machine: `/dev/dri` absent, only GCC 9.4 inst...
+My entry lists linux-asan as open, but the earlier log records it as passing. I'll correct that line.
+[94m[Bash][0m Correct the open-items line in progress log $ sed -i 's/linux-gcc (GCC 11+), linux-asan\/linux-sanitize, the Windows Vulkan editor suite/linux-gcc...
+US-081 is not complete, so I am not emitting the COMPLETE signal. Every gate that can run on this machine has already passed, and the remaining acceptance items need hardware, a compiler, or a decision this machine cannot supply.
+
+I re-checked the blockers this pass. Nothing has changed:
+- **No native Linux Vulkan device:** `/dev/dri` is absent.
+- **Wrong compiler for linux-gcc:** only GCC 9.4 is installed, and Jolt needs GCC 11+.
+- **No LICENSE file:** the license choice is yours to make.
+- **FSR 2 shader tables missing:** the vendored `*_permutations.h` files are not in `third_party`.
+
+`docs/acceptance.md` and the report logs in `artifacts/reports/us081/` were written in the same pass, so the recorded gate results match the current tree. I did not re-run any gate or change any source or doc this pass.
+
+Still open, as listed in `docs/acceptance.md`:
+- The RTX 5080 Vulkan GPU report on native Linux.
+- The full acceptance benchmark (`engine_bench --suite acceptance`).
+- Visual editor smoke tests with screenshots on both OSes.
+- The Windows Vulkan editor suite.
+- linux-gcc, which needs GCC 11+.
+- A package built from a real sample game on each OS.
+- The LICENSE decision.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this check and the open list.

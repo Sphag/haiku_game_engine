@@ -1,0 +1,51 @@
+# Iteration 259 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:46:03.284Z
+- **Ended At**: 2026-10-24T15:51:11.640Z
+- **Duration**: 5m 8s
+- **Input Tokens**: 42
+- **Output Tokens**: 3674
+- **Total Tokens**: 3716
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing Jolt status notes and the current state of the physics code, since memory says US-052 is partly done.
+[94m[Bash][0m Read physics memory notes, progress log, and physics dir $ git status 2>&1 | head -5
+The notes say the Windows and Linux clang gates pass, with `linux-gcc` blocked and no benchmark harness. Before deciding anything, I'll recheck the two blockers and confirm the source hasn't changed since the last run.
+[94m[Bash][0m Check compilers, bench target, and source mtimes $ grep -n '"name"' CMakePresets.json | grep -i gcc | head
+Nothing has changed: GCC 11+ is still absent, there is still no `engine_bench` target, and the physics sources are older than the last gate runs. I'll rerun the Linux clang gates once to confirm the current tree still passes.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -n 4 /tmp/us052_ctest.log)
+
+[91m[Error: Exit code 1
+validate=0
+dev=0
+build=0
+0][0m
+The chain stopped on `grep -c`, which exits 1 when it finds zero matches, so ctest never ran. The build itself reported 0 warnings. I'll run ctest on its own.
+[94m[Bash][0m Run Linux unit ctest preset $ grep -i physics /tmp/us052_ctest.log | head
+[94m[Bash][0m Confirm test totals and append progress entry $ Jolt needs GCC 11+ for `__builtin_bit_cast`. - Not run: `engine_bench --suite acceptance`. No `engin...
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The Jolt adapter is implemented and the Linux clang gates pass on the current tree. Two acceptance items remain blocked by this machine, not by the code.
+
+**Verified this pass (Linux, clang 10, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, 0 warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 passed (1 unit, 21 integration)
+
+I did not rerun the Windows gates or the ASan/UBSan preset this pass. The physics sources have not changed since 13:13, and my notes record both as passing after that edit (Windows 21/21, sanitize 22/22).
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. Only g++-9 is installed, and Jolt needs GCC 11+ for `__builtin_bit_cast`. `sudo` needs a password here, so I could not install g++-11. Installing it (`sudo apt install g++-11`) or running the separate GCC CI job would close this.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists in the tree. That harness is US-074, so this criterion cannot run yet.
+
+I appended a progress entry to `.ralph-tui/progress.md` recording this status. I made no source changes.

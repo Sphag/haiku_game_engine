@@ -1,0 +1,47 @@
+# Iteration 643 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T23:39:20.257Z
+- **Ended At**: 2026-10-25T23:40:06.337Z
+- **Duration**: 46s
+- **Input Tokens**: 50
+- **Output Tokens**: 4855
+- **Total Tokens**: 4905
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and find render_stress references $ git status 2>/dev/null | head -5
+[94m[Bash][0m Read US-076 PRD section and benchmark docs $ wc -l tools/benchmark/src/*.cpp
+[94m[Bash][0m Locate render_stress contract and manifest $ cat benchmarks/manifest.json | head -150
+[94m[Bash][0m Inspect bench main flow and render API for paths $ grep -rn -i "mesh_shader\|meshlet" engine/render/include/engine/render/*.hpp engine/rhi/include/engi...
+[94m[Bash][0m Locate built engine_workload and run its check $ [ -n "$f" ] && "$f" --check 2>&1 | tail -15
+[94m[Bash][0m Run engine_workload check against expected file $ print(json.dumps(d,indent=1)[:1500])" 2>/dev/null
+[94m[Bash][0m Print render_stress generated counts $ print(c)"
+[94m[Bash][0m Append partial-status entry to progress notes $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-26 - US-076 (partial, not complete) - Verified: `e...
+US-076 is not complete. I checked the data side of the story and recorded the rest as open in `.ralph-tui/progress.md`. I did not emit the completion signal.
+
+**Verified**
+- `engine_workload --check benchmarks/workload_expected.json` exits 0 and reports 4 scenes matching.
+- The generated `render_stress` counts match the contract: 20000 instances, 200 meshes, 100 characters with 64 bones each (6400 bones), 100000 particles, 128 lights, 4 shadowed, and 1 sun.
+
+**Not done**
+- No `render_stress` scene builder exists. `benchmarks/manifest.json` still has `implementation: "none"`, and `render_route_v1` is still "pending US-076". The route needs a definition, and that is a design choice you may want to weigh in on.
+- `engine_bench` has no GPU measurement loop yet. So the indexed, indirect, and meshlet path runs, the screenshots, the submitted and visible counters, the GPU timestamps, and the forced mesh-shader-off fallback are all missing.
+- The "at least 2 million submitted triangles" check cannot be measured until that loop exists.
+- None of the Windows or Linux quality gates were run for this story. The GPU suites were not run either.
+
+**Next steps**
+1. Define `render_route_v1` in the manifest.
+2. Build the scene on the renderer from the generated workload.
+3. Add per-path and per-profile runs that record counters and screenshots.
+4. Add the mesh-shader-off fallback check.
+5. Run the gates on Windows (via cmd.exe, per the saved notes) and on native Linux.

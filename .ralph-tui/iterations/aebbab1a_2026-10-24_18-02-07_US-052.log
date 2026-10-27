@@ -1,0 +1,41 @@
+# Iteration 240 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:02:07.867Z
+- **Ended At**: 2026-10-24T15:02:31.606Z
+- **Duration**: 23s
+- **Input Tokens**: 38
+- **Output Tokens**: 3454
+- **Total Tokens**: 3492
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing Jolt status notes and the current state of the tree.
+[94m[Bash][0m Read physics memory, gate notes, progress log, and physics dir $ git status 2>&1 | head -5
+The notes say the work is done and the remaining gaps are external. Before deciding, I'll check whether the tree changed since the last gate run and whether a GCC 11+ compiler now exists.
+[94m[Bash][0m Check file times, compilers, and engine_bench target $ grep -rl "engine_bench" --include=CMakeLists.txt . 2>/dev/null | grep -v third_party | head
+Nothing changed since the 13:13 CMake edit, the last full gate run covered that state, and there is still no GCC 11+ and no `engine_bench` target. I'll confirm the tests cover the pause, catch-up, and closure criteria before recording this pass.
+[94m[Bash][0m List physics test cases and pause/catch-up/close code $ grep -rn "catch\|pause\|closure\|close" engine/physics/src/physics_world.cpp | head -30
+Coverage for pause, catch-up, closure, and the rest is in place. I'll record this pass in the progress log.
+[94m[Bash][0m Append US-052 status entry to progress log $ no `/opt` compiler. `linux-gcc*` stay blocked (Jolt needs GCC 11+). - Benchmark: no `engine_bench` t...
+US-052 is still **Partial**, so I did not emit the completion signal. The adapter and its tests are in place and the gates I could run pass. Two acceptance items can't be closed in this environment.
+
+**Passing on the current tree** (last full run recorded in the progress log; nothing has changed since the 13:13 CMake edit):
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21).
+- Linux clang 10: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (22/22 including integration), and `linux-asan` plus `linux-sanitize` (22/22).
+- The 13 physics unit cases cover the 60 Hz fixed step, render interpolation, body motion types and stable handles, per-scene worlds, pause, the catch-up limit, callbacks through the queue, world closure, and origin rebases. None of them depend on the renderer.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. The only compilers here are GCC 9.4 and clang 10, and Jolt needs GCC 11+ for `__builtin_bit_cast`. There is no GCC 11+ on the machine and `sudo` needs a password. This needs a GCC 11+ environment or the CI job.
+- **`engine_bench --suite acceptance`:** not run. No `engine_bench` target exists in the tree; the benchmark harness is US-074. I read the criterion's condition ("once the harness exists") as not yet met, but that is my interpretation, not something the story settles.
+
+I appended a status entry to `.ralph-tui/progress.md`. I did not change any source files in this pass.

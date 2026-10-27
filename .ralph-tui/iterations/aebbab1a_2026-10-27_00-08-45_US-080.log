@@ -1,0 +1,41 @@
+# Iteration 1113 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:08:45.515Z
+- **Ended At**: 2026-10-26T21:08:59.790Z
+- **Duration**: 14s
+- **Input Tokens**: 18
+- **Output Tokens**: 1674
+- **Total Tokens**: 1692
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and list repo top level $ ls tools/benchmark 2>/dev/null
+[94m[Bash][0m Check hardware, bench artifacts, and FSR permutations $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+US-080 is not complete, and I did not signal COMPLETE. Nothing on this host has changed since the last 28 status checks in `.ralph-tui/progress.md`, so I made no code changes and ran no builds or benchmarks this pass.
+
+What I re-checked just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. `nvidia-smi` sees the RTX 5080, but only through WSL, which does not count as native Linux/Vulkan evidence.
+- **FSR 2 is still not buildable.** `third_party/fsr2` has 0 `*_permutations.h` files, so the upscaler stays unavailable.
+- **Benchmark manifest still has gaps.** `benchmarks/manifest.json` has 4 entries marked `implementation: none`, covering the physics, streaming, and all_features workloads.
+- **No acceptance run exists.** `artifacts/bench` has only the earlier us076–us080 runs and no `acceptance` run, so the required three-repeat reports do not exist.
+
+Still open, and not something more looping can fix:
+
+1. **The three native GPU reports** (Windows/DX12, Windows/Vulkan, native Linux/Vulkan) on the reference RTX 5080 machine. The Windows runs go through the cmd.exe/.bat route in memory notes, and the Linux Vulkan run needs a real device.
+2. **A user decision on the FSR 2 permutations route.** The generated shader tables are missing from the vendored tree, and I can't produce them without choosing where they come from.
+3. **Implementations for the physics, streaming, and all_features workloads.** These are needed before the full acceptance suite can run.
+4. **Frame budget.** The earlier render_stress notes say p99 is above 16.7 ms, so the 60 FPS budget is not met yet. The cause needs to be measured and fixed, not the contract changed.
+5. **Visual editor smoke tests** on both operating systems, which I can't run from here.
+
+I did not add another status entry to `progress.md`, since it would only repeat the previous ones. The next step needs one of: access to the reference machine, a decision on the FSR 2 route, or a decision to descope those workloads from this story.

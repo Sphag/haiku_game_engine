@@ -1,0 +1,40 @@
+# Iteration 248 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:11:59.555Z
+- **Ended At**: 2026-10-24T15:12:17.136Z
+- **Duration**: 17s
+- **Input Tokens**: 30
+- **Output Tokens**: 2718
+- **Total Tokens**: 2748
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state against the acceptance criteria before deciding what's left, starting with the progress log and the physics code.
+[94m[Bash][0m Read progress log and physics module files $ ls artifacts 2>/dev/null | head
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The progress log and memory both say US-052 is Partial, blocked only on the `linux-gcc` gate. Before re-running anything, I'll check whether a GCC 11+ toolchain now exists and whether the tree changed since the last verification.
+[94m[Bash][0m Check compilers and recent physics file changes $ date
+Nothing has changed since the last verification. The tree is untouched since 13:13, and the only compilers are GCC 9.4 and clang 10. I'll record this pass in the progress log without claiming completion.
+[94m[Bash][0m Append recheck entry to progress log $ `/opt` absent. `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` stay blocked (Jolt needs GCC 11+ for...
+US-052 is not complete, so I'm not emitting the completion signal. Everything except the GCC gate and the benchmark was verified on the current tree.
+
+**Verified on the current tree (the last full run was earlier today, and nothing under `engine/physics/` or the physics tests has changed since the 13:13 CMake edit):**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21) passed.
+- Linux clang 10: `ValidateVendor`, `linux-dev`, `linux-debug` (no warnings or errors), `linux-unit` (22/22), and `linux-asan` build plus `linux-sanitize` ctest (22/22) passed.
+- Physics coverage: 13 unit cases for the 60 Hz fixed step, pause, catch-up limit, per-scene worlds, callbacks, and world closure, none of which need the renderer.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. Jolt needs GCC 11+ for `__builtin_bit_cast`, and this machine has only GCC 9.4. `apt` has no GCC 11 candidate and sudo is not passwordless. This gate needs a GCC 11+ environment or CI.
+- **`engine_bench --suite acceptance`:** not run. No `engine_bench` target exists yet; that is US-074.
+
+I added a dated entry to `.ralph-tui/progress.md` recording this recheck and the Partial status. The memory note on the physics status already matches, so I left it unchanged.

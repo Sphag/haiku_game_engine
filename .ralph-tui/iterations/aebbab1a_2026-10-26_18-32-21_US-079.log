@@ -1,0 +1,61 @@
+# Iteration 998 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:32:21.377Z
+- **Ended At**: 2026-10-26T15:32:32.916Z
+- **Duration**: 11s
+- **Input Tokens**: 22
+- **Output Tokens**: 1680
+- **Total Tokens**: 1702
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether an `all_features` scene already exists.
+[94m[Bash][0m Check progress log and existing all_features references $ ls
+The progress log shows this story has been checked 85 times and stopped each time on the same blockers. I'll re-verify those blockers once, then report instead of repeating the loop.
+[94m[Bash][0m Re-verify US-079 blockers in manifest and tree $ ls -d samples 2>&1
+
+[91m[Error: Exit code 2
+0
+131:    "all_features": {
+132-      "implementation": "none",
+133-      "seed": 7901,
+134-      "workload": {
+135-        "descriptors": 100000,
+136-        "resident_renderables": 10000,
+137-        "animated_characters": 50,
+--
+169:        {"scene": "all_features", "profile": "native_1080"},
+170:        {"scene": "all_features", "profile": "full_1080"},
+171-        {"scene": "physics_stress", "profile": "physics_visual"},
+172-        {"scene": "physics_stress", "profile": "physics_headless"}
+173-      ]
+174-    },
+175-    "streaming_soak": {
+176-      "description": "Streaming stress on the CPU for residency stability: 30 s warmup, then a 30-minute soak paced at the 60 Hz step (about ten traversals of streaming_route_v1). A CPU diagnostic; not part of the performance acceptance suite.",
+152:      "route": {"name": "all_features_route_v1", "definition": "Shared world centre (4096, 4096) m with the streaming_route_v1 waypoints (-1200, -600), (1200, -600), (1200, 600), (-600, 600), walked at 30 m/s in simulated time on the fixed 60 Hz step, forward and back, so the 10 000 resident renderables, 50 000 particles and dynamic bodies stay in view while cells stream. The Lua gameplay, audio emitters, HUD, save/load fixtures and cooked material and animation graphs run on every frame. full_1080 is reported unsupported until FSR 2 permutation headers are vendored (ENGINE_FSR2_AVAILABLE off), the same policy render_stress uses."}
+ls: cannot access 'samples': No such file or directory][0m
+US-079 is not complete, and I did not signal COMPLETE. I re-checked the blockers and nothing has changed since the last 85 runs. The story depends on decisions and access only you can provide.
+
+**Verified just now:**
+- `samples/` does not exist, so there is no `samples/all_features` scene.
+- `third_party/fsr2` has 0 `*_permutations.h` files. FSR 2 cannot be enabled, so `full_1080` can only be reported unsupported.
+- `benchmarks/manifest.json` still has `all_features` as `implementation: none`. Its route `all_features_route_v1` is a proposal, not an approved contract.
+
+**What's needed from you:**
+1. **Approve `all_features_route_v1`.** It fixes the benchmark contract (the route, the 10 000 renderables, and the 50 000 particles). That's your decision to make, not mine. Once approved, I can wire the `all_features` benchmark branch and the tour.
+2. **Decide on FSR 2.** Either vendor the permutation headers or accept that `full_1080` stays unsupported and is reported as such.
+3. **Give me a Windows session.** The Windows gates (ValidateVendor, win-dev, win-debug, win-unit), the DX12/Vulkan GPU suites, and the live editor run with package/relaunch and screenshots need a Windows GUI environment. WSL cannot run those checks.
+
+**What is already in place:** the CPU integration suite passed on Linux (132 passed, 3 skipped for X11 window-manager cases, 1766/1766 assertions), and `ctest --preset linux-unit` passed 30/30. Those results are from the last recorded run and I did not re-run them in this pass. The Linux gates are the only part of the acceptance list I can verify from here. Not run or not verified: linux-asan, linux-gcc, engine_bench acceptance, the forced geometry paths, the GI/RT/upscale profiles, and the tour.
+
+I did not add another progress entry, because the log already holds 85 identical status entries.

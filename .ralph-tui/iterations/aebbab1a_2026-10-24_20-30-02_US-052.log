@@ -1,0 +1,43 @@
+# Iteration 305 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T17:30:02.196Z
+- **Ended At**: 2026-10-24T17:34:37.560Z
+- **Duration**: 4m 35s
+- **Input Tokens**: 36
+- **Output Tokens**: 2889
+- **Total Tokens**: 2925
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking how much of US-052 already exists, since the memory notes say the Jolt adapter was built earlier.
+[94m[Bash][0m Inspect physics dir and progress log for US-052 $ ls engine/physics/ && grep -n "US-052" -A3 .ralph-tui/progress.md | tail -40 && git status 2>&1 | he...
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+Earlier passes recorded US-052 as Partial, blocked on the `linux-gcc` gate and the benchmark. I'll re-check those two blockers before deciding anything.
+[94m[Bash][0m Check compilers, bench target, and gcc preset $ sudo -n true 2>&1 | head -1
+The blockers are unchanged: only GCC 9.4 and clang-10 are installed, `sudo` needs a password, and no `engine_bench` target exists. I'll re-run the local Linux gates so the status rests on a fresh run.
+[94m[Bash][0m Run validate, Linux debug build, and linux-unit ctest $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Confirm pass count and log the rerun in progress file $ `sudo -n` needs a password). Jolt needs GCC 11+ for `__builtin_bit_cast`. - Not run: `engine_bench -...
+US-052 is not complete, so I have not signalled `<promise>COMPLETE</promise>`. The Jolt adapter and its tests are in place, but two acceptance items are blocked by this environment.
+
+**Passing in this session (re-run today):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22 of 22 (1 unit, 21 integration)
+
+The Windows gates (validate, win-dev, win-debug, win-unit) passed in the last recorded run, after the most recent CMake edit. I did not re-run them in this session, and the source has not changed since.
+
+**Blocked:**
+- **`linux-gcc` gate.** Only GCC 9.4 and clang-10 are installed. Jolt needs GCC 11+ for `__builtin_bit_cast`. `sudo -n` requires a password, and there is no `/opt` compiler, micromamba, conda or docker. This gate needs GCC 11+ installed locally or a CI GCC 11 job.
+- **`engine_bench --suite acceptance`.** No `engine_bench` target exists in any non-vendored CMakeLists.txt. That target is US-074, so the benchmark cannot run yet.
+
+I appended a dated entry to `.ralph-tui/progress.md` recording this rerun and the Partial status. Nothing in source was changed.

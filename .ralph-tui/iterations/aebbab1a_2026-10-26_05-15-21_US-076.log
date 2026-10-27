@@ -1,0 +1,44 @@
+# Iteration 700 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:15:21.088Z
+- **Ended At**: 2026-10-26T02:15:39.080Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2972
+- **Total Tokens**: 2994
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo state and benchmark tool files $ wc -l .ralph-tui/progress.md
+The log shows several earlier US-076 passes, one ending in "needs user decision". I'll read that section before doing anything.
+[94m[Bash][0m Read latest US-076 progress entries $ sed -n 4150,4264p .ralph-tui/progress.md
+US-076 is not complete. Every remaining item is blocked on one decision from you, so I did not rerun anything this pass.
+
+**What is done (from the logged runs on the current tree):**
+- `render_route_v1` is defined in `benchmarks/manifest.json`, and the `render_stress` driver (`tools/benchmark/src/render_stress.{hpp,cpp}`) runs the indexed, indirect, and meshlet paths on DX12 and Vulkan.
+- The forced mesh-shader-off run falls back to indirect-indexed. Its report says `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, and the fallback is what the render path actually uses, not what was requested.
+- Counters, screenshots, and the `render_stress` counts (20000 instances, 200 meshes, 100 characters, 100000 particles, 128 lights, 4 shadowed, 1 sun) match the contract. `engine_workload --check` passes for all four scenes.
+- Windows gates pass on the current tree: ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72) and Vulkan (73), and the win-release `engine_bench` build.
+- Linux gates pass: ValidateVendor, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` (30/30).
+
+**What blocks completion:**
+1. **The acceptance floors fail on placement.** The start frame submits 312,068 triangles against the manifest's 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. The contract forbids reducing the workload, so the failing results stand as measured.
+2. **full_1080 is unsupported** because the vendored FSR 2 permutation headers are missing. Only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU, and linux-gcc (GCC 9.4 cannot build Jolt). WSL has no Vulkan device.
+
+**Decision needed from you:**
+- **(a)** Keep the contract as written. Close US-076 with the failing frame-budget and triangle results recorded as the measured outcome.
+- **(b)** Change instance placement so the route start sees a realistic share of the 20000 instances. This is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and rerun the eight `us076-*` reports (about 80 minutes). It may still fail the 16.7 ms budget, and I can't predict that.
+
+My recommendation is (b). A 312k-triangle start view doesn't stress the paths the story is meant to compare. But it changes the benchmark contract, so it's your call. Tell me which option to take and I'll do it, including the Windows and Linux gate reruns. I did not add a progress entry this pass, since the previous status checks already recorded this same blocker.

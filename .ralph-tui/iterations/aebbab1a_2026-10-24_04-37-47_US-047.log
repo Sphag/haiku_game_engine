@@ -1,0 +1,43 @@
+# Iteration 76 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T01:37:47.555Z
+- **Ended At**: 2026-10-24T01:42:36.609Z
+- **Duration**: 4m 49s
+- **Input Tokens**: 28
+- **Output Tokens**: 2689
+- **Total Tokens**: 2717
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and terrain sources $ git status 2>&1 | head -3
+[94m[Bash][0m Read PRD terrain section and terrain header $ cat engine/world/include/engine/world/terrain.hpp | head -150
+The CPU side is in place from earlier passes, and the renderer, GPU, and bench work is still open. I'll re-verify the Linux CPU gates on the current tree before recording anything.
+[94m[Bash][0m Run Linux vendor validation, build, and unit tests $ echo "ctest=${PIPESTATUS[0]}"
+[94m[Bash][0m Append progress note for this pass $ `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0. - Status call: US-047 stays...
+US-047 is still **Partial**, so I am not signalling COMPLETE.
+
+**What holds on Linux (re-run on the current tree):**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug` exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` exits 0. The CPU terrain fixture is part of that run.
+
+**What is still open:**
+- The CPU runtime in `engine/world` covers tiling, LOD selection, stitching, normals, four-layer splat weights, and the coverage/hole fixture. The earlier pass also recorded the Windows and linux-gcc/asan runs as passing.
+- No renderer terrain draw path exists yet, and no splat shader or material variant.
+- Depth, shadow, and RT participation in the full profile are not started.
+- No GPU fixtures for terrain, and no `engine_bench` terrain workload.
+- I did not run the Windows gates or the GPU and bench suites in this pass.
+
+**Decision needed from you:** how the four splat layers reach the GPU. Options are per-layer textures (a new material variant in `scene.hlsl`) or a vertex-colour encoding of the four weights. The renderer pass is large enough that I'd rather not pick this silently.
+
+I appended a progress entry to `.ralph-tui/progress.md` recording this pass and the open items.

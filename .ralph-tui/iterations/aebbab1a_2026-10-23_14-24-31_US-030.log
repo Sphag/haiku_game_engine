@@ -1,0 +1,127 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-030
+- **Task Title**: Vulkan Resources and Descriptors
+- **Description**: As a rendering developer, I want the same resource model in Vulkan so that the backends have parity.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T11:24:31.527Z
+- **Ended At**: 2026-10-23T11:57:21.188Z
+- **Duration**: 32m 49s
+- **Input Tokens**: 314
+- **Output Tokens**: 43437
+- **Total Tokens**: 43751
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the PRD sections this story touches.
+[94m[Bash][0m Inspect repo root and progress log tail $ ls -la && wc -l .ralph-tui/progress.md && tail -c 6000 .ralph-tui/progress.md
+[94m[Bash][0m Read progress log header and codebase patterns $ head -n 80 .ralph-tui/progress.md
+The progress log has no prior entries, so I need to find out what US-028 and US-029 actually left in the tree. Next I'll read the PRD and survey the engine.
+[94m[Bash][0m List tasks, engine, tests and source files $ find engine tests -type f | head -300 | xargs -I{} sh -c 'echo "{} $(wc -l < "{}")"' | tail -n 300
+[94m[Bash][0m Read US-030 story and PRD section index $ grep -n "US-02[89]\|US-030\|Vulkan\|Non-Goal\|Non-goal\|Technical Consid\|Functional Req\|performanc...
+The Vulkan device code is already large, so US-030 may be partly built. Before reading the RHI, I'll check the memory notes on how the gates run here, since they affect what I can verify.
+[94m[Bash][0m Read memory notes on gates and Vulkan environment $ done
+Memory notes show later stories (US-033, US-038) already ran, so the tree is further along than the story list suggests. I'll check what the Vulkan backend already has for US-030: sync2, staging, descriptors, deferred destruction, and capability gating.
+[94m[Bash][0m Survey Vulkan device header and function list $ grep -n "^[A-Za-z].*(" engine/rhi/src/vulkan/vulkan_device.cpp | head -150
+The backend already has descriptor pools, deferred retirement, and timeline sync. Next I'll check whether sync2 and capability validation are present, and what the existing Vulkan GPU tests cover.
+[94m[Bash][0m Search sync2 usage and list Vulkan GPU test cases $ grep -n "rhi_vulkan\|rhi_contract\|add_test\|LABELS\|label" tests/CMakeLists.txt | head -60
+Much of US-030 already exists in the backend, marked with "(US-030)" comments, so this is likely a verify-and-finish pass rather than a fresh build. I'll run the Linux gates first to see where things stand.
+[94m[Bash][0m Run vendor validation and Linux dev configure and build $ tail -n 30 /tmp/us030_linux_build.log
+Linux configure and debug build both exited 0. Next, the Linux unit test gate.
+[94m[Bash][0m Run Linux unit test gate via ctest $ tail -n 25 /tmp/us030_linux_unit.log
+Linux unit gate passes (22/22, 0 errors in the debug build). Next I'll check the US-030-specific criteria: the capability gate before pipeline creation, and whether the tests cover it.
+[94m[Bash][0m Find bindless and indirect capability checks in RHI $ sed -n 1003,1040p engine/rhi/src/vulkan/vulkan_device.cpp
+[94m[Bash][0m Read rest of Vulkan pipeline validation and feature checks $ sed -n 1,80p engine/rhi/include/engine/rhi/capabilities.hpp
+The backend already validates descriptor limits and feature bits before pipeline creation, so the implementation looks largely in place. Next I'll see what the Linux Vulkan GPU suite does on this host, since memory says there is no usable device.
+[94m[Bash][0m Run Linux Vulkan GPU suite to see host status $ tail -n 30 /tmp/us030_linux_gpu.log
+The Linux GPU suite reports not-run, as the memory notes predicted. Next are the Windows gates, which run through `cmd.exe`. I'll check for an existing gate batch to reuse and confirm no earlier batch is still running.
+[94m[Bash][0m Look for existing Windows gate batches and running batches $ ls /mnt/d/dev/vvl_build 2>/dev/null
+[94m[Bash][0m Inspect recent gate batch templates on Windows temp $ cat "$f" | tr -d '\r'
+I'll adapt the US-038 batch for US-030 (same gates, own file names), check its line endings, and launch it in the background.
+[94m[Bash][0m Create and launch US-030 Windows gate batch $ echo launched
+While the Windows batch runs, I'll wait on its done file with a bounded poll rather than relaunching anything.
+[94m[Bash][0m Poll Windows gate batch until done or timeout $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us030_done && echo DONE
+Windows gates pass through the DX12 GPU suite, but the Vulkan GPU suite returned 1. I'll read its log before drawing any conclusion.
+[94m[Bash][0m Read Windows Vulkan GPU failure log $ tail -n 5 us030_4.log
+The Vulkan GPU suite fails 5 swapchain cases with "layout transition on presentable image … not acquired". Memory says US-038 left this open. The layer report could be either a real acquire-tracking bug or a layer issue, so I'll identify the failing cases and read the swapchain code.
+[94m[Bash][0m Identify failing Vulkan GPU test cases $ grep -n -B2 -A6 "FAILED:" us030_6.log | head -80
+[94m[Bash][0m Read Vulkan swapchain tests and acquire logic $ grep -n "acquire\|present\|Present\|layout" engine/rhi/src/vulkan/vulkan_swapchain.cpp | head -90
+The first failing transition is on a swapchain image that has not been acquired yet. That points at the creation-time sync submission that moves every image to Present before any frame. I'll read that path and the acquire/present code to confirm.
+[94m[Bash][0m Read swapchain creation transition and acquire/present code $ sed -n 440,590p engine/rhi/src/vulkan/vulkan_swapchain.cpp
+Confirmed: `recreate` moves every swapchain image to PRESENT_SRC in a submission that runs before any `vkAcquireNextImageKHR`, and the layer flags it. Before choosing a fix, I need to see how `run_immediate` and the frame sync submission pass waits and signals.
+[94m[Bash][0m Read submit path, run_immediate, and frame sync helpers $ grep -n "run_immediate\|submit_frame_syncs\|add_frame_sync\|frame_sync_submitted" engine/rhi/src/vul...
+`run_immediate` host-waits and `submit_native` already merges swapchain frame syncs, so the fix can reuse that path. One question decides the design: whether a texture's transition barrier takes its old layout from the tracked `texture->layout` or from the RHI state. I'll check that and the back-buffer adoption code.
+[94m[Bash][0m Read Vulkan image barrier and back buffer adoption $ grep -n "layout" engine/rhi/src/vulkan/vulkan_device.hpp engine/rhi/src/vulkan/vulkan_common.hpp | h...
+The barrier takes its old layout from `texture->layout`, which is what I needed. So the fix is:
+
+1. Stop moving images to PRESENT_SRC at swapchain creation. They start UNDEFINED, which is valid for the first transition after acquire.
+2. In `present()`, if an acquired image is still UNDEFINED and no list has run this frame, transition it in the frame-sync submission. That submission still waits on the acquire.
+3. If a list already consumed the acquire without touching an UNDEFINED image, fail with a clear error rather than present in an invalid layout.
+
+I'll check the comments that describe this path first, so they stay accurate.
+[94m[Bash][0m Read device/swapchain comments and includes to edit $ grep -n "sync_for\|SyncScope" engine/rhi/src/vulkan/vulkan_common.hpp engine/rhi/src/vulkan/vulkan_c...
+I have what I need, so I'll make the edits. First the device API: `submit_frame_syncs` takes an optional record step, so the first-use transition can ride on the acquire wait without a host stall.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_device.hpp[0m edit: "    // Submits to the graphics queue the frame syn..." → "    // Submits to the graphics queue the frame syn..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_device.cpp[0m edit: "RhiStatus VulkanDevice::submit_frame_syncs() {
+   ..." → "RhiStatus VulkanDevice::submit_frame_syncs(const s..."
+Next, the swapchain: remove the creation-time transition, since images now start UNDEFINED.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_swapchain.cpp[0m edit: "    // A back buffer starts in Present, so its ima..." → "    // A back buffer starts in Present, but its im..."
+Now `present()`: the first-use path transitions the image inside the acquire-protected sync submission, and the no-list-touched case fails explicitly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_swapchain.cpp[0m edit: "    if (acquire_pending_) {
+        // No list was..." → "    if (acquire_pending_) {
+        // No list was..."
+Now I'll rebuild on Linux. First-party code builds with warnings as errors, so this also catches any unused variable left by the removed block.
+[94m[Bash][0m Rebuild Linux debug after swapchain transition fix $ tail -n 3 /tmp/us030_linux_build2.log
+Linux builds with no errors or warnings. I'll check that no earlier batch is running, then relaunch the Windows gate batch with the fix.
+[94m[Bash][0m Relaunch Windows gate batch after confirming none running $ echo launched
+[94m[Bash][0m Poll Windows gate batch until done or timeout $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us030_done && echo DONE
+All six Windows steps now exit 0, including the Vulkan GPU suite. Exit codes alone are not enough, so I'll check the logs for the real test counts, the GPU report, and any build warnings.
+[94m[Bash][0m Verify Windows logs: test counts, GPU report, warnings $ ls -la us030_3.log us030_4.log | head
+Windows is fully green: 41/41 Vulkan GPU cases with validation layers on, 40/40 DX12, 21/21 unit, and zero compile errors. Next I'll rerun the Linux unit gate after the fix, then the sanitizer and GCC presets that the memory-related criteria require.
+[94m[Bash][0m Rerun Linux unit gate and build ASan preset $ grep -c "error:" /tmp/us030_asan_build.log
+[94m[Bash][0m Run ASan/UBSan tests and build GCC preset $ grep -c "error:\|warning:" /tmp/us030_gcc_build.log
+[94m[Bash][0m Run GCC unit tests and check bench harness presence $ grep -n "US-030" engine/rhi/src/vulkan/*.cpp | head -3
+Linux GCC, unit, and sanitizer gates all pass. Two loose ends: a stale "arrives with US-030" comment in `vulkan_device.cpp`, and I still need to confirm whether an `engine_bench` harness exists for the performance criterion.
+[94m[Bash][0m Check benchmark harness presence and stale comment $ sed -n 1856,1866p engine/rhi/src/vulkan/vulkan_device.cpp
+The benchmark harness does not exist yet (only referenced in `prd.json`), so the performance-run criterion cannot be executed for this story. I'll fix the stale comment so it describes the code as it is now.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_device.cpp[0m edit: "// Upload memory, cross-queue waits, and resource ..." → "// Uploads go through the same staging-free mapped..."
+My comment claims the upload path is mapped and staging-free, so I need to verify that before keeping it. The story also asks for staging, so I'll check how buffers are allocated and uploaded.
+[94m[Bash][0m Verify upload path and staging usage in Vulkan buffers $ grep -n -i "staging\|staged" engine/rhi/src/vulkan/*.cpp engine/rhi/src/vulkan/*.hpp engine/rhi/src/...
+So staging here is the explicit model: a CpuWrite buffer (host-visible) feeds the GPU through a copy, and readback works the same way. I'll confirm DX12 uses the same model for parity, then correct the comment to describe that accurately.
+[94m[Bash][0m Check DX12 upload and readback heap model for parity $ grep -n "CpuWrite\|CpuRead" engine/rhi/src/dx12/dx12_device.cpp | head -8
+Both backends use the same model, so parity holds. I'll make the comment say exactly that.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_device.cpp[0m edit: "// Uploads go through the same staging-free mapped..." → "// Uploads write a host-visible CpuWrite buffer, w..."
+Now a final Linux rebuild and unit run on the finished tree, then one more Windows batch so the reported Windows results match the final code.
+[94m[Bash][0m Final Linux build/unit, then relaunch Windows gates $ echo launched_win
+While the Windows batch runs, I'll record the work in the progress log: a reusable pattern at the top and the story entry at the end.
+[94m[Bash][0m Check progress file ending bytes $ cat .ralph-tui/progress.md | tail -n 3 | od -c | tail -n 3
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "- Vulkan swapchain images are created UNDEFINED. T..."
+[94m[Bash][0m Append US-030 entry to progress log $ upload_buffer comment)   - engine/rhi/src/vulkan/vulkan_device.hpp (submit_frame_syncs declaration) ...
+The progress file shows my edits as expected, so nothing to reconcile. Now I'll wait for the final Windows batch.
+[94m[Bash][0m Poll final Windows batch and read its logs $ grep -c "warning C\|error C\|: error" us030_3.log
+US-030 is implemented and verified on Windows and the Linux build/test presets, with one open item: the native Linux Vulkan GPU run. This WSL host has no Vulkan device that meets the engine's requirements, so that suite reports not-run and the story is not complete. I did not emit the completion signal.
+
+**What was already there:** Most of the Vulkan resource model was already in the tree: CpuWrite/CpuRead staging buffers, descriptor sets and pools, fence-deferred retirement, synchronization2 barriers, and capability checks before pipeline creation and indirect-count draws.
+
+**What I fixed:** The Vulkan GPU suite failed 5 swapchain cases on Windows (the failure US-038 left open). `VulkanSwapchain::recreate` moved every back-buffer image to PRESENT_SRC before any acquire, which the 1.4.363 validation layer rejects.
+- Images now start UNDEFINED.
+- `present()` moves an acquired image that nothing has transitioned into PRESENT_SRC, inside the frame-sync submission that already waits on the acquire.
+- If a list consumed the acquire without touching that image, `present()` returns a StateMismatch error instead of presenting it in an invalid layout.
+- `VulkanDevice::submit_frame_syncs` takes an optional record callback to support this.
+
+**Gate results on the final tree:**
+- **Windows:** ValidateVendor, win-dev, and win-debug pass with zero compile errors. win-unit passes (21/21). DX12 GPU passes (40/40). Vulkan GPU passes (41/41) with validation layers on, on the RTX 5080.
+- **Linux:** ValidateVendor, linux-dev, and linux-debug pass with zero errors or warnings. linux-unit passes (22/22). linux-asan builds, and linux-sanitize passes (22/22). linux-gcc builds with zero errors or warnings, and linux-gcc-unit passes (22/22).
+
+**Not verified:**
+- **Native Linux Vulkan GPU suite:** not-run. The WSL host has no device that meets the engine's Vulkan 1.2 timeline-semaphore requirement. Acceptance needs this on native Linux.
+- **Benchmark run:** not executed. `engine_bench` does not exist in the tree yet.
+- **CI workflows:** not run, since I did not push.
+
+I did not commit, per the workflow. Progress is logged in `.ralph-tui/progress.md`, with a reusable pattern added at the top about when Vulkan swapchain images may be transitioned.

@@ -1,0 +1,35 @@
+# Iteration 118 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:41:07.254Z
+- **Ended At**: 2026-10-24T04:41:24.076Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2222
+- **Total Tokens**: 2244
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and terrain source state $ wc -l engine/world/src/terrain.cpp 2>/dev/null
+[94m[Bash][0m Check engine_bench presence and RT shadow wiring $ grep -n "traced\|RtShadow\|rt_" engine/render/src/scene_renderer.cpp | head -40
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: the next step needs a Windows GPU run...
+US-047 is not complete, so I am not signalling COMPLETE. I made no source changes this pass. I appended a re-check entry to `.ralph-tui/progress.md`.
+
+**Status: Partial.** Two blockers and one open GPU bug remain:
+
+1. **Ray-traced terrain shadow does not darken on the GPU.** The shadow-map path darkens the test hill, and the CPU traced reference shadows it too (`render_terrain_tests.cpp`, `[unit]`, passes). But the RT-on GPU frame matches the RT-off frame on DX12 and Vulkan (`darkened 0`). The cause is undiagnosed. It is probably in the GPU runtime: TLAS/BLAS build order for terrain tiles, or the `RtShadow` readback. Settling it needs a Windows GPU run that reads back the `RtShadow` texture for the hill frame.
+2. **`engine_bench --suite acceptance` does not exist.** No CMake target or source names it, and `tools/` has no benchmark harness. The PRD's performance contract depends on US-074, so the acceptance-benchmark criterion cannot be met here.
+3. **No native Linux Vulkan device on this host.** The Linux Vulkan GPU gate cannot run from WSL.
+
+**Verified in earlier passes (from the progress log, not re-run now):** `ValidateVendor`, `win-dev`, `win-debug` (/W4 /WX) and `win-unit` pass on Windows. Linux `ValidateVendor`, `linux-debug`, `linux-unit`, `linux-gcc-debug` and `linux-gcc-unit` pass. CPU unit tests pass (599 cases). DX12 passes 66/66 and Vulkan 67/67, with the one failing case being the traced-shadow test above.
+
+**Next step:** on the Windows host, read back `RtShadow` for the hill frame, or log the traced instance count and shadow values for the four tiles, to see whether the GPU writes zeros where the CPU reference shadows. The benchmark criterion stays open until US-074 lands.

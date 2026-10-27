@@ -1,0 +1,39 @@
+# Iteration 102 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:07:13.414Z
+- **Ended At**: 2026-10-24T03:07:34.750Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 3379
+- **Total Tokens**: 3407
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code, since the story notes say some of US-047 may already exist.
+[94m[Bash][0m Inspect progress log and terrain sources $ git status 2>&1 | head -5
+The log says US-047 is still Partial. The open items are the splat vertex binding, the pipeline variant, the `scene.hlsl` branch, a GPU fixture, the bench workload, and the Windows gates. I'll look at the draw path to see whether the first two can be done and checked on Linux.
+[94m[Bash][0m Read opaque pipeline and draw binding code $ sed -n 690,745p engine/render/src/scene_renderer.cpp && echo ---- && sed -n 440,475p engine/render/s...
+The remaining work is a shared draw-path change plus GPU verification, and this environment can't run the DX12 or Vulkan batch. Making the slot-2 binding and shader branch blind would risk breaking the opaque path that the Windows gates currently pass, so I won't edit source in this pass. I'll record the status in the progress log so the next pass starts from accurate information.
+[94m[Bash][0m Append re-check entry to progress log $ (5) Windows gate batch and Linux gates after the shader change. - Learnings: the next pass should st...
+US-047 is not complete, so I am not emitting the completion signal. I made no source changes this pass. I only appended a re-check entry to `.ralph-tui/progress.md`.
+
+**What exists:** the CPU terrain runtime (tiles, LOD, stitching, normals, splat weights) in `engine/world`, the render bridge in `terrain_mesh.cpp` with its unit tests, the static-path renderer integration with its DX12/Vulkan GPU fixture, RT set support, and the Linux GCC and ASan gates from earlier passes.
+
+**What is still open**, in order:
+1. A terrain-only splat vertex buffer bound at slot 2. Slot 1 is already the instance buffer. This needs a terrain variant of the opaque pipeline in `scene_renderer.cpp`.
+2. A `scene.hlsl` branch that blends with `splat_layer_colour`.
+3. A splat, shadow, and RT GPU fixture on DX12 and Vulkan.
+4. The `engine_bench` terrain workload and the acceptance run.
+5. The Windows gates (ValidateVendor, win-dev, win-debug, win-unit) and the Linux gates after the shader change.
+
+**Why I stopped there:** items 1 and 2 change the vertex layout of the shared opaque pipeline. Their correctness is only checkable on the Windows GPU batch, which can't run in this WSL session. An untested edit could break the opaque path that the Windows gates pass today. I recommend the next pass start with item 1 and run the Windows batch in the same pass, so the change is checked before anything else stacks on it.

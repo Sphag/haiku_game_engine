@@ -1,0 +1,298 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: US-007
+- **Task Title**: In-House Windows Windowing
+- **Description**: As a Windows user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T00:05:24.030Z
+- **Ended At**: 2026-10-22T00:45:26.588Z
+- **Duration**: 40m 2s
+- **Input Tokens**: 456
+- **Output Tokens**: 117991
+- **Total Tokens**: 118447
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the repo layout.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && cat .ralph-tui/progress.md | head -300 && echo --- && wc -l tasks/prd-open-wor...
+[94m[Bash][0m Read the full PRD $ cat tasks/prd-open-world-engine.md
+[94m[Bash][0m Grep PRD for relevant sections $ grep -n "US-00[0-9]\|Windowing\|window\|Window\|DPI\|DXGI\|framebuffer\|Non-Goal\|Technical Consider...
+[94m[Bash][0m Read PRD quality gates, US-007 area, FR, technical sections $ sed -n 22,135p tasks/prd-open-world-engine.md && echo ..... && sed -n 732,830p tasks/prd-open-world-...
+Next, the current state of the tree: what exists under `engine/`, `tests/`, `cmake/`, and the presets.
+[94m[Bash][0m Survey source tree, presets, and CI $ find engine tests cmake tools docs editor runtime -maxdepth 3 -not -path '*/build*' | sort && echo -...
+No `engine/platform/` exists yet. I'll read the build wiring, conventions doc, and an existing module to match its style.
+[94m[Bash][0m Read CMake target definitions and conventions doc $ cat cmake/EngineTargets.cmake && echo ---ENGINE_CORE && cat engine/core/CMakeLists.txt && echo ---RU...
+Now the core headers I'll build on (result/status, assert, log) and the runtime lifecycle, so the new code follows the same idioms.
+[94m[Bash][0m Read status, assert, log, and runtime headers $ ls engine/core/include/engine/core engine/runtime/include/engine/runtime && echo ---STATUS && cat en...
+[94m[Bash][0m Read result type, test main, a sample test, and CI $ cat engine/core/include/engine/core/result.hpp && echo ---JOBS-H-head && sed -n 1,40p engine/core/in...
+Before changing anything, I'll confirm the Linux gates pass on the untouched tree so I can tell my regressions apart from existing failures.
+[94m[Bash][0m Run Linux baseline quality gates $ echo "ctest=$?") && tail -5 /tmp/lin_ctest.log
+Linux baseline is green. Next, the Windows side: the progress log says to drive MSVC through a `.bat` under `C:\Windows\Temp`. I'll look for a leftover gates script and the vcvars path.
+[94m[Bash][0m Locate vcvars64.bat and prior Windows gate scripts $ find "/mnt/c/Program Files/Microsoft Visual Studio" -maxdepth 6 -name vcvars64.bat 2>/dev/null | hea...
+Visual Studio 2022 and 18 are both installed. I'll write a gates script that runs the Windows sequence from the repo root and records each step's real exit code.
+[94m[Bash][0m Run Windows baseline quality gates via MSVC script $ cat /tmp/gates/win_baseline.out | tr -d '\r' | tail -20
+Both baselines are green: Linux and Windows. Before I design the windowing code, I need the test tagging convention, the UTF-8 helpers, and the existing `engine/core` headers.
+[94m[Bash][0m Read test tagging, UTF-8 and path helpers $ cat engine/core/include/engine/core/utf8.hpp && echo ---CLI && grep -n "tag\|suite" tests/src/cli_op...
+Let me check whether `engine/core` already has a UTF-8 to UTF-16 helper I should reuse, and look at the existing Win32 usage pattern.
+[94m[Bash][0m Find existing UTF-16 conversion helpers $ cat engine/core/include/engine/core/clock.hpp | head -30
+There's no UTF-16 helper, so the Win32 file will carry its own conversion. I have enough context to design this. Plan:
+
+- **Platform-neutral layer** (`engine_platform`): window types, DPI math, a generation-checked slot table, and event coalescing. These get CPU unit tests on both OSes.
+- **Win32 backend** under `src/win32/`, compiled only on Windows. Event handlers only enqueue, and destruction is deferred while a message is dispatching. That keeps a window from being freed while its `WndProc` is still on the stack.
+- **Linux**: `Platform::create()` returns an explicit `Unsupported` error until the X11 story (US-008). No fake windows.
+
+I'll start with the public headers.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/window.hpp[0m "#pragma once
+
+#include "engine/core/result.hpp"
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <variant>
+
+namespace engine::platform {
+
+// Identifies a window for as long as it ... (3841 chars)"
+Next, the DPI conversions, the slot table, and the event queue, which are the platform-neutral pieces.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/dpi.hpp[0m "#pragma once
+
+#include "engine/platform/window.hpp"
+
+#include <cmath>
+#include <cstdint>
+#include <limits>
+
+namespace engine::platform {
+
+inline constexpr std::uint32_t kBaseDpi = 96;
+
+// Windows repo... (1541 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/slot_table.hpp[0m "#pragma once
+
+#include "engine/core/assert.hpp"
+#include "engine/platform/window.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+namespace engine::platform {
+
+// Sto... (3238 chars)"
+The slot table doesn't use the assert header, so I'll drop that include.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/slot_table.hpp[0m edit: "#include "engine/core/assert.hpp"
+#include "engine..." → "#include "engine/platform/window.hpp""
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/event_queue.hpp[0m "#pragma once
+
+#include "engine/platform/window.hpp"
+
+#include <vector>
+
+namespace engine::platform {
+
+// FIFO of window events. A resize that follows another resize of the same window replaces it, so ... (676 chars)"
+Now the `Platform` class header. Window operations go through `WindowId`s, and events are drained by the caller.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/platform.hpp[0m "#pragma once
+
+#include "engine/core/result.hpp"
+#include "engine/platform/window.hpp"
+
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <vector>
+
+namespace engine::platform {
+
+// Ow... (2885 chars)"
+Next, the neutral implementation files: validation, error names, and event coalescing.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/window.cpp[0m "#include "engine/platform/window.hpp"
+
+#include "engine/core/utf8.hpp"
+
+#include <cmath>
+
+namespace engine::platform {
+
+std::string_view to_string(PlatformErrorCode code) noexcept {
+    switch (code) ... (1717 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/event_queue.cpp[0m "#include "engine/platform/event_queue.hpp"
+
+#include <utility>
+
+namespace engine::platform {
+
+void EventQueue::push(WindowEvent event) {
+    if (!events_.empty() && std::holds_alternative<WindowResize... (652 chars)"
+The neutral layer is in place. Now the Win32 backend, the largest piece. The main risks I'm designing around:
+
+- Window records get stable heap bindings, so `WndProc` never holds a pointer into a table that might reallocate.
+- Destruction is deferred during dispatch and modal ticks, so a window is never freed while its message handler is on the stack.
+- C++ exceptions are captured in `WndProc` and rethrown from `pump_events()`, because they can't cross the OS callback.
+
+I'll write the Linux fallback first, since it's short.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/platform_unsupported.cpp[0m "// Windowing for operating systems without an in-house backend. Linux (X11) is US-008.
+// create() reports Unsupported, so no Platform object exists and the members below are never reached.
+#ifndef _W... (2928 chars)"
+I'll correct the `InvalidArgument` comment in the header, since wrong-thread calls are asserts, not errors.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/window.hpp[0m edit: "    InvalidArgument,   // rejected WindowDesc, or ..." → "    InvalidArgument,   // rejected WindowDesc (cal..."
+Now the Win32 backend itself.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m "// In-house Win32 windowing (US-007). Uses user32 directly; no SDL or GLFW.
+//
+// Message handlers only record state and queue events. They never run application code, except the modal tick,
+// which ... (18366 chars)"
+The backend is written. On review I found two things to fix. `require_owner` takes a name it never uses. More importantly, if `set_client_size` makes no size change, no `WM_SIZE` fires, so the initial framebuffer would stay 0x0. I'll read the size back from the client rect explicitly after creation.
+[94m[Bash][0m Drop unused argument from require_owner calls $ /g' platform_win32.cpp && grep -n "require_owner" platform_win32.cpp | head -20
+My `sed` missed `win32_handles` because the name contains digits. I'll fix that along with the helper signature, and re-read the file first since the tool flagged it as changed.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "    void require_owner(const char* call) const {
+ ..." → "    void require_owner() const {
+        ENGINE_AS..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "        require_owner("win32_handles");" → "        require_owner();"
+Now the post-creation sync: the record gets its real client size from the OS, and the app receives that as an event.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "        set_client_size(hwnd, framebuffer_from_log..." → "        set_client_size(hwnd, framebuffer_from_log..."
+Next, the CMake target. The Win32 source is listed only on Windows, and the fallback only elsewhere, so the guards in the source files are redundant. I'll drop the guard from the fallback file to keep one source of truth.
+[94m[Bash][0m Create engine_platform CMake target and fix fallback guard $ /^#endif  \/\/ !_WIN32$/d' src/platform_unsupported.cpp && head -5 src/platform_unsupported.cpp && t...
+That change is also mine (the guard removal), so it's expected. Next, the tests. I'll start with the platform-neutral unit tests, which run on both operating systems.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_window_tests.cpp[0m "#include "engine/platform/dpi.hpp"
+#include "engine/platform/event_queue.hpp"
+#include "engine/platform/platform.hpp"
+#include "engine/platform/slot_table.hpp"
+#include "engine/platform/window.hpp"
+
+#... (9394 chars)"
+The neutral tests are written. Next, Windows integration tests against real Win32 windows. These drive close, resize, minimize/restore, focus, DPI, destruction during a modal tick, and exception propagation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_win32_tests.cpp[0m "// Win32 windowing against real OS windows. These tests need an interactive desktop session, which Windows CI
+// runners provide. They do not claim OS focus or real monitor DPI changes; those are chec... (12770 chars)"
+Two cleanups in the Win32 tests before building: the DPI test's suggested-rectangle math is convoluted and I'll simplify it, and I need the `<string>` include and need to drop an unused alias.
+[94m[Bash][0m Simplify DPI test rectangle math and fix includes $ \n','') open(p,'w',encoding='utf-8').write(s) print("ok") EOF
+That change is mine too. Now I'll wire everything into CMake: add the platform subdirectory, link `engine_tests` to it, and add the Windows-only test source.
+[94m[Bash][0m Wire engine_platform into root and test CMake $ their tests exist only where the Win32 backend does.\n'      'if(WIN32)\n  target_sources(engine_tes...
+Wiring is done. I'll build and test on Linux first, since it's the faster loop.
+[94m[Bash][0m Configure, build, and test on Linux $ tail -8 /tmp/lin_ctest.log
+The build failed on three `[[nodiscard]]` returns in my tests, so that ctest pass was a stale binary and doesn't count. I'll fix the three call sites by discarding the ids explicitly.
+[94m[Bash][0m Fix nodiscard test calls, rebuild, and rerun Linux tests $ tail -8 /tmp/lin_ctest.log
+Linux builds with warnings-as-errors and the tests pass. Since ctest only sees two Catch2 entries, I'll confirm the new cases actually ran by checking the executable's own counts.
+[94m[Bash][0m Run engine_tests directly and list platform cases $ build/linux-dev -name engine_tests -type f | head -1) && echo "$E" && "$E" --suite unit 2>&1 | tail ...
+Linux is green: 97 unit cases and 20 integration cases pass, including the new platform ones. Now the Windows gates, which compile the Win32 backend under MSVC `/W4 /WX`.
+[94m[Bash][0m Run Windows quality gates with MSVC $ tr -d '\r' < /mnt/c/Windows/Temp/w_build.log | grep -E "error|warning" | head -40
+Three real problems showed up:
+
+1. `IDC_ARROW` expands to an ANSI string under this build (no `UNICODE` define), so `LoadCursorW` rejects it. I'll pass the resource id as a wide resource explicitly.
+2. The test file has `[[nodiscard]]` returns discarded on several lines.
+3. My gate script has a bug: `echo build=%ERRORLEVEL%` on the same line as the command is expanded before the command runs, so the per-step codes printed earlier were stale. The `OVERALL` value uses `if errorlevel`, which is evaluated at runtime, so it was correct. I'll split those lines so each code reflects its own step. The earlier baseline per-step numbers should be considered unreliable, which I'll say in the summary.
+
+Let me look at the flagged test lines.
+[94m[Bash][0m Inspect flagged discarded-return lines $ tr -d '\r' < /mnt/c/Windows/Temp/w_ctest.log | tail -5
+`drain_events` is `[[nodiscard]]`, so these are bare statements that discard the result. I'll make those explicit, fix the cursor, and split the gate script's echo lines.
+[94m[Bash][0m Fix test discards and cursor, rerun Windows gates $ tr -d '\r' < /mnt/c/Windows/Temp/w_build.log 2>/dev/null | grep -E " error | warning " | head -30
+The Windows build now gets past compilation, but the link fails with unresolved `__std_*` symbols from the MSVC STL. That isn't a code error; it points at a toolchain or link-environment mismatch. I'll check which compiler and linker the build actually used.
+[94m[Bash][0m Inspect Windows build log for toolchain details $ tr -d '\r' < /mnt/c/Windows/Temp/w_build.log | grep -c "Building CXX"
+The link is using the VS 18 linker (`MSVC\1451`), but my script loads the VS 2022 environment. That's a mixed toolset: the cached CMake configuration points at one Visual Studio and the environment at another. I'll confirm what the cache holds.
+[94m[Bash][0m Check which MSVC toolset the cache uses $ ls "/mnt/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/" 2>/dev/null
+The cache was configured with the VS 18 toolset (MSVC 14.51), and my script loads VS 2022. I'll switch the gate script to VS 18 so the environment matches the cached toolchain, and rerun.
+[94m[Bash][0m Rerun Windows gates on the cached VS 18 toolset $ tr -d '\r' < /mnt/c/Windows/Temp/w_build.log 2>/dev/null | grep -E " error | warning |FAILED" | head...
+All four Windows gates pass with the VS 18 toolset, and the build has no warnings or errors. Next I'll confirm the Win32 integration cases executed, not just that ctest's two entries passed.
+[94m[Bash][0m Run Windows test executable suites directly $ tr -d '\r' < /tmp/gates/win_unit.out | tail -3
+The Windows run is clean: 29 integration cases (257 assertions, including all nine Win32 tests) and 96 unit cases pass. The Linux count is one higher because it includes the Linux-only `Unsupported` test.
+
+One gap: the first Win32 test checks that the handles are non-null, but it doesn't check that they're real windows. I'll make it assert `IsWindow` and the instance handle, since those are the values a DX12 or Vulkan surface would consume.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_win32_tests.cpp[0m edit: "    CHECK(hwnd_of(*platform, first) != hwnd_of(*pl..." → "    CHECK(hwnd_of(*platform, first) != hwnd_of(*pl..."
+The edit applied, and the tool notes the file has other on-disk changes; I'll sanity-check that during the rebuild. Now the remaining Linux gates: the GCC job and the ASan/UBSan sanitizer job, since the change allocates and manages lifetimes.
+[94m[Bash][0m Run Linux GCC and sanitizer quality gates $ tail -3 /tmp/asan_ctest.log
+GCC and sanitizer builds are green. I'll confirm the sanitizer binary ran all the unit and integration cases, then rerun the Windows gates after the test edit.
+[94m[Bash][0m Verify sanitizer test run and rerun Windows gates $ "build/win-dev/tests/Debug/engine_tests.exe" --suite integration 2>&1 | tr -d '\r' | tail -2
+Every gate is green, and the sanitizer run covers all 117 cases. Before writing the docs and progress entry, I'll check two things: whether `user32` needs listing in an existing system-ABI exception list (the PRD asks for those explicitly), and whether the docs say anything about the Win32 window layer.
+[94m[Bash][0m Find system ABI exception lists and docs layout $ grep -n "^#" docs/build.md | head -30
+[94m[Bash][0m Read systemAbiExceptions manifest section $ sed -n 60,100p cmake/ValidateVendor.cmake
+The `Windows SDK` exception in the manifest already covers `user32` and the Win32 API, so no manifest change is needed. Next, a short contract document for the windowing layer, since other subsystems (DX12, Vulkan, editor) will depend on these rules.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/windowing.md[0m "# Windowing
+
+The `engine_platform` library (`engine/platform/`) owns native windows. It is in-house: Win32 is called directly
+through `user32`, with no SDL or GLFW. Windows is implemented (US-007). Li... (3691 chars)"
+Now the progress log: a Codebase Patterns entry for the toolset gotcha, and the US-007 section appended to the end.
+[94m[Bash][0m Append US-007 entry and Windows gate learnings to progress log $ only `OVERALL` (from `if errorlevel`) was reliable. The step codes in this entry come from the corre...
+The progress log is updated. One gap remains: the CI Windows job runs on `windows-2022` with VS 2022, and I've only verified the VS 18 toolset that my local cache uses. Since CI has no cache, it would use VS 2022 directly. I'll run the same gate sequence in a separate build directory under VS 2022, so this check doesn't touch the `win-dev` cache.
+[94m[Bash][0m Run Windows build and tests with VS 2022 in a separate dir $ tr -d '\r' < /mnt/c/Windows/Temp/v22_build.log | grep -E " error | warning " | head -10
+[94m[Bash][0m Read VS 2022 configure log $ tr -d '\r' < /mnt/c/Windows/Temp/v22_config.log | tail -25
+The configure failed because my script's `set RC=0` overwrites the `RC` environment variable, which CMake uses to find the resource compiler. The cached `win-dev` build never re-reads it, so the earlier gates didn't hit this. I'll rename the variable in both scripts and rerun the 2022 check.
+[94m[Bash][0m Rerun VS 2022 Windows check after fixing RC variable $ tr -d '\r' < /mnt/c/Windows/Temp/v22_ctest.log | tail -4
+With VS 2022 the build fails in `core_assert_tests.cpp` under `/W4 /WX` (C4127). That file predates this story and I haven't touched it. The VS 18 build didn't flag it, but CI's `windows-2022` image would. The shader tests then fail only because the build stopped early. I'll look at the two lines.
+[94m[Bash][0m Inspect flagged C4127 lines in assert tests $ sed -n 25,60p tests/src/core_assert_tests.cpp
+Both warnings come from literal-constant conditions inside `ENGINE_ASSERT` (lines 37 and 51). Reading the operands through `volatile` keeps the assertion's behavior while removing the constant condition. This is a test-only change, and it's needed for the VS 2022 CI job to pass, so I'll make it and report it.
+[94m[Bash][0m Fix C4127 in assert tests and rerun VS 2022 check $ tr -d '\r' < /mnt/c/Windows/Temp/v22_ctest.log | tail -5
+[94m[Bash][0m Inspect line 53 of assert tests $ grep -n "failing_ordering_assert\|failing_debug_assert" tests/src/core_assert_tests.cpp
+Line 53 is the same pattern, in the ordering assert. I'll apply the same fix while keeping the `__LINE__ + 1` relation intact.
+[94m[Bash][0m Fix remaining C4127 and rerun VS 2022 check $ tr -d '\r' < /mnt/c/Windows/Temp/v22_ctest.log | tail -5
+The VS 2022 build now succeeds. The `D9025` lines are a CMake flag-override notice from the vendor/Catch2 target, not a diagnostic in first-party code. Two unit tests now fail under VS 2022, so I'll read the output.
+[94m[Bash][0m Read failing unit test output under VS 2022 $ tr -d '\r' < /mnt/c/Windows/Temp/v22_ctest.log | grep -v D9025 | grep -B3 -A25 "engine_tests_unit\b"...
+That's my change, not the toolchain. The test asserts the stringified expression text `"2 < 1"`, which I just changed to `big < 1`. The CLI failure is the same unit run failing. The text check is meaningful, so I'll update the expected string to match the expression that is now compiled.
+[94m[Bash][0m Update expected expression text and rerun VS 2022 check $ tr -d '\r' < /mnt/c/Windows/Temp/v22_ctest.log | grep -v D9025 | tail -6
+The VS 2022 check is green end to end. Since `core_assert_tests.cpp` changed, I'll rerun every gate on the final tree: Linux Clang, GCC, and sanitizers, plus the Windows VS 18 cached-preset gates.
+[94m[Bash][0m Run full final gate set on Linux and Windows $ done
+
+[91m[Error: Exit code 1
+linux validate=0
+linux-dev build=0
+linux-unit=0
+gcc build=0
+gcc-unit=0
+asan build=0
+sanitize=0
+--- windows vs18:
+=== validate
+validate=0
+=== configure
+config=0
+=== build
+build=0
+=== ctest
+ctest=0
+OVERALL=0
+All tests passed (12298 assertions in 125 test cases)
+
+0
+0
+0][0m
+Every gate passes on the final tree. The `Exit code 1` comes from my final `grep -c` returning 0 matches, which is the expected "no warnings" result, not a failing gate. Last step: record the VS 2022 result, the test-only fix, and the `RC` gotcha in the progress log so it's accurate.
+[94m[Bash][0m Record VS 2022 result and gate-script gotcha in progress log $ the expected stringified expression changed from `2 < 1` to `big < 1`.\n") old2="  - Old Windows gat...
+US-007 is implemented: an in-house Win32 windowing layer in `engine/platform`, with no SDL or GLFW. All required gates pass on Windows and Linux. The only parts I could not verify are the ones that need a running app or a real desktop interaction, listed below.
+
+**What's in place**
+- **API:** `Platform` creates and destroys multiple windows and exposes `win32_handles` (`HINSTANCE`/`HWND`) for DX12 and Vulkan. Window ids are generation-checked, so a stale id returns `NotFound` after destruction.
+- **Sizes:** framebuffer size (physical pixels) and logical size (DIP) are separate types. A minimized window reports 0x0 for both.
+- **Events:** close, resize, minimize/restore, focus, and DPI change. Consecutive resizes are coalesced.
+- **Zero size and close during resize:** a window is never freed while its message handler is on the stack. A modal tick keeps the app running during the OS drag loop. Exceptions from app code are rethrown from `pump_events`, not thrown across the OS callback.
+- **Linux:** `Platform::create()` returns `Unsupported` until the X11 story (US-008). It does not create fake windows.
+
+**Verification** (exit codes checked directly)
+- Windows, VS 18 (the toolset the cached `win-dev` build uses): `ValidateVendor`, `win-dev`, `win-debug` (no warnings with `/W4 /WX`), `win-unit`: all pass.
+- Windows, VS 2022 (what CI's `windows-2022` uses, in a fresh build directory): validate, configure, build, and unit/integration ctest all pass.
+- Linux/Clang: `linux-dev`, `linux-debug`, `linux-unit`: pass.
+- Linux/GCC: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`: pass.
+- Linux ASan+UBSan: `linux-asan`, `linux-sanitize`: pass, 117 cases.
+- Test counts: 125 cases on Windows (including 9 Win32 cases that create real windows), 117 under sanitizers on Linux.
+
+**Not verified**
+- **GUI check:** not run. The repo has no application or editor window yet, so there is nothing to drive or screenshot.
+- **Real OS interaction:** focus and monitor DPI changes are simulated by sending the messages the OS would send. A real drag resize is not automated.
+- **Remote CI:** `ci.yml` was not run on GitHub.
+- **Not applicable yet:** benchmarks (no harness), GPU suites (no DX12/Vulkan RHI).
+
+**Changes outside the story's new files**
+- `tests/src/core_assert_tests.cpp`: VS 2022 failed on C4127 (constant conditions) in code that predates this story, which would have broken CI's Windows job. I made the operands `volatile`, which changed one expected expression string from `2 < 1` to `big < 1`.
+- Root and `tests/` CMake files: wired in `engine_platform`, and the Win32 tests are compiled only on Windows.
+
+**Notes**
+- The gate scripts I used live in `C:\Windows\Temp` (`win_gates.bat`, `win_gates_2022.bat`), outside the repo. `build/win-2022-check` is left behind as a verification directory.
+- Earlier in this session, my first Windows gate script printed stale per-step codes. Its overall result was reliable, and the results above come from the corrected script.
+- This is not a git repo, so nothing was committed.
+- `.ralph-tui/progress.md` has the US-007 entry and the toolset and `RC` gotchas.

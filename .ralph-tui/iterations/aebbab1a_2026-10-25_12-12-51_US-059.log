@@ -1,0 +1,40 @@
+# Iteration 532 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T09:12:51.027Z
+- **Ended At**: 2026-10-25T09:15:33.156Z
+- **Duration**: 2m 42s
+- **Input Tokens**: 28
+- **Output Tokens**: 2282
+- **Total Tokens**: 2310
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and status $ git status --short | head -30
+[94m[Bash][0m Check for source changes since last log and toolchain availability $ grep -rn "engine_bench" --include=CMakeLists.txt . | grep -v third_party | head -3
+[94m[Bash][0m Rebuild linux-debug and run linux unit tests $ cmake --build --preset linux-debug 2>&1 | tail -3 && ctest --preset linux-unit --output-on-failure -...
+[94m[Bash][0m Confirm test totals and log this verification pass $ a runtime save/load path through a host (US-060). Windows gates not re-run in this pass. --- EOF
+US-059 is still **not complete**, so I have not emitted the completion signal. Nothing in the tree changed in this pass, and the blockers are environmental.
+
+**What I checked**
+- No source, test, CMake, or preset file is newer than the last progress entry.
+- Linux debug build rebuilt cleanly, and `ctest --preset linux-unit` passed 22 of 22 (integration 21, unit 1). The `save_tests.cpp` cases cover component selection, GUIDs, format/version/CRC rejection, previous-save rotation, failed-write safety, script state, changed-cell round trip, and dirty layers.
+- The Linux toolchain is still GCC 9.4 and Clang 10. No GCC 11+ is available, so `linux-gcc` cannot run here.
+- There is still no `engine_bench` target anywhere in the CMake files (US-074).
+
+**Still open against the acceptance criteria**
+- `linux-gcc` preset, build, and `linux-gcc-unit` ctest. Jolt needs GCC 11+, so this has to run on a machine that has it.
+- `engine_bench --suite acceptance`, blocked until the benchmark harness exists.
+- Windows gates were not re-run in this pass. The earlier recorded Windows results still match the tree.
+- A runtime save/load path through a host is tracked as US-060.
+
+I appended a dated entry to `.ralph-tui/progress.md` recording this pass. No commit was made.

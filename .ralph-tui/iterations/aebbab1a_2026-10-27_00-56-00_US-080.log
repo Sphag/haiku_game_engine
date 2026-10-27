@@ -1,0 +1,43 @@
+# Iteration 1210 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:56:00.337Z
+- **Ended At**: 2026-10-26T21:56:14.943Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2125
+- **Total Tokens**: 2147
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and existing bench artifacts $ git status 2>/dev/null | head -5
+[94m[Bash][0m Re-check blockers: Vulkan device, FSR permutations, manifest, GPU $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ see that entry for the open-items list. No COMPLETE signal. --- EOF tail -3 .ralph-tui/progress.md
+US-080 is not complete, and I have not emitted the completion signal. I re-checked the blockers and nothing has changed since the last several status checks in the progress log.
+
+**What I verified in this session:**
+- **No native Linux Vulkan device:** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run cannot happen in this WSL environment.
+- **FSR 2 is not buildable:** there are zero `*_permutations.h` files under `third_party`, so `ENGINE_FSR2_AVAILABLE` stays off.
+- **Four workloads are unimplemented:** `benchmarks/manifest.json` still has four entries with `implementation: "none"` (lines 88, 108, 122, 132). The acceptance suite would exit 3 (incomplete) on them.
+- **No acceptance reports exist:** `artifacts/bench` has no acceptance-suite run. It only has earlier us076/us077/us078/us080 partial runs.
+- **The RTX 5080 is visible only through WSL:** `nvidia-smi` reports it (driver 617.42), but the Windows DX12/Vulkan runs need `cmd.exe` and `.bat` files.
+
+**What I did not do:** I did not build, run the Windows or Linux quality gates, or launch a benchmark. An acceptance batch would be incomplete while the workloads and hardware are missing, so there was nothing meaningful to run.
+
+**Decisions and inputs needed from you before this can move:**
+1. **A native Linux host with `/dev/dri`** for the Linux/Vulkan acceptance reports.
+2. **FSR 2 vendoring route:** supply the generated permutation headers, or choose another route.
+3. **Sources for the four `implementation: "none"` workloads**, including `all_features`.
+4. **The render_stress CPU hotspot:** the us076 meshlets run measured CPU p99 of 42.4 ms against a 16.7 ms budget. It needs a Release profile on the RTX 5080 via `cmd.exe`. I have not done that profile, and I can start it if you want.
+5. **A frame-budget decision:** if the budget stays exceeded after fixing the measured cause, the contract change needs your explicit approval. I will not reduce settings or thresholds to pass.
+
+I appended a short status entry to `.ralph-tui/progress.md`. It is the 97th status entry, and I'd suggest not re-running this loop until one of the items above is resolved.

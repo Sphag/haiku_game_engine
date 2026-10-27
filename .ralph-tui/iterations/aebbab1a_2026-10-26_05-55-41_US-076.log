@@ -1,0 +1,49 @@
+# Iteration 814 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:55:41.144Z
+- **Ended At**: 2026-10-26T02:56:11.526Z
+- **Duration**: 30s
+- **Input Tokens**: 36
+- **Output Tokens**: 4307
+- **Total Tokens**: 4343
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-076 already exists in the tree, then read the progress log and the benchmark code.
+[94m[Bash][0m Inspect repo root, progress log, and US-076 references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "render_stress\|US-076" --include=*.cpp --includ...
+The log shows US-076 has been blocked for many iterations on one contract decision. Before I restate that, I'll check the cited PRD lines and the latest measured report so the decision is framed accurately.
+[94m[Bash][0m Read cited PRD sections and latest US-076 report $ grep -o '"triangles[^,]*' -r "$latest" 2>/dev/null | head -5
+The report confirms the blocker. Before I accept it, I'll check whether the 312k-triangle shortfall comes from LOD selection in the implementation, which the PRD says to fix first, or from the fixed placement.
+[94m[Bash][0m Find LOD and triangle logic in render_stress and show report $ cat artifacts/bench/us076-vulkan-indexed/report.json 2>/dev/null | head -c 1500
+The shortfall is structural, not a bug I can fix without a contract decision. I'll record the mechanism in the progress log so the next pass doesn't re-derive it.
+[94m[Bash][0m Append status entry with the triangle-count mechanism to progress log $ native Linux Vulkan GPU and linux-gcc not run." "- No COMPLETE signal." "---" >> .ralph-tui/progress...
+US-076 is not complete, so I'm not signalling COMPLETE. The implementation exists, but the acceptance check it is built around fails, and fixing that changes the pinned benchmark contract, which needs your decision.
+
+**The blocker:** the `render_stress` indexed path submits 312,068 triangles on the start frame. The contract requires at least 2,000,000. The latest measured run (`artifacts/bench/us076-*`) also exceeds the frame budget, with p99 at 35–47 ms against 16.7 ms.
+
+**Why it can't be fixed in code alone:** the triangle count is the sum of `indices / 3` over visible instances (`tools/benchmark/src/render_stress.cpp`, around line 467). Each mesh is cooked once at LOD 0, and there is no LOD selection. So the only levers are:
+- denser fixture meshes, which changes fixture hashes and needs a `kWorkloadVersion` bump;
+- a different instance placement, which regenerates `benchmarks/workload_expected.json` and also bumps the version.
+
+The PRD (US-080) says a budget miss must be fixed in the implementation first, and that changing the contract needs a separate user decision. So I left the code and workload unchanged.
+
+**What I need from you (pick one):**
+1. Approve a fixture-density or placement change, with the version bump and regenerated expected file.
+2. Accept the failing measured run as the US-076 result.
+3. Agree a different contract for the start-frame floor.
+
+Two other items are still open:
+- `full_1080` stays unsupported until the FSR 2 permutation tables exist.
+- The native Linux Vulkan GPU run and the linux-gcc gate have not been run. WSL has no Vulkan device, and GCC 9 cannot build Jolt.
+
+I appended this finding to `.ralph-tui/progress.md`. I did not rerun the gates this session; the last Linux verification, from the earlier log entries, is still the most recent one.

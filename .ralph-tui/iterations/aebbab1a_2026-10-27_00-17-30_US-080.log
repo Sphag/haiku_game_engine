@@ -1,0 +1,40 @@
+# Iteration 1144 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:17:30.525Z
+- **Ended At**: 2026-10-26T21:17:44.437Z
+- **Duration**: 13s
+- **Input Tokens**: 16
+- **Output Tokens**: 1625
+- **Total Tokens**: 1641
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Append status entry to progress log $ the next step needs the user or the reference computer. - Stop: US-080 cannot be signed off on this ...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I checked the progress log and the bench artifacts, and the blockers are the same as in the previous status checks.
+
+**What blocks sign-off on this host:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. nvidia-smi sees the RTX 5080 only under WSL, and WSL does not count as native Linux GPU evidence.
+- **No RTX 5080 reference reports for Windows.** There is no `engine_bench --suite acceptance` run in `artifacts/bench`. The latest runs are diagnostics from 2026-10-26 (us076, us077, us080). The contract needs three 30 s warmup and 180 s measured repeats per scene, profile, and backend, which must be run on the reference machine.
+- **FSR 2 permutations are missing.** `third_party/fsr2` has no `*_permutations.h` files, so FSR cannot link. Choosing how to vendor them is a user decision.
+- **Missing workloads.** `benchmarks/manifest.json` still has 4 entries marked `implementation: none` (physics action route, streaming route, and the teleport/render entries).
+- **Frame budget not yet met.** The last render_stress diagnostic showed p99 above 16.7 ms. Fixing that would need Windows acceptance reruns, and the contract forbids changing the threshold to pass.
+
+**What I did this pass:** I re-read the log and the artifacts and appended a short status entry to `.ralph-tui/progress.md`. I made no source changes and ran no builds or benchmarks, because repeating those checks cannot change these blockers.
+
+**What's needed from you:**
+1. Access to the RTX 5080 reference computer, to run the Windows/DX12, Windows/Vulkan, and native Linux/Vulkan acceptance suites with three repeats each.
+2. A decision on the FSR 2 permutations route (vendor the generated tables, or drop FSR from this acceptance).
+3. Direction on the four `implementation: none` workloads: implement them or formally scope them out.
+
+Once those are settled, I can take the frame-budget investigation and the remaining workloads.

@@ -1,0 +1,40 @@
+# Iteration 582 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T12:17:07.151Z
+- **Ended At**: 2026-10-25T12:17:22.748Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2204
+- **Total Tokens**: 2226
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-061 work already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -n 120 .ralph-tui/progress.md && ls engine/editor && grep -n "US-061" -r .ralph-tui/progr...
+The log shows US-061 implemented and stuck at Partial for about 20 status checks, all blocked on the Windows session being locked. I'll check whether that has changed, then run the gates that can run here.
+[94m[Bash][0m Check Windows lock state and tree changes $ find engine tests tools cmake CMakeLists.txt CMakePresets.json -newer .ralph-tui/progress.md 2>/dev/...
+US-061 is not complete, so I'm not signalling COMPLETE. Nothing in the tree has changed since the last recorded run, and the remaining gates are blocked outside this sandbox.
+
+**Status: Partial (unchanged since the last several iterations).**
+
+- **Implementation:** The editor shell is in the tree (`engine/editor/`, `EditorModel` in `editor_model.hpp`, the ImGui renderer, and the `game_editor` target). The `artifacts/ui/us061/` folder has the workspace fixtures and a `NOT_VERIFIED.txt` note.
+- **Linux gates:** Last recorded as passing on the current tree, with no edits to `engine`, `tests`, `tools`, `cmake`, or the CMake files since then. `cmake -P cmake/ValidateVendor.cmake`, `linux-dev`, `linux-debug` (no warnings), and `linux-unit` all passed, and `engine_tests --suite editor` passed (322 assertions in 30 cases). I did not re-run them in this pass because the tree is unchanged.
+- **Windows session:** Still locked. `LogonUI` (52008) and `LockApp` (58728) are running, so the Windows gates (`win-dev`, `win-debug`, `win-unit`), the `game_editor.exe` screenshot, and the action log cannot run.
+- **Not run, and why:**
+  - Native Linux GUI and the Vulkan editor suite: WSL has no Vulkan adapter.
+  - `linux-gcc`: only GCC 9.4 is installed, and the job needs GCC 11+.
+  - `engine_bench`: the benchmark harness belongs to US-074.
+
+**To finish:** unlock the Windows session, then run the Windows gates and the GUI capture (`artifacts/ui/us061/run_ui.ps1` is referenced in the log but is not in the tree, so it has to be recreated). Run the linux-gcc job in CI with GCC 11+. Run the native Linux Vulkan suite on a machine with a Vulkan adapter. Only then can the story be signalled COMPLETE.
+
+I did not append another status-check entry to `.ralph-tui/progress.md`, since it would only repeat the previous ones.

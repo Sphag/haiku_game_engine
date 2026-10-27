@@ -1,0 +1,40 @@
+# Iteration 719 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:20:20.919Z
+- **Ended At**: 2026-10-26T02:20:38.247Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1779
+- **Total Tokens**: 1801
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and locate existing render_stress files $ ls tools/benchmark tools/benchmark/src 2>/dev/null
+The progress log shows this story has been blocked for many iterations on user decisions. I'll check whether anything has changed since the last status check.
+[94m[Bash][0m Check source mtimes and newest benchmark artifacts $ done
+US-076 is still not complete, and I did not signal COMPLETE. Nothing has changed since the last status check, so I made no edits and ran no gates or benchmarks.
+
+**What is blocking it:**
+
+1. **Triangle floor and frame budget fail on the current placement.** The `render_stress` scene places 312,068 triangles against the 2,000,000 the contract requires. The frame time is p99 35–47 ms against the 16.7 ms budget. Every `us076-*` run exits 1 for this reason. Fixing it means changing the workload: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and adjust the placement. The contract reserves that for an intended change, so it needs your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so the FSR path cannot build. This is tracked in the project memory.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What exists:** the render path (indexed, indirect, meshlets, and the mesh-shaders-off fallback), the eight `artifacts/bench/us076-*` runs for DX12 and Vulkan, and the prior gate results. The `render_stress.cpp` last changed at 04:15:43, and all eight reports postdate it.
+
+**Decisions I need from you:**
+
+- Approve a placement change that reaches 2,000,000 triangles and bumps the workload version. If you approve, I'll make the change, regenerate the expected file, and rerun the benchmarks.
+- Say whether a failing benchmark should close the story as measured, or whether it stays open until the budget passes. The acceptance criteria cannot pass on the current placement.
+- Decide whether FSR 2 stays out of the `full_1080` profile for this story, or whether the permutation tables should be vendored first.

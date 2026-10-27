@@ -1,0 +1,43 @@
+# Iteration 1037 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:19:06.515Z
+- **Ended At**: 2026-10-26T16:19:22.743Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 1860
+- **Total Tokens**: 1882
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and search for all_features $ grep -ril "all_features" --include=* . 2>/dev/null | grep -v third_party | head -30
+[94m[Bash][0m Re-check blockers and all_features test files $ grep -rl "all_features" tests | head
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I am not signalling COMPLETE. I re-checked the blockers and nothing has changed since the previous passes, so I made no source changes and ran no builds this time.
+
+**What exists**
+- The integration tests `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are present. Earlier passes recorded them as passing (`--suite integration`: 131 passed, 4 skipped), and `linux-unit` passed 30/30.
+
+**What is still missing**
+- **Sample project:** `samples/all_features` is absent. The runtime component catalog is empty in this build, so a scene with components would be refused.
+- **Benchmark route:** `benchmarks/manifest.json` still has `all_features` at `implementation: none`. Its route `all_features_route_v1` is still a proposal (line 152), and `tools/benchmark/src` has no runner for it.
+- **Forced geometry and upscale profiles:** `third_party/fsr2` has no `*_permutations.h` headers, so `full_1080` is unsupported.
+- **Tour, profiles, and editor scenario:** none of these have run. They need a Windows GPU and GUI session for the tour, the profiles, and the live editor run with package and relaunch.
+- **Gates not run here:** the Windows gates, native Linux Vulkan GPU, `engine_bench --suite acceptance`, `linux-gcc`, and the sanitizer presets.
+
+**Decisions needed from you**
+1. Approve `all_features_route_v1` so the benchmark contract is fixed.
+2. Vendor the FSR 2 permutation headers, or accept `full_1080` as unsupported.
+3. Provide a Windows GPU and GUI session for the tour, profiles, and live editor run.
+4. Decide how the runtime component catalog should handle `samples/all_features`.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this check.

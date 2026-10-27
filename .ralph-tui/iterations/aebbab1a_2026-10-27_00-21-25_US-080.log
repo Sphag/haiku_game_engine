@@ -1,0 +1,38 @@
+# Iteration 1159 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:21:25.915Z
+- **Ended At**: 2026-10-26T21:21:41.392Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2270
+- **Total Tokens**: 2298
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing benchmark tooling before deciding what can be run here.
+[94m[Bash][0m Read progress log, benchmark dirs, and gate memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md | ...
+The log records 55 prior status checks that all stopped on the same blockers. I'll re-verify those blockers with one command before deciding whether anything has changed.
+[94m[Bash][0m Re-verify the acceptance blockers on this host $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+Blockers are unchanged, so I'll record this check in the progress log and stop without a COMPLETE signal.
+[94m[Bash][0m Append status check entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No source change, ...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I made no code change and ran no build or benchmark in this pass.
+
+The blockers are the same as in the last 55 status checks, and I re-verified them just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan reports cannot be produced here. WSL sees the RTX 5080 (driver 617.42) only through its CUDA-style GPU passthrough, which does not count.
+- **No Windows acceptance reports.** `artifacts/bench` has no `acceptance` run. Each combination needs three 180 s repeats after 30 s of warmup, on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` has four entries with `implementation: none`. A run with them missing would exit 3 (incomplete), so I did not start a Windows batch.
+- **FSR 2 shader tables are missing.** `third_party/fsr2` has no `*_permutations.h` files, so FSR cannot link. Choosing how to vendor them is a user decision.
+- **The render_stress start-frame budget is not met.** The log records p99 above 16.7 ms there. Fixing it needs profiling on the Windows reference machine.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. Finishing US-080 needs the four workloads, a decision on the FSR 2 route, and the Windows and native Linux runs on the RTX 5080 reference machine. The Windows gates can be run from WSL through `cmd.exe` with the batch method in the memory notes. The native Linux Vulkan run needs a machine with a GPU device node.

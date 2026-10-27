@@ -1,0 +1,44 @@
+# Iteration 1183 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:36:50.813Z
+- **Ended At**: 2026-10-26T21:37:06.261Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2369
+- **Total Tokens**: 2397
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current benchmark state before deciding what can be run here.
+[94m[Bash][0m Read progress log and benchmark state $ grep -n "US-080" -A3 tasks/prd-open-world-engine.md | head -20
+The log shows this story has been blocked across many prior passes. I'll re-check the three blockers it names before deciding anything.
+[94m[Bash][0m Verify GPU device, workload, and FSR blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+The blockers are unchanged, so I'll record this pass in the progress log and stop without a COMPLETE signal.
+[94m[Bash][0m Append status check entry to progress log $ artifacts/bench has only partial us076/us077/us078/us080 runs, no acceptance suite. nvidia-smi sees ...
+US-080 is not complete, so I'm not signing it off and I'm not emitting the COMPLETE signal.
+
+I re-checked the blockers this pass and they are unchanged:
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent in this WSL environment. The RTX 5080 is visible only through `nvidia-smi` under WSL.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has four `implementation: "none"` entries (lines 88, 108, 122, 132). An acceptance batch would exit 3 (incomplete) until they exist.
+- **FSR 2 not buildable:** the vendored FSR 2 tree has zero `*_permutations.h` files, so the upscaler cannot link.
+- **Acceptance suite not run:** `artifacts/bench` holds only partial us076, us077, us078, and us080 runs. There is no full acceptance run.
+
+I did not run builds, gates, or benchmarks, because a run here would only produce an incomplete report. I appended a status-check entry to `.ralph-tui/progress.md` with these findings.
+
+To finish US-080, the following are needed:
+
+1. **Hardware:** the RTX 5080 reference machine (or a native Linux install with a Vulkan device) to produce the native Linux/Vulkan report, plus the Windows DX12 and Vulkan runs.
+2. **FSR 2 decision:** how to vendor the generated permutation tables, which is your call.
+3. **Workloads:** implementing the four `none` entries.
+4. **Frame-budget decision:** if the measured runs exceed the budget, the fix has to come from the measured cause. Changing the contract needs your separate decision.

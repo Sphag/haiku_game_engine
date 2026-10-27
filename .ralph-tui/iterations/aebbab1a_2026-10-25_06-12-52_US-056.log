@@ -1,0 +1,42 @@
+# Iteration 445 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T03:12:52.332Z
+- **Ended At**: 2026-10-25T03:13:08.257Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2238
+- **Total Tokens**: 2260
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and script module $ git -C . status 2>&1 | head -5
+[94m[Bash][0m Check toolchains and files changed since last log entry $ grep -n "linux-gcc" CMakePresets.json | head -5
+[94m[Bash][0m Append status re-check entry to progress log $ no GCC 11+ and no container runtime, so `linux-gcc*` cannot run here. - Status call: US-056 stays **...
+US-056 is not complete, so I am not emitting the completion signal. Everything except the Linux GCC gate is already verified.
+
+**What's blocking:** The acceptance criteria require `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit`. The host has only GCC 9.4 (`g++-9`), and Jolt needs GCC 11+ (`__builtin_bit_cast`). No newer compiler or container runtime is installed, so I can't run that gate here. The CI job for it also needs a GCC 11+ runner.
+
+**What I checked this pass:**
+- No file under `engine/`, `tests/`, or `cmake/` is newer than the last progress entry, so no source change has happened since the earlier verification.
+- The toolchain is unchanged: only g++-9, gcc-9, and clang++-10 are present.
+- I did not rerun the gates, since the tree is unchanged since the earlier passes.
+
+**Recorded results from earlier passes (not rerun now):**
+- Linux: ValidateVendor, linux-dev, linux-debug, linux-unit (22/22), and linux-asan/linux-sanitize all passed.
+- Windows: ValidateVendor, win-dev, win-debug, and win-unit (21/21) passed under MSVC.
+
+**Still open:**
+- The linux-gcc gate and its CI job. This needs a GCC 11+ toolchain, which the host lacks.
+- `engine_bench --suite acceptance` has no harness yet (US-074), and there are no GUI checks.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results. The story stays Partial until a GCC 11+ build passes.

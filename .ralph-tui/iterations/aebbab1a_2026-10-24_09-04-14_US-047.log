@@ -1,0 +1,39 @@
+# Iteration 157 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:04:14.410Z
+- **Ended At**: 2026-10-24T06:04:30.175Z
+- **Duration**: 15s
+- **Input Tokens**: 30
+- **Output Tokens**: 2078
+- **Total Tokens**: 2108
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the progress log and the current state of the terrain work first.
+[94m[Bash][0m Find US-047 entries in progress log $ ls artifacts/bench 2>/dev/null | head
+The log has many "still Partial" re-checks. I'll read the most recent entries to see what is actually open.
+[94m[Bash][0m Read US-047 status entries from progress log $ tail -n 60 .ralph-tui/progress.md
+The log already records the state: everything doable on this host is done, and two items remain. I'll confirm whether those blockers still hold before deciding anything.
+[94m[Bash][0m Check native Vulkan device, bench target, and tree changes $ find engine tests cmake -newer .ralph-tui/progress.md -type f 2>/dev/null | head
+US-047 stays **Partial**. I didn't complete it, and I didn't change any code this pass.
+
+The CPU runtime, the renderer integration, and the Windows and Linux gates are done. The log shows the DX12 and Vulkan GPU fixtures passing on Windows, with the splat, shadow, and RT checks included. Those results stand, since the tree has not changed since the last gate run.
+
+Two acceptance items are still open, and both are blocked outside this host:
+
+1. **`engine_tests --suite gpu --backend vulkan` on native Linux.** This host has no native Vulkan device: `/dev/dri` is absent and `vulkaninfo` is not installed. WSL does not replace this check, so it is not run here.
+2. **`engine_bench --suite acceptance` with a terrain workload.** `engine_bench` has no CMake target or source. It is named only in `tasks/prd.json` and the docs, and US-074 (Benchmark Harness) is not passing. The criterion applies only once the harness exists, so this item cannot be run yet.
+
+I did not append another re-check entry to `.ralph-tui/progress.md`. The log already has about 60 of them, and its own learning note says repeats of the same blockers don't change the status. Two things would close the story: a native Linux Vulkan host for the GPU run, and US-074 landing for the bench run.
+
+I'm not emitting the COMPLETE signal, since the story's acceptance criteria are not all met.

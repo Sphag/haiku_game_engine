@@ -1,0 +1,66 @@
+# Iteration 508 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:34:06.978Z
+- **Ended At**: 2026-10-25T07:42:54.653Z
+- **Duration**: 8m 47s
+- **Input Tokens**: 128
+- **Output Tokens**: 10656
+- **Total Tokens**: 10784
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-058 already has in the tree and what the progress log says.
+[94m[Bash][0m Inspect UI directory and progress log $ ls && ls engine/ui 2>/dev/null && find engine/ui -type f | head -100 && grep -n "US-058" .ralph-tui/...
+The log shows US-058 re-verified many times as Partial with no source change. Before repeating another pass, I'll check the two open items: whether anything calls `set_overlay`, and whether a test covers composition.
+[94m[Bash][0m Find set_overlay callers, UI tests, and executables $ grep -rn "add_executable" --include=CMakeLists.txt . | grep -v build | grep -v third_party | head -2...
+A GPU test already calls `set_overlay` at line 370. I'll check what it actually verifies.
+[94m[Bash][0m Read the overlay GPU test $ sed -n 340,420p tests/src/render_postprocess_gpu_tests.cpp
+The overlay composition fixture is real and runs on the GPU, so the open item is running it. The memory notes say GPU suites run on Windows through a batch file. I'll read those notes.
+[94m[Bash][0m Read Windows gate memory notes and build dirs $ ls /mnt/d/dev/haiku_game_engine/build | head -30
+The Windows host has the RTX 5080, so the DX12 GPU suite there is a valid report for the overlay fixture. I'll confirm no earlier batch is running and find the test binary path.
+[94m[Bash][0m Check for running batches and locate test binary $ [print(p['name'],p.get('binaryDir')) for p in json.load(open('CMakePresets.json'))['configurePresets...
+Nothing is running. I'll resolve which build directory the Windows presets use so the batch points at the right binary.
+[94m[Bash][0m Read Windows preset binary directories $ ls build/win-dev 2>/dev/null | head
+The Windows debug binary should be `build/win-dev/tests/Debug/engine_tests.exe`. I'll write the batch in the Windows Temp folder with CRLF endings, as the memory notes require, and run the build, unit tests, and the DX12 GPU suite in one batch.
+[94m[Bash][0m Write and launch the Windows build, unit, and GPU batch $ ps -eo pid,args | grep us058_gate | grep -v grep | head -3
+[94m[Monitor][0m Wait for Windows batch done file $ echo waited
+[94m[Bash][0m Check batch progress after a wait $ tail -3 $T/us058_build.log 2>/dev/null
+[94m[Monitor][0m Wait for batch completion notice $ echo waited
+[94m[Monitor][0m Wait for batch completion notice $ echo waited
+[94m[Bash][0m Check batch status $ tail -2 $T/us058_unit.log 2>/dev/null
+[94m[Bash][0m Poll for GPU suite completion $ tail -3 $T/us058_gpu.log 2>/dev/null
+The batch finished: build 0, unit 21/21, and the DX12 GPU suite passed (71 cases, 43,905 assertions). I'll confirm the overlay case is registered under the GPU suite tag, then record the result.
+[94m[Bash][0m Confirm overlay test registration and GPU adapter $ grep -i "NVIDIA\|RTX" /mnt/c/Users/bucha/AppData/Local/Temp/us058_gpu.log | head -2
+The overlay fixture is in the DX12 suite and ran on the RTX 5080 with validation on. The Vulkan GPU suite is also an acceptance gate, so I'll check what the Windows Vulkan run needs.
+[94m[Bash][0m Read Windows Vulkan validation layer notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-validation-layer-window...
+[94m[Bash][0m Check whether the pinned validation layer is staged $ ls /mnt/d/dev/vvl_build/layer 2>/dev/null || echo "no vvl layer staged"
+The pinned layer is staged. I'll run the Windows Vulkan GPU suite with it, after confirming the DX12 batch has exited.
+[94m[Bash][0m Launch Windows Vulkan GPU suite batch and poll $ cat $T/us058v_rc.txt 2>/dev/null || echo "running"
+[94m[Bash][0m Read Vulkan GPU suite log summary $ grep -ci "validation.*error\|VUID" $T/us058v_gpu.log
+The Vulkan GPU suite also passed on the RTX 5080 with validation on (72 cases, no validation errors). I'll record this in the progress log.
+[94m[Bash][0m Append US-058 entry to progress log $ `engine_tests --suite gpu --backend dx12` = 0, 71 cases, 43905 assertions, adapter NVIDIA GeForce RT...
+US-058 is still Partial, so I'm not emitting the completion signal. This pass ran the Windows GPU suites, which the earlier logs had left open. The tree is unchanged.
+
+**Verified on Windows (MSVC, RTX 5080, validation on):**
+- `cmake --build --preset win-debug`: exit 0, no warnings or errors.
+- `ctest --preset win-unit`: 21 of 21 passed.
+- `engine_tests --suite gpu --backend dx12`: exit 0, 71 cases, 43,905 assertions. This includes the overlay case, which calls `PostProcessor::set_overlay` after tone mapping.
+- `engine_tests --suite gpu --backend vulkan`: exit 0, 72 cases, 43,917 assertions. It used the pinned 1.4.363 validation layer, and the log has no VUID lines.
+
+**Still open:**
+- `linux-gcc`: only GCC 9 is installed here, and Jolt needs GCC 11+.
+- Native Linux Vulkan GPU run: WSL has no usable Vulkan device.
+- Running-application check with screenshots: no application host calls `set_overlay` yet, so there is nothing to run and screenshot.
+- Windows ValidateVendor and `win-dev` were not re-run in this pass. The earlier log has them passing, and the tree has not changed since.
+
+I appended this to `.ralph-tui/progress.md`. The running-application check needs an application host that calls `set_overlay`, and the Linux GCC gate needs a toolchain install. Both need your decision before the story can close.

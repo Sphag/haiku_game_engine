@@ -1,0 +1,201 @@
+# Iteration 34 Log
+
+## Metadata
+
+- **Task ID**: US-044
+- **Task Title**: Dynamic RT GI
+- **Description**: As a player, I want dynamic indirect lighting so that it responds to scene changes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T21:27:31.271Z
+- **Ended At**: 2026-10-23T21:57:09.954Z
+- **Duration**: 29m 38s
+- **Input Tokens**: 606
+- **Output Tokens**: 94835
+- **Total Tokens**: 95441
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD constraints, and the current state of the GI code.
+[94m[Bash][0m Read progress log tail and repo layout $ git status 2>&1 | head -3
+[94m[Bash][0m Find existing GI-related source files $ grep -rn -i "gi\b\|global illum\|probe" --include=*.hpp --include=*.cpp --include=*.hlsl --include=*...
+The previous pass left US-044 as Partial, with the grid not sampled by the scene. I'll check the PRD requirements and the design doc's open gaps before deciding what to finish.
+[94m[Bash][0m Read PRD US-044 section and dynamic GI doc $ cat docs/dynamic-gi.md | head -150
+The design doc says the lighting pass does not sample the grid. I'll check whether the PRD's functional requirements make that mandatory before deciding whether to integrate it.
+[94m[Bash][0m Find GI requirements in the PRD $ grep -n -i "indirect\|probe\|\bGI\b\|bounce" tasks/prd-open-world-engine.md | head -40
+FR-08 and the full-profile table require the frame's diffuse bounce to come from the dynamic grid, so the lighting pass sampling it is still missing. I'll read the pieces needed to wire it in: the dynamic GI header, the grid's volume layout, and how the scene shader currently takes its ambient term.
+[94m[Bash][0m Read dynamic GI and grid headers $ cat engine/gi/include/engine/gi/dynamic_grid.hpp | head -200
+Next, the scene shader's ambient path and the renderer's RT wiring, to see where a grid sample would go.
+[94m[Bash][0m Inspect scene shader ambient and binding layout $ wc -l engine/render/shaders/scene.hlsl engine/render/src/scene_renderer.cpp engine/render/include/en...
+The scene shader has no dynamic-grid input yet. Wiring it in means changes to `SceneRenderer`'s RT path and its space-3 bindings. I'll read those sections next.
+[94m[Bash][0m Locate RT wiring in scene renderer $ grep -n "ray_traced\|RtEffects\|rt_effects\|RayTraced\|rt_\|prepare_ray\|LightingData\|space3\|dummy...
+[94m[Bash][0m Read scene renderer header top section $ sed -n 1,200p engine/render/include/engine/render/scene_renderer.hpp | grep -n "" | sed -n 1,200p | ...
+The renderer side is large, so I'll read the pieces the integration touches: the dynamic pass's shader (how it writes and blends history), its slot-to-cell mapping, and the scene renderer's RT frame code.
+[94m[Bash][0m Read dynamic GI shader and grid slot mapping $ grep -n "to_volume" -A25 engine/gi/src/dynamic_grid.cpp | head -40
+The shader already has a sampler for the baked grid (`GiData`, x-fastest with a validity flag). The dynamic grid's `to_volume()` produces the same convention. The cleanest integration is a second sampler for the dynamic history, with a per-slot validity buffer uploaded from the CPU. Before writing that, I'll read the existing sampler, the environment descriptor set, and the pass code.
+[94m[Bash][0m Read probe sampler and environment set setup $ grep -n "gi_buffer_\|ray_traced\b\|environment_layout\|space2\|, 7\b" engine/render/src/scene_render...
+Now the environment layout, its descriptor writes, and the GI buffer upload.
+[94m[Bash][0m Read environment layout and GI upload code $ sed -n 3160,3215p engine/render/src/scene_renderer.cpp
+The baked grid is uploaded through `upload_gi` into environment binding 7. I'll check how `DynamicGi` creates and transitions its buffers, since the scene would bind them in the same set.
+[94m[Bash][0m Read dynamic GI pass implementation $ wc -l engine/render/src/dynamic_gi.cpp && sed -n 1,400p engine/render/src/dynamic_gi.cpp | grep -v "...
+The pass already keeps its history in `ShaderRead` between frames, and `update_frame` uploads through the graph. That fits the scene reading it, with one more buffer for per-slot validity and the grid window. Next I'll read the scene's RT frame code, the RT graph pass, and where `SceneShaders` is filled in.
+[94m[Bash][0m Read RT frame prep, graph pass, and shader wiring $ grep -rn "CSRayTracedEffects\|CSDynamicGi" --include=*.txt --include=*.cmake --include=*.cpp --inclu...
+The integration has one constraint I need to handle. The RT geometry is camera-relative, so the trace has to start probes relative to the camera, while the grid stays in world cells. I'll add a camera offset to the pass parameters. Next I'll check the upload helper signatures, the dynamic GI tests' size assertions, and the scene-test fixture I'll extend.
+[94m[Bash][0m Check upload helpers and dependent test references $ grep -n "RhiStatus SceneRenderer::upload_buffer_bytes" -A12 engine/render/src/scene_renderer.cpp
+I have what I need. The plan:
+
+1. **Grid and pass (CPU/GPU):** add a window-origin accessor; add a camera-world offset to the pass parameters so probes are traced in camera-relative space; add a sampling buffer (window header plus per-slot validity) that the scene reads.
+2. **Scene:** a second sampler in `scene.hlsl` over the slot-ordered history, used instead of the baked grid when the full profile's dynamic GI is on.
+3. **Renderer:** own the pass, feed it the sun and sky each frame, record it in the RT graph pass, and bind its buffers in the environment set.
+
+I'll start with the grid accessor and the pass's CPU side.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "    // World position of the probe in a slot, at t..." → "    // World position of the probe in a slot, at t..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m edit: "inline constexpr std::uint32_t kDynamicGiParameter..." → "inline constexpr std::uint32_t kDynamicGiParameter..."
+Next, the header's pack functions, the update signature, and the sampling buffer accessor.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m edit: "// The byte images the pass uploads. The update co..." → "// The byte images the pass uploads. The update co..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m edit: "    // Plans the frame's probes from the grid and ..." → "    // Plans the frame's probes from the grid and ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m edit: "    rhi::BufferHandle history_;
+    rhi::BufferHan..." → "    rhi::BufferHandle history_;
+    rhi::BufferHan..."
+Now the implementation: the parameter offset, the sampling packer, buffer creation and upload, and release.
+[94m[Bash][0m Apply CPU-side edits to the dynamic GI pass $ if (instances_""") open(p,'w').write(s) EOF grep -n "#include" engine/render/src/dynamic_gi.cpp
+The script stopped before writing anything, because one anchor didn't match. The `grep -v` in my earlier read hid a blank line. I'll look at the exact text.
+[94m[Bash][0m Show exact text around history state assignment $ grep -n "history_state_ = ResourceState::ShaderRead" -A3 engine/render/src/dynamic_gi.cpp | cat -A |...
+The blank line is there. I'll rerun the same edits with that anchor corrected.
+[94m[Bash][0m Reapply CPU-side edits to the dynamic GI pass $ if (instances_""") rep("""#include <cmath> #include <cstring>""","""#include <glm/glm.hpp>  #include...
+
+[91m[Error: Exit code 1
+Traceback (most recent call last):
+  File "<stdin>", line 87, in <module>
+  File "<stdin>", line 5, in rep
+AssertionError: (0, 'RhiStatus DynamicGi::update_frame() {\n    if (!scene_set_) {\n        return rhi:')][0m
+Another blank line hidden by my earlier filter. I'll print the exact text of `update_frame`'s head.
+[94m[Bash][0m Show exact update_frame text $ grep -n "DynamicGi::update_frame" -A7 engine/render/src/dynamic_gi.cpp | cat -A | cut -c1-150
+The blank line sits between `count` and `parameters`. I'll use single-line anchors for the remaining edits and rerun.
+[94m[Bash][0m Reapply CPU-side edits with corrected anchors $ """) rep("""#include <cmath> #include <cstring>""","""#include <glm/glm.hpp>  #include <cmath> #incl...
+The CPU side compiles against the new signatures in principle; I'll verify with a build later. Next, the trace shader: the camera offset is read from the parameters, and the probe origin moves to camera-relative space.
+[94m[Bash][0m Update dynamic GI shader for camera offset $ """) open(p,'w').write(s) print('ok') EOF grep -n "Params.Load3\|camera" engine/render/shaders/dynam...
+The trace is camera-relative now. Next, the scene shader: a dynamic sampler that reads the slot-ordered history, a shared blend helper so both samplers finish the same way, and the dispatch in `ProbeDiffuse`.
+[94m[Bash][0m Add dynamic probe sampler to scene shader $ } """) open(p,'w').write(s) print('ok') EOF
+The shader side is in place. Now the renderer, so I'll read the exact code around `build_ray_traced`, the settings check, and the upload declaration.
+[94m[Bash][0m Read RT build and header declarations $ grep -n "upload_buffer_bytes\|build_ray_traced\|destroy_ray_traced\|rt_effects_\|ray_traced_shader_\...
+Bindings 8 and 9 are needed even when RT is off, so the renderer needs dummy buffers. I'll check the upload helper's signature and where the environment set is first created.
+[94m[Bash][0m Check upload helper and environment set creation $ grep -n "^RhiStatus SceneRenderer::upload_buffer_bytes" -A22 engine/render/src/scene_renderer.cpp | ...
+The environment set exists before `build_ray_traced` runs, so the new bindings can be written there. I'll confirm the camera's position field and where `create` calls `set_environment`, then write the renderer changes.
+[94m[Bash][0m Check create order, camera fields, and includes $ grep -n "^#include" engine/render/include/engine/render/scene_renderer.hpp engine/render/include/eng...
+Environment bindings exist by the time `build_ray_traced` runs. I'll edit the header first: the settings, the shader slot, the members, and the helper declaration.
+[94m[Bash][0m Add dynamic GI declarations to scene renderer header $ sed -n 440,450p engine/render/src/scene_renderer.cpp
+Next, the renderer implementation: the environment layout, the build and bind steps, the per-frame update, the graph record, and teardown.
+[94m[Bash][0m Apply renderer edits for dynamic GI integration $ grep -n "destroy_ray_traced(first)" -B3 -A3 engine/render/src/scene_renderer.cpp | head -20
+The renderer changes are in. One gap: `dynamic_gi` without `enabled` would be silently ignored. I'll make `build_ray_traced` reject that combination up front, then compile the CPU side.
+[94m[Bash][0m Add dynamic-GI-requires-RT check and list build dir $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+Now a first real compile on Linux. This will catch C++ and shader-independent errors before I touch the tests.
+[94m[Bash][0m Build Linux debug preset and capture errors $ tail -3 /tmp/build_dbg.log
+The Linux debug build is clean with warnings as errors. Next, the unit suite, which will show whether the existing dynamic-GI tests still hold.
+[94m[Bash][0m Run Linux unit tests $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -15
+All 22 unit tests pass. The HLSL edits haven't been compiled yet, so I'll check whether the shader tool chain ran on this host.
+[94m[Bash][0m Check whether shader compiler runs on Linux $ grep -n "DXC\|dxc" cmake/ShaderToolchain.cmake | head -8
+DXC runs here and produces both DXIL and SPIR-V. I'll confirm the scene and dynamic-GI outputs are newer than my shader edits, so the compile really covered them.
+[94m[Bash][0m Compare shader output times with source edits $ ls -la --time-style=+%H:%M:%S engine/render/shaders/scene.hlsl engine/render/shaders/dynamic_gi.hlsl
+`scene.hlsl` wasn't among the outputs, so I'll find which target builds it.
+[94m[Bash][0m Locate scene shader build targets $ ls build/linux-dev/shaders | grep -i "^scene" | head -3
+[94m[Bash][0m Check scene shader outputs in the build tree $ grep -n "linux-debug\"" -A6 CMakePresets.json | head -12
+The shader outputs are from after my edit, so `scene.hlsl` and `dynamic_gi.hlsl` both compile with DXC on this host. Next, the tests. I'll look at the existing scene-level RT GPU test and the CPU dynamic-GI test to see what fixtures they provide.
+[94m[Bash][0m Outline scene-level RT GPU test file $ wc -l tests/src/render_rt_scene_gpu_tests.cpp tests/src/render_dynamic_gi_tests.cpp tests/src/render...
+[94m[Bash][0m Read scene RT test fixture and cases $ sed -n 113,350p tests/src/render_rt_scene_gpu_tests.cpp
+The scene fixture is reusable. Probe-level bounce assertions would be fragile without running them on hardware, so I'll test what the scene can show robustly. The dynamic path runs with the sun on and off, and the frame's total light must change in the right direction. I'll add that case next to the existing ones, plus CPU tests for the sampling block and camera offset. First, the test file's includes and the test-case pattern.
+[94m[Bash][0m Read test includes and CPU dynamic GI test file $ cat tests/src/render_dynamic_gi_tests.cpp | sed -n 1,94p
+I'll extend the CPU test file: the parameter block now carries the camera offset, and a new case checks the sampling block against a grid that has moved into negative cells and committed a plan.
+[94m[Bash][0m Add CPU tests for sampling block and camera offset $ } """) open(p,'w').write(s) print('ok') EOF grep -n "ProbeUpdate" tests/src/render_dynamic_gi_tests....
+Now the GPU scene case. It fills the grid for 16 frames (one sixteenth of the probes per frame), then turns the sun off and checks that the frame's total light drops.
+[94m[Bash][0m Add dynamic GI scene GPU test case $ } """ open(p,'w').write(s) print('ok') EOF grep -n "include <cmath>" tests/src/render_rt_scene_gpu_t...
+The tool says the file changed since I last read it, so I'll verify my edits landed. I also see a bug in the fill loop: it uses `dynamic.renderables` before any `place()` call, so the first frames would be empty. I'll route the fill frames through `render_reference`.
+[94m[Bash][0m Fix fill loop to place props before rendering $ }""") open(p,'w').write(s) print('ok') EOF grep -c "run_dynamic_case\|dynamic_gi = dynamic_gi\|CSDyn...
+Next, the Linux debug build and unit tests with the new cases.
+[94m[Bash][0m Rebuild debug and run unit tests with new cases $ ./build/linux-dev/tests/Debug/engine_tests "[unit]" 2>&1 | tail -4
+The build runs in the background. Meanwhile I'll read the Windows-gate memory notes, since the acceptance criteria need the Windows runs.
+[94m[Bash][0m Read Windows gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-validation-layer...
+The notes point to an existing batch template. A previous US-044 run used `us044b`, so I'll look for that file and its result files to reuse the same steps.
+[94m[Bash][0m Find previous US-044 gate batch template $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/us044b.bat" 2>/dev/null | tr -d '\r' | head -80
+[94m[Bash][0m Show a recent gate batch template and its rc output $ cat us046_rc.txt | tr -d '\r'
+The template is clear: validate, configure, build, unit tests, then the DX12 and Vulkan GPU suites, each with its own step code. I'll wait for the background Linux build before I start a Windows batch, since that batch reads the same source tree.
+[94m[Bash][0m Check background Linux build progress $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/afabdff1-7d33-4742-89a0-6fc57c6031ba/tasks/b7cto3e...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/afabdff1-7d33-4742-89a0-6fc57c6031ba/tasks/b7cto3e23.output tail -30. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Inspect Linux build log and running processes $ pgrep -fa "cmake --build|ctest" | grep -v pgrep | head -3
+The build compiled cleanly and `ctest` is running. I'll wait for it with a Monitor until-loop, as the tool guidance requires.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Signal when Linux unit ctest run exits $ echo "linux-unit ctest finished"
+The Linux unit run is still going. I'll wait for the monitor's completion event before reading its results.
+The background build and unit-test command finished with exit 0. I'll read its output for the ctest summary and the `[unit]` run.
+[94m[Bash][0m Read background build and test output $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/afabdff1-7d33-4742-89a0-6fc57c6031ba/tasks/b7cto3e...
+The ctest summary shows the label totals but not the pass count, and the `[unit]` argument was not the right way to select the suite. I'll rerun the unit suite the documented way and grep for the new cases.
+[94m[Bash][0m Run unit suite and ctest summary $ timeout 600 ctest --preset linux-unit --no-tests=error 2>&1 | grep "tests passed"
+All 544 unit cases pass, including the two new CPU tests, and ctest reports 22/22. Next is the Windows batch, which is the long step. Before launching it I'll check that no earlier gate batch is still running, as the overlap notes require.
+[94m[Bash][0m Check for running gate batches and write new batch $ sed 's/us046/us044c/g' us046_gate.bat > us044c_gate.bat && sed -i 's/$/\r/' us044c_gate.bat && rm -f...
+Three `cmd.exe` processes are still alive, so I need to know whether they are stale gate batches before I launch anything.
+[94m[Bash][0m List cmd.exe processes with command lines $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && printf '%s\n' 'Get-CimInstance Win32_Process -Filter "N...
+[94m[Bash][0m List cmd.exe processes with command lines $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && printf '%s\r\n' 'Get-CimInstance -ClassName Win32_Proce...
+[94m[Bash][0m List running cmd and engine_tests processes $ date +%H:%M
+Only two old `cmd.exe` processes are alive, both from 10/20, and no `engine_tests` is running. The last batch (`us046`) wrote its done file, so nothing overlaps. I'll launch the new batch in the background.
+[94m[Bash][0m Launch Windows gate batch in background $ echo launched
+While the Windows batch runs, I'll start the Linux GCC debug build in the background, which doesn't touch the Windows build tree.
+[94m[Bash][0m Start Linux GCC configure and debug build $ echo "gcc_build_exit=$?" > /tmp/gcc_done.txt) > /dev/null 2>&1 & echo started
+While those run, I'll update the design doc. Its "Limits" section still says the lighting pass does not sample the grid, which is no longer true.
+[94m[Bash][0m Update dynamic GI design doc for scene integration $ the API refuses records before a scene and a plan. - `render_rt_scene_gpu_tests.cpp` (`[gpu]`, DX12 ...
+The docs are updated. Next I'll wait for the Windows batch's done file and the GCC build's completion marker.
+[94m[Monitor][0m Signal when Windows batch and GCC build finish $ cat /tmp/gcc_done.txt
+The Windows batch and GCC build are still running. I'll wait for the monitor's completion event before reading their results.
+The Windows gates pass through `unit=0`, but both GPU suites returned 1. I'll read the logs to find the failing cases.
+[94m[Bash][0m Read DX12 GPU suite failure log $ tr -d '\r' < us044c_5.log | tail -5
+Four cases fail in the same place: a ray-traced buffer upload reports that its actual state differs from the `before` state the caller named. The existing dynamic-GI GPU test was passing before this change, so I'll look at the upload helper and that test's line 84.
+[94m[Bash][0m Inspect upload helper and failing test lines $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us044c_5.log | sed -n 1,18p
+The bug is mine. `create()` uploads the sampling block and leaves it in `ShaderRead`, but `sampling_uploaded_` stays false. So the first `update_frame()` names `Common` as the before state and the debug layer rejects it. The history buffer avoids this because it tracks its own state. I'll confirm the Vulkan log shows the same error, then fix the flag.
+[94m[Bash][0m Confirm Vulkan failure cause and fix sampling state $ // the copy leaves it in ShaderRead, so the first update starts from there  """) open(p,'w').write(s...
+Vulkan shows the same four failures from the same cause, and the fix is in. I'll rebuild Linux debug, rerun the unit suite, and then relaunch the Windows gates under a new name (`us044d`).
+[94m[Bash][0m Rebuild, run unit suite, relaunch Windows gates $ echo relaunched
+The Linux debug build is clean with no warnings, and the unit suite passes 544/544. I'll start the GCC rebuild and the ASan/UBSan chain in the background, then wait on the Windows batch.
+[94m[Bash][0m Start GCC and sanitizer chain in background $ echo "sanitize=$?" >> /tmp/chain_done.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Signal when the Windows gate batch finishes $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us044d_rc.txt
+The Windows batch and the Linux chain are running. I'll wait for the monitor's completion event before reading the results.
+That notice is from the earlier ctest monitor, which expired with no events. It isn't the Windows batch I'm waiting on. I'll check the state of the current batch and the Linux chain directly.
+[94m[Bash][0m Check Windows batch and Linux chain status $ date +%H:%M:%S
+Both are still running: the Windows batch has not written its done file, and the Linux chain has not finished. I'll wait for the monitor's completion event rather than poll.
+All six Windows gates now return 0. Before I count that as evidence, I'll confirm the GPU logs actually ran the new cases and the assertion totals look right.
+[94m[Bash][0m Verify GPU and unit logs for new cases $ tr -d '\r' < us044d_3.log | grep -c "warning C\|error C"
+The GPU logs show the new full-profile case ran on both backends: DX12 has 60 cases (up from 59) and Vulkan has 61 (up from 60), all passing. The Windows build has no warnings. The Linux GCC and sanitizer chain is still running, so I'll wait for it.
+[94m[Monitor][0m Signal when GCC and sanitizer chain completes $ cat /tmp/chain_done.txt
+[94m[Monitor][0m Wait for GCC and sanitizer chain completion $ cat /tmp/chain_done.txt
+The GCC and sanitizer chain is still running, so I'll wait on the new monitor before writing the progress entry.
+All Linux chain steps return 0. I'll check the build logs for warnings and the sanitizer totals before writing the progress entry.
+[94m[Bash][0m Check warnings and sanitizer results $ grep -i "runtime error\|AddressSanitizer" /tmp/san.log | head -3
+Every Linux gate passes, with zero warnings on the GCC and ASan builds. I'll record the entry in the progress log and add the reusable pattern to the top section.
+[94m[Bash][0m Append US-044 progress entry and codebase pattern $ `linux-sanitize` 22/22.   - Not run / not claimed: native Linux Vulkan GPU suite (no device here), `...
+One line in that entry overstates the evidence: the clang `linux-unit` run happened before the final fix. I'll correct it so the log matches what ran.
+[94m[Bash][0m Correct clang gate note in progress log $ `linux-unit` 22/22." assert s.count(old)==1 s=s.replace(old,"  - Linux clang: `linux-debug` 0 warnin...
+US-044 is implemented, and all the required Windows and Linux gates pass on the final tree. The full profile's frame is now lit by the dynamic probe grid, which the previous pass had left as an open gap.
+
+**What changed**
+- **Scene path:** with `RayTracedSettings::dynamic_gi` on, `SceneRenderer` owns the grid pass. Each frame it follows the camera, sets the sun and a uniform sky, updates the probe budget, and records the grid after the RT effects. `scene.hlsl` samples the history and uses it in place of the baked grid. With the option off, the native path is unchanged.
+- **Camera-relative tracing:** the RT geometry is camera-relative, so probes are traced from `world − camera`. The shader adds the camera position back when sampling.
+- **Sampling block:** a 48-byte header plus one valid flag per slot. A probe is read only after a trace has been recorded for it.
+- **Tests:** two CPU unit cases (camera offset, sampling block with negative cells). One GPU case per backend: after 16 fill frames, turning the sun off drops the frame's total light by more than 20%, and the frame stays lit.
+- **Docs:** `docs/dynamic-gi.md` and the progress log are updated.
+
+**Gates**
+- Windows (RTX 5080, validation on, batch us044d): `ValidateVendor`, `win-dev`, `win-debug` (no warnings), and `win-unit` 21/21 pass. `gpu dx12` is 60 cases and `gpu vulkan` is 61 cases, all passing.
+- Linux: `linux-debug` has no warnings, and `engine_tests --suite unit` passes 544 cases. `linux-unit` is 22/22. `linux-gcc-debug` has no warnings and `linux-gcc-unit` is 22/22. `linux-asan` has no warnings and `linux-sanitize` is 22/22.
+- An earlier Windows run (us044c) failed 4 cases in each GPU suite. The sampling block was not marked as uploaded, so the first update named the wrong before-state. I fixed that and reran the full set.
+
+**Not claimed**
+- The native Linux Vulkan GPU suite: this host has no device.
+- `engine_bench --suite acceptance`: US-074 isn't built, so there are no full-profile frame-time numbers.
+- The GUI check and GitHub CI.
+- The probe-level bounce accuracy: the GPU test checks the whole frame, not a single probe.
+
+**Choices I made that you may want to change**
+- The bounce sky is a uniform colour (`dynamic_sky_radiance`, default about 0.3/0.35/0.4), not the environment map.
+- Each frame uploads through the render graph, which waits on the GPU several times. Batching these uploads is future work.

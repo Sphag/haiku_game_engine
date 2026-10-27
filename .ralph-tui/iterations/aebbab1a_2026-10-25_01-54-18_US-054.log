@@ -1,0 +1,36 @@
+# Iteration 378 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:54:18.384Z
+- **Ended At**: 2026-10-24T22:54:39.788Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 2787
+- **Total Tokens**: 2815
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect physics sources and progress log $ grep -n "US-054" -r --include=*.md . | head -20
+The log shows US-054 marked Partial across many prior passes. Before deciding whether anything has changed, I'll check the two blockers: a GCC 11+ compiler and an `engine_bench` target.
+[94m[Bash][0m Check compilers, bench target, and changed files $ find . -newer .ralph-tui/progress.md -path ./.git -prune -o -type f \( -path './engine/*' -o -path '...
+[94m[Bash][0m Compare source mtimes against the progress log $ find engine tests cmake docs -newer .ralph-tui/progress.md -type f | wc -l
+US-054 is still **Partial**, so I'm not emitting the COMPLETE signal.
+
+Nothing has changed since the last status entry. No file under `engine/`, `tests/`, `cmake/`, or `docs/` is newer than `.ralph-tui/progress.md`, so I didn't rerun the gates. The most recent recorded results are: Linux `linux-unit` 22 of 22, `linux-sanitize` 22 of 22 with no ASan or UBSan reports, and Windows 21 of 21.
+
+Two criteria are still open, and neither can be closed from this environment:
+
+- **`linux-gcc` gate.** Only GCC/G++ 9 and clang 10 are installed. Jolt needs GCC 11+. A GCC 11 install needs root, which isn't available here. The CI job has to cover this.
+- **Performance measurement.** No `engine_bench` target exists in any CMakeLists, so `engine_bench --suite acceptance` cannot run. That depends on US-074, and `physics_stress` depends on US-077.
+
+I did not add another progress entry. Twenty-two consecutive status entries have recorded the same blockers, and an identical one would add nothing. To finish the story, someone with root needs to install GCC 11+ (or run the CI job), and US-074 and US-077 need to land before the benchmark can be measured.

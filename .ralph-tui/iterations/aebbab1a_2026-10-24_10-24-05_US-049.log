@@ -1,0 +1,65 @@
+# Iteration 163 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:24:05.229Z
+- **Ended At**: 2026-10-24T07:35:27.949Z
+- **Duration**: 11m 22s
+- **Input Tokens**: 118
+- **Output Tokens**: 8962
+- **Total Tokens**: 9080
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and the current state of the tree.
+[94m[Bash][0m Read progress log, PRD US-049, and repo state $ ls
+The log says US-049 is Partial: the CPU streaming side is done on Linux, and the Windows gates and GCC job remain. I'll read the Windows gate memory and the full story text.
+[94m[Bash][0m Read US-049 criteria and Windows gate memory notes $ wc -l engine/world/include/engine/world/streaming.hpp engine/world/src/streaming.cpp tests/src/world...
+Before running gates, I need to know what the existing streaming code and tests already cover against the criteria: the render consumer, transient residency, and cancellation.
+[94m[Bash][0m Read streaming header and test case list $ grep -rn "streaming" --include=*.cpp --include=*.hpp --include=*.txt -l . | grep -v third_party | gr...
+The CPU streaming code and its 7 test cases cover the lifecycle, render consumer, direction changes, teleport, missing cells, budgets, and destruction. What remains is the gate runs. Before starting the Windows batch I'll check that no earlier one is still running, as the memory notes require. I'll also start the Linux GCC job.
+[94m[Bash][0m Check for running gate batches and validate vendor $ tail -2 /tmp/us049_vendor.log
+No batch is running and vendor validation passes on Linux. Next I'll reuse an existing gate `.bat` as the template for the Windows run.
+[94m[Bash][0m Read an earlier Windows gate batch template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us009_result.txt | tail -8
+The memory says file-redirected exit codes were unreliable, so this batch prints each code to stdout and keeps per-step logs.
+[94m[Bash][0m Write and launch the Windows gate batch in background $ echo launched
+While the Windows batch runs, I'll run the Linux GCC job in the foreground. It builds in its own preset directory, so it does not collide with the Windows build.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests $ tail -3 /tmp/us049_gcc_ctest.log
+Linux GCC passes with zero warnings. Next is the "measure transient residency" criterion. I'll check whether the tests assert on the transient-byte stats or only record them.
+[94m[Bash][0m Check transient residency coverage in tests $ sed -n 268,292p tests/src/world_streaming_tests.cpp
+[94m[Bash][0m Read transient accounting and teleport test $ sed -n 292,322p tests/src/world_streaming_tests.cpp
+Transient bytes are tracked per update, with a peak, and the teleport test asserts it is non-zero. Real-workload numbers still need a stress scene, which the story does not require to be a new harness. I'll check on the Windows batch.
+[94m[Bash][0m Poll Windows gate batch result $ ps -eo pid,args | grep us049_gates | grep -v grep | wc -l
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us049_result.txt ps -eo pid,args grep us049_gates grep -v grep wc -l. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Wait for Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us049_result.txt 2>/dev/null
+All four Windows steps return 0. Before I trust them, I'll check the build log for warnings and read the ctest summary, as the memory notes require.
+[94m[Bash][0m Check Windows build log and ctest summary $ grep -c "Warning\|warning" us049_build.log
+Windows gates pass with zero build warnings and 21/21 ctest. I'll re-run the Linux clang gates to confirm the current tree, and check whether `engine_bench` exists yet.
+[94m[Bash][0m Re-run Linux clang gates and check for engine_bench target $ grep -rl "engine_bench" CMakeLists.txt engine tools tests 2>/dev/null | head -3
+Every gate passes on the current tree. Before I write the status, I need to know whether the "streaming_stress scene" from my earlier note is a PRD requirement, since it would decide whether this story is complete.
+[94m[Bash][0m Search PRD for stress scene and transient residency requirements $ grep -n "Partial\|COMPLETE" .ralph-tui/progress.md | tail -3
+The PRD defines `streaming_stress` as a benchmark workload with a 200 000-instance world, a 5400 m route at 30 m/s, and a 12 GiB / 16 GiB residency budget. It runs under `engine_bench`, and that harness only exists in US-074, which is not passing. So the story stays Partial. I'll record this pass in the progress log.
+[94m[Bash][0m Append US-049 gate results to progress log $ that harness is US-074, which is not passing. GPU suites: not run, since no GPU path changed. - Tran...
+US-049 is still **Partial**, so I'm not emitting the COMPLETE signal. Every gate the tree can run now passes, but the story's benchmark criterion is blocked on US-074.
+
+**Gates run on the current tree (source unchanged this pass):**
+- **Windows (MSVC):** `ValidateVendor`, `win-dev` configure, `win-debug` build (zero warnings or errors), and `win-unit` ctest (21/21) all pass.
+- **Linux (GCC):** `ValidateVendor`, `linux-gcc` configure, `linux-gcc-debug` build (zero warnings), and `linux-gcc-unit` ctest all pass.
+- **Linux (clang):** `ValidateVendor`, `linux-dev`, `linux-debug` (zero warnings), and `linux-unit` pass again on this tree.
+- **Linux ASan/UBSan:** carried forward from the previous pass; I did not re-run it.
+
+**Not met:**
+- **`streaming_stress` benchmark and residency numbers.** The PRD defines this as an `engine_bench` workload: 200 000 instances, a 5400 m route at 30 m/s, and 12 GiB GPU / 16 GiB host residency limits. No `engine_bench` target exists, and that harness is US-074, which is not passing. So `engine_bench --suite acceptance` has not been run.
+- **Transient residency.** The stats track in-flight IO and decode bytes per update, and the teleport test checks the peak is non-zero. There are no real-workload numbers yet.
+- **GPU suites.** Not run, because no GPU path changed.
+
+The CPU streaming manager and its 7 test cases were already complete from the previous pass. I appended this pass's results to `.ralph-tui/progress.md`. The next step is US-074, after which the `streaming_stress` scene can be measured.

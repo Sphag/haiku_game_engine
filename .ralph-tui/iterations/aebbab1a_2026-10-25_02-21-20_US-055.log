@@ -1,0 +1,138 @@
+# Iteration 393 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:21:20.721Z
+- **Ended At**: 2026-10-24T23:43:37.133Z
+- **Duration**: 22m 16s
+- **Input Tokens**: 340
+- **Output Tokens**: 93138
+- **Total Tokens**: 93478
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether a Lua integration already exists in the tree.
+[94m[Bash][0m List repo root, progress tail, and Lua references $ ls && tail -c 6000 .ralph-tui/progress.md && grep -ril "lua" --include=*.cpp --include=*.hpp --inclu...
+No Lua integration exists in the engine yet. Next I'll check for a vendored Lua, the PRD's US-055 entry, and the existing CMake layout.
+[94m[Bash][0m Inspect third_party, PRD Lua mentions, engine and test layout $ cat cmake/ValidateVendor.cmake | head -60
+A vendored `third_party/lua` exists. I'll look at it, the PRD section, and how the physics module is wired into CMake so I can follow the same pattern.
+[94m[Bash][0m Inspect Lua vendor, PRD section, physics and tests CMake $ grep -n "add_subdirectory\|engine_" CMakeLists.txt | head -60
+This is a large story: a new Lua module over the ECS, transforms, input actions, assets, physics, and events. I'll survey the APIs it has to bind before designing anything.
+[94m[Bash][0m Lua version, header listings, physics world API $ cat engine/physics/include/engine/physics/physics_world.hpp | head -250
+[94m[Bash][0m Read ECS world and entity headers $ cat engine/ecs/include/engine/ecs/entity.hpp | head -80
+[94m[Bash][0m Read registry, transform, and action map APIs $ grep -n "class\|struct\|(.*)" engine/platform/include/engine/platform/action_map.hpp | head -80
+[94m[Bash][0m Registry, action map, and asset registry APIs $ cat engine/assets/include/engine/assets/asset_registry.hpp | head -150
+Next I need the event mechanism, the test conventions, and the Lua-facing CMake helper functions.
+[94m[Bash][0m Find events, test conventions, and CMake helpers $ grep -n "function(engine_configure_first_party" -A25 cmake/*.cmake CMakeLists.txt | head -50
+The engine has no general event bus, so the `events` binding needs its own small queue. Before writing anything I need the GUID API, the root project's languages, and the library target names.
+[94m[Bash][0m Root languages, lib targets, and GUID API $ cat engine/world/CMakeLists.txt | head -20
+Everything I need is named. Last checks: the `core::Result` interface and the GUID header, then I'll write the module.
+[94m[Bash][0m Result API and GUID header $ grep -n "ActionEvaluator\|ActionMap" tests/src/input_action_tests.cpp | head -5
+Next I need three small pieces: how a test builds an `InputState` and feeds it to the evaluator, the `Path` constructor, and the `Key` enum names for input tests.
+[94m[Bash][0m Read input test pattern, Path API, and InputState $ grep -n "enum class Key" -A3 engine/platform/include/engine/platform/input.hpp
+[94m[Bash][0m Locate key event construction in input tests $ sed -n 1,20p engine/platform/include/engine/platform/input_state.hpp | grep -n include
+[94m[Bash][0m Check window_event helper and presets $ cat CMakePresets.json | grep -n '"name"' | head -40
+I have enough of the API surface. Before writing code, I'll check how `core::Result` is constructed and whether `PhysicsWorld` asserts on zero directions, since a script could pass one.
+[94m[Bash][0m Result constructors and physics asserts on direction $ grep -n "raycast" -A6 engine/physics/src/physics_world.cpp | head -30
+Physics quietly returns nothing for bad inputs, so the bindings will validate arguments and raise clear script errors instead. I have what I need to write the module. Starting with the build: the vendored Lua as a C static library, and the first-party `engine_script` target.
+[94m[Bash][0m Create engine_script CMake target and Lua VM target $ ls third_party/lua | wc -l
+Now the public contract. `EventBus` and `ScriptEngine` expose no Lua types, so scripts only see the bindings I define.
+[94m[Bash][0m Write EventBus, ScriptError, and ScriptEngine headers $ }  // namespace engine::script EOF
+Next, the implementation files: the event bus and the engine lifecycle (state setup, `run`, and the stack-depth check).
+[94m[Bash][0m Write EventBus and ScriptEngine implementation $ grep -n "include" engine/core/include/engine/core/result.hpp | head
+The engine and event-bus skeletons are in place. Next is the main piece, the bindings. Two rules shape it: no `std::string` or other owning C++ locals in any frame that can call `luaL_error` (it longjmps and would leak), and every argument is validated before the engine is touched.
+[94m[Bash][0m Write Lua bindings for all six modules $ }  }  // namespace engine::script EOF echo done
+The bindings are written. Scripts can't receive an entity from C++ yet, which the physics tests need, so I'll add a small host method for publishing a global entity. Then I'll check how the existing physics tests create worlds and bodies so my tests match.
+[94m[Bash][0m Read physics test helpers and ContentHash $ grep -n "struct ContentHash" -A5 engine/assets/include/engine/assets/content_hash.hpp | head -8
+[94m[Bash][0m Add set_global_entity host method $ }  }  // namespace engine::script """) open(p,'w').write(s) EOF tail -12 engine/script/src/script_bi...
+Now the headless tests. They cover stack balance, syntax/runtime/type errors, destroyed-entity handling including slot reuse, transform round-trips and atomic failure, input, assets, physics queries, events, and sandboxing.
+[94m[Bash][0m Write headless Lua API test suite $ grep -n "physics_character_tests.cpp" tests/CMakeLists.txt
+Before building, I'll fix three problems I can see in the test file: a local named `floor` shadows `<cmath>`'s function (`-Wshadow` is an error here), two physics-argument checks run without a bound physics world, and `<optional>` is missing.
+[94m[Bash][0m Fix test issues and wire CMake targets $ grep -n "engine_animation" tests/CMakeLists.txt
+The root `CMakeLists.txt` edit didn't show up in the grep, so I'll check it directly along with the test source list.
+[94m[Bash][0m Verify root CMake and test source wiring $ grep -n "make_physics" tests/src/script_lua_tests.cpp | head -3
+[94m[Bash][0m Add engine/script subdirectory to root CMake $ cmake --version | head -1
+The `engine/script` line is now duplicated (the earlier edit had landed after all). I'll remove the extra copy and build.
+[94m[Bash][0m Dedupe CMake line, validate vendor, configure Linux preset $ echo configure=$?) && tail -5 /tmp/configure.log
+[94m[Bash][0m Check configure progress $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/73b8787e-9203-4d5b-9f2e-e4a66638dc53/tasks/b1lw377...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/73b8787e-9203-4d5b-9f2e-e4a66638dc53/tasks/b1lw3777w.output tail -15. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read background command output $ tail -15 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/73b8787e-9203-4d5b-9f2e-e4a66638dc53/tasks/b1...
+Vendor validation passes; configure is still running. I'll poll for it with a bounded loop.
+[94m[Bash][0m Wait up to ~100s for configure to finish $ tail -5 /tmp/configure.log
+Configure succeeded. Now the Debug build, run in the background since it's long.
+[94m[Bash][0m Build Linux debug preset $ tail -3 /tmp/build.log
+[94m[Bash][0m Wait for build and show first errors $ tail -2 /tmp/build.log
+The engine compiled; only two test-side errors remain: `INFO` with a ternary, and `AssetRecord` has no default constructor (its `Path` member has none). I'll fix both with aggregate initialization, then rebuild.
+[94m[Bash][0m Fix test compile errors and rebuild $ grep -m10 "error:" /tmp/build.log
+The build passes with warnings-as-errors. Now the test run: the full `linux-unit` preset, since the suite can't be filtered to one case.
+[94m[Bash][0m Run Linux unit test preset $ tail -8 /tmp/ctest.log
+[94m[Bash][0m Extract failure details from ctest log $ grep -n "FAILED\|with expansion\|REQUIRE\|CHECK\|failed\|script_lua\|test cases\|assertions" /tmp/ct...
+[94m[Bash][0m Show the failing assertion details $ grep -n "engine_tests_cli_suite_unit" -A12 /tmp/ctest.log | head -20
+One real failure: my test expected `no action map is bound`, but `input.down` checks for the evaluator first, which is the correct order. The `exit 42` in the CLI test is just the same failing case reported by the binary. I'll fix the expectation and rerun.
+[94m[Bash][0m Fix expectation, rebuild, rerun unit tests $ tail -4 /tmp/ctest.log
+The Linux unit preset passes (`ctest` exit 0). Lua and the lifetime-sensitive bindings are in scope for the sanitizer gate, so I'll start the ASan/UBSan configure, build, and sanitize test chain in the background while I read the Windows gate notes.
+[94m[Bash][0m Start ASan chain; read Windows gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md ...
+The Windows gates run through a `.bat` on the Windows host, using the same tree. I'll reuse an existing batch from the user's Temp folder as the template so the `vcvars` path and output capture match what has worked before.
+[94m[Bash][0m Find an existing Windows gate batch as template $ [ -n "$f" ] && head -20 "$f" | tr -d '\r'
+I'll stage the US-055 batch from that template (same steps, `us055` names, CRLF endings) and check on the ASan chain.
+[94m[Bash][0m Stage the Windows gate batch and check ASan progress $ tail -2 /tmp/asan-build.log 2>/dev/null
+[94m[Bash][0m Wait for ASan chain result $ grep -c "error:" /tmp/asan-build.log
+[94m[Bash][0m Wait for sanitize run to finish and summarize $ grep -i "tests passed\|failed\|sanitizer\|runtime error\|ERROR: " /tmp/asan-ctest.log | head -20
+The sanitizer run passes 22 of 22 with no sanitizer reports. Next, the Windows gates: first I'll confirm no earlier batch is still running, as the notes require.
+[94m[Bash][0m Launch Windows gate batch for US-055 $ cat /tmp/us055_result.txt | tr -d '\r'
+The Windows batch is running in the background. While it runs I won't touch the tree, since the batch builds from the same source. I'll wait for its completion notification.
+[94m[Bash][0m Poll for Windows gate progress $ cat /tmp/us055_result.txt | tr -d '\r'
+[94m[Bash][0m Wait for first Windows gate result files $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us055_rc_*.txt 2>/dev/null
+[94m[Bash][0m Check Windows configure and build progress $ tail -3 us055_configure.txt | tr -d '\r'
+The Windows configure and build both returned 0. Before trusting that, I'll check the build log for the new targets so a warm build isn't mistaken for a fresh one.
+[94m[Bash][0m Inspect Windows build log for script target $ tr -d '\r' < us055_build.txt | grep -i "Building\|Linking" | head -5
+The Windows build compiled Lua and the new first-party sources from scratch with `/W4 /WX`, and returned 0. The unit run is next.
+[94m[Bash][0m Wait for Windows unit test result $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us055_unit.txt 2>/dev/null | tail -6
+Windows configure, build, and `win-unit` all return 0. Before recording the result, I'll check the PRD's Lua-specific constraints (sandboxing, budgets, error policy) so the summary doesn't miss any.
+[94m[Bash][0m Grep PRD for scripting constraints $ grep -n -i "script\|lua" tasks/prd-open-world-engine.md | grep -v "^516\|^520\|^522" | head -40
+The PRD constrains Lua through FR-19's validated API. Lifecycle and reload belong to US-056, and visual scripting and C++ hot reload are non-goals, so nothing else applies here. Next I'll record the work in the progress log: a new reusable pattern at the top, and an entry at the bottom.
+[94m[Bash][0m Locate Codebase Patterns section in progress log $ grep -n "^## " .ralph-tui/progress.md | head -5
+[94m[Bash][0m Append US-055 entry and Codebase pattern to progress log $ the CI job must cover it), `engine_bench` (no harness yet, US-074), GPU suites (no GPU work in this ...
+I'm going to record the status honestly. The `linux-gcc` gate can't run on this host, and earlier stories in this log were held at Partial for the same reason, so US-055 isn't complete by the story's own criteria. I'll say that in the log.
+[94m[Bash][0m Record Partial status in progress log $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() old="- Learnings:\n  - The Lua `__eq`"...
+US-055 is implemented and passes every gate I could run, but I'm marking it **Partial**, not complete. The `linux-gcc` gate can't run here: the local GCC is 9.4, and Jolt (which `engine_script` depends on) needs GCC 11+.
+
+**What's in place**
+- **Lua integration:** the vendored Lua 5.4.7 is built as a C target, and `engine_script` wraps it with in-house C API bindings. Six globals are exposed:
+  - `entity`: create, destroy, alive, and has/add/remove by component name.
+  - `transform`: get/set position, rotation (w,x,y,z, normalised), and scale. A malformed field leaves the component unchanged.
+  - `input`: value, down, pressed, and released, by action name.
+  - `assets`: find by path, exists, path, importer, and dependencies (by GUID text).
+  - `physics`: raycast and overlap_sphere, with an optional filter table.
+  - `events`: on, off, and emit. A failing handler is reported and the others still run.
+- **Destroyed entities:** a script holds the `ecs::EntityHandle` value, never a pointer. Every use checks liveness and raises a controlled Lua error. A stale handle never reaches a reused slot.
+- **Tests:** 15 headless cases with the `[unit]` label. They cover stack balance, syntax/runtime/type errors, destroyed entities, transform atomicity, input, assets, physics queries, events, unbound services, and the sandbox.
+
+**Gates**
+
+| Gate | Result |
+|---|---|
+| Linux: ValidateVendor, linux-dev, linux-debug, linux-unit | all exit 0 |
+| Linux: linux-asan build + linux-sanitize | exit 0, 22 of 22, no sanitizer reports |
+| Windows: ValidateVendor, win-dev, win-debug build, win-unit | all exit 0 (full MSVC rebuild with `/W4 /WX`) |
+| Linux: linux-gcc, linux-gcc-debug, linux-gcc-unit | **not run** (needs GCC 11+ or the CI job) |
+| engine_bench | not run; no harness exists yet (US-074) |
+
+**Choices I made that you may want to change**
+- **Components:** only `transform` is exposed. It's the only C++ component with a schema in the engine. Generic script components are not built.
+- **Events:** the bus is script-level, so physics contact events are not bridged to Lua yet. That fits with US-056.
+- **Physics from Lua:** scripts can query physics but cannot create bodies.
+- **Sandbox:** `io`, `os`, `package`, and `debug` are not opened, and `dofile`/`loadfile` are removed.
+
+**Known gap:** a script has no instruction or time limit, so `while true do end` blocks the thread. That needs a hook or budget, and I left it for a later story.
+
+I added the US-055 entry and a Codebase Pattern to `.ralph-tui/progress.md`, and staged the Windows batch at `us055_gate.bat` in the user's Temp folder.

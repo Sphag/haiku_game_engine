@@ -1,0 +1,108 @@
+# Iteration 454 Log
+
+## Metadata
+
+- **Task ID**: US-057
+- **Task Title**: Audio
+- **Description**: As a game creator, I want audio so that I can add sound to the game world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T04:14:08.449Z
+- **Ended At**: 2026-10-25T04:32:10.806Z
+- **Duration**: 18m 2s
+- **Input Tokens**: 178
+- **Output Tokens**: 20754
+- **Total Tokens**: 20932
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the audio work and the progress log.
+[94m[Bash][0m Inspect audio directory and progress log $ tail -c 3000 .ralph-tui/progress.md
+The log says US-057 is Partial. The remaining code gap is world-unload release of voices, which nothing calls yet. I'll look at the streaming hooks and the audio owner API to wire that.
+[94m[Bash][0m Find owner release and streaming subscriber code $ grep -rn "class StreamingSubscriber" -A40 engine --include=*.hpp | head -80
+[94m[Bash][0m Locate unload hooks and script audio wiring $ grep -rn "class CollisionCellStreamer\|class StreamingCell\|WorldStreamer" engine --include=*.hpp | ...
+[94m[Bash][0m Read streaming subscriber and audio engine headers $ cat engine/script/CMakeLists.txt | head -30
+The streaming manager already has an `on_unloaded` hook, so the missing piece is an adapter that maps a cell to an owner id and releases its voices. I need to see how voices get their owner today and what `WorldCell` identifies a cell with.
+[94m[Bash][0m Check script owner usage, cell types, and link deps $ grep -n "owner" engine/audio/include/engine/audio/mixer.hpp
+[94m[Bash][0m Find WorldCell and cell key types $ sed -n 110,150p engine/world/src/streaming.cpp
+The adapter can follow the physics `CollisionCellStreamer` pattern. I'll read `WorldCell`, the physics streamer for reference, and the existing audio mixer tests.
+[94m[Bash][0m Read WorldCell, physics streamer, and audio test layout $ tail -20 tests/src/audio_mixer_tests.cpp
+The owner tag must be a non-zero id that no script owner can match. Before I choose an encoding for `CellCoord`, I need to know whether the world bounds coordinates.
+[94m[Bash][0m Check coordinate bounds and physics cell key encoding $ grep -rn "cell_key" -A4 engine/physics/src/collision_cells.cpp | head -12
+Coordinates are bounded to about ±2^20, so a cell owner can be encoded losslessly. I'll set bit 63 so it can never equal a script owner (an object address), and keep the value non-zero. Next I'll write the subscriber.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/audio/include/engine/audio/cell_audio.hpp[0m "#pragma once
+
+// Cell-scoped sound (US-057). Voices that a cell's emitters start carry the cell's owner tag, and the cell's unload releases them, so a
+// cell that streams out leaves no sound behind. ... (1380 chars)"
+[94m[Bash][0m Read the cell index limit check $ sed -n 14,30p engine/world/src/partition.cpp
+The index limit is ±2^20, so a biased coordinate fits well inside 32 bits. I'll correct the header wording to state that bound precisely, then write the source.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/audio/include/engine/audio/cell_audio.hpp[0m edit: "    // The owner tag of a cell's voices. It is nev..." → "    // The owner tag of a cell's voices. Bit 63 is..."
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/audio/src/cell_audio.cpp[0m "#include "engine/audio/cell_audio.hpp"
+
+#include "engine/audio/audio_engine.hpp"
+
+#include <cstdint>
+
+namespace engine::audio {
+
+namespace {
+
+// Cell indices are within +-2^20, so this bias maps every... (918 chars)"
+Next, the CMake wiring: add the source and link `engine_world`, which only depends on core, so there is no cycle.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/audio/CMakeLists.txt[0m edit: "  src/audio_engine.cpp
+)
+target_include_directorie..." → "  src/audio_engine.cpp
+  src/cell_audio.cpp
+)
+targ..."
+Now a unit test in the existing mixer test file, which is already registered with the suite. It checks that unload releases only the cell's voices and that load leaves them alone.
+[94m[Bash][0m Append cell audio tests and fix includes $ }     } } EOF python3 - <<'EOF' import re p='/mnt/d/dev/haiku_game_engine/tests/src/audio_mixer_test...
+[94m[Bash][0m Add OwnerId alias and list Linux presets $ cat CMakePresets.json | grep -o '"name": "linux-[a-z-]*"' | head -20
+Now I'll run the Linux gates: configure, build the debug preset, and run the unit suite.
+[94m[Bash][0m Run Linux validate, configure, and debug build $ grep "error" /tmp/build.log | head -20)
+[94m[Bash][0m Run Linux unit tests $ find build -name engine_tests -type f | head -2
+The gate passes. To confirm the two new cases actually ran, I'll check the unit-suite case count against the previous total of 743.
+[94m[Bash][0m Count unit cases and run the new tests $ timeout 300 $B "Cell owners are non-zero, distinct per cell, and clear of script owners" 2>&1 | tail...
+[94m[Bash][0m Run unit suite and the new cases directly $ "$B" "Cell owners are non-zero, distinct per cell, and clear of script owners" 2>&1 | tail -2
+The count reconciles: 743 earlier plus the 2 new cases gives 745, and all pass. Since this change touches the streaming subscriber, I'll run the sanitizer gate too, and read the Windows gate notes to see how to run those.
+[94m[Bash][0m Run ASan build, sanitizer tests, and read Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+The ASan build passed, but `grep -c` returned 0 matches with exit 1, which stopped the chain before the sanitize step. I'll run the sanitize tests on their own.
+[94m[Bash][0m Run sanitizer CTest preset $ grep -ci "runtime error\|AddressSanitizer" /tmp/san.log
+The Linux gates all pass, and the sanitizer run reports no runtime errors. Next are the Windows gates. Per the saved notes, I'll first confirm no earlier batch is still running, then write a CRLF batch that runs each gate and records its exit code.
+[94m[Bash][0m Check for running Windows gate batches $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "gate\|us0" | head
+[94m[Bash][0m Write and run the Windows gate batch via cmd.exe $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us057_rc.txt 2>/dev/null
+All four Windows steps report exit 0. The notes say to read the logs too, since a short build log can mean a warm cache, so I'll check the build and test output.
+[94m[Bash][0m Read Windows build and test logs $ tail -6 $T/us057_test.log
+[94m[Bash][0m Read Windows test pass summary $ grep -i "tests passed\|tests failed\|Test project" $T/us057_test.log | head -5
+Windows gates pass: validation, configure, the debug build with 0 warnings and 0 errors, and 21 of 21 unit-preset tests. Next I'll record the result in the progress log, adding a reusable pattern at the top of its Codebase Patterns section.
+[94m[Bash][0m Read top of progress log $ sed -n 1,6p .ralph-tui/progress.md
+[94m[Bash][0m Append US-057 progress entry and pattern $ tail -3 .ralph-tui/progress.md
+US-057 is not complete. The functional work and the gates I could run pass, but two required gates cannot run in this environment. I did not emit the completion signal.
+
+**Closed this pass: world unload now releases voices.** The last gap in the log was that nothing called `stop_owner` on unload.
+
+- `engine/audio/include/engine/audio/cell_audio.hpp` and `src/cell_audio.cpp` (new): `CellAudioSubscriber` is a world cell subscriber. Its `on_unloaded` releases every voice tagged with the cell's owner. `cell_owner(coord)` is non-zero, distinct per cell, and has bit 63 set so it never matches a script owner. It takes only the audio mutex, never the ECS.
+- `engine/audio/CMakeLists.txt`: adds the source and links `engine_world`. That module depends only on core, so there is no cycle.
+- `tests/src/audio_mixer_tests.cpp`: two cases. Unload releases only that cell's voices and leaves script and other cells' voices playing. Load does not release anything. Owner tags are non-zero, flagged, and distinct.
+
+**Gate results**
+
+| Gate | Result |
+|---|---|
+| Linux `ValidateVendor`, `linux-dev`, `linux-debug` build | Pass, 0 warnings |
+| `ctest --preset linux-unit` | 22/22 |
+| `engine_tests --suite unit` | 745 cases, all pass (743 before, plus 2) |
+| `linux-asan` build + `linux-sanitize` tests | Pass, no sanitizer reports |
+| Windows `ValidateVendor`, `win-dev`, `win-debug` build | Pass, 0 warning C / error C |
+| `ctest --preset win-unit` | 21/21 |
+
+**Not run, so the story stays open**
+
+- **`linux-gcc` gates and the GCC CI job.** Only GCC 9.4 is installed, and Jolt needs GCC 11+. Nothing here can settle this.
+- **`engine_bench --suite acceptance`.** The tree has no benchmark target; the harness is US-074.
+- **Per-emitter tagging.** The tree has no audio emitter component or world-owned sound yet. `cell_owner` is the contract for it, so the unload path is in place but nothing starts voices with that tag.
+
+I added the progress entry and a Codebase Patterns note to `.ralph-tui/progress.md`. Those are the only shared-file edits.

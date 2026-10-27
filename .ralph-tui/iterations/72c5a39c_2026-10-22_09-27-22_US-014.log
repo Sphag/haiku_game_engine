@@ -1,0 +1,212 @@
+# Iteration 13 Log
+
+## Metadata
+
+- **Task ID**: US-014
+- **Task Title**: ECS Systems and Deferred Changes
+- **Description**: As a developer, I want controlled system ordering so that I can avoid races during structural changes.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T06:27:22.192Z
+- **Ended At**: 2026-10-22T06:57:22.564Z
+- **Duration**: 30m 0s
+- **Input Tokens**: 380
+- **Output Tokens**: 111780
+- **Total Tokens**: 112160
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the PRD, then check what US-006 and US-013 already built.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -400 && wc -l .ralph-tui/progress.md
+[94m[Bash][0m Find PRD sections for US-006, US-013, US-014 $ wc -l tasks/prd-open-world-engine.md && grep -n "US-014\|US-013\|US-006" tasks/prd-open-world-engine...
+The PRD is long and the progress log is large, so I'll read the relevant sections directly rather than the whole files.
+[94m[Bash][0m Read PRD header and first sections $ sed -n 1,123p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read PRD US-006 through US-015 stories $ sed -n 124,215p tasks/prd-open-world-engine.md
+[94m[Bash][0m Locate PRD non-story sections and job/ECS/benchmark constraints $ grep -n -i "job\|ECS\|system\|benchmark\|p99\|command buffer\|determin" tasks/prd-open-world-engine....
+[94m[Bash][0m Read PRD functional reqs, non-goals, technical considerations, perf contract $ sed -n 884,897p tasks/prd-open-world-engine.md
+[94m[Bash][0m List source tree, root CMake, and presets $ cat CMakePresets.json | head -150
+The ECS and jobs code are what this story builds on, so I'll read those next, along with the tail of the progress log for the US-006 and US-013 notes.
+[94m[Bash][0m Read ECS entity, world, and registry headers $ cat engine/ecs/include/engine/ecs/entity.hpp engine/ecs/include/engine/ecs/world.hpp engine/ecs/incl...
+[94m[Bash][0m Read sparse set, world impl, and ECS CMake $ cat engine/ecs/include/engine/ecs/sparse_set.hpp engine/ecs/src/world.cpp engine/ecs/CMakeLists.txt
+[94m[Bash][0m Read job system header, impl, and test CMake $ cat tests/CMakeLists.txt | head -150
+The jobs and ECS layers are in place. Next I'll check the progress log's story history and the tail, then the test files and the warnings-as-errors helper.
+[94m[Bash][0m List progress sections and read the log tail $ tail -c 9000 .ralph-tui/progress.md
+[94m[Bash][0m Read engine target policy, test main, and ECS storage tests head $ head -60 tests/src/ecs_storage_tests.cpp
+The ECS and jobs code are solid, and the log shows the repo's conventions. Before designing the API, I'll check the result, assert, and doc conventions I'll need to match.
+[94m[Bash][0m Read assert and result headers, list tasks/docs, codebase patterns $ sed -n 6,36p .ralph-tui/progress.md
+[94m[Bash][0m Read ECS docs, US-006 log entry, prd.json US-013/014 entries $ grep -n "US-01[34]" -A6 tasks/prd.json 2>/dev/null | head -40
+I have what I need to design this. Summary of the plan before I write code:
+
+- **Access declarations** (`Access`): each system declares read/write component types. Conflicts are write-vs-read or write-vs-write.
+- **Scheduler** (`Schedule`): explicit `after` dependencies plus conflict-based packing into stages. Non-conflicting systems in a stage run as jobs on the existing `JobSystem`. Conflicting systems never share a stage.
+- **Command buffers** (`CommandBuffer`): each system records create/destroy/add/remove into its own buffer. Each buffer is verified in full before any change, then applied at the stage's sync point in registration order.
+- **Frame-job cancellation**: a stage whose jobs did not all succeed, or whose frame was cancelled, has its buffers discarded and nothing from it is applied.
+
+I'll check how the existing tests tag cases and how the assert handler is used, then write the code.
+[94m[Bash][0m Check test tag style, assert handler use, and prd.json US-014 fields $ sed -n 433,456p tasks/prd.json | head -30
+Now the command buffer header. Structural changes are recorded here and only touch the registry at apply time.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/command_buffer.hpp[0m "#pragma once
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/registry.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#inclu... (6050 chars)"
+Next, the buffer's verify-then-apply implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/src/command_buffer.cpp[0m "#include "engine/ecs/command_buffer.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <map>
+#include <set>
+#include <utility>
+
+namespace engine::ecs {
+namespace {
+
+// Pending entities and live entitie... (4898 chars)"
+Now the systems header: access declarations, the system context that enforces them, the schedule, and the frame report.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/systems.hpp[0m "#pragma once
+
+#include "engine/ecs/command_buffer.hpp"
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/registry.hpp"
+
+#include "engine/core/assert.hpp"
+#include "engine/core/jobs.hpp"
+#include "... (7856 chars)"
+Now the scheduler implementation: dependency resolution, stage packing, and the frame loop with its sync points.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/src/systems.cpp[0m "#include "engine/ecs/systems.hpp"
+
+#include <algorithm>
+#include <utility>
+
+namespace engine::ecs {
+
+bool Access::contains(const std::vector<std::type_index>& types, std::type_index type) {
+    return... (7744 chars)"
+Next I'll register the new sources in the ECS target and add the test files to the test target.
+[94m[Bash][0m Register ECS sources and test files in CMake $ cat > engine/ecs/CMakeLists.txt <<'EOF' # In-house entity handles and worlds (US-012). Component poo...
+Now the command buffer tests: deferred application, pending entities, stale and foreign handles, duplicates, slot reuse, and move-only components.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_command_buffer_tests.cpp[0m "// Deferred structural changes (US-014). CPU-only; these run on every operating system.
+
+#include "engine/ecs/command_buffer.hpp"
+#include "engine/ecs/registry.hpp"
+
+#include <catch2/catch_test_macros... (9071 chars)"
+The test file calls `Registry::alive()` and `Registry::size()`, which don't exist. Those live on `world()`, so I'll fix the calls before going further.
+[94m[Bash][0m Fix Registry accessor calls to go through world() $ sed -i -e 's/registry\.alive(/registry.world().alive(/g' -e 's/owner\.alive(/owner.world().alive(/g'...
+The sed fixed the accessor calls. Now the systems tests: stage packing, explicit ordering, build errors, the no-overlap guarantee under real workers, sync-point visibility, entity invalidation between systems, cancellation, failure, and the access check in debug builds.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_systems_tests.cpp[0m "// Systems, access declarations, stage ordering, and frame sync points (US-014). CPU-only; these run on every operating system.
+
+#include "engine/ecs/registry.hpp"
+#include "engine/ecs/systems.hpp"
+
+#... (16691 chars)"
+Before compiling, I'm checking the test file against the Catch macro rule in the repo notes: a brace list with a top-level comma splits the macro. One `CHECK` does that, so I'll hoist it. I'll also remove a redundant assignment and a weak loop that adds no coverage.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_systems_tests.cpp[0m edit: "    const auto stages = schedule.stages();
+    REQ..." → "    const auto stages = schedule.stages();
+    REQ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_systems_tests.cpp[0m edit: "                [&seen_during_stage](SystemContext..." → "                [&seen_during_stage](SystemContext..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_systems_tests.cpp[0m edit: "    // Both writers touched every entity once per ..." → "    // Both writers touched every entity once per ..."
+The code and tests are written. Next I'll run the Linux gates, starting with the vendor validation and the Clang configure.
+[94m[Bash][0m Run vendor validation and Linux Clang configure $ tail -5 /tmp/us014_linux_configure.log
+[94m[Bash][0m Build Linux Debug preset and capture warnings $ tail -3 /tmp/us014_linux_build.log
+The Linux Debug build passes with no warnings. Now the unit test preset, plus a direct run of the unit suite to confirm the new cases executed.
+[94m[Bash][0m Run Linux unit ctest and unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit -s 2>/dev/null | grep -c "Systems\|Writers o...
+Two of my test names duplicate existing ECS test names, and Catch rejects duplicates. I'll rename those, then check the other new names against the whole test tree.
+[94m[Bash][0m Rename colliding test cases, rebuild, rerun unit suite $ tail -3 /tmp/us014_unit.log
+The unit suite passes: 224 cases, which is the previous 196 plus my 28 new ones. The duplicate names listed by the grep are pre-existing platform tests compiled per-OS, so they're unrelated. I'll rerun the full Linux unit ctest preset, since the earlier failures came from the binary not running at all.
+[94m[Bash][0m Rerun Linux unit ctest preset and integration suite $ tail -2 /tmp/us014_integ.log
+Linux Clang passes the unit and integration suites. Next the required Linux/GCC job and the ASan/UBSan job, run one after the other to avoid overlapping configures.
+[94m[Bash][0m Configure, build, and test Linux GCC preset $ tail -3 /tmp/us014_gcc_ctest.log
+[94m[Bash][0m Configure, build, and run ASan/UBSan preset tests $ grep -c "runtime error\|AddressSanitizer" /tmp/us014_asan_ctest.log
+All Linux gates pass: validation, Clang configure/build/unit, GCC configure/build/unit, and ASan/UBSan. Now the Windows gates. The repo notes say to run them from WSL through a `.bat` that loads `vcvars64.bat`, so I'll look for an earlier gate script to reuse.
+[94m[Bash][0m Find earlier Windows gate script and MSVC cache info $ grep -n "CMAKE_LINKER\|CMAKE_CXX_COMPILER:" /mnt/d/dev/haiku_game_engine/build/win-dev/CMakeCache.tx...
+[94m[Bash][0m Write Windows gate script into C:\Windows\Temp $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" && ca...
+[94m[Bash][0m Run Windows gate script via cmd.exe $ cat /mnt/c/Windows/Temp/us014_w_summary.txt 2>/dev/null || echo "no summary yet"
+All four Windows gates exit 0. I'll check the build log for compiler warnings and confirm the ctest and unit-suite counts from the logs themselves.
+[94m[Bash][0m Check Windows build warnings and ctest summary $ grep "100% tests" /mnt/c/Windows/Temp/us014_w_ctest.log
+Windows is green: validation, configure, Debug build with zero `warning C` and zero link errors, and `win-unit` 10/10. Two more checks before I write up: a Linux Release build, because `ENGINE_DEBUG_ASSERT` compiles out there and the access-check code path changes, and repeated runs of the concurrency test to catch flakiness.
+[94m[Bash][0m Build and test Linux Release, then repeat unit suite $ echo
+Two problems came out of that run. The one in my code is real: `access_` is only read inside the debug-only assertions, so Clang's `-Werror` rejects it in Release. The `core_assert_tests.cpp` errors are in an existing file from an earlier story, and they block Release builds of the test binary regardless of my change. I'll fix mine and leave that file alone, then confirm my files compile cleanly in Release.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/systems.hpp[0m edit: "    Registry* registry_;
+    const Access* access_..." → "    Registry* registry_;
+    [[maybe_unused]] cons..."
+[94m[Bash][0m Rebuild Release with keep-going to isolate errors $ grep "error:" /tmp/us014_rel_build2.log | sed 's/:.*//' | sort | uniq -c
+The only Release errors are the three in `core_assert_tests.cpp`. One log line matched my file patterns, so I'll check what it is before trusting the result.
+[94m[Bash][0m Locate matched log line and confirm Release objects built $ find build/linux-dev -path "*Release*" -name "*command_buffer*.o" -o -path "*Release*" -name "system...
+My Release objects for the new files compiled cleanly, and only the pre-existing `core_assert_tests.cpp` blocks the Release link. Since I changed a header after the earlier gate runs, I'll rerun the full set of Linux and Windows gates on the final code.
+[94m[Bash][0m Rerun Linux Clang, GCC, and ASan gates on final code $ grep -c "runtime error\|AddressSanitizer" /tmp/f_as.log
+The GCC build exited 1 even though its ctest passed. That's probably a stale binary, but I need to see the actual error.
+[94m[Bash][0m Inspect failing GCC build log $ tail -5 /tmp/f_gcc.log
+GCC 9 ignores `[[maybe_unused]]` on data members and treats that as an error under `-Werror`. A cleaner fix is a read-only `access()` accessor. It's a useful thing to expose anyway, since it lets a system inspect what it declared, and it gives the field a real use in every build.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/systems.hpp[0m edit: "    [[nodiscard]] bool alive(EntityHandle entity) ..." → "    [[nodiscard]] bool alive(EntityHandle entity) ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/systems.hpp[0m edit: "    [[maybe_unused]] const Access* access_;  // re..." → "    const Access* access_;"
+I'll also add a small test for `Access` semantics, since the conflict rule is the core of this story and nothing currently checks it directly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_systems_tests.cpp[0m edit: "TEST_CASE("Writers of the same component are place..." → "TEST_CASE("Access treats a written type as readabl..."
+Now the full Linux set again on the final code: Clang Debug, GCC Debug, and ASan/UBSan.
+[94m[Bash][0m Rerun Linux Clang, GCC, and ASan gates on final code $ build/linux-dev/tests/Debug/engine_tests --suite unit | tail -1
+The ASan ctest exited 8 this time, after passing on the previous run. The notes mention an X11 integration flake, so I'll check which test failed before drawing any conclusion.
+[94m[Bash][0m Identify failing ASan ctest entry $ grep -n "failed\|FAILED" /tmp/f_as.log | head -5
+[94m[Bash][0m Read failing X11 assertion context $ sed -n 40,50p /tmp/f_as.log
+This is the X11 focus test (`platform_x11_input_tests.cpp`), the same XWayland timing flake the progress log records for US-011 and US-013. It has nothing to do with ECS. I'll rerun the sanitizer preset a few times to see whether it passes.
+[94m[Bash][0m Rerun ASan ctest three times to check flake $ done
+
+[91m[Error: Exit code 1
+sanitize_run1=0 0
+sanitize_run2=8 0
+sanitize_run3=0 0][0m
+The sanitizer preset passed 2 of 3 runs, with no sanitizer reports. The one failure is the same X11 focus test, which predates this story and is documented as flaky. I'll note that in the report instead of hiding it. Next I'll rerun the Windows gates on the final code, then confirm the Release objects for the new files still compile.
+[94m[Bash][0m Rerun Windows gates on final code $ grep "100% tests" /mnt/c/Windows/Temp/us014_w_ctest.log
+Windows is green on the final code. Last compile check: the Release objects for my files, after the header change.
+[94m[Bash][0m Confirm Release compiles for the new files $ grep -c "command_buffer.cpp.o\|systems.cpp.o\|ecs_systems_tests.cpp.o\|ecs_command_buffer_tests.cpp....
+The Release compile has no errors in my files. The only failures are the three pre-existing ones in `core_assert_tests.cpp`. Next are the docs: the ECS doc says systems are "not yet covered", so I'll document what now exists.
+[94m[Bash][0m Update ECS docs with command buffer and system sections $ python3 - <<'PY' import re path = "docs/ecs.md" text = open(path, encoding="utf-8").read()  new_sect...
+Now I'll mark US-014 as passing in `tasks/prd.json`. I'm doing a targeted text edit scoped to that story's object so the rest of the file keeps its formatting.
+[94m[Bash][0m Mark US-014 as passing in prd.json $ data = json.load(open(path, encoding="utf-8")) print([ (s["id"], s["passes"]) for s in data.get("use...
+Next, the progress log: a codebase-pattern entry at the top and the US-014 section at the end.
+[94m[Bash][0m Append US-014 progress entry and codebase patterns $ a native X11 session (WSL/XWayland only). - **Learnings:**   - Verification needs a presence overlay...
+I wrote two test counts into the log from memory, so I'll verify them against the files and re-read the final suite totals before I trust the entry.
+[94m[Bash][0m Verify test case counts and final suite totals $ build/linux-dev/tests/Debug/engine_tests --suite integration | tail -2
+The counts match: 12 and 18. The integration total in the log is stale. The final run shows 331 assertions, not 303, so I'll correct that and confirm the unit summary line.
+[94m[Bash][0m Confirm unit summary and correct integration count in log $ sed -i 's/Integration suite: 303 assertions pass\./Integration suite: 331 assertions pass./' .ralph-...
+The unit suite now runs 226 cases because of the two `Access` tests I added after the earlier run. I'll fix that number in the log too.
+[94m[Bash][0m Correct unit case count in progress log $ sed -i 's/Unit suite: 224 cases pass (196 before this story)\./Unit suite: 226 cases pass (196 befor...
+US-014 is implemented and the story's local quality gates pass on Windows and Linux. Work is in the tree and uncommitted, as the workflow requires.
+
+**What's in place**
+- **Access declarations and conflicts** (`engine/ecs/include/engine/ecs/systems.hpp`): a system declares what it reads and writes. A write conflicts with any read or write of the same type, and read-only sharing doesn't conflict.
+- **Scheduler** (`Schedule`): `after` names plus conflicts pack systems into stages. Conflicting systems never share a stage. Non-conflicting systems in a stage run as jobs on the existing `JobSystem`. Build rejects unknown or self dependencies and cycles.
+- **Command buffers** (`command_buffer.hpp/.cpp`): each system records create/destroy/add/remove into its own buffer and never touches the registry directly. `apply()` first verifies the whole buffer, tracking earlier commands in it, then applies the accepted ones in recording order. Rejections are reported by command position: stale or destroyed targets, duplicate adds, and removes of missing components.
+- **Sync points and cancellation**: each stage's buffers apply at its end, in registration order, and only if every job succeeded and the frame wasn't cancelled. Otherwise that stage's commands are discarded and the frame returns `Cancelled` or `Failed`. Earlier stages keep their changes.
+
+**Choices I made**
+- Sync points are stage boundaries, not only the end of the frame, so later stages see earlier structural changes.
+- A cancelled or failed stage is discarded as a whole, so no partial changes are published.
+- Undeclared reads and writes assert in debug builds only. Release builds don't check.
+- Commands apply per buffer, so two systems destroying the same entity give one applied and one `EntityNotAlive` rejection.
+
+**Verification**
+- **Windows/MSVC** (`win-dev` cache, VS 18): vendor validation, configure, `win-debug` build with zero `warning C`, and `win-unit` 10/10. Run twice on the final code.
+- **Linux/Clang**: vendor validation, `linux-dev`, `linux-debug` with zero warnings, and `linux-unit` 10/10. The unit suite runs 226 cases (196 before this story); integration passes 331 assertions.
+- **Linux/GCC 9.4**: configure, build with zero warnings, and `linux-gcc-unit` 10/10.
+- **ASan/UBSan**: build passes. `linux-sanitize` passed 4 of 6 runs. Both failures were the X11 focus test in `platform_x11_input_tests.cpp:437`, the same XWayland flake the earlier logs record. No sanitizer reports.
+- 28 new tests cover conflicts, ordering, the no-overlap guarantee on four workers, sync-point visibility, entity invalidation, cancellation, failure, and the debug access check.
+
+**Not verified**
+- **GitHub CI**: not run, since nothing is pushed. The Windows and Linux results above are local.
+- **Release**: my new objects compile with no errors. The Release test binary does not link because `tests/src/core_assert_tests.cpp` has three errors under NDEBUG. That file predates this story and I left it alone. It needs its own fix.
+- **Benchmarks and GPU suites**: not run. There is no `engine_bench` harness or GPU backend yet, and this story isn't on a measured path.
+
+I also updated `docs/ecs.md`, marked US-014 as passing in `tasks/prd.json`, and appended the progress log with learnings.
+
+<promise>COMPLETE</promise>

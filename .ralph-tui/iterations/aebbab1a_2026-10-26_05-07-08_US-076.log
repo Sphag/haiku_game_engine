@@ -1,0 +1,44 @@
+# Iteration 672 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:07:08.577Z
+- **Ended At**: 2026-10-26T02:07:28.219Z
+- **Duration**: 19s
+- **Input Tokens**: 24
+- **Output Tokens**: 2671
+- **Total Tokens**: 2695
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 already has code in the tree.
+[94m[Bash][0m Check progress log and benchmark tool state $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls tools/benchmark/ tools/benchmark/src 2>/dev/nul...
+[94m[Bash][0m Locate US-076 PRD text and render_stress references $ grep -rn "render_stress\|render-stress" --include=*.cpp --include=*.hpp --include=*.json --include=*...
+The log shows US-076 is measured but blocked on a user decision, and the last nine status checks made no changes. I'll confirm the artifacts and source timestamps still match the log before deciding whether anything is left to do.
+[94m[Bash][0m Check artifact timestamps and report statuses $ done 2>/dev/null | head -20
+US-076 is not complete, and I did not change anything in this pass. The blocker needs your decision, so I have not signalled completion.
+
+**What is done and verified:**
+- The `render_stress` counts match the benchmark contract (20,000 instances, 200 meshes, 100 characters × 64 bones, 100,000 particles, 128 lights, 4 shadowed, 1 sun). `engine_workload --check` passes.
+- The `render_route_v1` route and the `render_stress` driver are in place, with `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`.
+- All eight acceptance reports exist under `artifacts/bench/us076-*`: DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders forced off. Each has screenshots and submitted/visible counters.
+- The mesh-shader-off fallback works. Those runs resolve to indirect-indexed (`meshlet_path: fell back`, `mesh_shaders: disabled: forced off`), and the report does not list mesh shaders as enabled.
+- Gates from the last full pass: Windows (validate, win-dev, win-debug, win-unit 29/29, `engine_tests --suite gpu` on dx12 and vulkan) and Linux (ValidateVendor, linux-dev, linux-debug, linux-unit 30/30) all passed. I checked the timestamps this pass and nothing has changed since, so those results still hold.
+
+**What is blocking completion:**
+1. **Triangle floor and frame budget fail.** The contract requires at least 2,000,000 submitted triangles on the starting frame. The measured value is 312,068. p99 frame time is 35–47 ms against a 16.7 ms budget. All eight runs exit 1 on these checks. The cause is placement: instances are spread uniformly over 8192 m, so the route start sees about 330 items. The manifest route is the only lever available without changing the workload.
+2. **Changing placement is a workload change.** It would mean bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and checking that the other scenes (US-077, US-078) still hold. I did not make that change on my own. Please tell me which of these you want:
+   - (a) Keep the contract and report the failures as the measured result.
+   - (b) Approve a placement change (for example, clustering instances near the route) and I'll bump the version, regenerate the expected file, and rerun the benchmarks.
+3. **`full_1080` is unsupported** because the vendored FSR 2 permutation headers are missing (see the FSR project memory). Only `native_1080` runs, so "both profiles" is only partly met.
+4. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device), and the `linux-gcc` gate (GCC 9 cannot build Jolt).
+
+Once you choose (a) or (b), I can finish the remaining steps. I'd recommend (b), because it is the only route to a contract-passing measurement.

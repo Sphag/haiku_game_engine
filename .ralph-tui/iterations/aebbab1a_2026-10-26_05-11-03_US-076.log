@@ -1,0 +1,41 @@
+# Iteration 685 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:11:03.772Z
+- **Ended At**: 2026-10-26T02:11:19.987Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 2082
+- **Total Tokens**: 2096
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `render_stress` already exists.
+[94m[Bash][0m Check progress log and existing render_stress code $ grep -rn "render_stress" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=...
+US-076 is not complete, and I made no changes in this pass. The remaining failures need a decision from you.
+
+**What's done (per the progress log, and the timestamps still match):**
+- The `render_stress` counts match the benchmark contract (20,000 instances, 200 meshes, 100 characters with 64 bones, 100,000 particles, 128 lights with 4 shadowed, 1 sun). `engine_workload --check` passes.
+- The driver `tools/benchmark/src/render_stress.{hpp,cpp}` runs the route. It records per-frame counters, GPU pass timings, start and end screenshots, and feature state. `--path indexed|indirect|meshlets` and `--disable-mesh-shaders` are wired in.
+- Eight reports exist under `artifacts/bench/us076-*`: indexed, indirect, and meshlets on DX12 and Vulkan, plus the two forced mesh-shader-off meshlet runs. The fallback runs report mesh shaders as disabled.
+- The Windows and Linux gates were recorded as passing on the current tree in earlier passes. I did not rerun them here.
+
+**What blocks completion:**
+1. **Triangle floor and frame budget fail.** The route start submits 312,068 triangles against the contract's 2,000,000. Frame time is p99 35–47 ms against the 16.7 ms budget. The generator spreads instances uniformly over the 8192 m world, so the route start sees few of them. The benchmark runs exit 1 on this.
+2. **full_1080 is unsupported.** The vendored FSR 2 permutation headers are missing, so only native_1080 runs.
+3. **Native Linux Vulkan GPU and linux-gcc have not been run.**
+
+**Decision needed:** the fix for item 1 changes the fixed workload. Options:
+- **(a) Recommended:** change placement so the route start sees the contract's triangle count. Bump `kWorkloadVersion`, regenerate `workload_expected.json`, then rerun the eight benchmarks and the gates. Frame budget may still fail on this hardware, and that would be a real measured result.
+- **(b)** Close the story as measured, with the failing triangle floor and frame budget recorded. The acceptance criteria would then not pass.
+
+Tell me which you want. Under (a) I'll make the placement change and rerun. Items 2 and 3 stay open either way.

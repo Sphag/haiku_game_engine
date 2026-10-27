@@ -1,0 +1,48 @@
+# Iteration 579 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T12:13:21.980Z
+- **Ended At**: 2026-10-25T12:13:45.245Z
+- **Duration**: 23s
+- **Input Tokens**: 38
+- **Output Tokens**: 3397
+- **Total Tokens**: 3435
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-061 already has code in the tree.
+[94m[Bash][0m Read progress log and check editor sources $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls engine/editor 2>/dev/null && git status --short...
+The log shows 19 prior "Partial" status checks, all blocked on a locked Windows desktop. Before repeating that pattern, I'll check the current lock state and the Windows gate notes.
+[94m[Bash][0m Read Windows gate notes and check desktop lock state $ ls -la /mnt/d/dev/haiku_game_engine/artifacts 2>/dev/null | head
+The desktop is still locked. The Windows build and unit gates don't need a visible desktop, though, so I'll check whether earlier entries recorded them and whether they have run on this tree.
+[94m[Bash][0m Find earlier US-061 gate records and UI artifacts $ ls -la artifacts/ui | head -30
+Earlier entries record that the Windows gates ran (line 3554). I'll read that entry and the lock-screen notes to pin down exactly what is still open.
+[94m[Bash][0m Read Windows gate results and lock-screen history $ ls artifacts/ui/us061 | head
+US-061 is not complete, so I am not emitting the COMPLETE signal. The code is in place and the gates that can run here pass. Three acceptance items need things this environment doesn't have.
+
+**Current state (checked just now)**
+- The tree is unchanged since the last progress entry. No file under `engine`, `tests`, `tools`, or `cmake` is newer than the log, so the recorded gate results still apply.
+- The Windows desktop is still locked. `LogonUI` (52008) and `LockApp` (58728) are running, so a `game_editor.exe` capture would show only the wallpaper. I did not launch it.
+
+**Verified (from the logged runs on this tree)**
+- Windows, MSVC `/W4 /WX`: `ValidateVendor` 0, `win-debug` build 0 with no warning lines, `win-unit` 29/29 passed.
+- Windows editor suite: `--backend dx12` 0 (31 cases). `--backend vulkan` 0 with `VK_LAYER_PATH` pointing at the pinned 1.4.363 layer.
+- Windows GPU suite on the RTX 5080 with validation on: DX12 73 cases and Vulkan 73 cases, both 0.
+- Linux (clang 10): `ValidateVendor` 0, `linux-dev` configure 0, `linux-debug` build 0 with no warnings, `linux-unit` 30/30, editor suite 322 assertions in 30 cases.
+
+**Still open, and why I can't close them here**
+1. **Running-app check with screenshots and an action log.** The desktop must be unlocked. Then run `artifacts/ui/us061/run_ui.ps1` and keep the capture and log. The current `NOT_VERIFIED.txt` records the locked-session result.
+2. **Native Linux GUI and Vulkan editor suite.** WSL has no usable Vulkan adapter, so this needs a native Linux machine.
+3. **`linux-gcc` gate.** The local toolchain is GCC 9.4 and Jolt needs GCC 11+.
+4. **`engine_bench`.** Not required yet, because the benchmark harness is US-074 and does not exist.
+
+Nineteen progress entries now repeat the same blocked status. I did not add a twentieth. The next step that moves this story is for you to unlock the Windows session and run the capture, or to point me at a GCC 11+ or native Linux Vulkan environment.

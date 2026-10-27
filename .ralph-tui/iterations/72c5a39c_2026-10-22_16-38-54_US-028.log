@@ -1,0 +1,53 @@
+# Iteration 30 Log
+
+## Metadata
+
+- **Task ID**: US-028
+- **Task Title**: Vulkan Device and Presentation
+- **Description**: As a user of both operating systems, I want Vulkan output so that I can use a shared alternative backend.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T13:38:54.988Z
+- **Ended At**: 2026-10-22T13:43:37.297Z
+- **Duration**: 4m 42s
+- **Input Tokens**: 74
+- **Output Tokens**: 5696
+- **Total Tokens**: 5770
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the PRD, then check the current state of the code.
+[94m[Bash][0m List repo root and progress file size $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read top of progress log $ sed -n 1,140p .ralph-tui/progress.md
+[94m[Bash][0m Read tail of progress log $ sed -n 600,747p .ralph-tui/progress.md
+US-028 already has code from earlier iterations. The open item is the native Linux GPU report, which earlier passes could not get on this WSL host. I'll check the story's current state in the PRD JSON and whether the tree has changed since the last verification.
+[94m[Bash][0m Check US-028 status, file mtimes, and GPU device nodes $ ls /tmp/vvl/layer 2>&1 | head -3
+[94m[Bash][0m Read US-028 passes flag and build directories $ cd build 2>/dev/null && ls
+The PRD still has `passes: false`, and the code has not changed since the last verification pass. I'll re-check the Linux GPU probe and the Linux unit gate on the current tree so the log reports fresh exit codes.
+[94m[Bash][0m Run Linux validate, configure, build, and unit ctest gates $ grep -c 'warning:' /tmp/us028_build.log
+[94m[Bash][0m Run Vulkan GPU suite probe on Linux $ echo "gpu_vulkan_exit=$?"' 2>&1 | tail -6
+[94m[Bash][0m Run Vulkan GPU probe on Linux with layer path $ grep 'tests passed\|tests failed' /tmp/us028_ctest.log | head -3
+[94m[Bash][0m Locate the linux-debug engine_tests binary $ find build -path '*linux-debug*' -name engine_tests | head -2
+[94m[Bash][0m Run Vulkan GPU probe on the linux-dev binary $ echo "gpu_vulkan_exit=$?"
+The Linux GPU probe still exits 3 on this host, so the open criterion is unchanged. I'll log this pass in the progress file.
+[94m[Bash][0m Append US-028 fourth-pass entry to progress log $ Linux GCC and ASan gates (no source change since their last run). - **Learnings:**   - `linux-debug`...
+I wrote a learning in that entry that I did not verify. I'll reword it to only what I observed.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "  - `linux-debug` has no `engine_tests` under `bui..." → "  - After `linux-debug` built, `engine_tests` was ..."
+US-028 is not complete, so I have not signalled completion. The Vulkan backend was already in the tree from earlier iterations, and this pass changed no source.
+
+**What's blocking it:** the acceptance criterion for `engine_tests --suite gpu --backend vulkan` on native Linux with validation layers needs a real Linux Vulkan 1.2 hardware adapter. This WSL host has none: `/dev/dri` is absent, and the Mesa lavapipe software driver lacks timeline semaphores. I re-ran the probe with the validation layer path set, and it exits 3 (`unsupported`, not run). The story stays `passes: false`. Surface-loss recovery is also still unexercised on both OS, since there is no deterministic trigger.
+
+**What I verified on the current tree (Linux/Clang, `linux-dev`):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, no `warning:` lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0, 22/22 passed
+
+I did not re-run the Windows gates, the Linux GCC or ASan gates, or `engine_bench`, so those rest on the earlier entries in the progress log.
+
+**Next step:** run the Linux GPU suite on a machine with a real Vulkan 1.2 adapter (timeline semaphores and swapchains) and the Khronos validation layer. A passing report there, plus a surface-loss trigger, is what remains before `passes` can be set to `true`.
+
+I appended a fourth-pass entry to `.ralph-tui/progress.md` with these results. The file changed on disk while I was editing it. My edit applied cleanly, but I did not re-read the surrounding content.

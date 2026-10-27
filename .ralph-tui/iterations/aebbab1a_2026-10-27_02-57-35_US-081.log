@@ -1,0 +1,44 @@
+# Iteration 1284 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:57:35.247Z
+- **Ended At**: 2026-10-26T23:57:52.660Z
+- **Duration**: 17s
+- **Input Tokens**: 30
+- **Output Tokens**: 2939
+- **Total Tokens**: 2969
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the PRD, and the progress log before deciding what this story can realistically deliver.
+[94m[Bash][0m Inspect repo root and progress log $ tail -n 80 .ralph-tui/progress.md
+[94m[Bash][0m Read PRD headings and existing README $ cat README.md 2>/dev/null | head -100
+The progress log shows several earlier passes on this story, all ending "not signed off." Before deciding what to do, I'll check whether anything has changed since the last recorded gate run.
+[94m[Bash][0m Check changes since last gate and acceptance status $ sed -n 1,60p docs/acceptance.md
+Nothing in the source, tests, or build has changed since the recorded gate runs. The only newer files are the acceptance doc, `prd.json`, the launch screenshot, and a DXC helper script. The blockers are the same as before: no `/dev/dri`, no GCC 11+, no FSR 2 permutations, no LICENSE, and no acceptance benchmark with GPU timestamps. I'll record this pass in the progress log without re-running gates.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not signed off, so I am not emitting a COMPLETE signal.
+
+Nothing in the source, tests, or build has changed since the recorded gate runs. The only newer files are `docs/acceptance.md`, `tasks/prd.json`, the Windows launch screenshot, and a DXC helper script. I did not re-run any gate, because a re-run would only repeat results already recorded in `artifacts/reports/us081/`.
+
+The README and the `docs/` set already cover the documentation items: OS/SDK, offline CMake, editor, packaging, architecture, schemas, vendor, benchmarks, capability matrix, and the acceptance map.
+
+Still open, and none of it can be closed from this Linux environment:
+- **Native Linux Vulkan GPU report:** `/dev/dri` is absent, so there is no native Linux Vulkan device.
+- **linux-gcc gate:** the local compiler is GCC 9.4, and Jolt needs GCC 11+.
+- **FSR 2:** the `*_permutations.h` shader tables are missing from `third_party`. This is your vendoring choice.
+- **LICENSE file:** there is none in the repo. This is your decision.
+- **Acceptance benchmark:** the acceptance scenes do not yet produce GPU timestamps, so the RTX 5080 `engine_bench --suite acceptance` run cannot produce a valid report.
+- **Visual editor smoke:** only the Windows launch screenshot exists. The action-sequence smoke tests on both OSes are not done.
+- **Sample game package:** no package built from a real sample game exists on either OS, and the clean-copy offline build has not been run.
+
+I appended a status entry to `.ralph-tui/progress.md`. The next step that would produce new evidence is the LICENSE decision plus either the FSR 2 vendoring route or the acceptance-benchmark GPU timestamps. Either one is a change that would justify re-running the gates.

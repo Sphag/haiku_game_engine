@@ -1,0 +1,390 @@
+# Iteration 19 Log
+
+## Metadata
+
+- **Task ID**: US-035
+- **Task Title**: Lighting and Raster Shadows
+- **Description**: As a scene author, I want lighting and shadows so that I can create readable environments.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T04:49:18.194Z
+- **Ended At**: 2026-10-23T05:57:05.526Z
+- **Duration**: 1h 7m 47s
+- **Input Tokens**: 842
+- **Output Tokens**: 294162
+- **Total Tokens**: 295004
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m List repo root and read progress notes head $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && sed -n 1,120p .ralph-tui/pr...
+[94m[Bash][0m Read remaining progress log $ sed -n 120,252p .ralph-tui/progress.md
+[94m[Bash][0m Locate US-035 and lighting-related PRD sections $ grep -n "US-03[0-9]\|US-02[89]\|lighting\|Lighting\|shadow\|Shadow\|cluster\|Cluster" tasks/prd-open...
+[94m[Bash][0m Read US-035 and PRD constraints/benchmark sections $ sed -n 280,365p tasks/prd-open-world-engine.md && echo ---- && sed -n 720,915p tasks/prd-open-world-...
+[94m[Bash][0m Survey render module files and PRD json status $ ls docs | head -80
+[94m[Bash][0m Read scene renderer, snapshot, and material headers $ cat engine/render/include/engine/render/scene_renderer.hpp && cat engine/render/include/engine/rende...
+[94m[Bash][0m Read scene HLSL shader $ cat engine/render/shaders/scene.hlsl
+[94m[Bash][0m Read memory notes and grep RHI types for viewport/array support $ grep -n "viewport\|scissor\|Viewport\|Scissor\|array\|Array\|depth_stencil\|Sampler\|struct RenderPa...
+[94m[Bash][0m Read RHI formats, texture and render pass descriptors $ sed -n 50,120p engine/rhi/include/engine/rhi/types.hpp && sed -n 195,330p engine/rhi/include/engine/...
+[94m[Bash][0m Read camera, PBR, reference rasterizer, mesh headers $ cat engine/render/include/engine/render/camera.hpp engine/render/include/engine/render/pbr.hpp engin...
+[94m[Bash][0m Read scene renderer implementation start $ grep -n "" engine/render/src/scene_renderer.cpp | sed -n 1,200p
+[94m[Bash][0m Read scene renderer build and pipelines $ sed -n 200,520p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read scene renderer render() and rest $ sed -n 520,1052p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Inspect test CMake, GPU test pattern, coords conversion $ grep -rn "to_vulkan_clip" -A12 engine/core/include/engine/core/coordinates.hpp | head -40
+[94m[Bash][0m Check build dirs, presets, and build doc rows $ tail -5 docs/build.md
+[94m[Bash][0m Start baseline Linux debug build; inspect render graph access enum $ grep -n "struct ResourceAccess\|enum class Access" -A22 engine/render/include/engine/render/render_g...
+[94m[Bash][0m Find how scene shaders are compiled and loaded $ cat /tmp/baseline_linux_debug.log | tail -3
+[94m[Bash][0m Inspect unit scene test setup and shader loader $ grep -n "load_shader" -A8 tests/src/render_scene_gpu_tests.cpp | head -30
+[94m[Bash][0m Read snapshot extraction and camera helpers $ grep -n "backend()" engine/rhi/include/engine/rhi/device.hpp
+Baseline Linux debug build passes. I have the picture of the renderer now. Writing the CPU lighting module first (light model, cluster assignment, cascade fitting, spot matrices).
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/lighting.hpp[0m "#pragma once
+
+// Direct lighting and shadow planning (US-035). Lights are directional, point, or spot. The renderer sorts them by priority, assigns each
+// one to the clusters it touches (a cluster is... (8626 chars)"
+[94m[Bash][0m Remove stray doc sentence in lighting header $ sed -n 1,30p engine/core/include/engine/core/coordinates.hpp | grep -n include
+[94m[Bash][0m Fix cascade doc comment wording $ python3 - <<'EOF' p='engine/render/include/engine/render/lighting.hpp' s=open(p).read() s=s.replace(...
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/lighting.cpp[0m "#include "engine/render/lighting.hpp"
+
+#include "engine/core/coordinates.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+namespace engine::rende... (15598 chars)"
+[94m[Bash][0m Simplify spot cosine helper signature $ } """) s=s.replace("spot_cos(light, light.inner_angle)","spot_cos(light.inner_angle)").replace("spot...
+[94m[Bash][0m Re-check lighting.cpp current state after external change $ wc -l engine/render/src/lighting.cpp && sed -n 25,40p engine/render/src/lighting.cpp && grep -n "spo...
+[94m[Bash][0m Write shadow atlas header and implementation $ }  }  // namespace engine::render EOF echo ok
+[94m[Bash][0m Extend snapshot with lights, camera, and shadow-only casters $ """) s=s.replace('#include <algorithm>\n#include <cmath>\n','#include <algorithm>\n#include <cmath>\...
+[94m[Bash][0m Find all snapshot item loops $ grep -n "items()" engine/render/src/*.cpp tests/src/*.cpp | head -20
+[94m[Bash][0m View reference raster loop and test id loops $ sed -n 218,226p tests/src/render_scene_tests.cpp
+Snapshot and atlas code are in place. Next is the shader contract, which the C++ buffer layout must match, so I'm writing the HLSL side now.
+[94m[Bash][0m Add lighting, shadow, and cluster functions to scene shader $ }  """ s=s.replace(marker, lighting_block+marker,1) open(p,'w').write(s) print("ok") EOF
+[94m[Bash][0m Verify scene shader edits applied $ ls -la engine/render/shaders/
+[94m[Bash][0m Wire direct lighting and debug views into shading; add shadow entries $ } """ open(p,'w').write(s+"\n") EOF grep -n "TransformPoint(uint" -A3 engine/render/shaders/scene.hl...
+Shader side is in place. Now the C++ renderer header: new desc fields, shader entries, lighting view, stats, and the lighting/shadow members.
+[94m[Bash][0m Update scene renderer header with lighting and shadow API $ """) open(p,'w').write(s) print("header ok") EOF
+Header is done. Now the renderer implementation: lighting buffer layout, pack helpers, build-time atlas and lighting resources, and a new `render()` that plans shadows, assigns clusters, and draws shadow tiles before the scene.
+[94m[Bash][0m Rename lighting build helpers in header $ """) open(p,'w').write(s) EOF grep -n "build_atlases\|build_lighting\|pack_frame" engine/render/incl...
+[94m[Bash][0m Add lighting helpers and draw binding to renderer source $ !status.ok()) {''')  # ctor init list rep('''    : device_(device), desc_(desc), frame_layout_{}, ma...
+[94m[Bash][0m Fix constructor init order to match member order $ grep -n "Four pipelines differ" -B2 -A3 engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Add shadow pipeline and lighting layout to build() $ ''') open(p,'w').write(s) print("ok") EOF grep -n "pipeline.debug_name = blended" -B3 -A8 engine/ren...
+[94m[Bash][0m Implement lighting buffer and shadow atlas construction $ }''') open(p,'w').write(s) print('ok') EOF
+Build-side resources are wired. Now the core piece: the new `render()` that plans shadow tiles, assigns clusters, packs the lighting buffer, and runs the shadow and scene passes.
+[94m[Bash][0m Replace render() with lighting- and shadow-aware frame $ }  EOF python3 - <<'EOF' p='/mnt/d/dev/haiku_game_engine/engine/render/src/scene_renderer.cpp' s=ope...
+Render path is spliced in. Checking a few dependencies before compiling: `ResourceId` equality, and the unused constant I left behind.
+[94m[Bash][0m Check ResourceId comparison and remove unused constant $ " engine/render/src/scene_renderer.cpp | head -3
+[94m[Bash][0m Release lighting resources and register new sources in CMake $ grep -n "ENGINE_TEST_SHADER_DIR\|engine_add_hlsl_shader(scene" tests/CMakeLists.txt | head
+[94m[Bash][0m Wire shadow shader entries, rasterizer skip, and test shader setup $ \n')     open(p,'w').write(s) print("ok") EOF
+Library sources are wired. Compiling the render library alone first to shake out errors before writing tests.
+[94m[Bash][0m Build engine_render library on Linux debug $ echo "exit=${PIPESTATUS[0]}"
+The library build needs the test sources to exist for CMake to configure. Writing the CPU lighting tests now, which also check the math I just wrote.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/lighting_tests.cpp[0m "// Direct lighting and shadow planning (US-035), on the CPU. These cases need no GPU: they check the light model's validation and falloff,
+// the cluster grid and its overflow control, the cascade fit... (20667 chars)"
+Before compiling, I re-traced several expectations by hand and found mistakes in my own test: the atlas case (four 128 tiles fit, so the third request is granted), the shadow-only caster position (it needs to sit inside the light's cylinder), and an unused helper that would trip `-Werror`. Fixing those.
+[94m[Bash][0m Correct atlas and shadow-caster test expectations $ ''') open(p,'w').write(s) print("ok") EOF
+The file was rewritten by a formatter on disk, which is fine; my edits are preserved. Adding a placeholder GPU test file so the build configures, then compiling and running the CPU lighting tests.
+[94m[Bash][0m Build full Linux debug tree and capture errors $ tail -3 /tmp/us035/build1.log
+The library compiles cleanly under `-Werror`. The only errors are namespace qualifications in my test file. Fixing those.
+[94m[Bash][0m Fix namespaces in test and rebuild Linux debug $ tail -2 /tmp/us035/build2.log
+[94m[Bash][0m Run unit suite including new lighting tests $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -40
+Both failures are in my test expectations, not the implementation. The atlas case released ids 3 and 4 because the frame that changed the key didn't request them, which is the intended release behavior. The cluster footprint of a 0.5 m sphere at 2 m legitimately covers the whole 4×4 grid, so I'll use a smaller sphere to make the corner check meaningful.
+[94m[Bash][0m Fix test expectations, rebuild, and rerun unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -4
+[94m[Bash][0m Show failing unit assertion details $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | grep -B12 "FAILED" | head -60
+[94m[Bash][0m View atlas test section around failure $ sed -n 352,372p tests/src/lighting_tests.cpp
+Same release-timing slip one frame earlier: the "unchanged" frame also has to request tiles 3 and 4 or they're released. Correcting the test.
+[94m[Bash][0m Rebuild and rerun unit suite after test fix $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -3
+Full unit suite passes on Linux (460 cases). The HLSL entries are compiled by the build too, so I'll confirm the shadow entries produced bytecode, then run the integration suite for regressions.
+[94m[Bash][0m Check shader outputs and run integration suite $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -4
+Integration suite passes (110, with the same 4 X11 focus skips as before), and both backends' shadow shaders compile. Now the GPU test file. Let me look at the existing GPU test scaffolding so mine matches it.
+[94m[Bash][0m Review GPU test scaffolding and tags $ grep -n "gpu_test_options\|backend_from\|ENGINE_GPU" tests/src/gpu_test_options.hpp | head
+Before writing the GPU suite, I want the expected behavior pinned down so the Windows run is a real check. Here is the plan: the shadow-factor, cluster, overflow, and cascade debug views get checked against scene geometry I can reason about, and acne is tested by comparing zero bias to the tuned bias on an unoccluded plane.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/lighting_gpu_tests.cpp[0m "// Lights and shadows on real GPUs (US-035). Each case runs the scene shader with the debug views the lighting header selects, and reads the
+// targets back. The debug views write a value per pixel, s... (19991 chars)"
+I wrote some things in that file that won't compile or that I don't want: a call to a nonexistent `lighting_settings_for_test()`, a stray empty namespace block, bounds rebuilt per call, and a duplicate mesh upload. I also re-derived the scene geometry and moved the occluder so its shadow lands in view, and centered the light for the cluster checks on the middle of the frame. Fixing all of that now.
+[94m[Bash][0m Fix GPU test helpers, bounds, and light placement $ grep -n "^#include <set>" tests/src/lighting_gpu_tests.cpp
+[94m[Bash][0m Build GPU test file and run unit plus GPU suites on Linux $ echo "gpu exit=$?"
+Linux build and all 460 unit cases pass. The Linux GPU suite reports `unsupported` / exit 3 as expected here, since WSL has no Vulkan device, so the GPU evidence has to come from the Windows RTX 5080 run. Let me look at the previous batch scripts so I reuse the proven pattern.
+[94m[Bash][0m Inspect previous Windows gate batch scripts $ cat "$f" 2>/dev/null | tr -d '\r' | head -60
+There's a proven batch pattern. I'll reuse it for US-035, add the documented `VK_LAYER_PATH` for the Vulkan run, and launch it in the background, then run the Linux gates while it works.
+[94m[Bash][0m Write and launch the Windows gate batch in background $ echo launched
+The batch is running on Windows. While it works, I'll run the Linux gates in the background, logging each step.
+[94m[Bash][0m Start Linux quality gates in background $ echo started
+While the gates run, I'll write the design doc. It has to match what the code actually does, so I'm checking the details against the source as I go.
+[94m[Bash][0m Cross-check HLSL offsets and PRD passes flag $ cat /tmp/us035/linux/rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+42:static const uint kHeaderTilesX = 0;
+43:static const uint kHeaderTilesY = 4;
+44:static const uint kHeaderSlices = 8;
+45:static const uint kHeaderMaxPerCluster = 12;
+46:static const uint kHeaderTilePx = 16;
+47:static const uint kHeaderNear = 20;
+48:static const uint kHeaderSliceScale = 28;  // slices / ln(far / near)
+49:static const uint kHeaderForward = 32;
+50:static const uint kHeaderLightCount = 48;
+51:static const uint kHeaderShadowCount = 52;
+52:static const uint kHeaderView = 56;
+53:static const uint kHeaderSigma = 60;
+54:static const uint kHeaderLightBase = 64;
+55:static const uint kHeaderShadowBase = 68;
+56:static const uint kHeaderCountBase = 72;
+57:static const uint kHeaderIndexBase = 76;
+58:static const uint kHeaderCascadeAtlasSize = 80;
+59:static const uint kHeaderLocalAtlasSize = 84;
+60:static const uint kNoShadow = 0xffffffffu;
+67:static const uint kViewCascadeIndex = 3;
+258:    float sigma = asfloat(LightingData.Load(kHeaderSigma));
+290:// index, or kNoShadow when no cascade covers the point.
+368:    uint tiles_x = LightingData.Load(kHeaderTilesX);
+369:    uint tiles_y = LightingData.Load(kHeaderTilesY);
+370:    uint slices = LightingData.Load(kHeaderSlices);
+371:    uint max_per = LightingData.Load(kHeaderMaxPerCluster);
+372:    float tile_px = asfloat(LightingData.Load(kHeaderTilePx));
+373:    float near_plane = asfloat(LightingData.Load(kHeaderNear));
+374:    float slice_scale = asfloat(LightingData.Load(kHeaderSliceScale));
+375:    uint light_base = LightingData.Load(kHeaderLightBase);
+376:    uint shadow_base = LightingData.Load(kHeaderShadowBase);
+377:    uint count_base = LightingData.Load(kHeaderCountBase);
+378:    uint index_base = LightingData.Load(kHeaderIndexBase);
+379:    uint light_count = LightingData.Load(kHeaderLightCount);
+380:    float3 forward = asfloat(LightingData.Load3(kHeaderForward));
+440:        if (shadow_first != kNoShadow && shadow_count > 0)
+546:    uint view_mode = LightingData.Load(kHeaderView);
+547:    float max_per = (float)LightingData.Load(kHeaderMaxPerCluster);
+556:    if (view_mode == kViewCascadeIndex)
+9:1127-        "Windows quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+10:1128-        "Windows quality gate: cmake --preset win-dev passes.",
+11:1129-        "Windows quality gate: cmake --build --preset win-debug passes.",
+12:1130-        "Windows quality gate: ctest --preset win-unit --output-on-failure --no-tests=error passes.",
+13:1131-        "Linux quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+14:1132-        "Linux quality gate: cmake --preset linux-dev passes.",
+15:1133-        "Linux quality gate: cmake --build --preset linux-debug passes.",
+16:1134-        "Linux quality gate: ctest --preset linux-unit --output-on-failure --no-tests=error passes.",
+19:1137-        "Once established in US-004, CI builds Windows/MSVC and Linux/Clang for every story; do not report an operating system as verified until its job succeeds. The separate Linux/GCC CI job passes cmake --preset linux-gcc, cmake --build --preset linux-gcc-debug, and ctest --preset linux-gcc-unit --output-on-failure --no-tests=error.",
+23:1141-        "Once the corresponding GPU subsystems exist, engine_tests --suite gpu --backend dx12 passes on Windows, and engine_tests --suite gpu --backend vulkan passes on Windows and native Linux. Debug runs enable the D3D12 debug layer or Vulkan validation layers; lifetime, synchronization, resource-state, and GPU validation errors fail the check. Record unimplemented backends at early stages without claiming cross-backend readiness."
+38:1225-        "Windows quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+39:1226-        "Windows quality gate: cmake --preset win-dev passes.",
+40:1227-        "Windows quality gate: cmake --build --preset win-debug passes.",
+41:1228-        "Windows quality gate: ctest --preset win-unit --output-on-failure --no-tests=error passes.",
+42:1229-        "Linux quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+43:1230-        "Linux quality gate: cmake --preset linux-dev passes.",
+44:1231-        "Linux quality gate: cmake --build --preset linux-debug passes.",
+45:1232-        "Linux quality gate: ctest --preset linux-unit --output-on-failure --no-tests=error passes.",
+62:1291-        "Windows quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+63:1292-        "Windows quality gate: cmake --preset win-dev passes.",
+64:1293-        "Windows quality gate: cmake --build --preset win-debug passes.",
+65:1294-        "Windows quality gate: ctest --preset win-unit --output-on-failure --no-tests=error passes.",
+66:1295-        "Linux quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+67:1296-        "Linux quality gate: cmake --preset linux-dev passes.",
+68:1297-        "Linux quality gate: cmake --build --preset linux-debug passes.",
+69:1298-        "Linux quality gate: ctest --preset linux-unit --output-on-failure --no-tests=error passes.",
+88:1560-        "Windows quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+89:1561-        "Windows quality gate: cmake --preset win-dev passes.",
+90:1562-        "Windows quality gate: cmake --build --preset win-debug passes.",
+91:1563-        "Windows quality gate: ctest --preset win-unit --output-on-failure --no-tests=error passes.",
+92:1564-        "Linux quality gate: cmake -P cmake/ValidateVendor.cmake passes.",
+93:1565-        "Linux quality gate: cmake --preset linux-dev passes.",
+94:1566-        "Linux quality gate: cmake --build --preset linux-debug passes.",
+95:1567-        "Linux quality gate: ctest --preset linux-unit --output-on-failure --no-tests=error passes.",][0m
+Offsets agree between HLSL and C++. Writing the lighting doc while the gates run.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/lighting.md[0m "# Lighting and raster shadows (US-035)
+
+`engine/render/` (library `engine_render`) lights the scene with directional, point, and spot lights, and shadows the directional lights
+with cascades and the s... (9507 chars)"
+[94m[Bash][0m Poll Linux and Windows gate progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us035
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /tmp/us035/linux/rc.txt echo --- cat /tmp/us035/rc.txt cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us035. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux and Windows gate result files $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us035
+The Windows build returned 2. Checking its log for the first real error.
+[94m[Bash][0m Find build errors in Windows build log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && wc -l us035_3.log && grep -n "error\|warning C\|FAILED"...
+[94m[Bash][0m View the MSVC warning line in lighting test $ sed -n 277,281p tests/src/lighting_tests.cpp
+The MSVC error is a `double`→`float` narrowing in my test. Before fixing it I need the current batch to finish, because the failed build lets the remaining steps run a stale binary.
+[94m[Bash][0m Wait for Windows batch to finish $ cat /tmp/us035/linux/rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+validate=0
+configure=0
+build=2
+unit=8
+gpu_dx12=1
+gpu_vulkan=1
+DONE][0m
+The batch finished with build=2, unit=8, and both GPU runs at exit 1. The unit and GPU steps ran a stale or partial binary, so those codes don't count. Checking the logs to see what they actually executed.
+[94m[Bash][0m Inspect Windows unit and GPU logs $ ls -la /mnt/d/dev/haiku_game_engine/build/win-dev/tests/Debug/engine_tests.exe 2>/dev/null
+Those results are from the stale `engine_tests.exe` (built 07:35, before this change). Its shaders were rebuilt with the new lighting layout while its C++ wasn't, so the failures mean nothing yet. Fixing the narrowing and relaunching the full batch cleanly.
+[94m[Bash][0m Fix narrowing in lighting test and check Linux gates $ cat /tmp/us035/linux/rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+279:    float previous = static_cast<float>(camera.near_plane);
+tests/src/lighting_tests.cpp:56:    camera.fov_y_radians = 1.0471975511965976;
+tests/src/lighting_tests.cpp:57:    camera.aspect = 1.0;
+tests/src/lighting_tests.cpp:58:    camera.near_plane = 0.1;
+tests/src/lighting_tests.cpp:59:    camera.far_plane = 1000.0;
+tests/src/lighting_tests.cpp:279:    float previous = static_cast<float>(camera.near_plane);
+tests/src/lighting_tests.cpp:289:        const float near = i == 0 ? static_cast<float>(camera.near_plane) : plans[i - 1].split_far;
+tests/src/lighting_gpu_tests.cpp:140:    stage.camera.fov_y_radians = 1.0471975511965976;
+tests/src/lighting_gpu_tests.cpp:141:    stage.camera.aspect = 1.0;
+tests/src/lighting_gpu_tests.cpp:142:    stage.camera.near_plane = 0.1;
+tests/src/lighting_gpu_tests.cpp:143:    stage.camera.far_plane = 200.0;][0m
+[94m[Bash][0m Inspect Linux gate script progress $ pgrep -af "linux_gates|cmake|ninja" | head
+`ValidateVendor` on the Linux side is slow over the `/mnt/d` tree, so it will take a while. The previous Windows batch is done, so I'll relaunch it now with the narrowing fix in place.
+[94m[Bash][0m Relaunch Windows gate batch after the fix $ echo relaunched
+While waiting, I re-checked the shadow tile logic and found a real bug. A tile is redrawn only through its casters, so when a caster leaves a tile, the atlas texels it covered keep their old depth values and create phantom occluders. A tile with no casters also never gets cleared. The fix is to treat the atlas as the unit of redraw: if any tile in an atlas changes, clear that atlas's color once and redraw all its granted tiles. Making that change now.
+[94m[Bash][0m Make shadow redraw atlas-wide to avoid stale depth $ }''') open(p,'w').write(s) print("ok") EOF grep -n "if (!tiles.empty())" engine/render/src/scene_ren...
+Updating the invalidation section of the doc to match the atlas-wide redraw rule.
+[94m[Bash][0m Document atlas-wide redraw and check gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt 2>/dev/null
+The Windows run I just launched started before the atlas-wide fix, and the Linux gate script is still running, so neither result will be final. I'll let both finish and then do one clean pass on the final code. Waiting on them in the background so I'm notified rather than polling.
+[94m[Bash][0m Wait for Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+[94m[Bash][0m Wait for Linux gate script to finish $ cat /tmp/us035/linux/rc.txt
+[94m[Bash][0m Check background task output so far $ cat /tmp/us035/linux/rc.txt 2>/dev/null
+[94m[Bash][0m Check Linux gate log progress $ ls /tmp/us035/linux/
+Linux `ValidateVendor` passed; the rest of the Linux gates are running. Waiting for the Windows batch to complete.
+[94m[Bash][0m Wait for Windows batch completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+[94m[ScheduleWakeup][0m
+Both gate runs are in the background, and I've written most of the documentation. I'll wait for their completion notifications instead of polling.
+[94m[Bash][0m Wait for Linux gate script to finish $ cat /tmp/us035/linux/rc.txt
+US-035 is implemented and the Linux unit suite passes, but the Windows gates and the full Linux gate set are still running, so the story is not complete yet. Waiting on:
+
+- The Windows batch (`cmake -P`, `win-dev`, `win-debug`, `win-unit`, and the DX12 and Vulkan GPU suites on the RTX 5080). Its last run failed at a `double`→`float` narrowing in my test, which is fixed. It has been relaunched on that fix, and it started before the atlas-wide redraw fix, so it will need one more run.
+- The Linux gate script: the GCC, ASan, and sanitizer steps are still to run, and it also started before the redraw fix.
+
+Once both finish I'll rerun everything on the final code, then fill in the `docs/build.md` row, the progress log, and `prd.json`.
+
+**What's built so far** (Linux clang debug, `engine_render` and tests all compile under `-Werror`; `engine_tests --suite unit` 460/460 pass, integration 110 pass with the same 4 X11 focus skips as before):
+
+- **Light model and clustering** (`lighting.hpp/.cpp`): directional, point, and spot lights with priority-ordered overflow control. Lights go into exponential depth slices over screen tiles, with a conservative footprint, and drops are counted and flagged.
+- **Cascaded shadows** (`plan_cascades`): practical splits, bounding-sphere cascades with texel snapping, and a caster margin toward the light. Objects outside the view that can still shadow it are kept as shadow-only casters.
+- **Shadow atlas** (`shadow_atlas.hpp/.cpp`): shelf-packed tiles with per-tile keys, invalidation, release, and refusal when full. The atlas is remapped per tile, and the row sign is backend-specific (Vulkan `+1`, DX12 `-1`).
+- **Shader and renderer** (`scene.hlsl`, `scene_renderer.cpp`): a lighting buffer (set 3), a cluster lookup per pixel, PCF with normal and depth bias, five debug views, and a shadow-tile pipeline.
+- **Tests**: `lighting_tests.cpp` (CPU, unit) and `lighting_gpu_tests.cpp` (DX12 and Vulkan, not yet run on hardware).
+- **Docs**: `docs/lighting.md`.
+
+**Bug fixed during review:** a tile was redrawn only through its own casters, so a caster leaving a tile left its old depth behind as a phantom occluder, and an empty tile was never cleared. The atlas is now the unit of redraw: a changed tile clears the atlas and redraws its granted tiles. `shadow_maps_rendered` still counts changed tiles; `shadow_draws` counts actual draws.
+
+**Scope calls** (also in `docs/lighting.md`): point lights light the scene but cast no shadows. Alpha-mask casters cast full shadows. The direct BRDF exists only in `scene.hlsl`, so the GPU checks cover the debug views and visibilities, not an exact shaded-pixel comparison.
+
+**Not run yet:** the Windows and Linux gates above, the GPU suites on the RTX 5080, GCC and ASan. The Linux native Vulkan GPU suite can't run on this WSL host, so it will be reported as not-run.
+[94m[Bash][0m Check Windows and Linux gate result files $ pgrep -af "us035_gates|linux_gates" | grep -v pgrep | head -3
+Windows build and unit tests now pass. Both GPU runs fail, so I'm reading the logs.
+[94m[Bash][0m Read DX12 GPU failures from log $ tail -4 us035_5.log
+The DX12 run is at 26 of 31 passing. Two real problems:
+
+1. **Shadow pass state error.** Shadow draws bind the lighting set, and that set includes the cascade and local atlases. The pass is writing to those atlases, so the descriptor's ShaderRead expectation conflicts. Fix: shadow draws get their own lighting set that points at a 1×1 dummy texture instead of the atlases.
+2. **Missing-light check saturates.** The default environment is radiance 1, so the ground is already near 255 and a point light can't raise the mean. The test needs a dim environment.
+
+Checking the Vulkan log for the same issues first.
+[94m[Bash][0m Read Vulkan GPU failures from log $ tail -3 us035_6.log
+Vulkan shows the same two failures, so both fixes apply to both backends. Implementing them: a dedicated shadow lighting set backed by a 1×1 dummy texture, and a dim environment in the missing-light case.
+[94m[Bash][0m Add shadow lighting set and dim environment for missing-light case $ const auto mean_of"""), ("#include \"engine/render/mesh.hpp\"\n", "#include \"engine/render/mesh.hpp...
+Before testing these, I'll stop the running Linux gate script. It's still building from sources I just changed, and I'll rerun all Linux gates on final code anyway.
+[94m[Bash][0m Stop Linux gate run and rebuild debug tree $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+
+[91m[Error: Exit code 144][0m
+[94m[Bash][0m Rebuild Linux debug tree after edits $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+Linux builds clean and all 460 unit cases pass. Relaunching the Windows batch on this code.
+[94m[Bash][0m Relaunch Windows gate batch on final code $ echo launched
+[94m[Bash][0m Wait for Windows gate batch on final code $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+[94m[Bash][0m Check interim Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+The Windows batch is still running on the final code. I'll wait for its completion notification.
+[94m[Bash][0m Read Windows gate results and GPU failure details $ tail -2 us035_6.log
+No validation errors remain on either backend. The remaining failures are the same on DX12 and Vulkan, which points at the data itself: no shadowing and no cascade variation. The ground shows one cascade color and zero shadowed pixels, and even zero bias gives no acne. That suggests shadow records aren't being read as intended, so I'm checking the lighting upload path first.
+[94m[Bash][0m Check lighting buffer upload calls $ grep -n "lighting_upload_\|lighting.data()\|upload_buffer(" engine/render/src/scene_renderer.cpp | h...
+Found it: the lighting bytes are packed but never uploaded to `lighting_upload_`, so the GPU reads whatever was there before (the zero-filled initial buffer). That explains every symptom. Adding the upload before the graph runs.
+[94m[Bash][0m Upload lighting buffer, rebuild, and relaunch Windows gates $ echo relaunched
+[94m[Bash][0m Wait for Windows gate batch with lighting upload fix $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+[94m[Bash][0m Idle until Windows batch notification $ echo waiting
+The lighting-buffer upload was missing, so the GPU always read an empty lighting buffer. That explains the failed shadow, acne, cascade, and light checks on both backends. I've added the upload and relaunched the Windows batch; it will report when it finishes.
+[94m[Bash][0m Read Windows gate results after lighting upload fix $ done
+Shadows are working now: the cascade, spot, invalidation, and atlas-budget checks all pass on both backends. Two checks remain:
+
+1. **Acne with the tuned bias: 799 ground pixels still shadowed.** The normal bias is a fixed 0.02 m, but cascade texels are about 0.5 m at the far end, so the offset is far too small there. The fix is to express normal bias in texels and scale it by each map's world texel size.
+2. **Missing light adds only about 3 levels.** A point light 2 m above the ground should add roughly 0.3 linear. I haven't found the cause by reading the code. I'm adding a cluster-count check on the ground to tell whether the light misses the shader's cluster or is dropped in shading.
+[94m[Bash][0m Change normal bias to texel units in light header $ ""","""XX"""), ]) EOF grep -n "normal bias must" engine/render/src/lighting.cpp
+My edit helper applies all pairs to one file, and the second pair belongs in `lighting.cpp`, so nothing was written. Redoing it correctly.
+[94m[Bash][0m Scale normal bias by texel world size in renderer and shader $ """)]) EOF grep -n "struct CascadePlan" -A4 engine/render/include/engine/render/lighting.hpp
+`CascadePlan` doesn't carry the radius yet, so I'll add it and set it in `plan_cascades`. Then I'll add the cluster diagnostic to the missing-light test and update the bias text in the doc.
+[94m[Bash][0m Add cascade radius and rebuild Linux tree $ tail -1 /tmp/us035/build8.log
+Linux builds. Relaunching the Windows gates.
+[94m[Bash][0m Run Linux unit tests and relaunch Windows gates $ echo relaunched
+[94m[Bash][0m Wait for Windows gate batch completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+The Windows batch is running with the texel-scaled normal bias and the cluster diagnostic. I'll wait for its completion notification.
+[94m[Bash][0m Read Windows gate results after normal bias fix $ done
+The cluster diagnostic passes, so the point light does reach the ground's clusters. That leaves two things I now understand:
+
+- **The missing-light check is too blunt.** The light only brightens a patch of ground near it, so the mean over the whole frame moves by only about 3 levels. The test should compare per pixel: count pixels that brighten clearly.
+- **The texel-scaled normal bias made acne worse (1908 pixels).** Offsetting the receiver sideways shifts which texel it samples, and on a sloped plane that reads the wrong depth. Offsetting it straight toward the light keeps the same texel and just lowers the receiver's depth. I'll switch to that and rename the field to `light_bias` so the name matches what it does.
+[94m[Bash][0m Rename normal bias field to light bias across code and docs $ grep -rln "normal_bias" engine tests docs | xargs sed -i 's/normal_bias/light_bias/g' && grep -rn "l...
+The rename is clean; the `render_material_tests` hit is an unrelated comment. Now the shader and renderer change: the offset is along the direction toward the light, with the anchor stored per record.
+[94m[Bash][0m Offset shadow lookup toward the light with per-record anchor $ grep -n "normal offset\|lookup\|texel" engine/render/shaders/scene.hlsl | head -5
+Now the test side: tuned light bias becomes 1 texel, and the missing-light check becomes per-pixel so a local brightening is detected.
+[94m[Bash][0m Update missing-light test and rebuild $ timeout 900 ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+The shader already declares a `bias` variable for the depth bias, so I'll rename my new local to `offset`.
+[94m[Bash][0m Fix shader name clash, rebuild, and relaunch Windows gates $ echo relaunched
+[94m[Bash][0m Wait for Windows gate batch completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us035_rc.txt
+The Windows batch is running with the light-direction bias and the per-pixel light check. I'll wait for its completion notification.
+[94m[Bash][0m Check Windows gate progress and GPU results $ done
+
+[91m[Error: Exit code 1
+
+== us035_5.log
+== us035_6.log][0m
+[94m[Bash][0m Check whether Windows gate batch is still running $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/b6b17a33-668f-4bec-8358-3e41ac35785b/tasks/bvt1kst...
+The Windows batch is still running its first step (`ValidateVendor`), which has been slow on this tree before, so there's nothing to act on yet. Re-arming the check.
+[94m[ScheduleWakeup][0m
+Status: the Windows gate batch (validate, configure, build, unit, DX12 and Vulkan GPU suites) is still running its first step, `ValidateVendor`, so there are no new results yet. The Linux side is quiet, and this is not a PR-based task, so there's nothing else to act on. I'll check again in about 20 minutes.
+[94m[Bash][0m Read Windows gate results after light-bias change $ done
+All Windows gates pass on the final code: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, and both GPU suites on the RTX 5080 (DX12 31 cases, Vulkan 32 cases, no failures). Now the remaining Linux gates on this same code.
+[94m[Bash][0m Run all Linux quality gates on final code $ cat /tmp/us035/linux/rc.txt
+[94m[Bash][0m Check Linux gate progress $ cat /tmp/us035/linux/rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+The Linux gates are running in the background. Waiting for them to finish before writing up the results.
+[94m[Bash][0m Check Linux gate result file and whether script still runs $ pgrep -af linux_gates | grep -v pgrep | head -2
+Every Linux gate passes on the final code: `ValidateVendor`, clang debug build and unit, GCC debug build and unit, and ASan build plus sanitizer unit run. Now I'll record the story: the `prd.json` pass flag, the build-table row, and the progress log.
+[94m[Bash][0m Locate PRD flag, build table row, and progress log tail $ grep -n "US-034 \|US-035" docs/build.md | cut -c1-80
+That's another stale waiter from the killed script; the Linux results above are the current ones. Writing the build-table row, flipping the US-035 pass flag, and appending the progress entry.
+[94m[Bash][0m Record US-035 in PRD flag, build table, and progress log $ changed `frame_snapshot`, `scene_renderer`, `reference_raster`, `shaders/scene.hlsl`, `CMakeLists.tx...
+The guard tripped because the US-035 block is longer than my 3000-character bound. I'll bound by the next story's id instead.
+[94m[Bash][0m Set US-035 passes flag after bounding by next story $ python3 - <<'EOF' import json p='tasks/prd.json' s=open(p).read() i=s.index('"id": "US-035"') end=s....
+The flag is set. The build-table row and progress entry didn't run in the earlier script (it stopped at the assertion), so I'm adding them now.
+[94m[Bash][0m Append US-035 build row and progress entry $ changed `frame_snapshot`, `scene_renderer`, `reference_raster`, `shaders/scene.hlsl`, `CMakeLists.tx...
+Adding the two reusable patterns to the Codebase Patterns section at the top of the progress file.
+[94m[Bash][0m Add reusable shadow and descriptor patterns to progress log $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() anchor="- Catch2 `FAIL(...)` followed ...
+US-035 is implemented and every gate in the story now passes on the final code, except the parts that can't run on this host. Those are listed below.
+
+**Gates (final code)**
+- **Windows** (RTX 5080, run through `cmd.exe`): `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` pass. `engine_tests --suite gpu --backend dx12` passes 31 cases (1221 assertions). `--suite gpu --backend vulkan` passes 32 cases (1233 assertions). Both ran with the debug layers and validation on, and reported no validation errors.
+- **Linux** (native, clang and GCC): `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` pass. `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` pass. `linux-asan` builds and `linux-sanitize` passes.
+- **Not run:** the native Linux Vulkan GPU suite (this WSL host has no usable Vulkan device; it reports `unsupported`, exit 3). `engine_bench --suite acceptance` (no bench target exists yet, so there is no performance report). The GUI check (no application window yet).
+
+**What was built**
+- **Lights:** directional, point, and spot lights. They go through screen-by-depth clusters with priority-ordered overflow, and drops are counted.
+- **Cascades:** directional shadows use four cascades, texel-snapped, with casters outside the view kept as shadow-only so they still shadow the scene.
+- **Shadow atlases:** spot lights and cascades use two R32Float atlases with shelf allocation, per-tile keys, invalidation, and release. A full atlas refuses the request and the light goes unshadowed, which is counted.
+- **Bias and filtering:** depth bias in NDC units, a light bias expressed in texels that offsets the lookup toward the light, and PCF.
+- **Debug views:** five views (lit, cluster count, cluster overflow, cascade index, shadow factor).
+
+**Bugs found on the way (all fixed and re-verified on hardware)**
+- A shadow pass was binding atlases it was writing to, which tripped the descriptor-state check. The shadow pass now uses a dedicated lighting set with a 1×1 dummy texture.
+- The lighting buffer was never uploaded, so the GPU read empty data. The symptoms looked like shadow bugs, which is why it took a while to find.
+- A tile kept stale depth after its caster moved, which left phantom occluders. A changed tile now redraws its whole atlas.
+- The normal-offset bias shifted the lookup sideways and made acne worse. It is now an offset toward the light, in texels.
+
+**Scope calls** (also in `docs/lighting.md`)
+- Point lights light the scene but cast no shadows; that needs six faces per light.
+- Alpha-mask casters cast full shadows; alpha-blended items cast none.
+- The GPU suites check the debug views and visibility, not the shaded pixel values. The direct BRDF lives only in `scene.hlsl`, with no CPU reference.
+
+**Files:** new `engine/render/include/engine/render/{lighting,shadow_atlas}.hpp` and matching `src/` files; changes to `frame_snapshot`, `scene_renderer`, `reference_raster`, and `shaders/scene.hlsl`; new `tests/src/lighting_tests.cpp` and `lighting_gpu_tests.cpp`; new `docs/lighting.md`. Also updated: the `docs/build.md` US-035 row, the `tasks/prd.json` US-035 `passes: true` flag, and `.ralph-tui/progress.md` (story entry plus two Codebase Patterns).
+
+I did not create a git commit, per the workflow.
+US-035 is complete and every gate has passed, so there is nothing left to act on. Stopping the loop.
+[94m[ScheduleWakeup][0m
+Nothing left to act on: US-035 is complete and every gate passes. I've stopped the loop, and there is no PR on this project to maintain because it isn't a git repository.

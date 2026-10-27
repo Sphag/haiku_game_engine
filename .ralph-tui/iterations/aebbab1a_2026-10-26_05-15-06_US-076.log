@@ -1,0 +1,46 @@
+# Iteration 699 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:15:06.861Z
+- **Ended At**: 2026-10-26T02:15:20.055Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2099
+- **Total Tokens**: 2121
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and US-076 PRD $ ls && tail -n 120 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-07...
+The log shows this story has been blocked on one user decision for several passes. I'll confirm the recorded state still matches the tree before I report.
+[94m[Bash][0m Check source mtimes and benchmark artifact listing $ done | head -20 && grep -n "kWorkloadVersion" tools/benchmark/include/engine/benchmark/workload.hpp ...
+US-076 is not complete, so I'm not emitting the COMPLETE signal. The tree matches the last recorded state, and the story cannot pass its acceptance criteria without a decision from you.
+
+**What is blocked on you**
+
+1. **Frame budget and triangle floor fail on instance placement.** The DX12 and Vulkan indexed, indirect, and meshlet runs all exit 1. The route start submits about 312,000 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. The cause is that instances are spread uniformly over the 8192 m world, so the 60° view at the route start holds only about 330 items. The contract forbids reducing the workload, so the fix is a placement change: bump `kWorkloadVersion` in `tools/benchmark/include/engine/benchmark/workload.hpp` (currently 1), regenerate `benchmarks/workload_expected.json`, and rerun. Please approve or reject that change. If you reject it, I'd record these as the measured results and close the story as failed.
+2. **Full 1080p profile is unsupported.** FSR 2's generated `*_permutations.h` tables are missing, so `full_1080` cannot run and "both profiles" is only partly covered.
+
+**What is done and verified (from the log and current artifacts)**
+
+- `render_route_v1` is defined in the manifest, and the `render_stress` driver builds the scene from the generated workload. The counts match the contract (20000 instances, 200 meshes, 100 characters with 6400 bones, 100000 particles, 128 lights, 1 sun).
+- Eight acceptance reports exist under `artifacts/bench/us076-*`, covering DX12 and Vulkan for indexed, indirect, meshlets, and meshlets with mesh shaders forced off. Each has screenshots and submitted/visible counters.
+- The forced mesh-shader-off runs fall back to indirect-indexed draws, and the report marks mesh shaders as "forced off" rather than enabled.
+- Gates on the current tree: Linux `ValidateVendor`, `linux-dev`, `linux-debug` build with no warnings, and `linux-unit` (30/30) pass. Windows validate, `win-dev`, `win-debug`, `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72) and Vulkan (73), and the win-release bench build pass.
+
+**Not run**
+
+- Native Linux Vulkan GPU: WSL has no Vulkan device.
+- `linux-gcc`: GCC 9.4 cannot build Jolt.
+- `linux-asan`: not run in this pass.
+
+I did not add another progress entry, since nothing changed since the last status check.

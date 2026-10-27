@@ -1,0 +1,47 @@
+# Iteration 132 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T05:37:52.701Z
+- **Ended At**: 2026-10-24T05:38:15.465Z
+- **Duration**: 22s
+- **Input Tokens**: 36
+- **Output Tokens**: 4064
+- **Total Tokens**: 4100
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain work against the progress log and the story's acceptance criteria.
+[94m[Bash][0m Read progress log tail and working tree status $ tail -n 120 .ralph-tui/progress.md && git status --short | head -50
+The log shows the traced-shadow failure was fixed in the last pass and the gates were re-run. Before deciding what's left, I'll confirm the blockers are still real in the tree.
+[94m[Bash][0m Check engine_bench presence, Vulkan devices, terrain files $ echo "--- terrain files:" && ls -la engine/world/src/terrain.cpp tests/src/render_terrain_gpu_tests....
+The tree confirms the blockers: `engine_bench` exists only in logs and notes, not in source, and there is no Vulkan device on this host. The terrain memory note is also stale, since it still records the traced-shadow case as failing. I'll read it and correct it.
+[94m[Bash][0m Read the terrain runtime memory note $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+The memory note already reflects the fixed traced-shadow case and the two open blockers, so it stays as is. I'll record this pass in the progress log.
+[94m[Bash][0m Append re-check entry to the progress log $ no `/dev/dri` device and no Vulkan summary on this WSL host, so the native Linux Vulkan GPU run cann...
+US-047 is not complete, so I'm not signalling COMPLETE. The terrain work and the Windows and Linux gates pass, but two acceptance items cannot be run in this environment.
+
+**What's done (from the previous pass, no source changed since):**
+- Terrain tiles with LOD, stitching, normals, and four-layer splat blending.
+- The shadow-shape fixture and the ray-traced terrain shadow pass on DX12 and Vulkan with validation layers on the RTX 5080.
+- The earlier `darkened 0` failure was a fixture problem. The hill frame kept the default environment, whose ambient light filled the shadow. The fixture now sets a black environment.
+- Windows gates pass: `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit`, and the GPU suites on DX12 and Vulkan.
+- Linux gates pass: `ValidateVendor`, `linux-debug` (0 warnings), `linux-unit`, `linux-gcc-debug`, and `linux-gcc-unit`.
+
+**What's open:**
+- **Native Linux Vulkan GPU run:** `engine_tests --suite gpu --backend vulkan` has not run on native Linux. This WSL host has no Vulkan device (no `/dev/dri`). WSL does not count as a substitute, so this is reported as not-run.
+- **Acceptance benchmark:** `engine_bench` does not exist in the source tree. It appears only in `.ralph-tui` logs and notes. The benchmark workload depends on US-074, so `engine_bench --suite acceptance` cannot run yet.
+
+I also did not re-run the gates this pass, since no source changed. The ASan preset was not re-run after the last test-only change.
+
+**Changes this pass:** I appended a re-check entry to `.ralph-tui/progress.md` recording these blockers. The terrain memory note already matched the current state, so I left it alone.
+
+To close the story, it needs a native Linux host with a Vulkan device and the `engine_bench` target from US-074.

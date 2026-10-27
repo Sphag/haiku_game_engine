@@ -1,0 +1,46 @@
+# Iteration 1276 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:54:42.769Z
+- **Ended At**: 2026-10-26T23:55:05.676Z
+- **Duration**: 22s
+- **Input Tokens**: 38
+- **Output Tokens**: 3313
+- **Total Tokens**: 3351
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and the state of the repo.
+[94m[Bash][0m Inspect repo layout and recent progress log $ wc -l README.md 2>/dev/null
+[94m[Bash][0m Read PRD entries and presets $ ls CMakePresets.json && grep -o '"name": "[^"]*"' CMakePresets.json | head -80
+The progress log shows US-081 has been checked several times and held open on real blockers. I'll confirm whether anything changed since the last recorded gate run before deciding whether any work remains.
+[94m[Bash][0m Check changes since last gate and blocker status $ grep -n -i "blocked\|incomplete\|not-run\|not run" docs/acceptance.md | head -40
+Only `tasks/prd.json`, `docs/acceptance.md`, and a screenshot changed since the last gate run. I'll check the story's status in `prd.json` and the open-items list so I don't misreport it.
+[94m[Bash][0m Read US-081 status and open items $ sed -n 120,140p docs/acceptance.md
+The story is still open (`passes: false`), and every remaining item needs hardware or a decision I can't make here. I'll record this pass in the progress log without repeating the gates, since nothing changed.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `tasks/prd.json`, `docs/accep...
+US-081 is not complete, so I'm not emitting the COMPLETE signal. Nothing changed in this pass, and the story stays `passes: false`.
+
+**What the tree already has:** the README, the docs under `docs/` (architecture, schemas, vendor manifest, benchmarks, capability matrix, `acceptance.md`), and the Windows and Linux unit gates all exist. The last recorded runs passed: `ValidateVendor`, the debug build, and 30/30 Linux unit tests. The Windows gates from the earlier session also passed, per `artifacts/reports/us081/`.
+
+**What blocks final acceptance** (these match `docs/acceptance.md`, and I re-checked each one):
+1. **No native Linux Vulkan GPU device.** `/dev/dri` is absent, so `engine_tests --suite gpu --backend vulkan` can't run on Linux. WSL does not count.
+2. **Acceptance benchmark incomplete.** The render, streaming, all-features, and physics acceptance scenes don't produce GPU timestamps yet, so `engine_bench --suite acceptance` reports `incomplete`. Fixing that is engineering work, not documentation.
+3. **FSR 2 permutations missing.** `third_party` has zero `*_permutations.h` files. This is your vendoring decision.
+4. **linux-gcc.** The local GCC is 9.4, and Jolt needs GCC 11+.
+5. **Visual editor smoke.** Windows has a launch-only screenshot. Linux can't run the editor, and neither platform has a full action-sequence smoke test.
+6. **Sample-game package.** No package has been built from a real sample game on either OS.
+7. **LICENSE.** The repo has no license file. This needs your decision.
+
+**What would unblock it:** a native Linux machine with a Vulkan device, a decision on FSR 2 and the license, GCC 11+ for linux-gcc, and GPU timestamps in the acceptance scenes. Once those are in, the remaining gates can be re-run.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this pass.

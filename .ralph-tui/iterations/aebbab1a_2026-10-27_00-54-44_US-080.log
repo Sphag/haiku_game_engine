@@ -1,0 +1,41 @@
+# Iteration 1206 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:54:44.280Z
+- **Ended At**: 2026-10-26T21:55:05.765Z
+- **Duration**: 21s
+- **Input Tokens**: 22
+- **Output Tokens**: 2391
+- **Total Tokens**: 2413
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log, PRD entry, and bench artifacts $ tail -n 150 .ralph-tui/progress.md && grep -n "US-080" -A3 tasks/prd-open-world-engine.md | head -40...
+[94m[Bash][0m Re-check hardware, FSR permutations, and manifest blockers $ find . -newer .ralph-tui/progress.md -name '*.cpp' -not -path './third_party/*' -not -path './build*...
+[94m[Bash][0m Append a concise blocked-status entry to progress log $ no acceptance-suite run in artifacts/bench. - No build or bench run: the acceptance batch needs nati...
+US-080 is not complete, so I have not signalled COMPLETE. I re-checked the blockers and nothing has changed since the last status entries.
+
+**What still blocks sign-off:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run cannot happen on this host. The RTX 5080 is visible only under WSL.
+- **FSR 2 cannot build.** There are no generated `*_permutations.h` files under `third_party`. Choosing how to vendor them is your decision.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still marks four entries `implementation: "none"` (lines 88, 108, 122, 132). An acceptance batch would exit 3 (incomplete) until they have source.
+- **Frame budget miss.** The only measured meshlets run on DX12 (`us076-dx12-meshlets`, native 1080p) shows CPU p99 at 42.4 ms against the 16.7 ms budget. GPU p99 is 11.5 ms, so the cost is on the CPU side. The likely hotspot is `SceneRenderer::render` (`engine/render/src/scene_renderer.cpp`), but I have not profiled it. Confirming it needs a Release profile on the RTX 5080 through cmd.exe. Per the contract, the fix must change the code, not the budget.
+
+**What I did:** I appended a short blocked-status entry to `.ralph-tui/progress.md`. I made no code changes and ran no builds or benchmarks.
+
+**What would unblock it:**
+1. A native Linux host with `/dev/dri`, or confirmation that the Linux Vulkan run should wait.
+2. The FSR 2 vendoring route.
+3. Source for the four `none` workloads, or a decision to drop them from acceptance.
+4. Permission to run the Release profile of `render_stress` on the RTX 5080 and fix the measured hotspot.
+
+The earlier log had about 90 identical status checks. I'd suggest stopping the unattended loop until one of those decisions is made, since another pass would only repeat this.

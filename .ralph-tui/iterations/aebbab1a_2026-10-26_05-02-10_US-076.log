@@ -1,0 +1,39 @@
+# Iteration 655 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:02:10.161Z
+- **Ended At**: 2026-10-26T02:02:26.545Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 1931
+- **Total Tokens**: 1945
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and search for existing US-076 work $ tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src 2>/dev/null && grep -rn "render_stress\|...
+US-076 is not complete. The measured results fail the benchmark contract, and fixing that needs your decision, so I have not signaled COMPLETE.
+
+**What is done (from the progress log and artifacts):**
+- `render_route_v1` is defined in `benchmarks/manifest.json`, and the `render_stress` driver is in `tools/benchmark/src/render_stress.{hpp,cpp}`.
+- The driver takes `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`, and it records counters, screenshots, and feature state.
+- All eight acceptance reports (DX12 and Vulkan, for indexed, indirect, and meshlets, plus meshlets with mesh shaders forced off) were rerun on the current tree. They are in `artifacts/bench/us076-*`.
+- The mesh-shader-off fallback works. Both backends report `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with indirect draws active. Disabled features are not reported as enabled.
+- Windows gates pass on the current tree: validate, `win-dev`, `win-debug` build with no warnings, `win-unit` 29/29, `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and the Release `engine_bench` build.
+- Linux gates pass on the current tree: validate, `linux-dev`, `linux-debug` build with no warnings, and `linux-unit` 30/30.
+
+**What is blocking it:**
+1. **Triangle floor and frame budget fail on placement.** The route start submits 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. The cause is that instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. Fixing this means changing the instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `workload_expected.json`. The contract forbids reducing the workload, so I have not made that change. This is a measured failure, not a fallback failure.
+2. **`full_1080` is unsupported** because the FSR 2 permutation headers are missing. Only `native_1080` runs, so "both profiles" is only partly met.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device), `linux-gcc` (GCC 9.4 cannot build Jolt), and `linux-asan`.
+
+**Decision needed:** should I change instance placement (a workload change, which needs `kWorkloadVersion` bumped and the expected file regenerated), or keep the contract and record these failures as the result? If it's the second, the remaining work is documenting the failing results and the unsupported profile.

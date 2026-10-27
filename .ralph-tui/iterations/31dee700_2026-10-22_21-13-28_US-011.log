@@ -1,0 +1,104 @@
+# Iteration 3 Log
+
+## Metadata
+
+- **Task ID**: US-011
+- **Task Title**: Actions and Input Routing
+- **Description**: As a game creator, I want to bind actions to devices so that I can change controls without code.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T18:13:28.500Z
+- **Ended At**: 2026-10-22T18:23:24.924Z
+- **Duration**: 9m 56s
+- **Input Tokens**: 198
+- **Output Tokens**: 19514
+- **Total Tokens**: 19712
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+[94m[Bash][0m Read the PRD document $ cat tasks/prd-open-world-engine.md | head -400
+The story depends on US-010, which is recorded as done. Next I'll pull the PRD's constraint sections and survey the existing input code.
+[94m[Bash][0m Outline PRD sections and read functional requirements $ grep -n '^## \|^### ' tasks/prd-open-world-engine.md | head -80 && sed -n '/## Functional Requiremen...
+[94m[Bash][0m Survey engine, tests, and build configuration $ find engine tests cmake docs tools -type f | grep -v '/build/' | head -300 && cat CMakeLists.txt && ...
+The Docs MCP tools aren't needed for this task. The input-routing files (`action_map`, `action_profile`, `input_router`, plus `input_*` tests) already exist, so I need to check how complete they are against US-011.
+[94m[Bash][0m Read input docs and check input file sizes and build wiring $ cat docs/input.md && wc -l engine/platform/include/engine/platform/*.hpp engine/platform/src/*.cpp t...
+The US-011 code, docs, and tests already exist, but `progress.md` has no US-011 entry. Before I decide whether there's anything left to build, I'll check the build verification table and the saved Windows-gate notes.
+[94m[Bash][0m Check build doc verification rows and saved memory notes $ ls build/* | head
+The build doc has no US-011 row yet, so the code appears to be from an earlier pass without a recorded verification. I'll run the Linux gates first to see whether the existing code actually builds and passes.
+[94m[Bash][0m Run Linux clang gates: validate, configure, build, unit tests $ tail -5 /tmp/us011_ctest.log
+The Linux clang build has zero warnings and ctest exits 0. Next I'll confirm the input-routing test cases actually ran and check the actual tests against the acceptance criteria.
+[94m[Bash][0m Summarize ctest results and locate test binary $ find build/linux-dev -name engine_tests -type f | head -2
+[94m[Bash][0m Run input test cases and list their names $ grep -h 'TEST_CASE' tests/src/input_*.cpp | sed 's/^ *//' | head -80
+The input tests cover remapping, dead zones, profiles, capture routing, Play release, and multi-device scenarios. Now I'll run the Linux GCC gates, which CI also requires, and run the input suites by name.
+[94m[Bash][0m Run input suites and Linux GCC gates $ tail -3 /tmp/us011_gcc_ctest.log
+The Linux GCC gates pass with zero warnings. My name-filter run was rejected as an invalid command line, so I'll check the runner's argument syntax.
+[94m[Bash][0m Inspect test runner argument handling $ ./build/linux-dev/tests/Debug/engine_tests --suite unit "Routing*" 2>&1 | tail -3
+[94m[Bash][0m Run unit and integration suites and show help $ ./build/linux-dev/tests/Debug/engine_tests --help 2>&1 | head -20
+Unit passes 375/375. Integration has 4 skips, so I need to confirm none of them are in the input-routing scenarios.
+[94m[Bash][0m Identify which integration cases skipped $ ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | grep -B3 -i 'skip' | grep -E '...
+The four skips are X11 window-manager focus cases, not input-routing cases. Linux is verified. Next are the Windows gates, following the saved procedure: a CRLF `.bat` run through `cmd.exe`. I'll check the VS path and any earlier gate scripts first.
+[94m[Bash][0m Locate VS vcvars and earlier gate batch files $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" 2>/de...
+[94m[Bash][0m Read a previous Windows gate batch for reuse $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/gates_us025.bat" | tr -d '\r' | head -40
+I'll reuse that pattern for US-011, writing the batch file into the same Temp directory with CRLF line endings.
+[94m[Bash][0m Run Windows gates via cmd.exe batch $ cat /tmp/us011_win_result.txt | tr -d '\r'
+All four Windows steps report exit 0. The memory notes say to confirm the logs and not trust exit codes alone, so I'll check them.
+[94m[Bash][0m Check Windows gate logs for real output $ tr -d '\r' < $T/us011_test.log | grep -E 'tests passed|tests failed|All tests|test cases|Total Test'...
+The Windows unit tests pass 21/21 and the build has zero warnings. But the build log ends at step 13 of 62, which doesn't look like a finished build, so I'll check it before reporting.
+[94m[Bash][0m Inspect the full Windows build log ending $ tr -d '\r' < $T/us011_build.log | tail -c 600
+The Windows build log stops at `[13/62]` and has no `FAILED` lines and no final step count. That may be a logging artifact, but I can't assume it, so I'll compare with the Linux log and rerun the Windows build with a fuller log.
+[94m[Bash][0m Rerun Windows debug build with verbose log $ tr -d '\r' < $T/us011_build2.log | tail -3
+The verbose rerun is only the DXC external-project stamp steps. The top-level target count changed between runs, so I can't tell from logs alone that `engine_tests.exe` is current. I'll compare its timestamp against the newest source and run a dry-run to confirm nothing is out of date.
+[94m[Bash][0m Check Windows test binary freshness and ninja dry run $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us011_dry.log | tail -3
+The `engine_tests.exe` timestamp is newer than every source file, and the dry run shows nothing left to rebuild. That means the Windows binary reflects the current code and the build exited 0. Before I record results, I'll confirm warnings-as-errors is set for first-party targets and look at the build doc's table format.
+[94m[Bash][0m Confirm warnings-as-errors and read build doc table layout $ 171,175p' docs/build.md | cut -c1-200
+Warnings-as-errors is set for first-party targets, and the Windows `--suite unit` CTest case passed. Next I'll read the verification table so I can add the US-011 row in the existing format.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m
+I'll add the US-011 row after the US-009 row, recording the results I actually observed.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "| GPU DX12 and Vulkan on Windows, GPU Vulkan on Li..." → "| US-011 actions and input routing (`engine/platfo..."
+Next I'll update `progress.md`. The story entry goes at the end, and the reusable verification learnings go under Codebase Patterns, so I'll read the file first.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "- X11 integration tests on XWayland are focus- and..." → "- X11 integration tests on XWayland are focus- and..."
+[94m[Bash][0m Append US-011 entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-22 - US-011 - Verified the action-map, profile, an...
+The progress file changed on disk after my last read. I appended rather than rewrote it, so I'll check that the file still has one US-011 entry and that my earlier pattern edit is intact.
+[94m[Bash][0m Verify progress log structure after append $ grep -n '^## \|engine_tests. selects\|warm Windows' .ralph-tui/progress.md
+Everything is recorded. I'll remove my three scratch batch files from the Windows Temp folder, then give the final report.
+[94m[Bash][0m Remove scratch batch files and confirm doc entries $ cd /mnt/d/dev/haiku_game_engine && grep -c 'US-011' docs/build.md .ralph-tui/progress.md
+US-011 was already implemented in an earlier pass, but nothing recorded it. I verified it against the acceptance criteria and all gates I could run pass. I changed no source. The GUI check is not run, so the story is not fully verified.
+
+**What exists and was checked**
+- **Action maps** (`engine/platform/src/action_map.cpp`): buttons and axes, multi-device bindings to one action, gamepad dead zones, rebinding, reset, and unbinding.
+- **Profiles** (`action_profile.cpp`): JSON save and load that stores only user overrides, with strict validation and all-or-nothing apply.
+- **Capture routing** (`input_router.cpp`): per-owner capture requests, captured events kept out of gameplay, held-state handoff, and Play releasing every capture.
+- **Tests**: `input_action_tests`, `input_profile_tests`, `input_router_tests`, and `input_scenario_tests`. The scenarios cover simultaneous keyboard, pad, and mouse input and remapping mid-session.
+
+**Gates**
+
+| Gate | Result |
+|---|---|
+| Linux clang: ValidateVendor, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` | passed, 22/22 |
+| Linux GCC: `linux-gcc`, `linux-gcc-debug` (0 warnings), `linux-gcc-unit` | passed, 22/22 |
+| Windows MSVC: ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` | passed, 21/21 |
+| `engine_tests --suite unit` | 375 cases, all pass |
+| `engine_tests --suite integration` | 101 cases, 97 pass, 4 skip |
+
+The 4 integration skips are X11 window-manager focus cases, not input-routing cases.
+
+**Not run or not verified**
+- **GUI and screenshots:** no editor or runtime window exists yet, and the frame loop does not call `InputRouter::route()`. Capture and Play handoff are verified only with synthetic events.
+- **`linux-asan`:** input is not in the story's sanitizer list, so I did not run it.
+- **GitHub CI:** not run, since nothing was pushed.
+- **Benchmarks:** no harness exists yet (US-074), and input is not measured.
+- **Windows build log:** the warm build log shows only the DXC stamp steps. To confirm `engine_tests.exe` was current, I compared its timestamp with the source tree and ran a ninja dry run, which showed nothing left to rebuild.
+
+**Files changed**
+- `docs/build.md`: added the US-011 verification row.
+- `.ralph-tui/progress.md`: added the US-011 entry and two Codebase Patterns notes (`--suite` is the only test selector, and how to confirm a warm Windows build).
+
+I did not create a git commit, as the workflow requires.
+
+<promise>COMPLETE</promise>

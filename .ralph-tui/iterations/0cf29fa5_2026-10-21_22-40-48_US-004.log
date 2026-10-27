@@ -1,0 +1,210 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: US-004
+- **Task Title**: CI and Verification Reports
+- **Description**: As a developer, I want to check changes on both operating systems so that I can detect platform regressions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-21T19:40:48.467Z
+- **Ended At**: 2026-10-21T20:12:08.676Z
+- **Duration**: 31m 20s
+- **Input Tokens**: 596
+- **Output Tokens**: 56528
+- **Total Tokens**: 57124
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log to see what US-001 through US-003 already delivered.
+[94m[Bash][0m List repo root, PRD and progress sizes, presets $ cat CMakePresets.json 2>/dev/null | head -c 6000
+[94m[Bash][0m Read progress log and US-004 PRD section $ cat .ralph-tui/progress.md && echo ---- && grep -n "US-004" -A40 tasks/prd-open-world-engine.md | he...
+The story needs CI workflows plus a fair amount of verification. Next I'll check the toolchain available here and the PRD constraints on CI, GPU, and benchmarks.
+[94m[Bash][0m Check toolchain versions and test layout $ cat CMakeLists.txt
+[94m[Bash][0m Check toolchain and grep PRD constraints $ grep -n -i -E "CI|GPU runner|runner|benchmark|engine_bench|artifacts/bench|offline|network|sanitiz|N...
+The story needs CI workflows, an offline verification path, JUnit reports, and an honest GPU status path. Before writing anything I'll check how warnings-as-errors is applied, whether any configure path downloads, and what the existing Windows gate script looks like.
+[94m[Bash][0m Inspect target policy, download grep, docs and gate script $ ls /mnt/d/dev/us003-gates 2>/dev/null && cat /mnt/d/dev/us003-gates/win-gate.bat 2>/dev/null
+[94m[Bash][0m Read build docs sections for gates and offline rules $ grep -n "ENGINE_BUILD_SHADER_TOOLCHAIN\|option(" CMakeLists.txt cmake/*.cmake | head
+The docs and the compile policy are clear. The GCC job is the main unknown, since the progress log flags GCC 9 with DXC as untested. I'll start the GCC and ASan builds in the background now and check the result before writing the CI.
+[94m[Bash][0m Start Linux GCC gate in background $ echo started
+While GCC builds, I'll write the CI pieces. The design is: pinned runner images, CMake and Ninja installed via pip at the verified 3.31.6, JUnit reports from `ctest --output-junit`, a `--preset` gate for each job, an offline job under `unshare -rn`, and GPU jobs gated on a repository variable with a status record for the unavailable case.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/.github/workflows/ci.yml[0m "# CI for the open-world engine (US-004).
+#
+# CPU jobs run on every push and pull request. GPU jobs are separate and run only on
+# self-hosted runners with a real GPU (see gpu.yml). Each job uploads CT... (7971 chars)"
+The GPU jobs go in a separate workflow so they can run only on GPU hardware. Each one writes an explicit status, and an unsupported result is never reported as a pass.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/.github/workflows/gpu.yml[0m "# GPU jobs (US-004). Separate from CPU CI because they need a self-hosted runner with a real GPU.
+#
+# Enable by registering runners with the labels below and setting the repository variable
+# GPU_RUNN... (3671 chars)"
+Next the helper scripts: `write_status.py` for the not-run record, `gpu_run.py` for the GPU jobs, and `offline_verify.sh` for the offline job.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/ci/write_status.py[0m "#!/usr/bin/env python3
+"""Write a machine-readable verification status record (US-004).
+
+Statuses are explicit so an unavailable environment is never reported as passed:
+  passed       the check ran a... (1548 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/ci/gpu_run.py[0m "#!/usr/bin/env python3
+"""Run the GPU suite on a self-hosted GPU runner and record its status (US-004).
+
+The engine_tests GPU suite does not exist yet, so this reports `unsupported` instead of
+passing... (2477 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/ci/offline_verify.sh[0m "#!/usr/bin/env bash
+# Offline build verification (US-004). Runs configure, build, and unit tests with no network,
+# starting from an empty build directory. A cache miss must not trigger a download, so... (1826 chars)"
+The scripts are written. Next I'll check the GCC gate, then run the offline script locally since it's the riskiest piece.
+[94m[Bash][0m Check GCC gate progress $ grep -c "" /tmp/us004/gcc.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -5 /tmp/us004/gcc.log grep -c "" /tmp/us004/gcc.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check GCC gate log tail $ grep -c "" /tmp/us004/gcc.log
+GCC is still configuring, which includes the vendor validation. I'll run the offline verification in the background in the meantime, since it starts from an empty `build/linux-dev`.
+[94m[Bash][0m Start offline verification script in background $ echo "OFFLINE_EXIT=$?" >> /tmp/us004/offline.log) & echo started
+[94m[Bash][0m Inspect offline and GCC logs $ tail -3 /tmp/us004/gcc.log
+The offline check confirmed only `lo` is present. Both jobs are still running, so I'll wait on their exit markers.
+[94m[Monitor][0m Wait for offline and GCC gates to finish $ tail -3 /tmp/us004/gcc.log
+[94m[Bash][0m Syntax-check helper scripts and check YAML lib $ print('py ok')" && bash -n tools/ci/offline_verify.sh && echo "sh ok" && python3 -I -c "import yaml"...
+[94m[Bash][0m Validate workflow YAML and check ctest junit flag $ ctest --help | grep -i junit | head -2
+Both workflows parse, and `ctest --output-junit` exists in this CMake. I'll wait for the two background gates.
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Peek at both logs $ tail -2 /tmp/us004/gcc.log
+Neither log has moved in several minutes. I'll check whether the processes are still alive.
+[94m[Bash][0m List active build processes $ ps -eo pid,etime,pcpu,args --sort=-pcpu | grep -E "cmake|ninja|clang|gcc|cc1|ctest|python" | grep -v...
+Both are alive: GCC is in configure and the offline run is in vendor validation, which is slow on `/mnt/d`. I'll keep waiting for the completion notices.
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check progress of both logs $ tail -3 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check progress of both logs $ tail -3 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check progress of both logs $ tail -3 /tmp/us004/gcc.log
+Neither log has advanced for a long stretch, so I'll check whether the processes are stuck rather than slow.
+[94m[Bash][0m Inspect running build processes and load $ uptime
+Both are progressing: the offline run is in vendor validation and GCC is configuring the DXC sub-build. These are just slow `/mnt/d` operations, so I'll keep waiting.
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check progress of both logs $ tail -3 /tmp/us004/gcc.log
+The logs are still stuck at the same lines, so I'll look at what the DXC sub-build is doing.
+[94m[Bash][0m Check DXC sub-build processes and output files $ date
+Processes are alive, with the DXC sub-configure in disk-wait (`D` state). This is I/O on `/mnt/d` under WSL, not a hang. I'll keep waiting.
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check progress of both logs and processes $ ps -eo etime,args | grep -E "ValidateVendor|ninja" | grep -v grep | cut -c1-120
+[94m[Bash][0m Trace offline script process tree and log times $ date +%H:%M:%S
+The clock shows the runs started only about two minutes ago, so my earlier estimate was off. While they run, I'll document the CI section in `docs/build.md`. Results go in afterward.
+[94m[Bash][0m Locate docs sections for CI insertion $ sed -n 122,126p docs/build.md && grep -n "^## " docs/build.md && tail -15 docs/build.md
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "## Test layout
+" → "## Continuous integration (US-004)
+
+Workflows live..."
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check logs with current time $ tail -3 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check logs and compiler processes $ ps -eo etime,args | grep -E "cc1plus|clang\+\+|ninja" | grep -v grep | cut -c1-100 | head -3
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check logs with current time $ tail -2 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Monitor][0m Wait for background gate completion markers $ tail -4 /tmp/us004/gcc.log
+[94m[Bash][0m Check logs with current time $ tail -2 /tmp/us004/gcc.log
+Monitors return immediately here, so the clock barely moves between my checks. I'll wait with one foreground loop bounded to the tool's max timeout instead.
+[94m[Bash][0m Wait up to 9 minutes for both gates to finish $ tail -3 /tmp/us004/gcc.log
+Both background gates were stopped. The GCC run hit the 10-minute background limit and was killed mid-build, and the offline run may have been killed too. I'll check the state of each before restarting anything.
+[94m[Bash][0m Check status of killed and running gate processes $ ls build/
+[94m[Bash][0m Identify working directories of ninja processes $ ps -o pid,ppid,etime,args -p 32219 | cut -c1-150
+Both ninja processes belong to the offline run in `build/linux-dev`, which is still going, so that one wasn't killed. I'll restart the GCC gate with the maximum background timeout so it can finish.
+[94m[Bash][0m Rerun Linux GCC gate in background with long timeout $ echo "GCC_EXIT=$?" >> /tmp/us004/gcc2.log
+While those run, I'll wait on the offline run in a bounded foreground loop, since its result is the next thing I need.
+[94m[Bash][0m Wait up to 9 minutes for offline gate result $ tail -2 /tmp/us004/gcc2.log
+The offline gate passed. I'll confirm its test counts and that the JUnit report was written.
+[94m[Bash][0m Confirm offline gate test results and junit output $ head -c 400 artifacts/reports/offline-linux-dev-unit.xml 2>/dev/null
+The offline gate passes: 10/10 tests, `lo` only, and a JUnit report written. Next I'll start the ASan/UBSan gate in the background.
+[94m[Bash][0m Run Linux ASan/UBSan gate in background $ echo "ASAN_EXIT=$?" >> /tmp/us004/asan.log
+[94m[Bash][0m Wait up to 9 minutes for GCC gate result $ tail -2 /tmp/us004/asan.log
+[94m[Bash][0m Summarize GCC gate test results $ grep -E "tests passed|tests failed|Error|error:" /tmp/us004/gcc2.log | head -8
+[94m[Bash][0m Show GCC CTest pass lines $ grep -c "first-party\|engine/\|tests/" /tmp/us004/gcc2.log
+GCC passes 10/10. The 272 matches are mostly vendored DXC warnings, so I'll check whether any warning comes from first-party code.
+[94m[Bash][0m Check for first-party compiler warnings in GCC log $ echo "first-party warnings: $(grep -E 'warning:' /tmp/us004/gcc2.log | grep -E '/(engine|tests)/' | ...
+No first-party warnings, and the only warnings are vendored DXC ones. Next I'll prepare the Windows gate script outside the repo, using the same pattern as the US-003 gate, and start it once ASan finishes.
+[94m[Write][0m [95m/mnt/d/dev/us004-gates/win-gate.bat[0m "@echo off
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" || goto fail
+cd /d D:\dev\haiku_game_engine || goto fail
+if exist build\win-dev rmdir /s /q build... (740 chars)"
+[94m[Bash][0m Wait up to 9 minutes for ASan gate result $ tail -3 /tmp/us004/asan.log
+[94m[Bash][0m Confirm ASan results and start Windows gate $ echo "WIN_RUN_EXIT=$?" >> /tmp/us004/win.log) & echo started-win
+ASan/UBSan passes 10/10 with the sanitizer flags in the cache. The Windows gate is running in the background, so I'll wait on its end marker.
+[94m[Bash][0m Wait up to 9 minutes for Windows gate result $ tr -d '\r' < /tmp/us004/win.log | grep -E "====|GATE|PASSED|tests passed|WIN_RUN|Error|error C" | ta...
+The Windows gate passes: validator, `win-dev`, `win-debug`, and `win-unit` at 10/10. Before finalizing, I'll check the artifact paths the GPU script depends on and the `.gitignore` coverage for the reports my local runs wrote.
+[94m[Bash][0m Verify binary paths, gitignore, and status scripts $ python3 -I tools/ci/write_status.py --out /tmp/us004/st/gpu-x.json --environment windows-dx12 --stat...
+The `engine_tests` path my GPU script assumes is wrong. I'll locate where the binary actually lands.
+[94m[Bash][0m Locate engine_tests binaries in build trees $ find build/win-dev -maxdepth 3 -name "engine_tests.exe" | head
+The binaries are under `tests/<Config>/`. I'll fix the three `--build-dir` arguments in `gpu.yml`.
+[94m[Bash][0m Fix GPU build-dir paths and re-run status probe $ cat /tmp/us004/gpu/gpu-linux-vulkan.json
+That `gpu.yml` change is my own `sed` fix, so it stays. The GPU probe now resolves the binary and reports `unsupported` as intended. Next I'll add `artifacts/` to `.gitignore` and record the actual verification results in the docs.
+[94m[Bash][0m Ignore local CI artifacts directory $ printf 'build/\nartifacts/\n' > .gitignore && cat .gitignore
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "| Linux gates (`linux-dev`, `linux-debug`, `linux-..." → "| Linux gates (`linux-dev`, `linux-debug`, `linux-..."
+Now the progress log. The file's last line is a `---` separator, so I'll append the entry and add the reusable patterns to the top section.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "- Vendored CMake fetch sites to keep off: Assimp U..." → "- CI reports: `ctest --preset <name> --output-juni..."
+[94m[Bash][0m Append US-004 entry to progress log $ none come from first-party code. - Linux ASan/UBSan (`linux-asan`, `linux-sanitize`, clang 10): pass...
+The progress log is updated. One line overstates what I verified: I claimed CI runners allow unprivileged user namespaces, which I haven't tested. I'll soften it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "then removes `build/linux-dev` before configuring...." → "then removes `build/linux-dev` before configuring...."
+Last, I'll re-validate the workflow YAML and the script syntax after the edits.
+[94m[Bash][0m Final YAML and script syntax validation $ ls tools/ci
+US-004 is implemented and the local gates pass. The GitHub Actions jobs have never run on GitHub, so I have not signed off on the story. I did not emit the completion signal.
+
+**Built**
+- `.github/workflows/ci.yml`: Windows/MSVC, Linux/Clang, Linux/GCC, ASan/UBSan, and an offline job. Each CPU job runs `ValidateVendor`, its presets, and CTest with `--output-junit` into `artifacts/reports/`. CMake 3.31.6 and Ninja are pinned.
+- `.github/workflows/gpu.yml`: self-hosted GPU jobs for Windows DX12, Windows Vulkan, and Linux Vulkan. They are skipped unless the repo variable `GPU_RUNNER_ENABLED` is `true`.
+- `tools/ci/offline_verify.sh`: runs the Linux clang gate inside `unshare -rn`. It checks that only `lo` exists and that outbound TCP fails, then starts from an empty `build/linux-dev`.
+- `tools/ci/gpu_run.py` and `tools/ci/write_status.py`: write `passed | failed | unsupported | not-run` records. `engine_tests` has no `--suite gpu` yet, so the status is `unsupported`, never `passed`.
+- `docs/build.md`: a CI section with the job table, offline rules, GPU status rules, and a verification-status table.
+- `.gitignore`: added `artifacts/`. Progress log entry appended.
+
+**Verified locally (all 10/10 tests)**
+- Linux clang (`linux-dev`, `linux-debug`, `linux-unit`) and the offline run.
+- Linux GCC 9.4 (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`). The GCC 9/DXC risk noted in US-003 did not reproduce. Warnings come only from vendored DXC.
+- Linux ASan/UBSan (`linux-asan`, `linux-sanitize`).
+- Windows MSVC 14.51: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`.
+
+**Not verified**
+- **GitHub Actions**: the workflows are unexecuted. The CI compilers (clang-14, GCC 11, `windows-2022` MSVC) and the `ubuntu-22.04` user-namespace behavior are untested. Pushing the branch is the next step, which I haven't done.
+- **GPU**: no GPU runner here, and WSL does not count. Status is `not-run` on hosted CI and `unsupported` on a runner.
+- **`engine_bench`**: not applicable yet, because the benchmark harness (US-074) doesn't exist.
+
+**Choices I made**
+- Read "CI builds Windows/MSVC and Linux/Clang for every story" as the triggers on `push` and `pull_request` for the CPU jobs.
+- Action versions are tag-pinned (`@v4`, `@v5`), not SHA-pinned. The vendor policy may call for SHA pins, so that is worth a decision.

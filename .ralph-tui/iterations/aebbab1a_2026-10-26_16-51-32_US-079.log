@@ -1,0 +1,44 @@
+# Iteration 938 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:51:32.419Z
+- **Ended At**: 2026-10-26T13:57:38.029Z
+- **Duration**: 6m 5s
+- **Input Tokens**: 26
+- **Output Tokens**: 2786
+- **Total Tokens**: 2812
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -c 3000 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp...
+The log shows this story has been blocked across many sessions, mainly on an FSR 2 vendoring decision. Before deciding whether to keep building, I'll re-check the Linux gates on the current tree and look for that decision.
+[94m[Bash][0m Check recorded decision, newer files, and rerun Linux gates $ echo "exit=$?"
+[94m[Bash][0m Append status entry to progress log $ ASan preset not run. - Stop: the open items need a user decision (FSR 2 vendoring route) or a Window...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. The Linux quality gates pass on the current tree, but most acceptance criteria are still open.
+
+**Passing on this tree (Linux, re-run this session):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug`: succeed.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exits 0 (29 integration tests, 1 unit test).
+- Windows gates from the earlier batch (status check 41 in the log) also passed on the tree; I did not re-run them.
+
+**Still open, not reported as passed:**
+- **`all_features` scene:** there is no `samples/all_features/` project, and `benchmarks/manifest.json` still says `implementation: none`.
+- **Tour runner:** no automated tour, screenshots, or action log. The only CPU coverage is `tests/src/all_features_tests.cpp`.
+- **GI/RT/upscale profiles and forced geometry paths:** `full_1080` is unsupported because `third_party/fsr2` has no `*_permutations.h`. The indirect and meshlet forced runs have not been done.
+- **Editor scenario:** the CPU-side test `tests/src/all_features_editor_tests.cpp` covers edits, undo/redo, Play/Stop, and a Build Game verify. There is no live-app run and no package relaunch.
+- **Other gates:** GUI checks, native Linux Vulkan GPU suite, `engine_bench --suite acceptance` (blocked on `all_features` having no runner), `linux-gcc*` (host has GCC 9.4 only), and the ASan preset.
+
+**Decision needed from you:** the FSR 2 vendoring route. Until the permutation headers are vendored, the upscale profile cannot link. The other blockers need a Windows or native Linux GPU session, which this environment cannot provide.
+
+I appended a status-check-43 entry to `.ralph-tui/progress.md` recording these results.

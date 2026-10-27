@@ -1,0 +1,44 @@
+# Iteration 899 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:27:14.017Z
+- **Ended At**: 2026-10-26T12:31:33.941Z
+- **Duration**: 4m 19s
+- **Input Tokens**: 36
+- **Output Tokens**: 3241
+- **Total Tokens**: 3277
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for US-079.
+[94m[Bash][0m Read progress log and search for existing US-079 work $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -rn "all_features\|US-079" --include=* -r . 2...
+The log shows many status checks with no code change. I'll read the most recent partial entry and the all_features files to see what's actually missing.
+[94m[Bash][0m Read latest US-079 partial entry and locate all_features files $ ls tests | head -50
+The story has been through many passes. The open items are environment-bound: FSR 2 permutation headers, a Windows GPU session, GCC 11+, GUI, and no all_features GPU scene route. I'll re-verify the current tree once so the report rests on a fresh result, not the log.
+[94m[Bash][0m Run validate, Linux build, unit tests, and check blockers $ grep -n '"all_features"' -A6 benchmarks/manifest.json | head -12
+The Linux gates still pass. I'll record this pass in the progress log so the next run starts from the same facts.
+[94m[Bash][0m Append verification entry to progress log $ native Linux Vulkan and `linux-gcc*` need hardware or toolchains this host lacks. - No COMPLETE sign...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. This pass re-verified the Linux gates and changed no code.
+
+**Verified on this tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0, no `warning:` lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0.
+
+**Still open, and not reported as passed:**
+- **all_features GPU scene:** `benchmarks/manifest.json` has `all_features` at `implementation: none`. That blocks the GI/RT/upscale profiles, the forced indirect/meshlet paths, and `engine_bench --suite acceptance`.
+- **FSR 2:** `third_party/fsr2` still has no `*_permutations.h`, so the `full_1080` profile cannot link.
+- **Tour and editor scenario:** there is no tour runner with screenshots or an action log. The CPU test checks markers and outputs. The editor scenario test exists, but the package relaunch is only Build Game's own verify step.
+- **Windows gates:** not rerun in this pass. The last recorded Windows run is in the progress log.
+- **Other environments:** GUI checks, native Linux Vulkan GPU, `linux-gcc*`, and the sanitizer presets need hardware or toolchains this host lacks.
+
+The next step that can move the story forward is a decision on the FSR 2 vendoring route and a defined all_features GPU route. After that, the profiles need a Windows GPU session. I appended a status entry to `.ralph-tui/progress.md`.

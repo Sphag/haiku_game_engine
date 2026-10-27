@@ -1,0 +1,40 @@
+# Iteration 48 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:39:11.875Z
+- **Ended At**: 2026-10-24T00:39:32.842Z
+- **Duration**: 20s
+- **Input Tokens**: 28
+- **Output Tokens**: 2779
+- **Total Tokens**: 2807
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the FSR and upscaler code.
+[94m[Bash][0m Read progress log tail and locate FSR references $ grep -rln -i "fsr" --include=*.cpp --include=*.hpp --include=*.txt --include=*.cmake --include=*.jso...
+The log shows US-046 blocked on FSR 2's generated shader tables, with three re-checks and no change. I'll verify the vendored tree is still missing them before deciding anything.
+[94m[Bash][0m Verify FSR permutation headers and recent changes $ grep -n "FSR\|fsr" tasks/prd-open-world-engine.md | head -20
+The FSR 2 blocker is unchanged, so I'll record this re-check in the progress log and stop rather than stub the upscale path.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check 4, still blocked) - What was...
+US-046 is still blocked, so I have not signalled COMPLETE. Nothing in the source changed in this pass.
+
+**What is blocking it:** FSR 2 cannot be built, because the vendored tree has none of the generated `*_permutations.h` shader tables. There are 0 of them in `third_party/` and `engine/rhi/`. The build gate in `engine/rhi/CMakeLists.txt` therefore leaves FSR 2 off, and both backends return `Unsupported`. I checked this again and nothing has changed since the last three re-checks.
+
+**What is done:** the CPU contract in `engine/render/`, the RHI upscaler interface, the Vulkan and DX12 backend scaffolding, the unit tests, and `docs/upscaling.md`. The earlier log entries record the Windows and Linux gate results for that work.
+
+**What I did not do:** I did not add a renderer path over the non-working upscale, and I did not stub the shader tables. A path that silently returns `Unsupported` would hide the failure, and a fake table would be worse. Profile sizing and UI composition after upscaling also depend on FSR being callable, so I left them for the same reason.
+
+**Decision needed from you**, to unblock it:
+1. Vendor the hash-pinned outputs of the archive's `tools/sc/FidelityFX_SC.exe`. This needs a documented exception to the no-prebuilt-tools rule.
+2. Regenerate the shader blobs with the engine's pinned DXC through a first-party generator. This is more work.
+
+Once you choose, I can carry out the rest of the story: the FSR 2 integration, profile sizing, UI after upscale, history reset, and the gate runs. I appended a re-check 4 entry to `.ralph-tui/progress.md` recording this.

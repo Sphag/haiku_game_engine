@@ -1,0 +1,64 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-005
+- **Task Title**: Core Runtime Services
+- **Description**: As a developer, I want shared services so that subsystems behave consistently on both operating systems.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-21T22:32:24.533Z
+- **Ended At**: 2026-10-21T22:42:11.590Z
+- **Duration**: 9m 47s
+- **Input Tokens**: 80
+- **Output Tokens**: 6465
+- **Total Tokens**: 6545
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and the progress log, then check the current state of the repo.
+[94m[Bash][0m List repo root and progress/PRD files $ wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md 2>/dev/null
+[94m[Bash][0m Read progress log $ cat .ralph-tui/progress.md 2>/dev/null | head -300
+The progress log already has a US-005 entry from an earlier pass. I'll check that the tree matches it and that the gates still hold before I signal completion.
+[94m[Bash][0m Inspect core sources, tests, docs, and US-005 PRD section $ grep -n "US-005" -A40 tasks/prd-open-world-engine.md | head -80
+The Docs MCP tools aren't relevant to this story. Next I'll check that the tests cover the required fixtures (IO errors, long paths, Cyrillic) and look at the PRD constraints.
+[94m[Bash][0m Check test coverage for long paths, Cyrillic, and conventions doc $ cat docs/runtime-conventions.md | head -120
+Coverage and docs match the criteria. Now I'll run the Linux gates on the current tree, starting with the vendor validator and the configure/build/test chain.
+[94m[Bash][0m Run Linux validator, configure, build, and unit tests $ tail -25 /tmp/linux_gate.log
+The Linux chain passes: validator, configure, debug build, and 10/10 unit and integration tests. Next is the Windows gate script the previous pass used.
+[94m[Bash][0m Check for existing Windows gate script $ ls -la /mnt/d/dev/us005-gates/ 2>/dev/null && cat /mnt/d/dev/us005-gates/win-gate.bat 2>/dev/null
+The script exists and only clears the regenerable `build\win-dev` directory. I'll run it with a long timeout and capture the output.
+[94m[Bash][0m Run the Windows quality gate script $ tail -30 /mnt/d/dev/us005-gates/win-run2.log | tr -d '\r'
+While the Windows gate runs, I'll re-run the GCC and sanitizer chains on the same tree, since the progress log marks them as stale.
+[94m[Bash][0m Run Linux GCC and ASan/UBSan gate chains $ grep -E "EXIT=|tests passed|Error|error:" /tmp/linux_gcc_asan.log | head -30
+[94m[Bash][0m Summarize Windows gate results and first-party warnings $ tr -d '\r' < win-run2.log | grep -i "warning" | grep -v "third_party\|C5285" | head -5
+[94m[Bash][0m Confirm Windows gate result lines $ echo "first-party-warn-check-done"
+All Windows gates pass. The only warnings are vendor `C5285`/`D9025` noise, with no first-party warnings. I'll append a verification entry to the progress log so the next iteration sees the current state.
+[94m[Bash][0m Append US-005 verification entry to progress log $ the tree already contains the logging, assertion, clock, GUID, UTF-8 path, file IO/result, units, co...
+US-005 is complete on the current tree. I re-verified it rather than rebuilding it, because an earlier iteration had already implemented it. The local gates pass on Linux and Windows.
+
+**Gates (all passed on the current tree)**
+- **Linux clang:** `ValidateVendor` (26 dependencies, 8524 files), `linux-dev`, `linux-debug`, `linux-unit` 10/10.
+- **Linux GCC:** `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` 10/10, with `-Werror` on first-party code.
+- **Linux ASan/UBSan:** `linux-asan`, `linux-sanitize` 10/10.
+- **Windows MSVC 14.51:** `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` 10/10, printing `WIN_GATES_PASSED`. Warnings are vendored DXC/LLVM only (`C5285`, `D9025`).
+
+**Acceptance criteria**
+- The runtime services exist: logging, assertions, monotonic clock, GUIDs, UTF-8 paths, file IO/result APIs.
+- The conventions doc (`docs/runtime-conventions.md`) covers meters, seconds, Y-up right-handed axes, column-major matrices, and the Vulkan y-flip.
+- Tests cover IO errors, paths beyond `MAX_PATH`, and Cyrillic file names and contents.
+- Nothing in the runtime requires the editor.
+
+**Not verified**
+- **Hosted GitHub Actions:** the CI jobs have never run on GitHub, so neither OS is CI-verified. Pushing to run them is outward-facing, so I did not do it.
+- **Compiler versions:** the CI pins clang-14 and GCC 11. I could only test clang 10 and GCC 9.4 locally.
+- **Offline script:** `tools/ci/offline_verify.sh` was not re-run in this pass.
+- **Benchmark:** `engine_bench --suite acceptance` does not apply yet. The harness is US-074. The performance-contract constants exist in `performance_contract.hpp`.
+- **GPU suites:** `unsupported`, since no GPU suite exists yet.
+
+**Changes:** I appended a verification entry to `.ralph-tui/progress.md`. No source code changed, and I made no commits.
+
+<promise>COMPLETE</promise>

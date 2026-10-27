@@ -1,0 +1,46 @@
+# Iteration 650 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:00:19.701Z
+- **Ended At**: 2026-10-26T02:00:47.428Z
+- **Duration**: 27s
+- **Input Tokens**: 36
+- **Output Tokens**: 3465
+- **Total Tokens**: 3501
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for US-076.
+[94m[Bash][0m Read progress log and locate benchmark code $ grep -rn "render_stress\|RenderStress\|US-076" --include=*.cpp --include=*.hpp --include=*.md --incl...
+The log shows US-076 was measured and gated in earlier passes, with open items that need your decision. I'll confirm nothing changed since the last gate run before deciding whether to re-verify.
+[94m[Bash][0m Check source edits newer than latest benchmark reports $ date +%H:%M:%S
+`scene_renderer.cpp` shows a modification time later than the benchmark reports, and the progress log doesn't mention it. I'll check the full timestamps to see whether it postdates the gate runs.
+[94m[Bash][0m Show full modification timestamps $ date
+The tree matches the last gate runs: `scene_renderer.cpp` dates from 2026-10-24, and every benchmark report postdates `render_stress.cpp`. I'll record this status pass in the progress log.
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. --- EOF tail -3 .ralph-tui/progress.md
+US-076 is not complete. The harness and all eight acceptance runs exist, but the contract's own floors fail and one profile can't run. I did not signal completion.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on every indexed run.** The route start shows 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms. The cause is placement: instances are spread uniformly over the 8192 m world, so the route start sees about 330 of the 20,000 instances. The contract forbids reducing the workload. Changing placement is a workload change: it means bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`. Do you approve that, or should I report these failures as the measured result?
+2. **`full_1080` profile is unsupported.** The vendored FSR 2 permutation tables are missing, so only `native_1080` runs and "both profiles" is only partly met.
+
+**Not run:** native Linux Vulkan GPU suite and the `linux-gcc` gate (GCC 9 cannot build Jolt). WSL has no Vulkan device.
+
+**Done and verified:**
+- The `render_stress` counts match the contract, and the route, per-run counters, and screenshots are in place.
+- Indexed, indirect, and meshlet paths run on DX12 and Vulkan (8 reports in `artifacts/bench/us076-*`).
+- Forced mesh-shader-off run falls back to indirect-indexed. Its report shows `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with 338–340 visible items.
+- Earlier gate results still describe the current tree. No source file changed after the last benchmark reports.
+  - Windows: validate, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` on DX12 and Vulkan, and win-release `engine_bench`.
+  - Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30).
+
+I appended a status entry to `.ralph-tui/progress.md` and did not rerun the 10-minute benchmarks, since nothing changed.

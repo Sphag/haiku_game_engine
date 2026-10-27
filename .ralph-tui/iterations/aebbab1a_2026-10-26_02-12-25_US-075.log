@@ -1,0 +1,196 @@
+# Iteration 642 Log
+
+## Metadata
+
+- **Task ID**: US-075
+- **Task Title**: Reproducible Test Assets
+- **Description**: As a developer, I want accessible test resources so that any runner can reproduce the scenes.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T23:12:25.151Z
+- **Ended At**: 2026-10-25T23:39:19.196Z
+- **Duration**: 26m 54s
+- **Input Tokens**: 430
+- **Output Tokens**: 110086
+- **Total Tokens**: 110516
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-075 already has in the tree.
+[94m[Bash][0m Read progress log and list repo layout $ tail -n 120 .ralph-tui/progress.md && ls && ls tests tools 2>/dev/null && git status 2>&1 | head -5
+[94m[Bash][0m Find US-075 spec and existing fixture/benchmark dirs $ grep -rl "US-075\|reproducible" --include=*.md --include=*.txt --include=*.cmake --include=*.json . ...
+The docs tools aren't needed for this story. Next I'll read the benchmark manifest, the harness, and the existing fixtures.
+[94m[Bash][0m Read benchmark manifest, fixtures, and benchmark docs $ cat benchmarks/manifest.json && ls -R tests/fixtures | head -80 && ls tools/benchmark/* && ls docs &...
+[94m[Bash][0m Search PRD for benchmark, seed, and fixture constraints $ grep -n "Benchmark\|benchmark\|Non-Goal\|Technical Consid\|seed\|fixture\|provenance\|licen" tasks/p...
+[94m[Bash][0m Read PRD non-goals, technical, scene table; fixture READMEs $ ls tools/benchmark/include/engine
+The story needs a seeded generator, expected counts/hashes, and fixture provenance. I'll check the existing harness CLI, the SHA-256 helper, and the Windows gate workflow.
+[94m[Bash][0m Inspect bench CLI, sha256 helper, license, and Windows gate notes $ ls ~/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/ && cat ~/.claude/projects/-mnt-d-dev-haik...
+[94m[Bash][0m Locate SHA-256 helper and bench test setup $ sed -n 1,40p tools/benchmark/src/main.cpp
+[94m[Bash][0m Read hash helper and manifest structs and main entry $ grep -n "int main" -A 30 tools/benchmark/src/main.cpp | head -50
+[94m[Bash][0m Read manifest header and scene parsing $ sed -n 1,58p tools/benchmark/include/engine/benchmark/manifest.hpp && grep -n "scene" tools/benchmar...
+The benchmark table already carries seeds and integer counts per scene, so the generator can read them directly. Next I'll check the test wiring, fixture inventory, and whether the repo has a license file.
+[94m[Bash][0m Check license file, fixture inventory, test tags and defines $ ls tests/src | head -80 | tr '\n' ' '
+There's no LICENSE file in the repo, so I'll record that gap in the provenance rather than invent a license. Next I'll check the file-reading API and the parts of `manifest.cpp` I need.
+[94m[Bash][0m Check file IO API and manifest parse helpers $ grep -n "Result\|struct Json\|nlohmann" tools/benchmark/src/report.cpp | head -5
+I have what I need from the harness. Before writing code I'll check how the scene parser treats boolean table entries, which fixtures are generated versus hand-written, and whether the test target can use nlohmann.
+[94m[Bash][0m Inspect scene parse, fixture details, and tools available $ which python3 jq sha256sum ffmpeg
+ffmpeg is installed, so I can check the audio fixtures' documented commands against the checked-in files. Next I'll write the generator: a header, then the implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/workload.hpp[0m "#pragma once
+
+#include "engine/benchmark/manifest.hpp"
+#include "engine/core/result.hpp"
+
+#include <cstdint>
+#include <map>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace engine... (3620 chars)"
+Next is the implementation. Everything is integer math, so the digests should match across compilers and hosts. Each table key maps to one recipe field, and any workload key the generator does not know is refused.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m "#include "engine/benchmark/workload.hpp"
+
+#include "engine/assets/content_hash.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <set>
+
+namespace engine::bench {
+namespace {
+
+using Json = nlohmann::json;
+
+... (27239 chars)"
+The generator is written. I'll remove an unused struct I left in, then add the CLI.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "struct PhysicsCounts {
+    std::string sha256;
+};
+..." → "// Dynamic"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload_main.cpp[0m "// engine_workload (US-075): generates the seeded benchmark workloads from the benchmark table and writes them, or checks them
+// against the expected file. Generation reads only the manifest and the ... (6792 chars)"
+Next I'll wire the library source and the `engine_workload` target into the benchmark CMake file.
+[94m[Bash][0m Add workload source and engine_workload target to CMake $ python3 -I - <<'EOF' import pathlib p = pathlib.Path("tools/benchmark/CMakeLists.txt") s = p.read_te...
+Now I'll build the new tool on Linux to catch compile errors and warnings early.
+[94m[Bash][0m Configure Linux dev preset and build engine_workload $ tail -3 /tmp/us075_b1.log
+[94m[Bash][0m Wait briefly and check the background build output $ tail -3 /tmp/us075_b1.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/10d445f5-f630-4f79-a2b1-b52ea7121b1a/tasks/bfnxmnf0m.output tail -5 tail -3 /tmp/us075_cfg.log tail -3 /tmp/us075_b1.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure and build logs progress $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/10d445f5-f630-4f79-a2b1-b52ea7121b1a/tasks/bfn...
+The tool built with no warnings. Next I'll run it to a scratch file and look at the counts and timing before pinning anything.
+[94m[Bash][0m Write scratch expected file, check determinism and counts $ jq '.scenes | map_values(.counts)' /tmp/us075_expected_a.json | head -120
+The generator is deterministic (two runs produced identical bytes), and all four scenes match the table counts. The debug run takes about 1.8 s, which is acceptable. Before writing tests I need the `core::Path`, `Result`, and `Unit` APIs, since fixture paths include Cyrillic names.
+[94m[Bash][0m Inspect Path, Result, and test helper APIs $ grep -n "require_path" -A6 tests/src/core_file_io_tests.cpp | head -12
+I have the APIs I need. Next I'll add a check that the generator's world constants match the manifest's `world` block, so the two can't drift apart silently.
+[94m[Bash][0m Add world-constant check to generator and CLI $ }  """ + old assert s.count(old) == 1 m.write_text(s.replace(old, new, 1)) print("ok") EOF
+Those change notices are just my own scripted edits to the three files, so I'll carry on. Next I'll write the unit tests for the generator.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/bench_workload_tests.cpp[0m "// Benchmark workloads (US-075): the seeded generator, its counts against the benchmark table, the expected file that pins each
+// workload, and the refusals that keep a table from being generated qui... (11980 chars)"
+I'll drop one assertion that can't fail (instances vs. meshes digests differ by construction) and add the missing `<utility>` include.
+[94m[Bash][0m Remove weak assertion and add include in workload tests $ \n' assert s.count(old) == 1 s = s.replace(old, "") s = s.replace("#include <string_view>\n\nnamespa...
+Next is fixture provenance. I'll read the generator headers and a few fixture heads so each provenance row names its real source.
+[94m[Bash][0m Inspect fixture headers and generator scripts $ cat ../../.gitignore | head -20
+The audio README documents ffmpeg commands and two fixture groups come from scripts. I'll check whether the commands and scripts reproduce the checked-in bytes, running each in a scratch directory so the repo is untouched.
+[94m[Bash][0m Reproduce audio, model, and texture fixtures in scratch dirs $ done
+Everything reproduces except the two Ogg files, which differ in bytes but match in size. Vorbis writes a random stream serial, so I'll compare the decoded PCM to confirm the audio is the same.
+[94m[Bash][0m Compare decoded Ogg audio and byte differences $ done
+The decoded PCM is identical and the byte differences are 24 bytes of stream serial and page checksums, so the Ogg files reproduce in content. Next I'll write the provenance file, computing each fixture's SHA-256 with hashlib and naming each source as the evidence above shows.
+[94m[Bash][0m Write fixture provenance table with hashes $ wc -l PROVENANCE.md
+The provenance table lists all 39 files. Next is the test that reads it, hashes every file, and fails on any missing, extra, or changed entry.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/fixture_provenance_tests.cpp[0m "// Fixture provenance (US-075): tests/fixtures/PROVENANCE.md lists every fixture with its SHA-256, source, and license. This test
+// reads that table, hashes each file on disk, and fails on a missing,... (4051 chars)"
+I'll add the `<sstream>` include, register both test sources and the expected-file define in `tests/CMakeLists.txt`, and then write the expected file with the tool itself.
+[94m[Bash][0m Register tests, write expected file, and build test binary $ echo build_tests=$?)
+The test build is running in the background. While it runs I'll update `docs/benchmarks.md` with the workload generator, the expected file, and the provenance and license state.
+[94m[Bash][0m Document workload generator and fixture provenance $ nothing is downloaded. To check a change to the contract, edit a copy of the manifest and pass it wi...
+[94m[Bash][0m Check progress of background test build $ tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/10d445f5-f630-4f79-a2b1-b52ea7121b1a/tasks/b25...
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/10d445f5-f630-4f79-a2b1-b52ea7121b1a/tasks/b25132wtf.output. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check background build output and benchmarks folder $ ls -la /mnt/d/dev/haiku_game_engine/benchmarks/
+The expected file matches the regenerated workloads. The test build is still running, so I'll wait on its process directly.
+[94m[Bash][0m Wait for the engine_tests build process to finish $ tail -4 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/10d445f5-f630-4f79-a2b1-b52ea7121b1a/tasks/b25...
+The `build_tests=124` means my 110-second timeout killed the engine_tests build partway, not a compile failure. I'll restart that build in the background with no timeout.
+[94m[Bash][0m Build engine_tests on Linux debug preset $ tail -2 /tmp/us075_b4.log
+[94m[Bash][0m Wait on engine_tests build process $ tail -2 /tmp/us075_b4.log
+[94m[Bash][0m Continue waiting on engine_tests build $ tail -2 /tmp/us075_b4.log
+[94m[Bash][0m Check build warnings and run new workload and fixture tests $ $B "Bench*" 2>&1 | tail -3
+`engine_tests` only takes a suite flag, so I can't run one case by name. I'll run the whole `unit` suite and check the new cases in its output, in the background.
+[94m[Bash][0m Run the full unit test suite on Linux $ tail -4 /tmp/us075_unit.log
+[94m[Bash][0m Wait for unit test run to finish $ tail -4 /tmp/us075_unit.log
+[94m[Bash][0m Show failing assertions from unit run $ grep -n "FAILED" -B 30 /tmp/us075_unit.log | grep -v "^--$" | head -80
+Two failures, both from my test rather than the generator: `render_stress` has no physics bodies or audio emitters, so those digests are the empty-input hash and cannot change with the seed. I'll restrict the check to components that have content in that scene.
+[94m[Bash][0m Fix seed-change test components and rebuild tests $ echo build=$?
+While the rebuild runs, I'll look at the previous story's Windows gate script so this story's gates follow the same pattern.
+[94m[Bash][0m Read previous Windows gate batch template $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us074_gate.bat 2>/dev/null | tr -d '\r' | head -60
+[94m[Bash][0m Wait for test rebuild to complete $ tail -2 /tmp/us075_b5.log
+[94m[Bash][0m Wait for test rebuild to finish and count warnings $ grep -c "warning" /tmp/us075_b5.log
+The test binary rebuilt with no warnings. Next I'll run the full Linux gate sequence in one background script with its exit codes recorded.
+[94m[Bash][0m Start Linux quality gate sequence in background $ echo "workload_check=$?" >> $R echo DONE >> $R EOF chmod +x /tmp/us075_gates/linux_gate.sh && /tmp/u...
+[94m[Bash][0m Check Linux gate progress file $ pgrep -f linux_gate.sh | head -2
+The Linux gates are running. Meanwhile I'll check the Windows preset's build directory so I can prepare the Windows batch file, including a determinism check on MSVC.
+[94m[Bash][0m Look up Windows and Linux preset build directories $ ls build
+[94m[Bash][0m Locate Windows engine_workload output path and gate progress $ cat /tmp/us075_gates/linux_rc.txt
+The Windows build directory already exists, so the batch can build incrementally. I'll write it now and start it once the Linux gates finish, since the notes say to run one gate batch at a time.
+[94m[Bash][0m Write Windows gate batch file to Temp with CRLF endings $ cat /tmp/us075_gates/linux_rc.txt
+[94m[Bash][0m Wait on Linux gate script progress $ cat /tmp/us075_gates/linux_rc.txt
+[94m[Bash][0m Continue waiting on Linux gate script $ cat /tmp/us075_gates/linux_rc.txt
+[94m[Bash][0m Check build warnings and keep waiting on gates $ cat /tmp/us075_gates/linux_rc.txt
+All Linux gates pass with zero build warnings. I'll confirm the ctest summary, then start the Windows batch.
+[94m[Bash][0m Show ctest summary and launch Windows gate batch $ echo launched
+The Windows batch is running. While it runs, I'll confirm the Linux ctest totals.
+[94m[Bash][0m Confirm ctest pass totals on Linux $ grep -n "bench\|Workload\|Fixtures" /tmp/us075_gates/l_ctest.log | head -5
+The Linux gate results are in, and ctest reports 30 of 30 passing. I'll wait on the Windows result file.
+[94m[Bash][0m Wait for Windows gate result lines $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us075_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+tail: cannot open '/mnt/c/Users/bucha/AppData/Local/Temp/us075_rc.txt' for reading: No such file or directory
+tail: no files remaining
+
+---][0m
+[94m[Bash][0m Check whether the Windows batch started and its output $ pgrep -fa "us075_gate" | head -3
+The batch is running (validate is in progress). I'll wait on its process.
+[94m[Bash][0m Wait on Windows gate batch process $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us075_rc.txt 2>/dev/null || echo "no rc yet"
+All five Windows steps report 0. Since the build directory was warm, I'll check the logs to confirm the new sources actually compiled and nothing warned.
+[94m[Bash][0m Verify Windows build compiled new sources and tests passed $ tail -3 $T/us075_build.log
+Windows also passes: the MSVC build has zero warnings, the win-unit ctest is 29 of 29, and the expected file generated on Linux matches exactly on Windows, which confirms the integer-only generation is portable. Next I'll record the learnings in the progress log.
+[94m[Bash][0m Read top of progress log for pattern section placement $ head -5 .ralph-tui/progress.md | cut -c1-160
+[94m[Bash][0m Locate section headings in progress log $ grep -n "^## " .ralph-tui/progress.md | head -5
+[94m[Bash][0m Append US-075 learnings and codebase patterns to progress log $ the count check (1002 plus the new cases) was the way to confirm it ran. --- """ p.write_text(s, enc...
+[94m[Bash][0m Correct the filesystem pattern note in progress log $ python3 -I - <<'EOF' import pathlib p = pathlib.Path(".ralph-tui/progress.md") s = p.read_text(encod...
+One more accuracy fix: the docs name `workload_version` but the constant in code is `kWorkloadVersion`.
+[94m[Bash][0m Correct version constant name in benchmark docs $ python3 -I - <<'EOF' import pathlib p = pathlib.Path("docs/benchmarks.md") s = p.read_text(encoding=...
+US-075 is implemented, and every listed gate passes on Windows and Linux. The tests cover the generator and the fixture provenance table. The `linux-asan` and `linux-gcc` jobs were not run, and `engine_bench` acceptance still reports `missing` for the four scenes.
+
+**What was built**
+- **Generator (`tools/benchmark/src/workload.cpp`)**: builds each benchmark scene from its seed and the integer counts in `benchmarks/manifest.json`. It produces unique meshes, instance descriptors, animated characters with clips, lights and suns, particle emitters, physics bodies, constraints, characters, audio emitters, and a 9×9 tile terrain window. All of it is integer-only, so the digests are the same on every compiler.
+- **`engine_workload` CLI**: `--write` produces the expected file and `--check` regenerates and compares it, printing any differing component.
+- **Expected file (`benchmarks/workload_expected.json`)**: pins each scene's counts and one SHA-256 per component.
+- **Fixture provenance (`tests/fixtures/PROVENANCE.md`)**: lists all 39 fixtures with SHA-256, source, and license. A unit test fails on any missing, extra, or changed file.
+- **Tests**: 14 new unit cases (`bench_workload_tests.cpp`, `fixture_provenance_tests.cpp`). `engine_tests --suite unit` now reports 1016 cases.
+- **Docs**: `docs/benchmarks.md` has a workloads section, fixture provenance, and reproduction steps. `.ralph-tui/progress.md` has the US-075 entry.
+
+**Gates**
+- Linux: ValidateVendor, `linux-dev` configure, `linux-debug` build (0 warnings), `ctest --preset linux-unit` (30 of 30), and `engine_workload --check` all pass.
+- Windows (MSVC /W4 /WX): ValidateVendor, `win-dev`, `win-debug` build (0 warnings), `ctest --preset win-unit` (29 of 29), and `engine_workload --check` all pass.
+- The expected file generated on Linux matches the MSVC output exactly.
+
+**Verification of the fixtures**
+- I ran the audio commands from `tests/fixtures/audio/README.md` in a scratch directory. The WAV files match byte for byte. The Ogg files decode to identical PCM, but 24 bytes differ (stream serial and page checksums), so the Ogg bytes are not reproducible.
+- The model and texture generators reproduce their files byte for byte. The one JPEG (`gradient_9x7.jpg`) comes from a Windows-only script and is not regenerated here.
+
+**Choices you may want to change**
+- **No new file-format fixtures.** I read "include required file-format fixtures" as "document and verify the existing ones". Existing fixtures already cover glTF/GLB, FBX, OBJ, PNG, JPEG, WAV, and Ogg. If you want new formats added, say which.
+- **No license chosen.** The repo has no `LICENSE` file, so the provenance table says "project-authored" and leaves the license open. This needs your decision.
+- **Generator scope.** Terrain is heights only, and the four terrain layers are not generated. The route, cell crossings, and teleport case are left to US-076 to US-078. The `instances_within_draw_distance` checkpoint (957 of 20000 for `render_stress`) is not the resident count the route will define.
+- **Scene parameters not in the table.** A 64-mesh library is used for scenes whose table names no meshes, and the world seed is fixed. Both are part of the digests, and the docs say so.
+
+**Not run**
+- `linux-asan` (no memory, ECS, jobs, streaming, Lua, or physics code changed).
+- `linux-gcc` (GCC 9.4 cannot build Jolt, as before).
+- `engine_bench` acceptance (the four scenes still report `missing` until their route stories land).
+- GPU suites and native Linux Vulkan (no GPU path changed).
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,67 @@
+# Iteration 909 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:45:03.447Z
+- **Ended At**: 2026-10-26T13:01:49.020Z
+- **Duration**: 16m 45s
+- **Input Tokens**: 130
+- **Output Tokens**: 10451
+- **Total Tokens**: 10581
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -c 3000 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp...
+The log shows about 20 prior passes that stopped without completing. Before deciding anything, I'll check whether the Linux gates still pass on the current tree.
+[94m[Bash][0m Run vendor validation and list presets $ grep -n '"name"' CMakePresets.json | head -60
+[94m[Bash][0m Run Linux dev configure, debug build, and unit tests $ tail -15 /tmp/us079_linux.log
+Linux dev configure, debug build, and unit suite all pass (30/30). Next I'll look at what the existing all_features CPU test already covers, to see what a tour would add.
+[94m[Bash][0m Read all_features CPU test and manifest entry $ wc -l tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp && sed -n 1,200p test...
+The CPU integration scenario already exists and passes. The open items are GPU, GUI, Windows, and GCC work. I'll check the Windows-gate reference notes and whether a gate batch is already running, since the notes warn about overlapping batches.
+[94m[Bash][0m Read Windows gate notes and check for running gate processes $ cmd.exe /c tasklist 2>/dev/null | grep -i -E "cmake|ctest|engine_|cl.exe|msbuild|ninja" | head
+No gate batch is running, so I can launch one. I'll write a Windows gate batch covering the four Windows quality gates plus the GPU suites.
+[94m[Bash][0m Write and stage the Windows US-079 gate batch $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" 2>&1
+The batch is staged. Before launching I need the real binary path for `engine_tests.exe`, so I'll check the preset output layout.
+[94m[Bash][0m Find binaryDir and test executable output path $ find build/linux-dev -name engine_tests -type f | head -2
+The output is under `tests/<Config>/`, so I'll correct the paths in the batch and launch it in the background.
+[94m[Bash][0m Launch the Windows gate batch in background $ echo launched
+The gate is running in the background. I'll load the Monitor tool so I can wait on its done file instead of polling.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m US-079 Windows gate batch step results and completion $ echo BATCH_EXITED
+The Windows gate batch is running in the background, and a monitor will report each step's exit code when it finishes. Nothing else can run on the Windows tree while it builds, so I'm waiting for that result.
+The Windows gates pass through `unit=0`, and `gpu_dx12=0`, but `gpu_vulkan` exited with `-1073741819` (0xC0000005, an access violation). I'll rerun only the Vulkan GPU suite to see whether the crash repeats, after confirming no batch is still running.
+[94m[Bash][0m Rerun Vulkan GPU suite alone and capture its log $ tail -c 1500 /mnt/c/Users/bucha/AppData/Local/Temp/us079_vk.log
+The rerun returned exit 1: 67 of 73 Vulkan GPU cases fail, with a device-creation validation error about `VkDeviceCreateInfo` `pNext` feature structs. Earlier runs passed, so I need the first error to find the cause.
+[94m[Bash][0m Find first Vulkan validation error in the log $ grep -n "FAILED" /mnt/c/Users/bucha/AppData/Local/Temp/us079_vk.log | head -3
+Two separate validation errors appear. The layer's message cites the 1.3.224 spec, but my memory notes say the Windows gate needs the pinned 1.4.363 layer. I'll check which layer the run loaded and how the device enables the struct.
+[94m[Bash][0m Read Vulkan layer memory and locate struct/mutable usage $ grep -n "Validation\|validation" /mnt/c/Users/bucha/AppData/Local/Temp/us079_vk.log | head -3
+The cause is my batch: it did not set `VK_LAYER_PATH`, so the installed 1.3.224 SDK layer loaded instead of the pinned 1.4.363 build. I'll check that the pinned layer exists, then rerun with the variable set.
+[94m[Bash][0m Rerun Vulkan GPU suite with the pinned validation layer $ grep -c "Validation Error" /mnt/c/Users/bucha/AppData/Local/Temp/us079_vk.log
+With the pinned layer, the Vulkan suite passes 73/73 with zero validation errors. I'll record this run in the progress log, then stop, since the story's remaining items cannot be finished in this session.
+[94m[Bash][0m Append US-079 gate results to progress log $ ASan preset not run. --- EOF echo ok
+US-079 is not complete. The gates that can run here pass, but the all_features scene's GPU profiles, forced geometry paths, tour runner, and the remaining checks are still open, so I have not signaled COMPLETE.
+
+**Passing this session:**
+- **Linux:** `cmake -P cmake/ValidateVendor.cmake`, `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest all pass (30/30).
+- **Windows, batch `us079_gate.bat`:** `ValidateVendor`, `win-dev` configure, `win-debug` build, `win-unit` ctest, and `engine_tests --suite gpu --backend dx12` all exit 0.
+- **Windows Vulkan GPU:** the first run failed (67 of 73 cases, exit 0xC0000005). The cause was my batch: it did not set `VK_LAYER_PATH`, so the installed 1.3.224 SDK layer loaded instead of the pinned 1.4.363 build. With `VK_LAYER_PATH=D:\dev\vvl_build\layer`, `--suite gpu --backend vulkan` passes 73/73 with zero validation errors.
+
+**Still open, not reported as passed:**
+- The tour runner with screenshots and an action log.
+- GI/RT/upscale profiles and forced indirect/meshlet paths for `all_features`. The scene has no GPU route yet (`route: "pending final benchmark scene"`), and FSR 2 cannot link because its `*_permutations.h` headers are missing.
+- Package relaunch beyond Build Game's verify step.
+- GUI checks.
+- Native Linux Vulkan GPU (no `/dev/dri` on this host).
+- `engine_bench --suite acceptance`, which cannot run until `all_features` has a runner.
+- `linux-gcc*` (host has GCC 9.4 only) and the `linux-asan` / `linux-sanitize` presets, which I did not run.
+
+The CPU integration scenario and the editor scenario already exist and pass. I appended this run to `.ralph-tui/progress.md`. Closing the remaining items needs a decision on the all_features GPU route and the FSR 2 vendoring route, plus a Windows GPU session, a GUI, and a GCC 11+ toolchain.

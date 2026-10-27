@@ -1,0 +1,39 @@
+# Iteration 663 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:04:35.273Z
+- **Ended At**: 2026-10-26T02:04:48.596Z
+- **Duration**: 13s
+- **Input Tokens**: 14
+- **Output Tokens**: 2296
+- **Total Tokens**: 2310
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the tree and the progress log, then look at what US-076 needs.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tool $ git -C /mnt/d/dev/haiku_game_engine status --short 2>/dev/null | head -50
+US-076 is not complete, and I have not changed anything in this pass. The remaining work depends on a decision only you can make.
+
+**What is in place (verified in earlier passes, not re-run here):**
+- The `render_stress` counts match the benchmark contract (20000 instances, 200 meshes, 100 characters / 6400 bones, 100000 particles, 128 lights, 4 shadowed, 1 sun). `engine_workload --check` passes.
+- The `render_route_v1` route, the `--path indexed|indirect|meshlets` runs, and `--disable-mesh-shaders` are implemented, with per-run counters and screenshots.
+- Eight acceptance reports exist under `artifacts/bench/us076-*`: indexed, indirect, and meshlets on DX12 and Vulkan, plus meshlets with mesh shaders forced off. The forced-off runs report `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and 338–340 visible indirect items. Disabled features are not reported as enabled.
+- Linux gates passed on the current tree: ValidateVendor, `linux-dev`, `linux-debug` build with 0 warnings, and `linux-unit` at 30/30. Windows gates (`us076d.bat`) passed for validate, `win-dev`, `win-debug`, `win-unit` at 29/29, `--suite gpu` on dx12 and vulkan, and `win-release` engine_bench.
+
+**What blocks completion:**
+1. **Frame budget and triangle floor fail.** Every indexed run measures 312,068 triangles at the route start against the 2,000,000 floor, with p99 of 35–47 ms against 16.7 ms. The cause is placement: instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. These are measured failures, and the contract does not allow reducing the workload.
+2. **`full_1080` is unsupported.** FSR 2's permutation headers are missing (see the project memory on FSR 2), so only `native_1080` runs.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and `linux-gcc` (GCC 9.4 cannot build Jolt).
+
+**Decision needed:** Option (a) keeps the contract and records the failures as the result, which closes the story as "measured, failing" and leaves it open. Option (b) changes instance placement to put more items near the camera path. That is a workload change: it bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and reruns all eight reports. I recommend (b), because uniform placement makes the route's own measurement meaningless. But it changes a checked-in contract artifact, so I need your approval first.
+
+Tell me which option to take. Even with (b), items 2 and 3 stay open, so the story cannot be marked complete in this environment.

@@ -1,0 +1,41 @@
+# Iteration 1223 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:59:18.421Z
+- **Ended At**: 2026-10-26T21:59:33.150Z
+- **Duration**: 14s
+- **Input Tokens**: 24
+- **Output Tokens**: 2129
+- **Total Tokens**: 2153
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress tail and bench artifacts $ ls artifacts/bench 2>/dev/null | head
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+[94m[Bash][0m Re-verify host and blocker state $ find engine tools tests benchmarks -newer artifacts/bench/us078-soak-linux-debug -type f 2>/dev/null...
+[94m[Bash][0m Append status entry to progress log $ latest artifacts are us080 readback-off runs only, no acceptance-suite run. - No build or bench run....
+US-080 is not complete, and I have not signed it off. I made no code changes and ran no builds or benchmarks this session, because the blockers recorded in the progress log still hold.
+
+I re-checked the host and tree state:
+- **No native Linux Vulkan device:** `/dev/dri` does not exist. WSL has no usable Vulkan device, and the RTX 5080 is visible only under WSL and Windows.
+- **FSR 2 is not buildable:** there are 0 `*_permutations.h` files under `third_party`, so `ENGINE_FSR2_AVAILABLE` stays off. The `full_1080` profile cannot run until you choose a vendoring route.
+- **Workloads are not implemented:** `benchmarks/manifest.json` still has four entries with `implementation: "none"`. An acceptance run would exit 3 (incomplete).
+- **Frame budget is unmet:** the last measured `render_stress` runs had p99 frame times of 35–47 ms against the 16.7 ms budget. The us076 meshlets CPU p99 is 42.4 ms against 16.7 ms. The acceptance criteria require fixing the measured cause, and changing the contract needs your decision.
+- **Remaining gates:** the native Linux Vulkan GPU run, the linux-gcc gate (local GCC 9.4 cannot build Jolt), the residency accessor (not implemented), and the Windows and Linux quality gates have not been run for this story.
+
+I appended a short status entry to `.ralph-tui/progress.md` and did not signal COMPLETE.
+
+To move this forward, I need these decisions or resources from you:
+1. A native Linux host with a Vulkan device, or confirmation that native Linux Vulkan acceptance is out of scope for now.
+2. The FSR 2 vendoring route: supply the generated permutation headers, or drop FSR from the acceptance profiles.
+3. Sources for the four unimplemented workloads (`all_features`, physics, streaming, and one more).
+4. Whether to go ahead with the frame-budget fix on the `render_stress` CPU hotspot. I can start on that now and profile it on the RTX 5080 from Windows, without waiting on the other items.

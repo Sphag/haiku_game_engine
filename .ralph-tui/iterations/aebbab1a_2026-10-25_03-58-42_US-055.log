@@ -1,0 +1,41 @@
+# Iteration 418 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:58:42.281Z
+- **Ended At**: 2026-10-25T00:58:57.952Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2490
+- **Total Tokens**: 2518
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-055 and where the progress log stands.
+[94m[Bash][0m Inspect repo layout, script module, and progress log $ grep -n "US-055" .ralph-tui/progress.md | head
+The log shows US-055 already implemented and marked Partial, with the same re-check repeated many times. I'll read the main entry to see what's actually open.
+[94m[Bash][0m Read the main US-055 progress entry and search for sanitizer and Windows gate notes $ git status 2>&1 | head -2
+[94m[Bash][0m Check for newer GCC/Clang toolchains and changes since last progress entry $ cd /mnt/d/dev/haiku_game_engine && find engine tests cmake docs CMakeLists.txt CMakePresets.json -ne...
+US-055 is not complete, so I'm not signalling COMPLETE. The Lua API was implemented and passed every gate this host can run, but the Linux GCC gate is still unverified.
+
+**What exists:** a `engine_script` module on vendored Lua 5.4.7 (`engine/script/`), with `entity`, `transform`, `input`, `assets`, `physics`, and `events` globals. Destroyed entities raise controlled script errors. Entities cross as `EntityHandle` userdata, not pointers. There are 15 unit cases in `tests/src/script_lua_tests.cpp`.
+
+**Gates (from the last full pass, logged in `.ralph-tui/progress.md`):**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, and `linux-asan` plus `linux-sanitize` (22 of 22, no sanitizer reports) all pass.
+- Windows (MSVC /W4 /WX): `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` all pass.
+
+**What is still open:**
+- The `linux-gcc` gate. Jolt needs GCC 11+, and this host has only g++-9 and clang++-10. I re-checked `/usr/bin` just now and found no newer compiler. This needs either a root install of GCC 11+ or the CI job.
+- `engine_bench --suite acceptance` is not run. The benchmark harness is US-074, which does not exist yet, so the performance criterion does not apply yet.
+
+**Nothing changed since the last pass.** No file under `engine/`, `tests/`, `cmake/`, `docs/`, or the root CMake files is newer than the progress log. I did not add another identical "status re-check" entry. The log now has about 15 of these in a row, which is noise. I can trim them if you want.
+
+To finish the story, someone with root needs to install GCC 11+ and run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit --output-on-failure --no-tests=error`, or the CI job needs to run them.

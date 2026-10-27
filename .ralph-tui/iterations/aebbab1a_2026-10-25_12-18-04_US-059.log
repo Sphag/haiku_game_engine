@@ -1,0 +1,40 @@
+# Iteration 535 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T09:18:04.094Z
+- **Ended At**: 2026-10-25T09:18:25.556Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 3078
+- **Total Tokens**: 3106
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-059 work already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout, save module, and progress log $ grep -n "US-059" -r .ralph-tui/progress.md | head
+The log shows US-059 as Partial after many status-only passes. The only open items are the GCC 11+ gate, which this machine cannot run, and the benchmark harness, which does not exist yet. I'll confirm the tree has not changed since the last gate run before deciding whether anything else is worth doing.
+[94m[Bash][0m Check tree changes, test dirs, and GCC 11+ availability $ grep -rn "engine_bench" --include=CMakeLists.txt . 2>/dev/null | grep -v third_party | head -3
+The tree is unchanged since the last gate run, and the blockers are the same. I'll record this pass in the progress log without claiming completion.
+[94m[Bash][0m Append status entry to progress log $ `engine_bench --suite acceptance` (no harness yet, US-074). A runtime save/load path through a host ...
+US-059 is not complete, so I am not emitting the completion signal. The save code and its tests are in the tree, but one acceptance gate cannot run on this machine.
+
+**Blocked:**
+- **`linux-gcc` gate:** the preset, its build, and `linux-gcc-unit` need GCC 11 or newer. This machine only has GCC 9.4 and Clang 10, and GCC 9.4 cannot build Jolt. Earlier passes already ruled out installing GCC 11+ through apt on this image, so this needs a machine that has it.
+- **`engine_bench --suite acceptance`:** no benchmark target exists in any `CMakeLists.txt`. That harness belongs to US-074, so this item is not yet applicable to US-059.
+
+**Verified in earlier runs today (not re-run in this pass):**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` (no warnings), `linux-unit` (22 of 22 passed, including the 11 save tests), plus the ASan/UBSan sanitize run recorded earlier.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` (no warnings), `win-unit` (21 of 21 passed).
+
+**This pass:** I confirmed that no source file has changed since the last gate run and that GCC 11+ is still absent. I did not re-run the gates, since nothing has changed. I appended a short status entry to `.ralph-tui/progress.md`.
+
+**Next step:** run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit --output-on-failure --no-tests=error` on a machine with GCC 11+. If that passes, US-059 can be marked complete, with the benchmark item recorded as not applicable until US-074 lands.

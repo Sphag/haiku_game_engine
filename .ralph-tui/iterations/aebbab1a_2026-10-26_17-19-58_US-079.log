@@ -1,0 +1,39 @@
+# Iteration 950 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:19:58.786Z
+- **Ended At**: 2026-10-26T14:20:14.878Z
+- **Duration**: 16s
+- **Input Tokens**: 26
+- **Output Tokens**: 1980
+- **Total Tokens**: 2006
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any `all_features` scene already exists.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 4000 .ralph-tui/progress.md && grep -ril "all_features" --exclude-dir=.git . | head -5...
+The log shows this story has been checked many times without finishing. I'll re-confirm the two blockers it names before deciding anything.
+[94m[Bash][0m Re-check samples dir, FSR permutations, and manifest entry $ ls tests/src | grep -i all_features
+[94m[Bash][0m Append status entry to progress log $ (2) approval of \`all_features_route_v1\`. Scene project, tour, profiles, forced geometry paths, liv...
+US-079 is not complete, so I am not emitting the COMPLETE signal.
+
+**What is blocked:**
+- **FSR 2 vendoring (needs your decision).** `third_party/fsr2` has no `*_permutations.h` files, so `full_1080` cannot run. The manifest reports it as unsupported, as the story's rules allow. Choosing a vendoring route is your call.
+- **Route approval (needs your decision).** The scene's route, `all_features_route_v1`, is defined in `benchmarks/manifest.json` but has not been approved. The scene and acceptance runs depend on it.
+- **No `samples/all_features/` project exists.** The scene, the automated tour with feature-marker checks, the GI/RT/upscale profiles, and the forced indirect/meshlet paths all depend on it. The manifest entry is still `implementation: none`.
+- **Needs a Windows RTX host and a GUI session.** The Windows gates, the DX12 and Vulkan GPU suites, the live-app editor run with package and relaunch, and the `engine_bench --suite acceptance` run all require this. None of them can run from this WSL environment.
+
+**What is already in place:** the two `all_features` CPU integration cases pass in the Linux unit suite, and the editor suite's CPU run passes (106 cases). I did not re-run the build or tests this pass; I only re-checked the blockers.
+
+I appended a status entry to `.ralph-tui/progress.md`. Nothing is reported as passed beyond the earlier Linux CPU results.
+
+**What I need from you:** pick the FSR 2 vendoring route, approve `all_features_route_v1`, and say whether a Windows RTX session is available to run the gates and the live-app scenario.

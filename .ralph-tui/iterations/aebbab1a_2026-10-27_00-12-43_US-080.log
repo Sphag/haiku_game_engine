@@ -1,0 +1,39 @@
+# Iteration 1127 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:12:43.331Z
+- **Ended At**: 2026-10-26T21:12:59.163Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2261
+- **Total Tokens**: 2287
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress log and check bench artifacts $ git status --short 2>/dev/null | head -20
+The log shows 32 prior status checks, all blocked. I'll re-verify the blockers with one cheap check before deciding whether anything has changed.
+[94m[Bash][0m Re-check hardware and manifest blockers $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ no `acceptance` run in `artifacts/bench`. nvidia-smi sees the RTX 5080 under WSL only. - No source c...
+US-080 is not complete, so I am not signalling COMPLETE. I re-checked the blockers and nothing has changed since the last 32 status checks in the progress log.
+
+**Still blocking:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible to `nvidia-smi` only under WSL, which does not count as the native Linux report the story requires.
+- **No Windows RTX 5080 acceptance reports.** `artifacts/bench` has no `acceptance` run. Only earlier US-076 to US-078 runs and two US-080 readback-off runs exist. The full contract (30 s warmup, 180 s measured, three repeats, per scene, profile and backend) has to run on the reference machine.
+- **FSR 2 permutations are missing.** `third_party/fsr2` has 0 `*_permutations.h` files, so FSR cannot build or link. Choosing how to vendor them is your decision.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` lists four entries as `implementation: none` (lines 88, 108, 122, 132), covering physics, streaming and all_features. The acceptance run cannot cover them until they exist.
+
+The progress log also records an earlier render_stress p99 above the 16.7 ms budget. That is a measured failure the story says to fix at its cause, not by changing the contract.
+
+**What I did this pass:** re-verified the blockers above and appended a short status entry to `.ralph-tui/progress.md`. I made no source changes and ran no builds or benchmarks.
+
+**What I need from you:** the RTX 5080 reference machine (or a decision to run the native Windows and Linux reports elsewhere), a choice of FSR 2 vendoring route, and a go-ahead to implement the four missing workloads and fix the render_stress frame budget. Once those are in place, I can run the acceptance suite.

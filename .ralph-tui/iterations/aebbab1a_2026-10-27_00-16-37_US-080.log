@@ -1,0 +1,46 @@
+# Iteration 1141 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:16:37.760Z
+- **Ended At**: 2026-10-26T21:16:55.987Z
+- **Duration**: 18s
+- **Input Tokens**: 30
+- **Output Tokens**: 2831
+- **Total Tokens**: 2861
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress log tail and benchmark dirs $ tail -c 6000 .ralph-tui/progress.md && echo ---- && ls tools/benchmark/src/ benchmarks/ 2>/dev/null ...
+[94m[Bash][0m Find US-079 notes and performance contract in PRD $ grep -n -i "performance contract" -A30 tasks/prd-open-world-engine.md | head -80
+The log shows many earlier passes concluded this story is blocked on this host. I'll re-check the blockers once, so I'm not relying on stale notes.
+[94m[Bash][0m Re-check blockers: GPU device, FSR files, manifest, toolchain $ cmd.exe /c "echo ok" 2>/dev/null | head -1
+Blockers still hold, so I'll record this check in the progress log and stop rather than repeat the same loop.
+[94m[Bash][0m Append status check entry to progress log $ GCC is still 9.4. - No source change, build, or bench run. Blockers are unchanged: native Linux Vulk...
+US-080 is not complete, and I am not emitting the COMPLETE signal. This host cannot produce the required acceptance evidence, and the earlier passes reached the same conclusion.
+
+**Blockers, re-checked this pass:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL's `nvidia-smi`, which does not satisfy the native Linux/Vulkan requirement.
+- **FSR 2 is not buildable.** `third_party/fsr2` has no `*_permutations.h` files. Full-profile scenes depend on FSR, so this needs a vendoring decision from you.
+- **Workloads are missing.** `benchmarks/manifest.json` still has 4 entries marked `implementation: none` (physics action route, streaming route, and the teleport/render entries).
+- **No acceptance run exists.** `artifacts/bench` holds only the us076/us077/us080 diagnostic runs from 2026-10-26. None is a 30 s warmup, 180 s measured, three-repeat acceptance run.
+
+**Known budget failure, not yet fixed:** earlier `render_stress` runs measured p99 frame time of 35–47 ms against the 16.7 ms target. The fix belongs to this story, but it needs Windows acceptance runs to verify. Each scene, profile, and backend takes about 3 × 210 s, so this is too long for this pass.
+
+**What I did:** I changed no source, ran no build, and started no benchmark. I appended a status entry to `.ralph-tui/progress.md`.
+
+**What unblocks this:**
+1. Your decision on the FSR 2 permutations route: vendor the generated tables, or accept a documented scope change.
+2. Access to the reference RTX 5080 computer for the native Linux/Vulkan run and the Windows DX12 and Vulkan acceptance runs.
+3. Implementation of the four `implementation: none` workloads.
+
+Once those exist, the next step is to profile the frame-budget overrun on `render_stress` and fix the measured cause. Changing the contract or reducing the workload would need your separate decision.

@@ -1,0 +1,63 @@
+# Iteration 1068 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:20:20.331Z
+- **Ended At**: 2026-10-26T20:25:17.859Z
+- **Duration**: 4m 57s
+- **Input Tokens**: 64
+- **Output Tokens**: 4623
+- **Total Tokens**: 4687
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress notes and PRD story $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-079" -A30 tasks/prd-open-world-engine.md | ...
+[94m[Bash][0m Recheck the recorded US-079 blockers $ ls /dev/dri 2>&1 | head -1
+[94m[Bash][0m Inspect the all_features test files $ wc -l tests/src/all_features_*.cpp && ls -la tests/src/all_features_*.cpp && grep -n "all_features" ...
+[94m[Bash][0m Build linux-debug preset to check current state $ (cmake --build --preset linux-debug -j8 2>&1 | tail -15) && ls build | head -30
+[94m[Bash][0m Locate the engine_tests binary $ find build -maxdepth 3 -name engine_tests -type f | head -3
+[94m[Bash][0m Full linux-debug build with log capture $ tail -3 /tmp/us079_build.log
+[94m[Bash][0m Configure linux-dev then build linux-debug $ tail -3 /tmp/us079_build.log
+[94m[Bash][0m Run integration tests including all_features cases $ ls samples 2>/dev/null
+
+[91m[Error: Exit code 2
+build/linux-dev/tests/Debug/engine_tests
+Exit codes:
+  0    all selected tests passed, or help was shown
+  2    invalid command line
+  3    the requested GPU backend is not available here (reported as unsupported, not passed)
+  other nonzero values report the number of failed tests][0m
+[94m[Bash][0m Run the integration suite and filter all_features results $ build/linux-dev/tests/Debug/engine_tests --suite integration -r compact 2>&1 | grep -i "all_features...
+[94m[Bash][0m Run editor and unit suites and list all_features cases $ build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | grep -E "test cases|assertions"
+[94m[Bash][0m Append US-079 status entry to progress log $ (4) a runtime component catalog decision for `samples/all_features`. - Stop: no COMPLETE signal. ---...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. The CPU-side pieces build and pass here, but the scene, the GPU/GUI verification, and the Windows gates are still blocked.
+
+**What I verified this pass (Linux):**
+- `cmake --preset linux-dev` configured, and `cmake --build --preset linux-debug` exited 0.
+- `engine_tests --suite unit`: all passed (1032 cases).
+- `engine_tests --suite editor`: all passed (106 cases).
+- `engine_tests --suite integration`: 132 passed, 3 skipped.
+- `tests/src/all_features_tests.cpp` (workload, gameplay, audio, UI, save, material graph on the CPU) and `tests/src/all_features_editor_tests.cpp` (editor model scenario) exist and are registered in `tests/CMakeLists.txt`. My earlier progress notes said no tour code existed; that was wrong, and I've recorded the correction.
+
+**Still open, and why I stopped here:**
+- **No `samples/` directory.** There is no `all_features` project or scene on disk.
+- **`benchmarks/manifest.json`** still lists `all_features` as `implementation: none`, and the route `all_features_route_v1` is only a proposal.
+- **FSR 2 permutation headers are missing** (`third_party/fsr2` has 0 `*_permutations.h`), so `full_1080` cannot be built or run.
+- **No GPU here.** `/dev/dri` is absent, so native Linux Vulkan cannot be exercised.
+- **Not run:** the tour, profiles, forced geometry paths, the live editor run with package/relaunch, and all Windows gates. These need a Windows GPU and GUI session.
+
+**Decisions I need from you:**
+1. Approve `all_features_route_v1`. The tour, profiles, and forced paths are defined against it.
+2. Either supply the FSR 2 permutation headers or confirm that `full_1080` stays unsupported.
+3. Provide a Windows GPU and GUI session for the tour, profiles, and live editor run.
+4. Decide the runtime component catalog for `samples/all_features`. Today a scene with components is refused.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results. I did not commit anything.

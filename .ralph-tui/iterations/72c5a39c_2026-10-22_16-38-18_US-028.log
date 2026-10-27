@@ -1,0 +1,39 @@
+# Iteration 29 Log
+
+## Metadata
+
+- **Task ID**: US-028
+- **Task Title**: Vulkan Device and Presentation
+- **Description**: As a user of both operating systems, I want Vulkan output so that I can use a shared alternative backend.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T13:38:18.571Z
+- **Ended At**: 2026-10-22T13:38:53.943Z
+- **Duration**: 35s
+- **Input Tokens**: 34
+- **Output Tokens**: 3380
+- **Total Tokens**: 3414
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root, progress log, and US-028 PRD entry $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-028" -A3 tasks/prd-open-world-engine.md...
+[94m[Bash][0m Read US-028 details, tracking files, and Vulkan doc $ cat docs/vulkan.md | head -80
+[94m[Bash][0m Check US-028 pass flag and whether sources changed since last log $ find . -newer .ralph-tui/progress.md -not -path './build/*' -type f | head
+[94m[Bash][0m Re-run Linux Vulkan GPU suite to confirm current status $ echo "exit=$?"
+[94m[Bash][0m Append US-028 status entry to progress log $ the blocker is hardware, not code. --- EOF tail -3 .ralph-tui/progress.md
+US-028 is not complete, so I have not emitted the completion signal. The Vulkan backend is implemented, but one acceptance criterion needs hardware this WSL host doesn't have.
+
+**Blocked:** "The same clear/readback fixture passes on Windows and native Linux with validation layers." I re-ran `engine_tests --suite gpu --backend vulkan` with the validation layer path set. It exits 3 `unsupported`: no hardware Vulkan 1.2 adapter with timeline semaphores. `/dev/dri` is absent, and the software ICD (lavapipe 21.2) lacks timeline semaphores. The PRD says software rendering and WSL don't replace the native Linux GPU report, so the story stays `passes: false`.
+
+**Not changed this pass:** No engine, test, or doc source changed since the previous verified iteration, so I did not re-run the Windows or Linux quality gates. The last recorded run (in `.ralph-tui/progress.md`) had them passing: Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21); the Windows GPU suite on RTX 5080 for DX12 and Vulkan with validation on; Linux `linux-dev`, `linux-debug`, and `linux-unit`; Linux GCC; and Linux ASan/UBSan.
+
+**Still open:**
+- The native Linux GPU clear/readback report, which needs a machine with a real Vulkan 1.2 hardware adapter.
+- Surface-loss recovery is implemented but not exercised on either OS.
+- GitHub CI has not been checked.
+- `engine_bench` has no harness yet.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this pass. Once the native Linux report exists, `passes` can be set to true.

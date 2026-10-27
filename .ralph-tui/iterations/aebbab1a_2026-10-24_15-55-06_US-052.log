@@ -1,0 +1,43 @@
+# Iteration 199 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T12:55:06.485Z
+- **Ended At**: 2026-10-24T12:55:31.755Z
+- **Duration**: 25s
+- **Input Tokens**: 38
+- **Output Tokens**: 3798
+- **Total Tokens**: 3836
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics work against the progress log and the memory notes.
+[94m[Bash][0m Review progress log, physics dir, and memory note $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md
+The log shows the adapter and tests were already verified on Windows and Linux clang. The only open gates are `linux-gcc` (blocked by GCC 9.4 locally) and the benchmark (no `engine_bench` target exists yet, US-074). Before accepting that block again, I'll check whether a GCC 11+ can be obtained without root.
+[94m[Bash][0m Check OS release, compilers, and apt download availability $ ls /var/lib/apt/lists | head -3
+[94m[Bash][0m Search apt for GCC 11+ packages $ apt-cache policy g++-11 gcc-11 g++-12 2>&1 | head -12
+Ubuntu 20.04's apt has no GCC 11+ package, so the `linux-gcc` gate is still blocked on this machine. I'll record that finding in the progress log and the memory note so the next pass does not repeat the search.
+[94m[Bash][0m Append GCC availability finding to progress log $ US-074). No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/progress.md
+[94m[Edit][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m edit: "**Why:** the local GCC is 9.4 and cannot compile t..." → "**Why:** the local GCC is 9.4 and cannot compile t..."
+US-052 is not complete, so I have not emitted the completion signal.
+
+**Status: Partial.** The physics adapter and its tests were already in the tree from earlier passes. I made no source changes this pass.
+
+**Passing (verified on the current tree in earlier runs and recorded in `.ralph-tui/progress.md`):**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` ctest (unit 1, integration 20).
+- Linux clang 10: `ValidateVendor`, `linux-dev`, `linux-debug` build, `linux-unit` ctest (unit 1, integration 21).
+- ASan/UBSan: `linux-asan` build and `linux-sanitize` ctest pass on a second run. The first run failed one X11 focus test that depends on the window manager; it is not physics.
+
+**Blocked:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** Jolt needs GCC 11+ (`__builtin_bit_cast`). The host has only GCC 9.4, and Ubuntu 20.04's apt has no GCC 11+ package. I checked this today, so I didn't try a download route. This needs a GCC 11+ environment such as the CI image.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists in the tree; the harness is US-074. The criterion applies only once the harness exists.
+
+I added the GCC availability finding to the progress log and the physics memory note. To close the story, someone needs to run the three `linux-gcc*` gates in a GCC 11+ environment.

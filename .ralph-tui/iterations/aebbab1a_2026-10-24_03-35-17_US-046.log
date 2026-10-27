@@ -1,0 +1,43 @@
+# Iteration 42 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:35:17.482Z
+- **Ended At**: 2026-10-24T00:35:36.407Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2624
+- **Total Tokens**: 2652
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current FSR state before deciding what this story can finish.
+[94m[Bash][0m Read progress log and locate FSR references $ tail -n 150 .ralph-tui/progress.md && ls && grep -rn "ENGINE_FSR2_AVAILABLE\|fsr2\|FSR" --include=*....
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-fsr2-permutations-missing.md[0m
+The FSR 2 blocker is already documented, so I'll confirm the tree hasn't changed since the last entry before deciding whether any work remains.
+[94m[Bash][0m Check for changes since last log entry and FSR permutation headers $ echo "exit=$?"
+[94m[Bash][0m Append blocked-status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-046 (re-check, still blocked) - What was i...
+US-046 is not complete. I'm stopping here because the FSR 2 integration is blocked on a decision only you can make.
+
+**What's blocked:** FSR 2's Vulkan and DX12 shader sources include eight generated `*_permutations.h` headers per backend. The vendored tree lacks them, and so does the pinned upstream archive. The generator, `tools/sc/FidelityFX_SC.exe`, is in the archive but not vendored. Until those headers exist, `ENGINE_FSR2_AVAILABLE` stays off and both backends return `Unsupported` from `upscale`. I did not add stub headers, because they would hide the failure until pipeline creation.
+
+**Choose a route:**
+1. Run the archive's `FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs an exception to the rule against vendoring prebuilt tools.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This is more work, and the bytes will differ from upstream.
+
+**What's done:** the CPU contract (profile resolutions, FSR jitter phases, benchmark policy, history reset), the RHI upscaler API, and both backend implementations behind the FSR 2 flag. The last Windows GPU run and the Linux clang and GCC gates from the earlier entries still stand.
+
+**What remains, all dependent on FSR 2 being callable:**
+- Calling the upscale on both backends and adding the reactive mask.
+- Switching `SceneRenderer` to the profile sizes and composing the UI after upscaling.
+- GPU tests that exercise an upscale, and every gate that depends on them.
+
+This pass changed no source. The tree is unchanged since the last entry, so I only appended a blocked-status entry to `.ralph-tui/progress.md`. I didn't rerun the gates, because nothing changed since the last passing run.

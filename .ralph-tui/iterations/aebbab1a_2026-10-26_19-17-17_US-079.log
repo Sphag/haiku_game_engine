@@ -1,0 +1,42 @@
+# Iteration 1032 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:17:17.313Z
+- **Ended At**: 2026-10-26T16:17:35.235Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1886
+- **Total Tokens**: 1908
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any of the US-079 deliverables already exist.
+[94m[Bash][0m Inspect repo state and progress log $ grep -rl "all_features" --include=* . 2>/dev/null | grep -v third_party | head -20
+The log shows this story has been blocked across many passes. I'll re-verify the blockers once so my report is current.
+[94m[Bash][0m Re-verify blockers for US-079 $ grep -n "all_features" tools/benchmark/src/*.cpp | head -5
+US-079 is not complete, and I have not signaled COMPLETE. The remaining work depends on decisions and hardware only you can supply, and I did not change any code this pass.
+
+I re-checked the blockers:
+
+- **Benchmark contract is still a proposal.** `benchmarks/manifest.json` (line 152) has `all_features` with `implementation: none`, and its route `all_features_route_v1` is unapproved. No `all_features` runner exists in `tools/benchmark/src`, so there is nothing to run as the tour or profiles.
+- **No `samples/all_features` project.** The `samples/` directory does not exist. The integration tests in `all_features_tests.cpp` and `all_features_editor_tests.cpp` build their content in code instead.
+- **FSR 2 is not vendored in full.** `third_party/fsr2` has 0 `*_permutations.h` files, so the forced upscale path cannot build. Per the manifest, `full_1080` is reported unsupported until those headers exist.
+
+Verified in earlier passes: the Linux debug build is clean, `ctest --preset linux-unit` passes 30/30, and `engine_tests --suite integration` passes 131 with 4 skipped.
+
+Not yet run: the Windows quality gates, the Linux/GCC and sanitizer presets, `engine_bench --suite acceptance`, the GPU suites, the editor scenario, and any GUI tour with screenshots. Those need a Windows GPU and GUI session, and the GUI work also needs a running app.
+
+To move forward, I need three things from you:
+
+1. **Approve `all_features_route_v1`** (or give changes). Approval fixes the benchmark contract, and I can then write the runner, the `samples/all_features` project, and the tour.
+2. **Decide on FSR 2.** Either vendor the generated permutation headers, or keep `full_1080` unsupported and report the forced-upscale profile as not run.
+3. **Schedule a Windows GPU and GUI session** for the tour, profiles, editor scenario, package/relaunch, and the Windows gates.

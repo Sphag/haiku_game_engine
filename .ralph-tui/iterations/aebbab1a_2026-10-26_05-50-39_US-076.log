@@ -1,0 +1,41 @@
+# Iteration 796 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:50:39.123Z
+- **Ended At**: 2026-10-26T02:50:54.598Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1749
+- **Total Tokens**: 1771
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-076 already has in the tree.
+[94m[Bash][0m Check progress log and existing render_stress code $ grep -n "render_stress\|US-076" -r --include=*.cpp --include=*.hpp --include=*.json --include=*.md -...
+The progress log shows this story has been blocked for many passes on one user decision. I'll confirm that blocker still holds in the PRD before reporting.
+[94m[Bash][0m Confirm PRD contract lines and workload file state $ ls -l --time-style=+%H:%M tools/benchmark/src/render_stress.cpp tools/benchmark/src/workload.cpp ben...
+US-076 is not complete, and I have not signaled COMPLETE. The story is blocked on a decision only you can make, and I made no code changes in this pass.
+
+**The blocker:** the `render_stress` route start produces about 312,068 submitted triangles on the indexed path. The PRD requires at least 2,000,000 at the starting frame (`tasks/prd-open-world-engine.md`, the scene table). The frame budget is also in question. Both the workload and the contract are pinned: the camera route by manifest SHA-256 and the instance placement by `benchmarks/workload_expected.json`. Fixing either changes a fixed contract, and the PRD (around line 722) reserves that change for a separate user decision. I did not change the contract myself. Choose one of:
+
+1. Approve a change to the route start or instance placement. That means bumping `kWorkloadVersion`, regenerating `workload_expected.json`, and updating the manifest hash.
+2. Accept the measured run as-is, with the 312,068 figure recorded as a failed contract check.
+
+**Other open items, which are outside what I can do here:**
+
+- **full_1080 profile:** unsupported until the vendored FSR 2 permutation headers exist (`ENGINE_FSR2_AVAILABLE` gates it).
+- **Native Linux Vulkan GPU run and linux-gcc:** not run. The local GCC 9.4 cannot build Jolt, and WSL has no usable Vulkan device.
+- **Windows quality gates:** not run in this pass. They need the cmd.exe `.bat` path from the Windows gate notes.
+
+**What did pass:** I re-checked the state in this pass. `engine_workload --check benchmarks/workload_expected.json` reports the 4 scenes as matching, and the Linux unit suite passed 30/30 in the last full run recorded in the progress log. The source files are unchanged since the last pass.
+
+Tell me which option you want for the route start, and I will carry it through the regenerate, rebuild, and gate steps. The progress log has 30 identical "status check" entries from earlier passes, so I did not add another.

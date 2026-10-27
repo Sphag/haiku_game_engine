@@ -1,0 +1,35 @@
+# Iteration 681 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:10:03.565Z
+- **Ended At**: 2026-10-26T02:10:14.711Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1525
+- **Total Tokens**: 1543
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m $ git status --short 2>/dev/null | head
+[94m[Bash][0m $ ls -la --time-style=+%H:%M artifacts/bench/ | tail -15
+US-076 is not complete, so I'm not emitting the COMPLETE signal. I made no changes in this pass and reran no gates or benchmarks, because the recorded results still describe the current tree.
+
+**What is done (from the progress log and the artifacts):**
+- The `render_stress` scene builder and the route exist. The mesh-shader fallback is wired: `render_stress.cpp` checks `geometry_path()` before attaching meshlets.
+- Eight runs are recorded under `artifacts/bench/us076-*`: DX12 and Vulkan, each for indexed, indirect, and meshlets, plus a meshlets run with mesh shaders forced off. Each run exits 1.
+
+**What blocks completion (needs your decision):**
+1. **Triangle floor and frame budget fail on instance placement.** The scene places 312,068 of the 2,000,000 required triangles at the route start. p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing this changes the workload, so `kWorkloadVersion` must be bumped and `workload_expected.json` regenerated. US-080 says the contract cannot be changed without your decision, so I have not changed it.
+2. **full_1080 is unsupported** until the FSR 2 permutation headers exist. Only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU, linux-gcc, and the Windows and Linux quality gates on this final tree.
+
+**Decision I need from you:** approve or reject a placement change that bumps the workload version. Also say whether a run that fails the contract should close US-076 as measured, or stay open until the placement is fixed. Once you answer, I can make the change, regenerate the expected file, and rerun the gates and benchmarks.

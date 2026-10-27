@@ -1,0 +1,183 @@
+# Iteration 1288 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:58:58.703Z
+- **Ended At**: 2026-10-27T00:01:10.700Z
+- **Duration**: 2m 11s
+- **Input Tokens**: 46
+- **Output Tokens**: 3883
+- **Total Tokens**: 3929
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and what documentation already exists.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ git status 2>&1 | head -3
+[94m[Bash][0m Find US-080 and US-081 references in progress and PRD $ grep -n "US-081" -A40 tasks/prd-open-world-engine.md | head -80
+The progress log shows US-081 was already status-checked several times and blocked on hardware and user decisions. I'll read the current README and acceptance checklist to see what documentation work is still missing.
+[94m[Bash][0m Read README, acceptance checklist, and report listing $ ls /dev/dri 2>&1
+
+[91m[Error: Exit code 2
+# Haiku Game Engine
+
+A C++20 engine for open-world games, with an in-house Windows and Linux platform layer, a
+DirectX 12 and Vulkan renderer, a Jolt-based physics world, Lua scripting, an asset converter,
+resource packs, and an ImGui editor. Everything the build needs is vendored; configuration and
+build never download anything.
+
+**Status: pre-release.** The engine builds and its CPU unit tests run on the verified
+platforms (see [Verified platforms](#verified-platforms)). Final acceptance is **incomplete**:
+the real-GPU reports, the visual editor smoke tests, the clean-copy offline build, the standalone
+package smoke tests on clean directories, and the full acceptance benchmark have not all been
+produced. [docs/acceptance.md](docs/acceptance.md) lists each mandatory feature with its tests
+and artifacts, and marks what is still open. Read it before relying on any feature.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Module layers, the frame, and the ownership rules |
+| [docs/capability-matrix.md](docs/capability-matrix.md) | What each platform and backend supports, and its verification state |
+| [docs/acceptance.md](docs/acceptance.md) | Mandatory features mapped to tests and artifacts, with open items |
+| [docs/build.md](docs/build.md) | Tools, presets, quality gates, the shader toolchain, CI |
+| [docs/schemas.md](docs/schemas.md) | Scene, prefab, component, pack, save, and manifest schemas |
+| [docs/vendor.md](docs/vendor.md) | Vendored dependencies, their pinned revisions, licenses, and notices |
+| [docs/benchmarks.md](docs/benchmarks.md) | `engine_bench` and `engine_workload`, and how to reproduce a run |
+| [docs/editor.md](docs/editor.md) | The editor workflow |
+| [docs/distribution.md](docs/distribution.md) | Building a standalone game package |
+| [docs/asset-converter.md](docs/asset-converter.md), [docs/runtime-packs.md](docs/runtime-packs.md) | The asset pipeline and the pack format |
+
+## OS and SDK requirements
+
+### Windows
+
+- Windows 10 or 11, x64. DirectX 12 and the Vulkan backend need a GPU driver for the device under test.
+- Visual Studio 2022 (MSVC 14.38, verified) with the "Desktop development with C++" workload and the
+  "C++ ATL for latest v143 build tools" component. Configure from an x64 developer environment
+  (`vcvars64.bat`).
+- Windows SDK (provides `<windows.h>` and the D3D12 headers used by the build).
+- CMake 3.28 or newer (4.3.4 verified), Ninja, and Python 3.8 or newer on `PATH`. The shader
+  toolchain's generators run under Python.
+- Vulkan GPU runs use the Vulkan SDK validation layer when the Debug build is run; see
+  [docs/vulkan.md](docs/vulkan.md).
+
+### Linux
+
+- A native x86-64 Linux with glibc headers and `dlopen` (`libc6-dev`).
+- Clang 10 with libstdc++ 9 is the verified local compiler (`linux-dev`, `linux-asan`). CI uses clang 14.
+  GCC 9 cannot build Jolt; the `linux-gcc` preset needs GCC 11 or newer (CI uses gcc 11). Jolt uses
+  `__builtin_bit_cast`.
+- CMake 3.28 or newer, Ninja, and Python 3.8 or newer.
+- Vulkan GPU runs need a Vulkan 1.2 driver with timeline semaphores, plus the validation layer for Debug runs.
+- WSL and software rendering (llvmpipe, lavapipe, WARP, SwiftShader) run the CPU suites only. They do not
+  produce GPU reports; see [docs/capability-matrix.md](docs/capability-matrix.md).
+
+## Offline CMake setup
+
+The configure step is offline by design. All sources are in `third_party/`, pinned in
+`third_party/manifest.json`, and checked before configure:
+
+```sh
+cmake -P cmake/ValidateVendor.cmake      # checks every pinned file's SHA-256 and rejects stray files
+cmake --preset linux-dev                  # or win-dev from an x64 developer prompt
+cmake --build --preset linux-debug        # or win-debug
+ctest --preset linux-unit --output-on-failure --no-tests=error
+```
+
+The DirectX Shader Compiler and its SPIRV-Tools dependency are built from source as part of the
+default build (`ENGINE_BUILD_SHADER_TOOLCHAIN=ON`). Pass `-DENGINE_BUILD_SHADER_TOOLCHAIN=OFF` to
+skip them while working on engine code; the shader tests are then not built.
+`tools/ci/offline_verify.sh` runs the Linux clang gate inside a network namespace with no route
+out, and fails if anything tries to download.
+
+Presets, build targets, and the test presets are listed in [docs/build.md](docs/build.md).
+
+## Verified platforms
+
+| Platform | Compiler | Gate state |
+|---|---|---|
+| Windows x64 host (reference RTX 5080) | MSVC | See [docs/acceptance.md](docs/acceptance.md) for the latest gate results |
+| Ubuntu 20.04 under WSL2 | Clang 10 | Configure, Debug build, and unit tests; no GPU device |
+| Native Linux with a Vulkan GPU | — | Not yet run; no native report exists |
+
+Do not read a platform as verified unless its gate and its GPU report exist.
+
+## Editor workflow
+
+The editor is `game_editor`. Build it with the default target, then:
+
+1. Open or create a project. A project is a directory of assets, each with a sidecar that holds its GU
+
+... [17429 characters truncated] ...
+
+C 9.4 cannot build Jolt |
+| `cmake --preset linux-asan`, `cmake --build --preset linux-asan`, `ctest --preset linux-sanitize` | Linux | passed (ASan + UBSan, CPU tests, 30 of 30) |
+| `cmake --build --preset win-release` | Windows | Passed (exit 0; 596 of 596 steps, MSVC Release) |
+| `cmake --build --preset linux-release`, `ctest --preset linux-release-unit` | Linux | passed (30 of 30). The first build failed on a release-only test compile error in `core_assert_tests.cpp`; fixed, then rebuilt |
+| `engine_tests --suite gpu --backend dx12` | Windows, RTX 5080 | Passed: 72 cases, 43923 assertions. The report names `NVIDIA GeForce RTX 5080`, validation layers on (`artifacts/reports/us081/win-gpu-dx12.log`) |
+| `engine_tests --suite gpu --backend vulkan` | Windows, RTX 5080 | Passed: 73 cases, 43935 assertions. The report names `NVIDIA GeForce RTX 5080`, `software=no`, validation layers on, and no VUID lines. The run used the pinned 1.4.363 layer via `VK_LAYER_PATH` (`artifacts/reports/us081/win-gpu-vulkan.log`) |
+| `engine_tests --suite gpu --backend vulkan` | native Linux GPU | not run: no native Linux Vulkan device on the verification machine |
+| `engine_tests --suite editor --backend <dx12\|vulkan>` | Windows | DX12 passed: 107 cases, 1588 assertions (`artifacts/reports/us081/win-editor-dx12.log`). Vulkan passed: 107 cases, 1587 assertions, pinned 1.4.363 layer via `VK_LAYER_PATH`, no VUID or error lines (`artifacts/reports/us081/win-editor-vulkan.log`) |
+| `engine_bench --suite acceptance --backend <dx12\|vulkan> --output artifacts/bench/<run-id>` | Windows (DX12, Vulkan), native Linux (Vulkan), Release | not run; see Open items |
+| Offline build from a clean repository copy | Linux | Passed: a copy without `build/`, `artifacts/`, and `.ralph-tui/` ran `tools/ci/offline_verify.sh` in a network namespace with only `lo` (outbound TCP refused). Validate, `linux-dev`, `linux-debug`, and `linux-unit` (30 of 30) passed |
+| Standalone packages from clean directories | Windows, Linux | Linux: `engine_tests --suite editor` (CPU, `[editor]~[gpu]`) passed, 106 cases and 1569 assertions, on the current tree. Windows: `engine_tests --suite editor --backend dx12` and `--backend vulkan` passed, 107 cases each. The Windows logs list no per-case names, but `tests/src/editor_distribution_tests.cpp` is tagged `[editor][integration]`, so it runs in that suite. Both OSes run its "Build Game writes a package that launches from a clean folder" case, which builds a package from the sample project into an empty folder and launches it. Both results are from the suite run, not a separate package-only run |
+| Visual editor smoke test with screenshots | Windows, Linux | Windows: launch only. `game_editor.exe` (Release) started and drew its panels (Project, Assets, Hierarchy, Viewport, Inspector, Console, Errors), with the console at "no project is open". Screenshot in `artifacts/reports/us081/win-editor-smoke-launch.png`. No project was opened and no action sequence ran, so the full smoke test is still open. Linux: not run as a visual test. On the WSL2 verification machine (WSLg display present), `game_editor` (Release, `build/linux-dev`) exits at start with `cannot create the vulkan device: no hardware Vulkan 1.2 adapter` and draws nothing. This is WSL without a Vulkan device, so it does not stand in for a native Linux smoke test |
+
+## Open items
+
+These block final acceptance. Each one is recorded as incomplete rather than passed.
+
+1. **Native Linux Vulkan GPU report.** The verification machine (WSL2) has no usable Vulkan device. No `engine_tests --suite gpu
+   --backend vulkan` report exists for native Linux.
+2. **Full acceptance benchmark.** `engine_bench --suite acceptance` has not been run to completion on DX12 or Vulkan. The
+   `artifacts/bench` folder holds only the US-076 to US-078 runs and two US-080 readback-off runs. The render, streaming,
+   all-features, and physics acceptance scenes do not yet produce GPU timestamps and residency, so an acceptance run reports
+   `incomplete` (see [benchmarks.md](benchmarks.md)).
+3. **FSR 2.** The vendored tree lacks its generated shader permutations, so temporal upscaling is unavailable (see [vendor.md](vendor.md)).
+4. **Linux GCC.** The local GCC 9.4 cannot build Jolt. The `linux-gcc` gate needs GCC 11 or newer.
+5. **Visual editor smoke test.** No screenshot-backed run of the editor on Windows or Linux exists for US-081.
+6. **Clean-directory checks.** The offline clean-copy build passed. The standalone package test (build from the sample project, then launch from an empty folder) passed in the editor suite on Linux and on Windows (DX12 and Vulkan runs). It is not a separate package-only run, and a package from a real game is not yet built.
+7. **License.** The repository has no license file (see [vendor.md](vendor.md)).
+----
+linux-asan-ubsan.xml
+linux-clang-unit.xml
+linux-gcc-unit.xml
+offline-linux-dev-unit.xml
+us081
+win-msvc-unit.xml
+ls: cannot access '/dev/dri': No such file or directory][0m
+The docs are already largely written. I'll check whether anything changed since the last recorded gate run, and verify that the README's doc links resolve.
+[94m[Bash][0m Check for changes since last gate run and broken doc links $ ls artifacts/reports/us081 | head -30
+The only source-tree change since the last gate run is `third_party/dxc/utils/GetCommitInfo.py`, a vendored file. I'll confirm the vendor manifest still matches it, since that is the one check that could be affected.
+[94m[Bash][0m Run vendor validation and check the changed vendored file $ grep -n "GetCommitInfo" third_party/manifest.json | head -3
+Vendor validation passes (26 dependencies, 8542 files), so the changed `GetCommitInfo.py` still matches its pinned hash. I'll record this status pass in the progress log, as earlier iterations did.
+[94m[Bash][0m Append US-081 status entry to progress log $ `ValidateVendor` confirms it in seconds. --- EOF tail -3 .ralph-tui/progress.md
+US-081 is not complete, so I am not signalling COMPLETE. The documentation deliverables already exist in the repo. What remains needs hardware this machine does not have, a benchmark budget that is failing, and two decisions only you can make.
+
+**What I checked this turn**
+- `cmake -P cmake/ValidateVendor.cmake` passes: 26 dependencies, 8542 files.
+- Since the last recorded gate run, the only source-tree change is `third_party/dxc/utils/GetCommitInfo.py`. Its mtime changed but it still matches its pinned hash. No first-party source, test, or CMake file changed, so I did not re-run the other gates.
+- Every `docs/*.md` link in the README and the docs resolves.
+- I appended a status entry to `.ralph-tui/progress.md`.
+
+**What is still open (from `docs/acceptance.md`)**
+1. **Native Linux Vulkan GPU report.** `/dev/dri` is absent, so there is no native Linux Vulkan device. WSL does not count.
+2. **Full acceptance benchmark.** The `render_stress` p99 frame time is over 16.7 ms on the start frame. The acceptance scenes also produce no GPU timestamps, so an acceptance run reports `incomplete`. US-080 owns the frame-time fix. Relaxing the budget would need your agreement.
+3. **FSR 2.** The vendored tree lacks its generated shader permutations. Temporal upscaling cannot be built until you choose a vendoring route.
+4. **linux-gcc.** The local GCC is 9.4, which cannot build Jolt. The gate needs GCC 11 or newer.
+5. **Visual editor smoke on Linux.** Windows has a launch-only screenshot. No action sequence has run on either OS.
+6. **Real sample game package.** The package smoke test passes from a clean directory, but it builds from the sample project, not a real game.
+7. **LICENSE.** The repository has no license file. Choosing one is your decision.
+
+**Decisions I need from you**
+- Whether the frame budget should be fixed in the implementation (my recommendation) or the contract changed.
+- Which FSR 2 vendoring route to use.
+- Which license to add.

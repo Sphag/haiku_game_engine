@@ -1,0 +1,64 @@
+# Iteration 1239 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:03:29.407Z
+- **Ended At**: 2026-10-26T23:03:45.731Z
+- **Duration**: 16s
+- **Input Tokens**: 28
+- **Output Tokens**: 2182
+- **Total Tokens**: 2210
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and what docs already exist.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The progress log shows earlier passes already ran the feasible gates and left US-081 open on hardware. I'll read the acceptance doc to confirm its open items still match the tree before deciding what, if anything, to do this pass.
+[94m[Bash][0m Read open items in acceptance doc and check devices $ ls LICENSE* 2>&1
+
+[91m[Error: Exit code 2
+134 docs/acceptance.md
+4:are still open. Source of the story list: `tasks/prd-open-world-engine.md` and `tasks/prd.json`.
+6:**Final acceptance is incomplete.** The reasons are in [Open items](#open-items). Nothing on this page should be read as
+91:| US-080 | RTX 5080 performance acceptance | Acceptance suite (see Open items) | `artifacts/bench/us080-*` (readback-off runs only) |
+95:Each gate is a command, with the environment where it must run. A gate that has not been run is listed as `not run`.
+107:| `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, `ctest --preset linux-gcc-unit` | Linux (GCC 11+) | not run; the local GCC 9.4 cannot build Jolt |
+111:| `engine_tests --suite gpu --backend dx12` | Windows, RTX 5080 | not run for US-081 |
+112:| `engine_tests --suite gpu --backend vulkan` | Windows, RTX 5080 | not run for US-081 |
+113:| `engine_tests --suite gpu --backend vulkan` | native Linux GPU | not run: no native Linux Vulkan device on the verification machine |
+114:| `engine_tests --suite editor --backend <dx12\|vulkan>` | Windows | not run for US-081 |
+115:| `engine_bench --suite acceptance --backend <dx12\|vulkan> --output artifacts/bench/<run-id>` | Windows (DX12, Vulkan), native Linux (Vulkan), Release | not run; see Open items |
+117:| Standalone packages from clean directories | Windows, Linux | Linux: `engine_tests --suite editor` (CPU, `[editor]~[gpu]`) passed, 106 cases and 1569 assertions, on the current tree. It includes `tests/src/editor_distribution_tests.cpp`, which builds a package from the sample project into an empty folder and launches it. Windows: not run in this pass. A package built from a real sample game on each OS is still open |
+118:| Visual editor smoke test with screenshots | Windows, Linux | not run |
+120:## Open items
+133:6. **Clean-directory checks.** The offline clean-copy build passed. A standalone package smoke test on a clean directory, built from a sample project on each OS, has not run.
+ls: cannot access '/dev/dri': No such file or directory
+ls: cannot access 'LICENSE*': No such file or directory][0m
+The doc matches the earlier passes, and nothing in the tree has changed since. The remaining items need hardware this machine lacks, so I'll record this pass in the progress log and stop without the completion signal.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - Read `docs/acceptance.md`: the open items match the gate table. No source or d...
+US-081 is not complete, so I am not signalling COMPLETE. I made no source or doc changes this pass.
+
+**What is in place (from earlier passes, checked against `docs/acceptance.md`):**
+- The README covers the required sections, and the architecture, schema, vendor, benchmark, and capability docs exist under `docs/`.
+- Linux: `ValidateVendor.cmake` passes, `linux-debug` builds, `linux-unit` passes 30 of 30, and `linux-asan` with `linux-sanitize` passes 30 of 30.
+- Linux editor suite passes 106 cases, including a build-and-launch of a package from an empty folder.
+- Windows: `win-dev` configures and `win-release` builds, 596 of 596 steps.
+- Offline clean-copy build passes.
+
+**What is still open, and why I can't close it here:**
+- **No Vulkan device on this machine.** `/dev/dri` is absent, so the native Linux Vulkan GPU suite and any Linux visual check cannot run.
+- **RTX 5080 reports are missing.** The DX12 and Vulkan GPU suites, the Windows editor suite, and the acceptance benchmark have not been run for US-081. Only the readback-off benchmark runs from US-080 exist.
+- **Visual editor smoke tests with screenshots** have not been done on either OS.
+- **linux-gcc** needs GCC 11+. Only GCC 9.4 is installed, and it cannot build Jolt.
+- **Sample-game packages** on each OS are not built. The Linux clean-directory check uses the CPU distribution test, not a real sample game, and the Windows one has not run.
+- **No LICENSE file** exists. Choosing a license is your decision, so I did not add one.
+
+The gap is hardware and a licensing decision, not code. The next step that needs you is either running the RTX 5080 gates on the reference machine or telling me which license to add. I appended a status entry to `.ralph-tui/progress.md`.

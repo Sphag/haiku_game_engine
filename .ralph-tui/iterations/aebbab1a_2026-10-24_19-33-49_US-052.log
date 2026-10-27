@@ -1,0 +1,40 @@
+# Iteration 276 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T16:33:49.093Z
+- **Ended At**: 2026-10-24T16:34:05.759Z
+- **Duration**: 16s
+- **Input Tokens**: 24
+- **Output Tokens**: 2336
+- **Total Tokens**: 2360
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the existing Jolt physics work and the progress log, since the memory notes suggest US-052 is partly done.
+[94m[Bash][0m Inspect progress log and physics directory $ ls tests 2>/dev/null | head -50
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The log shows US-052 has been re-verified many times and stays Partial on two blockers: no GCC 11+ for the `linux-gcc` gate, and no `engine_bench` target. Before deciding, I'll check whether either blocker has changed since the last pass.
+[94m[Bash][0m Check compilers, bench target, and file mtimes $ date +%H:%M
+US-052 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last full verification pass, and the two blockers are still in place.
+
+**Status: Partial**
+
+- **Implemented and passing (from the existing tree, unchanged since 13:13):** the Jolt adapter in `engine/physics/` and 13 cases in `tests/src/physics_world_tests.cpp`. The memory notes record these gates as passing on the current tree:
+  - Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21).
+  - Linux clang 10: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (22/22).
+  - ASan/UBSan: `linux-asan` build and `linux-sanitize` ctest.
+- **Blocked: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`.** The only compilers are g++-9, gcc-9, and clang++-10. Jolt needs GCC 11+ for `__builtin_bit_cast`. There is no `/opt` compiler, and sudo needs a password. The acceptance criteria say not to report an OS as verified until its job succeeds, so this gate stays open. Closing it needs `g++-11` installed locally or a CI GCC 11 job.
+- **Not run: `engine_bench --suite acceptance`.** No `engine_bench` target exists in the tree. The story's own text ties this to the benchmark harness existing, which is US-074.
+
+I did not re-run the gates this pass. The source files are unchanged since the last passing runs, and the previous entries in `.ralph-tui/progress.md` already record the same results. I also did not append another identical "no change" entry to the log.
+
+To finish the story, install GCC 11+ so the `linux-gcc` gate can run, or add a GCC 11 CI job. The benchmark item waits on US-074.

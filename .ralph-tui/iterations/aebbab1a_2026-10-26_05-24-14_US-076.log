@@ -1,0 +1,39 @@
+# Iteration 732 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:24:14.861Z
+- **Ended At**: 2026-10-26T02:24:32.771Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2271
+- **Total Tokens**: 2293
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and locate render_stress references $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.json --include=*.md --i...
+The log shows 15 earlier status checks, all blocked on the same user decisions. Before I report, I'll confirm the blocker and check the newest benchmark result so I'm not repeating stale claims.
+[94m[Bash][0m Check benchmark artifacts, workload version, and PRD constraints $ [ -n "$f" ] && head -c 1500 "$f"
+US-076 is not complete, and I did not run anything or change any files in this pass. The benchmark results and the code are unchanged from the last recorded run, so I'm not signalling COMPLETE.
+
+**What's blocking it**
+
+1. **Triangle floor and frame budget fail on placement.** The recorded runs show 312,068 of the 2,000,000 triangles placed at the route start, with p99 frame time at 35–47 ms against a 16.7 ms budget. Every `us076-*` report exits 1. Fixing the placement means changing the workload, which requires bumping `kWorkloadVersion` (currently 1) and regenerating `workload_expected.json`. The PRD (`tasks/prd-open-world-engine.md` line 722) says a contract change needs a separate user decision. The "identify and fix the measured cause" rule may allow a placement fix that keeps the counts, but that is a judgement call I shouldn't make alone.
+2. **`full_1080` is unsupported** until the vendored FSR 2 permutation headers exist (see `project-fsr2-permutations-missing`).
+3. **Not run:** native Linux Vulkan GPU, and the `linux-gcc` gate (local GCC 9.4 can't build Jolt).
+
+**Decisions I need from you**
+
+- Approve a workload change to fix placement (bump `kWorkloadVersion`, regenerate the expected file), or tell me to close US-076 as measured with the failing results recorded.
+- Decide whether `full_1080` should be reported as unsupported for this story, or wait on the FSR 2 vendoring route.
+
+Once you decide, I can make the placement change and rerun the eight-combination benchmark matrix plus the Linux gates. I did not rerun the Windows gates here.

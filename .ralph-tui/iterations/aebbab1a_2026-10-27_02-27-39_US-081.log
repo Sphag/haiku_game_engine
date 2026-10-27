@@ -1,0 +1,165 @@
+# Iteration 1255 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:27:39.213Z
+- **Ended At**: 2026-10-26T23:28:24.027Z
+- **Duration**: 44s
+- **Input Tokens**: 58
+- **Output Tokens**: 5516
+- **Total Tokens**: 5574
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and which docs already exist.
+[94m[Bash][0m Inspect repo root, progress log, and PRD references $ grep -n "US-08" tasks/prd-open-world-engine.md | head -20
+The progress log shows US-081 was worked across several passes and never signed off. I'll check the acceptance doc and README against the criteria to see what is still doable here.
+[94m[Bash][0m Read acceptance doc, README headings, and blocker checks $ ls LICENSE* 2>&1
+
+[91m[Error: Exit code 2
+# Acceptance checklist
+
+This page maps each PRD story to the tests and artifacts that cover it, then lists the release gates and the items that
+are still open. Source of the story list: `tasks/prd-open-world-engine.md` and `tasks/prd.json`.
+
+**Final acceptance is incomplete.** The reasons are in [Open items](#open-items). Nothing on this page should be read as
+"passed" unless it names the run that produced the result.
+
+## Reading the map
+
+- Test files are under `tests/src/` (CPU and GPU). CTest runs them by tag (`[unit]`, `[integration]`, `[gpu][<backend>]`,
+  `[editor]`). Catch2 cannot select one case by name, so check a suite's new cases by reconciling its total.
+- `Artifacts` names what a run leaves behind: a report, a fixture, a benchmark folder, or a gate log.
+- A story with no GPU test is CPU-only. A GPU test that needs a device is reported `not-run` when no device is present.
+
+## Feature map
+
+| Story | Feature | Tests | Artifacts and docs |
+|---|---|---|---|
+| US-001 | CMake and initial checks | `tests/cli/CliContract.cmake`, CTest cases `engine_tests_cli_*` | `cmake/ValidateVendor.cmake`, [build.md](build.md) |
+| US-002 | Library dependency sources | `fixture_provenance_tests` (fixtures), vendor validator | `third_party/manifest.json`, [vendor.md](vendor.md) |
+| US-003 | Buildable shader toolchain | `shader_compiler_tests`, `shader_diagnostics_tests`, `shader_program_tests` | `engine_add_hlsl_shader`, [shader-pipeline.md](shader-pipeline.md) |
+| US-004 | CI and verification reports | CI workflow (`.github/workflows/ci.yml`, `gpu.yml`) | `artifacts/reports/*.xml`, `gpu-*.json` |
+| US-005 | Core runtime services | `core_*_tests` (assert, clock, coordinates, file I/O, GUID, log, path, result, units, UTF-8) | [runtime-conventions.md](runtime-conventions.md) |
+| US-006 | Jobs and controlled shutdown | `core_jobs_tests`, `lifecycle_tests` | [runtime-conventions.md](runtime-conventions.md) |
+| US-007, US-008 | Windowing (Win32, X11) | `platform_win32_tests`, `platform_x11_tests`, `platform_window_tests` | [windowing.md](windowing.md) |
+| US-009, US-010 | Input (Win32, Linux evdev and X11) | `platform_win32_input_tests`, `platform_evdev_tests`, `platform_x11_input_tests`, `platform_input_tests`, `platform_replay_tests` | [input.md](input.md) |
+| US-011 | Actions and input routing | `input_action_tests`, `input_router_tests`, `input_profile_tests`, `input_scenario_tests` | [input.md](input.md) |
+| US-012 to US-014 | ECS handles, storage, systems | `ecs_world_tests`, `ecs_storage_tests`, `ecs_systems_tests`, `ecs_command_buffer_tests` | [ecs.md](ecs.md) |
+| US-015 | Component reflection | `scene_reflection_tests` | [schemas.md](schemas.md) |
+| US-016 | Scene graph and transforms | `scene_graph_tests`, `scene_transform_tests` | [scene-graph.md](scene-graph.md) |
+| US-017 | Scene format and prefabs | `scene_format_tests`, `scene_tests` | [scene-format.md](scene-format.md), [schemas.md](schemas.md) |
+| US-018 | Asset registry | `assets_registry_tests`, `assets_project_tests` | [asset-registry.md](asset-registry.md) |
+| US-019 | Asset converter CLI | `converter_tests` | [asset-converter.md](asset-converter.md) |
+| US-020 | Model import | `converter_model_tests` | [model-import.md](model-import.md) |
+| US-021 | Texture conversion | `converter_texture_tests` | [texture-import.md](texture-import.md) |
+| US-022 | Skeleton and clip import | `converter_model_tests`, `animation_tests` | [model-import.md](model-import.md) |
+| US-023 | LOD and meshlet cooking | `converter_mesh_tests`, `render_meshlet_tests` | [mesh-cooking.md](mesh-cooking.md) |
+| US-024 | Runtime asset handles | `assets_handle_tests`, `assets_cooked_tests` | [runtime-assets.md](runtime-assets.md) |
+| US-025 | Changed asset updates | `converter_watch_tests` | [source-watch.md](source-watch.md) |
+| US-026 | RHI contract | `rhi_contract_tests`, `rhi_vulkan_mapping_tests` | [rhi.md](rhi.md) |
+| US-027, US-029 | DX12 device, resources, descriptors | `rhi_dx12_gpu_tests` `[gpu][dx12]` | [dx12.md](dx12.md) |
+| US-028, US-030 | Vulkan device, resources, descriptors | `rhi_vulkan_gpu_tests` `[gpu][vulkan]` | [vulkan.md](vulkan.md) |
+| US-031 | Shaders, reflection, PSO cache | `shader_reflection_tests`, `shader_cache_tests`, `shader_gpu_tests` | [shader-pipeline.md](shader-pipeline.md) |
+| US-032 | Render graph | `render_graph_tests`, `render_graph_gpu_tests` | [render-graph.md](render-graph.md) |
+| US-033 | Scene rendering and picking | `render_scene_tests`, `render_scene_gpu_tests` | [scene-rendering.md](scene-rendering.md) |
+| US-034 | PBR and transparency | `render_material_tests`, `render_material_gpu_tests` | [materials.md](materials.md) |
+| US-035 | Lighting and raster shadows | `lighting_tests`, `lighting_gpu_tests` | [lighting.md](lighting.md) |
+| US-036 | Playback and skinning | `render_skin_tests`, `render_skin_gpu_tests`, `animation_tests` | [animation.md](animation.md) |
+| US-037 | GPU indirect pipeline | `render_indirect_gpu_tests` | [sce
+
+... [5521 characters truncated] ...
+
+ | Passed (exit 0). The tree was already built, so only the DXC external step ran |
+| `ctest --preset linux-unit --output-on-failure --no-tests=error` | Linux | Passed: 30 of 30 tests (1 unit, 29 integration) |
+| `cmake --preset win-dev` | Windows | Passed (exit 0) |
+| `cmake --build --preset win-debug` | Windows | Passed (exit 0), rerun on its own. The tree was already built, so only the DXC external step ran |
+| `ctest --preset win-unit --output-on-failure --no-tests=error` | Windows | Passed: 29 of 29 tests (1 unit, 28 integration) |
+| `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, `ctest --preset linux-gcc-unit` | Linux (GCC 11+) | not run; the local GCC 9.4 cannot build Jolt |
+| `cmake --preset linux-asan`, `cmake --build --preset linux-asan`, `ctest --preset linux-sanitize` | Linux | passed (ASan + UBSan, CPU tests, 30 of 30) |
+| `cmake --build --preset win-release` | Windows | Passed (exit 0; 596 of 596 steps, MSVC Release) |
+| `cmake --build --preset linux-release`, `ctest --preset linux-release-unit` | Linux | passed (30 of 30). The first build failed on a release-only test compile error in `core_assert_tests.cpp`; fixed, then rebuilt |
+| `engine_tests --suite gpu --backend dx12` | Windows, RTX 5080 | Passed: 72 cases, 43923 assertions. The report names `NVIDIA GeForce RTX 5080`, validation layers on (`artifacts/reports/us081/win-gpu-dx12.log`) |
+| `engine_tests --suite gpu --backend vulkan` | Windows, RTX 5080 | Passed: 73 cases, 43935 assertions. The report names `NVIDIA GeForce RTX 5080`, `software=no`, validation layers on, and no VUID lines. The run used the pinned 1.4.363 layer via `VK_LAYER_PATH` (`artifacts/reports/us081/win-gpu-vulkan.log`) |
+| `engine_tests --suite gpu --backend vulkan` | native Linux GPU | not run: no native Linux Vulkan device on the verification machine |
+| `engine_tests --suite editor --backend <dx12\|vulkan>` | Windows | DX12 passed: 107 cases, 1588 assertions (`artifacts/reports/us081/win-editor-dx12.log`). Vulkan passed: 107 cases, 1587 assertions, pinned 1.4.363 layer via `VK_LAYER_PATH`, no VUID or error lines (`artifacts/reports/us081/win-editor-vulkan.log`) |
+| `engine_bench --suite acceptance --backend <dx12\|vulkan> --output artifacts/bench/<run-id>` | Windows (DX12, Vulkan), native Linux (Vulkan), Release | not run; see Open items |
+| Offline build from a clean repository copy | Linux | Passed: a copy without `build/`, `artifacts/`, and `.ralph-tui/` ran `tools/ci/offline_verify.sh` in a network namespace with only `lo` (outbound TCP refused). Validate, `linux-dev`, `linux-debug`, and `linux-unit` (30 of 30) passed |
+| Standalone packages from clean directories | Windows, Linux | Linux: `engine_tests --suite editor` (CPU, `[editor]~[gpu]`) passed, 106 cases and 1569 assertions, on the current tree. It includes `tests/src/editor_distribution_tests.cpp`, which builds a package from the sample project into an empty folder and launches it. Windows: not run in this pass. A package built from a real sample game on each OS is still open |
+| Visual editor smoke test with screenshots | Windows, Linux | not run |
+
+## Open items
+
+These block final acceptance. Each one is recorded as incomplete rather than passed.
+
+1. **Native Linux Vulkan GPU report.** The verification machine (WSL2) has no usable Vulkan device. No `engine_tests --suite gpu
+   --backend vulkan` report exists for native Linux.
+2. **Full acceptance benchmark.** `engine_bench --suite acceptance` has not been run to completion on DX12 or Vulkan. The
+   `artifacts/bench` folder holds only the US-076 to US-078 runs and two US-080 readback-off runs. The render, streaming,
+   all-features, and physics acceptance scenes do not yet produce GPU timestamps and residency, so an acceptance run reports
+   `incomplete` (see [benchmarks.md](benchmarks.md)).
+3. **FSR 2.** The vendored tree lacks its generated shader permutations, so temporal upscaling is unavailable (see [vendor.md](vendor.md)).
+4. **Linux GCC.** The local GCC 9.4 cannot build Jolt. The `linux-gcc` gate needs GCC 11 or newer.
+5. **Visual editor smoke test.** No screenshot-backed run of the editor on Windows or Linux exists for US-081.
+6. **Clean-directory checks.** The offline clean-copy build passed. A standalone package smoke test on a clean directory, built from a sample project on each OS, has not run.
+7. **License.** The repository has no license file (see [vendor.md](vendor.md)).
+----
+1:# Haiku Game Engine
+15:## Documentation
+30:## OS and SDK requirements
+32:### Windows
+44:### Linux
+55:## Offline CMake setup
+75:## Verified platforms
+85:## Editor workflow
+103:## Lua API
+129:## Asset pipeline
+151:## Native packaging
+164:## Benchmarks
+178:## Tests
+189:## Licensing
+win-debug-build.log
+win-editor-dx12.log
+win-editor-vulkan.log
+win-gpu-dx12.log
+win-gpu-vulkan.log
+win-unit-ctest.log
+ls: cannot access '/dev/dri': No such file or directory
+g++ (Ubuntu 9.4.0-1ubuntu1~20.04) 9.4.0
+ls: cannot access 'LICENSE*': No such file or directory][0m
+The docs, README sections, and acceptance map already exist. What is still open is hardware work and a license decision. One open item might be doable from here: a Windows visual smoke test. I'll check whether the editor binary exists and whether WSL can launch Windows executables.
+[94m[Bash][0m Locate editor binary and Windows interop tools $ which powershell.exe cmd.exe 2>&1 | head -2
+The Windows editor binary exists and PowerShell is reachable from WSL. I'll try a launch-and-screenshot smoke test with a script kept outside the repo.
+[94m[Bash][0m Launch Windows editor and capture a screenshot $ ls -la /mnt/d/dev/haiku_game_engine/artifacts/reports/us081/ | grep smoke
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/artifacts/reports/us081/win-editor-smoke-launch.png[0m
+The screenshot shows the Windows editor launched and drew its full panel layout, with the console reading "no project is open". That is a launch-only smoke test with no actions, so I'll record it as partial rather than as the full visual smoke test. I'll find the acceptance row to update.
+[94m[Bash][0m Find the visual smoke row in acceptance doc $ grep -n "Visual editor smoke test with screenshots" docs/acceptance.md
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| Visual editor smoke test with screenshots | Wind..." → "| Visual editor smoke test with screenshots | Wind..."
+[94m[Bash][0m Append progress entry for this pass $ no COMPLETE signal) - Launched `build/win-dev/tools/game_editor/Release/game_editor.exe` from WSL th...
+US-081 is not complete, so I am not signalling COMPLETE. Most of the story was already in place from earlier passes; this pass added one Windows smoke check and recorded it.
+
+**What I did this pass**
+- Launched the Windows Release `game_editor.exe` from WSL, waited 8 seconds, and captured the screen. The editor stayed up and drew its panels (Project, Assets, Hierarchy, Viewport, Inspector, Console, Errors). The console read "no project is open". I then stopped the process.
+- Screenshot: `artifacts/reports/us081/win-editor-smoke-launch.png`.
+- Updated the visual smoke row in `docs/acceptance.md` to say "launch only". I did not open a project or run any actions, so the full visual smoke test is still open.
+- Appended a progress entry to `.ralph-tui/progress.md`.
+
+**Still open, and why I can't close it from here**
+- Native Linux Vulkan GPU report: `/dev/dri` is absent on this WSL machine.
+- Full `engine_bench --suite acceptance` on DX12 and Vulkan: the render, streaming, all-features, and physics scenes don't yet produce GPU timestamps, so runs report `incomplete`.
+- Visual editor smoke test with actions and screenshots on both OSes: Windows is launch-only; Linux is not run.
+- `linux-gcc` gate: only GCC 9.4 is installed, and Jolt needs GCC 11 or newer.
+- FSR 2: the vendored tree is missing its generated `*_permutations.h` files.
+- Clean-directory package built from a real sample game on Windows: not run.
+- LICENSE: the repo has no license file. This needs your decision on which license to use.
+
+The Windows gates, the Linux gates, the vendor check, and the GPU and editor suites on Windows were already recorded as passing in earlier passes, and I did not re-run them.

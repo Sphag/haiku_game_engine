@@ -1,0 +1,40 @@
+# Iteration 701 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:15:40.121Z
+- **Ended At**: 2026-10-26T02:15:56.953Z
+- **Duration**: 16s
+- **Input Tokens**: 18
+- **Output Tokens**: 2515
+- **Total Tokens**: 2533
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo and progress log for US-076 $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-076" -r --include=*.md --include=*.cpp --in...
+[94m[Bash][0m Locate recent US-076 progress entries $ grep -n "## 2026-10-2" .ralph-tui/progress.md | tail -40 && grep -n "312,068\|placement" .ralph-tui/...
+US-076 is not complete, and I have not signalled COMPLETE. I made no source changes and ran no gates or benchmarks in this pass. The last twelve progress entries are status checks that repeat the same blocker, so I stopped instead of adding another one.
+
+**What is done:** the `render_stress` driver and its fallback guard are in the tree. The `attach_meshlets` call is guarded by `geometry_path() == Meshlets`. Eight `artifacts/bench/us076-*` runs exist for DX12 and Vulkan across indexed, indirect, and meshlet paths, plus the no-mesh-shader fallback. Their timestamps postdate the last source edit, so the recorded results still describe the current tree.
+
+**What blocks completion:**
+
+1. **Triangle floor and frame budget fail on placement.** Every indexed run submits 312,068 triangles at the route start against the contract's 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms. Instances are placed uniformly over 8192 m, so the route start sees about 330 items. The contract does not allow reducing the workload, so the failure is the measured result unless placement changes.
+2. **full_1080 is unsupported.** FSR 2 permutation headers are missing from the vendored tree, so only native_1080 runs. The vendoring route is your call.
+3. **Not yet run:** native Linux Vulkan GPU, the Linux GCC gate, and the Windows and Linux quality gates on this final tree.
+
+**Decisions I need from you:**
+
+- **Placement:** approve a placement change that keeps the contract counts but clusters instances near the route, which means bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`. My recommendation is to approve it, since the current generator cannot meet the contract's own counts at the route start. The frame-budget failure should then be reported as measured, not tuned away.
+- **Story closure:** if placement is not changed, the story should be closed as measured with the failures recorded, not marked complete.
+- **FSR 2:** pick a vendoring route for the permutation headers, or accept full_1080 as unsupported for this story.
+
+Once you answer, I can make the placement change, rerun the Windows and Linux gates, and rerun the benchmark matrix.

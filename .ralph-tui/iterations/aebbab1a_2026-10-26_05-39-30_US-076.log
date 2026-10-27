@@ -1,0 +1,38 @@
+# Iteration 775 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:39:30.587Z
+- **Ended At**: 2026-10-26T02:39:40.918Z
+- **Duration**: 10s
+- **Input Tokens**: 12
+- **Output Tokens**: 1476
+- **Total Tokens**: 1488
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress notes $ ls && tail -c 3000 .ralph-tui/progress.md && grep -n "US-076" -r tasks/ .ralph-tui/progress.md | hea...
+US-076 is not complete. I did not run any gates or change any code in this pass, because the remaining work depends on decisions only you can make.
+
+**What is blocked on you:**
+
+1. **Route-start triangle floor.** The PRD (line 875) requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The pinned start pose from the manifest camera route gives 312,068. Fixing that means changing the fixed contract: either a route-start or placement change (bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, update the manifest hash), or accepting the failing measured run as the result. The frame budget is part of the same decision.
+2. **full_1080 profile.** It stays unsupported until the vendored FSR 2 permutation headers exist. `ENGINE_FSR2_AVAILABLE` gates it, and the tree and pinned archive both lack them.
+3. **Native Linux Vulkan GPU run and linux-gcc run.** Neither has been run. WSL has no usable Vulkan device, and GCC 9.4 cannot build Jolt.
+
+**Last verified state (status check 23, from the progress log):**
+- `cmake --build --preset linux-debug` builds.
+- `ctest --preset linux-unit` passes 30/30.
+- `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes matching.
+
+Source and manifest mtimes are unchanged since then, so that result still stands. The Windows gates, the mesh-shader-off fallback run, screenshots, and the indexed/indirect/meshlet path runs are also still not done.
+
+Four consecutive status checks (22–25) found no new information, so I stopped rerunning gates and did not add another no-op entry to the progress log. Tell me which option to take for the triangle floor (change the route/placement contract, or record the failing result), and whether to proceed with the Windows gates from WSL.

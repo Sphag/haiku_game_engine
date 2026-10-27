@@ -1,0 +1,47 @@
+# Iteration 521 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:45:14.565Z
+- **Ended At**: 2026-10-25T08:46:52.665Z
+- **Duration**: 1m 38s
+- **Input Tokens**: 36
+- **Output Tokens**: 2555
+- **Total Tokens**: 2591
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-059 is already implemented, since the codebase patterns already describe save code.
+[94m[Bash][0m Inspect repo layout, save module, and progress log $ tail -80 .ralph-tui/progress.md 2>/dev/null | head -120
+[94m[Bash][0m Search for US-059 progress and save files $ find . -path ./third_party -prune -o -name "*save*" -print | grep -v build | head -30
+The progress log says US-059 is implemented but Partial. I'll re-verify the current tree and check whether the GCC 11+ blocker has changed.
+[94m[Bash][0m Check GCC versions, rebuild Linux debug, run unit tests $ tail -3 /tmp/us059_ctest.log)
+[94m[Bash][0m Read ctest summary and benchmark PRD references $ grep -n "US-074\|engine_bench" tasks/prd-open-world-engine.md | head -5
+The tree still builds and passes, and nothing new unblocks the remaining items. I'll log this pass in the progress file the way earlier passes did.
+[94m[Bash][0m Append re-check entry to progress log $ no g++-11 or newer, so \`linux-gcc\` cannot run here." "- Status: US-059 stays **Partial**, no COMPL...
+US-059 is not complete, so I'm not emitting the completion signal. The save system is implemented and passes the Linux gates I could run here. Three acceptance items remain blocked by the environment or by other stories.
+
+**What I checked this pass**
+- The Linux debug build succeeds with 0 warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22.
+- The only GCC on this machine is 9.4. The `linux-gcc` gate needs GCC 11 or newer for Jolt, so it cannot run here.
+
+**What's already in the tree**
+- `engine/save/` has the slot format, atomic writes, the `.prev` backup of the last good save, world-change capture and restore, and the world-change validation.
+- `engine/script/src/script_state.cpp` captures and restores Lua instance state.
+- `tests/src/save_tests.cpp` has 12 unit cases covering format, checksum, corruption rejection, and restore into both the authored world and cell files.
+
+**What's still open**
+- `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11 or newer. Installing it needs sudo, which this environment doesn't have.
+- `engine_bench --suite acceptance` can't run because the benchmark harness is US-074, which doesn't exist yet.
+- A save and load through a running game needs the application host from US-060.
+
+I also appended a re-check entry to `.ralph-tui/progress.md`. No source files changed.

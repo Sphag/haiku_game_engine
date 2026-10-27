@@ -1,0 +1,41 @@
+# Iteration 695 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:14:01.961Z
+- **Ended At**: 2026-10-26T02:14:15.749Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2139
+- **Total Tokens**: 2161
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for the benchmark tool.
+[94m[Bash][0m Check progress log and benchmark tool state $ grep -n "US-076" -A3 tasks/prd-open-world-engine.md | head -60
+The log shows this story has been parked for many passes on the same blocker. I'll confirm the tree hasn't changed since the last run before deciding whether to rerun anything.
+[94m[Bash][0m Check source mtimes and recorded benchmark status $ ls artifacts/bench/us076-dx12-meshlets-nomesh 2>/dev/null
+US-076 is not complete, so I'm not emitting the COMPLETE signal. I checked the tree and the recorded results and changed nothing, because every pass since the last source edit has reached the same blocker.
+
+**Current state**
+- `render_stress.cpp` was last edited at 04:15:43. All eight `us076-*` benchmark reports postdate it. Every one exits `failed`, so no benchmark or gate was rerun.
+- Forced mesh-shader-off runs (`*-meshlets-nomesh`) exist for DX12 and Vulkan. They do not add up to a passing fallback proof, because the run as a whole fails.
+
+**What blocks completion**
+1. **Triangle floor and frame budget fail on placement.** The route start shows 312,068 of the required 2,000,000 triangles. p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`. That changes the fixed benchmark contract, so it needs your approval.
+2. **`full_1080` is unsupported** because the vendored FSR 2 permutation headers are missing. `native_1080` is the only profile that runs.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not been run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Decision needed from you**
+- Approve or reject a placement change that bumps `kWorkloadVersion`. Without it, the acceptance criteria cannot pass.
+- Say whether the story should close as measured with the failing numbers recorded, or stay open until the workload is fixed.
+
+Once you decide, I can make the placement change, regenerate the expected file, and rerun the Windows gates and benchmarks. I did not add another status entry to `.ralph-tui/progress.md`, because the last twelve entries already record this same blocker.

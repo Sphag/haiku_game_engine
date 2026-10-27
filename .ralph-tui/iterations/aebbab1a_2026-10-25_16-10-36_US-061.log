@@ -1,0 +1,48 @@
+# Iteration 602 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T13:10:36.866Z
+- **Ended At**: 2026-10-25T13:16:52.108Z
+- **Duration**: 6m 15s
+- **Input Tokens**: 48
+- **Output Tokens**: 3660
+- **Total Tokens**: 3708
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress log $ grep -n "US-061" -r .ralph-tui/progress.md | head
+[94m[Bash][0m Check Windows lock state and rerun Linux gates $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Read interim output of the background check $ grep -c -E "warning:|error:" /tmp/b.log 2>/dev/null
+[94m[Bash][0m Run Linux unit tests via ctest $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+The Linux unit run failed on `engine_tests_integration`, which passed in earlier passes. I'll get the failing output before deciding anything.
+[94m[Bash][0m Rerun integration tests with failure output $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error -R integration 2>&1 | gre...
+The integration test passes on rerun. The background `ctest` from the first command was still running at the same time, so the failure is probably a collision between two concurrent runs. I'll run the full suite once more alone to confirm.
+[94m[Bash][0m Run full Linux unit suite alone $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Confirm full suite result and log status $ only GCC 9.4 installed). --- EOF
+US-061 is not complete, so I have not emitted the completion signal.
+
+**Stuck on:** the Windows desktop is still locked (`LogonUI` 52008 and `LockApp` 58728 are running). That blocks the unlocked-desktop `game_editor.exe` screenshot and action log, and I haven't re-run the Windows gates in this pass.
+
+**Verified this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --build --preset linux-debug`: passed, with zero `warning:` or `error:` lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: passed on a solo run, 30 of 30 (unit 1, integration 29).
+
+**One unexplained failure:** on the first ctest run, `engine_tests_integration` failed. A second ctest was still running in the background at the time, so I think the two runs collided. The integration test then passed on its own, and the full suite passed again solo. I have not confirmed the cause, so if it recurs when runs are not overlapping, it needs investigating.
+
+**Still open, and not run here:**
+- Windows gates (`ValidateVendor`, `win-dev`, `win-debug` build, `win-unit`), which need the Windows session.
+- The unlocked-desktop GUI capture and action log, via `artifacts/ui/us061/run_ui.ps1`.
+- The native Linux Vulkan editor suite. WSL has no usable Vulkan adapter.
+- `linux-gcc`, which needs GCC 11 or later. Only GCC 9.4 is installed.
+
+I appended a status entry to `.ralph-tui/progress.md` recording the above. The next step is to unlock the Windows session and run the GUI capture and Windows gates. Once that is done, the story can be closed.

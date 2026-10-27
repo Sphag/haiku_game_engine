@@ -1,0 +1,44 @@
+# Iteration 180 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T10:40:34.114Z
+- **Ended At**: 2026-10-24T10:40:54.374Z
+- **Duration**: 20s
+- **Input Tokens**: 24
+- **Output Tokens**: 3302
+- **Total Tokens**: 3326
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect physics module and progress log $ grep -n "US-052" .ralph-tui/progress.md | head
+[94m[Bash][0m List repo root, physics sources, and Jolt memory note $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md
+[94m[Bash][0m Check available GCC/Clang toolchains $ ls ~/.local/bin 2>/dev/null | head -30
+[94m[Bash][0m Append status entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The physics adapter and its tests are in place and pass every gate this machine can run. Two acceptance items remain open, and neither can be closed here.
+
+**Status: Partial**
+
+**Already in place (from earlier passes, unchanged this pass):**
+- `engine/physics/` holds the Jolt adapter: one physics system per scene, 60 Hz fixed steps with an accumulator, a catch-up limit, pause, interpolated render transforms in double world space, and static/dynamic/kinematic bodies that reference `EntityHandle`s.
+- Contact and activation callbacks go through a mutex-guarded queue drained by `take_events()`. `close()` tears the world down, and the origin-shift subscriber is a no-op after close.
+- `tests/src/physics_world_tests.cpp` has 13 `[unit]` cases. `docs/physics.md` documents the adapter.
+
+**Gates that pass (Linux clang 10 and Windows MSVC, per the progress log):**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (21/21).
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warning or error lines), `linux-unit` (22/22).
+- Linux ASan/UBSan: `linux-asan` build and `linux-sanitize` (22/22), with no sanitizer output.
+
+**Open items:**
+- **`linux-gcc` gate: blocked.** `/usr/bin` has only GCC 9.4 and clang 10. Jolt needs GCC 11+ (`__builtin_bit_cast`). `sudo` needs a password, and there is no conda, micromamba, or docker to get a newer GCC. CI's GCC 11 job is also unverified. Closing this needs a GCC 11+ environment.
+- **`engine_bench --suite acceptance`: not run.** No benchmark harness exists in the tree yet; that is US-074.
+
+**This pass:** I did not change any source or rerun the build. I confirmed the toolchain is still limited and appended a status entry to `.ralph-tui/progress.md`. The Windows gates were not rerun in this pass; their results come from the earlier US-052 entry on the same source.

@@ -1,0 +1,40 @@
+# Iteration 67 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:49:41.838Z
+- **Ended At**: 2026-10-24T00:50:00.253Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2960
+- **Total Tokens**: 2988
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the FSR blocker recorded in memory.
+[94m[Bash][0m Read progress log and FSR memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/feedback-windows-gate-overlap.md
+The log shows 14 earlier passes, all stopped on the same FSR 2 vendoring decision. Before deciding anything, I'll confirm the blocker still holds.
+[94m[Bash][0m Verify FSR permutation headers and recent changes $ find . -newer .ralph-tui/progress.md -path ./build -prune -o -type f -print 2>/dev/null | grep -v "^...
+The blocker still holds: no `*_permutations.h` files exist, so FSR 2 cannot build. I'll record this pass in the progress log and stop.
+[94m[Bash][0m Append re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ta...
+US-046 is still blocked, so I'm not signalling COMPLETE. Nothing in the source changed this pass.
+
+**What's blocking:** FSR 2 cannot compile from the vendored tree. The shader sources include eight `ffx_fsr2_<pass>_permutations.h` files per backend, and none exist in `third_party/fsr2` or the pinned upstream archive. Without them `ENGINE_FSR2_AVAILABLE` stays off, and both backends return `Unsupported` for upscaling. I confirmed this again just now: 0 permutation headers exist.
+
+**Decision needed from you.** Choose one route for generating those headers:
+1. **Vendor the hash-pinned outputs** of the archive's `tools/sc/FidelityFX_SC.exe`. This needs a documented exception to the rule against vendoring prebuilt tools. It is the faster route.
+2. **Regenerate the blobs with the engine's pinned DXC** through a first-party generator. This is more work, and the bytes will differ from upstream.
+
+I won't add stub headers. They would hide the failure until pipeline creation.
+
+**Work that depends on the decision:** the fixed Native and Full profiles, composing UI after upscaling, and the acceptance checks for the Windows and Linux gates and GPU suites. The non-FSR parts of the story (history reset on resize and camera cuts, and benchmarks not enabling frame generation) could go ahead, but I haven't started them, because the profile and UI work is tied to a working FSR 2.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. Tell me which route to take and I'll start on the FSR integration.

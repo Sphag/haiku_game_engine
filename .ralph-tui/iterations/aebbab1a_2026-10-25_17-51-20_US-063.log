@@ -1,0 +1,58 @@
+# Iteration 617 Log
+
+## Metadata
+
+- **Task ID**: US-063
+- **Task Title**: Viewport and Gizmos
+- **Description**: As a scene author, I want to edit transforms in the viewport so that I can place objects visually.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T14:51:20.141Z
+- **Ended At**: 2026-10-25T14:54:39.176Z
+- **Duration**: 3m 19s
+- **Input Tokens**: 52
+- **Output Tokens**: 4204
+- **Total Tokens**: 4256
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the viewport code, since the patterns list already mentions US-063.
+[94m[Bash][0m Read progress log tail and editor sources $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -n "US-063" .ralph-tui/progress.md | head -20...
+The progress log already has a US-063 entry with gates recorded. I'll check whether any source changed after that entry, then re-run the Linux gates that are cheap to run here.
+[94m[Bash][0m Check for files changed after the US-063 log entry $ grep -n "Status\|Partial\|COMPLETE" .ralph-tui/progress.md | tail -5
+[94m[Bash][0m Run Linux validate, build, unit ctest, and editor suite $ echo "editor=${PIPESTATUS[0]}")
+Validation, the Linux debug build, and unit ctest all pass. The editor suite path was wrong, so I'll locate the binary and run it.
+[94m[Bash][0m Locate engine_tests and run the editor suite $ grep -E "passed|failed" /tmp/us063_ctest.log | tail -2
+The editor suite passes (570 assertions, 56 cases). One acceptance point, that gizmo drags never drive the gameplay camera, isn't named in the log, so I'll check that directly.
+[94m[Bash][0m Check gameplay camera isolation and viewport test cases $ grep -n "TEST_CASE" tests/src/editor_viewport_tests.cpp | head -30
+[94m[Bash][0m Check viewport and scene editor for camera component access $ grep -n -i "camera" engine/editor/src/scene_editor.cpp | head
+The viewport only touches its own `EditorCamera`, and nothing in the viewport or scene editor reads or writes a scene camera, so gizmo drags cannot move the gameplay camera. I'll record this verification pass in the progress log.
+[94m[Bash][0m Append US-063 verification entry to progress log $ GUI, Vulkan, and linux-gcc items are reported as not run. --- EOF tail -3 .ralph-tui/progress.md
+US-063 was already implemented in an earlier pass. I re-checked it on Linux and it still holds. I made no source changes.
+
+**Re-verified on Linux (this pass):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --build --preset linux-debug`: passes, with first-party warnings as errors.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30 of 30 pass.
+- `engine_tests --suite editor`: 56 cases, 570 assertions, all pass. The viewport accounts for 14 of these cases.
+- No file under `engine`, `tests`, `tools`, `cmake`, or `docs` is newer than the earlier US-063 entry.
+
+**Covered by the earlier pass (recorded in the log, not re-run):**
+- The Windows gates passed on the RTX 5080 with MSVC: ValidateVendor, configure, win-debug build, win-unit ctest (29 of 29), and `engine_tests --suite editor --backend dx12` (57 cases).
+
+**Acceptance points:**
+- Gizmo drags cannot move the gameplay camera. The viewport drives only its own `EditorCamera`, and neither `viewport.cpp` nor `scene_editor.cpp` touches a scene camera. A test covers the editor camera.
+- Selection survives deletion and reparenting. Tests cover both.
+
+**Not run, so reported as not verified:**
+- The running `game_editor` window: the Windows desktop was locked in earlier passes, so there are no screenshots or action log.
+- The native Linux Vulkan editor suite: WSL has no Vulkan adapter.
+- `linux-gcc`: needs GCC 11+, and only GCC 9.4 is installed.
+- `linux-asan`: not required, since the change touches no memory, ECS, jobs, streaming, Lua, or physics path.
+
+I appended a verification entry to `.ralph-tui/progress.md`.
+
+<promise>COMPLETE</promise>

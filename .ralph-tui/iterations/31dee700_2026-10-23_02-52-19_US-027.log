@@ -1,0 +1,104 @@
+# Iteration 12 Log
+
+## Metadata
+
+- **Task ID**: US-027
+- **Task Title**: DX12 Device and Presentation
+- **Description**: As a Windows user, I want DX12 output so that I can run the engine through DirectX.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T23:52:19.466Z
+- **Ended At**: 2026-10-23T00:04:28.531Z
+- **Duration**: 12m 9s
+- **Input Tokens**: 178
+- **Output Tokens**: 18097
+- **Total Tokens**: 18275
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and what US-007 and US-026 already built.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md
+[94m[Bash][0m List tasks and memory directory $ ls /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/
+[94m[Bash][0m Read story definitions from prd.json $ for s in d.get('userStories',d.get('stories',[])):   if s.get('id') in ('US-004','US-005','US-006','...
+[94m[Bash][0m Read memory references and find render/DX12 sources $ find . -path ./build -prune -o -iname "*dx12*" -print -o -iname "*d3d12*" -print -o -iname "*render*...
+The memory notes say the DX12 pieces already exist in `engine/rhi/src/dx12`. Next I'll check what US-026 and US-027 require and what the RHI currently contains.
+[94m[Bash][0m Show story statuses, US-026/027 details, RHI file list $ cat docs/dx12.md | head -150
+`docs/dx12.md` already describes the DX12 device and swapchain, and its verification record is dated 2026-10-22. I need to confirm the code matches the doc and see what gates have actually been recorded.
+[94m[Bash][0m Check build.md rows, DX12 file sizes, artifacts $ sed -n 1,80p docs/rhi.md 2>/dev/null | head -80
+The DX12 backend, its doc, and a GPU test file all exist. This looks like a story whose code landed earlier without its gate record. I'll verify it against the acceptance criteria rather than rewrite it. First, the verification table format and the GPU test coverage.
+[94m[Bash][0m Inspect build.md table, DX12 test cases, CMake wiring $ grep -n "gpu\|dx12\|DX12" CMakePresets.json tests/CMakeLists.txt engine/rhi/CMakeLists.txt | head -4...
+The code, the GPU test cases, and the CMake wiring are all in place. What's missing is a verified gate record and the PRD/progress updates. I'll run the Linux gates first, then the Windows gates from WSL through `cmd.exe`.
+[94m[Bash][0m Run Linux validate, configure, and debug build gates $ tail -3 /tmp/us027_linux_build.log
+[94m[Bash][0m Run Linux clang and GCC unit test gates $ tail -3 /tmp/us027_gcc.log
+Linux clang passes 22/22. The GCC run reused an existing build directory, so I'll redo that chain from configure, and also run the ASan/UBSan gate since the device owns object lifetime.
+[94m[Bash][0m Rerun GCC chain and run ASan/UBSan gate $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | head -30
+Linux is green on all four gates: clang, GCC, and ASan/UBSan. Next are the Windows gates. I'll reuse the batch pattern from the memory notes, so I'm looking for a previous working `.bat` to copy the `vcvars` path from.
+[94m[Bash][0m Find prior Windows gate batch and build tree layout $ ls /mnt/d/dev/haiku_game_engine/build/win-dev/tests 2>/dev/null
+A previous batch shows the working pattern. I'll write a US-027 batch that captures every step's exit code into its own file, then run it through `cmd.exe`.
+[94m[Write][0m [95m/mnt/c/Users/bucha/AppData/Local/Temp/us027_gates.bat[0m "@echo off
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
+cd /d D:\dev\haiku_game_engine
+set LOGDIR=C:\Users\bucha\AppData\Local\Temp\us027
+if not exi... (953 chars)"
+[94m[Bash][0m Run Windows gate batch via cmd.exe $ cat us027/done.txt 2>/dev/null
+All five Windows steps return 0. The notes say a short build log can hide a stale binary, so I'll read the logs before I trust those codes.
+[94m[Bash][0m Inspect Windows build, unit, and GPU logs $ find /mnt/d/dev/haiku_game_engine/engine /mnt/d/dev/haiku_game_engine/tests/src -newer tests/Debug/e...
+Windows is green, the log shows 0 `warning C` lines, and the DX12 suite reports the RTX 5080 with validation on. The `find` result says no source is newer than `engine_tests.exe`. I'll confirm that with a ninja dry run, and also run the Vulkan GPU suite on Windows, which is cheap and covers the cross-backend criterion. I'll also check whether `engine_bench` exists yet.
+[94m[Write][0m [95m/mnt/c/Users/bucha/AppData/Local/Temp/us027_extra.bat[0m "@echo off
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
+cd /d D:\dev\haiku_game_engine\build\win-dev
+set LOGDIR=C:\Users\bucha\AppData\Local\Temp\us... (559 chars)"
+[94m[Bash][0m Run ninja dry run and Vulkan GPU suite on Windows $ grep -n "vsync\|VSync" engine/rhi/include/engine/rhi/swapchain.hpp | head
+Every check I planned passes, and the dry run confirms the Windows build is current. `engine_bench` has no CMake target yet, so the benchmark criterion is not applicable. Now I'll record the results in the docs, the PRD, and the progress log, starting with the lines I need to edit.
+[94m[Bash][0m Locate PRD flag and doc rows to update $ grep -n "Verified on 2026-10-22" docs/dx12.md
+[94m[Bash][0m Find passes flag line for US-027 and build table rows $ sed -n 170,181p docs/build.md | cut -c1-80
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m edit: "      "priority": 27,
+      "passes": false," → "      "priority": 27,
+      "passes": true,"
+The PRD flag is set. Before writing the verification row, I need the exact Windows unit pass count rather than a guess.
+[94m[Bash][0m Get exact ctest pass counts for Windows and Linux $ tail -3 /tmp/us027_asan.log | head -1
+Counts confirmed: Windows `win-unit` 21/21, Linux clang and GCC 22/22. Now I'll add the verification row to `docs/build.md`, inserted just above the GPU summary row.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "| GPU DX12 and Vulkan on Windows, GPU Vulkan on Li..." → "| US-027 DX12 device and presentation (`engine/rhi..."
+I wrote a reference to a personal memory file into the repo doc. Repo docs shouldn't point at it, so I'll remove that clause. I'll also refresh the DX12 verification record with today's run.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "no Vulkan device exists in this WSL host, see `ref..." → "no usable Vulkan device exists on the WSL host), "
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/docs/dx12.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/dx12.md[0m edit: "Not run: `engine_bench --suite acceptance` (no ben..." → "Re-verified on 2026-10-23 with no source change, o..."
+Next is the progress log entry. I'll read the end of the file so I can append after the last entry.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "  - The Windows batch used the `us023` pattern wit..." → "  - The Windows batch used the `us023` pattern wit..."
+Last, I'll confirm the edited PRD still parses and that US-027 is the only flag I changed.
+[94m[Bash][0m Validate prd.json parses and show US flags $ print([ (s['id'],s['passes']) for s in d['userStories'] if s['id'] in ('US-026','US-027','US-028','U...
+US-027 (DX12 Device and Presentation) is verified and marked `passes: true`. The DX12 backend already existed in `engine/rhi/src/dx12/`, so I made no source changes. I checked it against the acceptance criteria, ran every gate, and recorded the results.
+
+**Gate results**
+
+| Gate | Result |
+|---|---|
+| Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | Pass. `win-unit` 21/21, 0 `warning C` lines |
+| Linux `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` | Pass. 22/22, 0 warnings |
+| Linux GCC `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | Pass. 22/22, 0 warnings |
+| Linux `linux-asan` build + `linux-sanitize` | Pass. 22/22, no sanitizer reports |
+| `engine_tests --suite gpu --backend dx12` (RTX 5080, debug layer on) | Pass. 13 cases, 508 assertions |
+| `engine_tests --suite gpu --backend vulkan` (Windows, cross-check) | Pass. 9 cases, 80 assertions |
+
+The Windows build log was short, so I ran a `ninja -n engine_tests` dry run. It showed only DXC stamp steps, which means the test binary is current.
+
+**Not run or not applicable**
+- `engine_bench --suite acceptance` is not applicable. No benchmark target exists yet (US-074).
+- The Linux GPU suites report unsupported. DX12 is Windows-only, and the WSL host has no usable Vulkan device.
+- GitHub CI has not run because nothing is pushed.
+- The GUI and screenshot check is not run. No editor or runtime window exists yet.
+
+**Files changed**
+- `tasks/prd.json`: US-027 `passes: true`.
+- `docs/build.md`: added the US-027 verification row.
+- `docs/dx12.md`: added the 2026-10-23 re-verification.
+- `.ralph-tui/progress.md`: added the US-027 entry.
+
+**Flag for you:** `docs/dx12.md` also describes US-029 (DX12 resources and descriptors), but `tasks/prd.json` still has US-029 at `passes: false`. The GPU suite includes the US-029 cases. I did not change that flag, because US-029 is a separate story and I did not verify its acceptance criteria.
+
+<promise>COMPLETE</promise>

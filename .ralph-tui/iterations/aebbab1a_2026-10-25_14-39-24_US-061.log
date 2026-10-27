@@ -1,0 +1,40 @@
+# Iteration 555 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T11:39:24.683Z
+- **Ended At**: 2026-10-25T11:39:40.283Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2387
+- **Total Tokens**: 2415
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress notes $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/editor && grep -n "US-061" -r .ralph-tui/progre...
+[94m[Bash][0m Check whether the Windows session is still locked $ ls artifacts/ui/us061 2>/dev/null
+[94m[Bash][0m Confirm lock-screen processes are gone $ cat artifacts/ui/us061/NOT_VERIFIED.txt | head -20
+[94m[Bash][0m Append lock-screen recheck entry to progress log $ no COMPLETE signal. Open: unlock the Windows session, then run `artifacts/ui/us061/run_ui.ps1` and r...
+US-061 is not complete, so I am not emitting the completion signal. The editor shell itself was already implemented and verified in earlier iterations. What's missing is evidence that only a native GUI session and a `linux-gcc` run can produce.
+
+**Blocked on the environment:**
+- **Running-app UI check (acceptance criterion):** the Windows session is still locked. `LogonUI.exe` and `LockApp.exe` are running, so `game_editor.exe` would only capture the wallpaper. I did not launch it. Unlocking the session and running `artifacts/ui/us061/run_ui.ps1` would produce the screenshot and action log.
+- **Native Linux GUI and Vulkan editor suite:** WSL has no Vulkan 1.2 adapter.
+- **`linux-gcc` gate:** the local GCC is 9.4, which cannot build Jolt. The CI job needs GCC 11+.
+- **`engine_bench`:** no benchmark harness exists yet (US-074).
+
+**Recorded from earlier runs (not re-run this pass):**
+- Linux gates passed on the current tree: `ValidateVendor`, `linux-dev`, `linux-debug` with no warnings, and `linux-unit` at 30 of 30. The editor suite passed at 322 assertions in 30 cases.
+- Windows gates passed: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` at 29 of 29. The editor suite passed on DX12 (340 assertions) and on Vulkan with `VK_LAYER_PATH` set to the pinned layer. GPU suite passed on both backends (73 cases each).
+
+**Change this pass:** I appended a "Lock-screen recheck 3" entry to `.ralph-tui/progress.md` recording the lock state and the open items. No source files changed.
+
+To finish, unlock the Windows desktop and run the UI script. Then run the `linux-gcc` job in CI, and a native Linux GUI pass if a Vulkan-capable machine is available.

@@ -1,0 +1,41 @@
+# Iteration 882 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:28:13.086Z
+- **Ended At**: 2026-10-26T11:28:35.544Z
+- **Duration**: 22s
+- **Input Tokens**: 26
+- **Output Tokens**: 2579
+- **Total Tokens**: 2605
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null ...
+The log shows six prior status-only passes with no code change. The remaining items are the tour runner, profiles, relaunch, and gates. I'll check the existing all_features code to see what can be done on this host.
+[94m[Bash][0m Inspect all_features tests, manifest references, and tools layout $ wc -l tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp && grep -rn "all_feat...
+[94m[Bash][0m Check for source changes since last log and host toolchain $ g++ --version | head -1
+US-079 is not complete, so I am not emitting the COMPLETE signal. I made no code changes this pass.
+
+**State of the tree**
+- `all_features` has a CPU scenario (`tests/src/all_features_tests.cpp`) that runs the table workload, Lua gameplay, audio, UI click, save round trip, animation, and a material graph. It checks feature markers and outputs in order. The editor scenario is in `tests/src/all_features_editor_tests.cpp`.
+- Nothing under engine, tools, tests, benchmarks, docs, or cmake has changed since the last recorded US-079 run, so the earlier Linux results still describe this tree.
+
+**Still open, and why I can't close them on this host**
+- **GI/RT/upscale profiles and forced indirect/meshlet paths:** these need a GPU. FSR 2 also cannot link because its `*_permutations.h` headers are missing from `third_party`.
+- **Automated tour with screenshots and action log:** only the CPU marker check exists. Screenshots need a GUI session.
+- **Editor package/relaunch:** only Build Game's own verify step runs. The published folder is never launched a second time.
+- **Windows gates** (`win-dev`, `win-debug`, `win-unit`, `ValidateVendor`) and the `--suite gpu --backend dx12` run: not re-run for this change, and need a Windows session.
+- **Native Linux Vulkan GPU, GUI checks, and `engine_bench --suite acceptance`:** no `/dev/dri` device here. `all_features` is still `implementation: none` in `benchmarks/manifest.json`.
+- **`linux-gcc*`:** the host has only g++ 9.4 (clang 10 is present), and Jolt needs GCC 11+.
+
+The work that would close this is a Windows GPU session, a native Linux Vulkan device, a GCC 11+ host, and the FSR 2 permutation headers. I did not add another status entry to `.ralph-tui/progress.md`, since six identical ones already exist.

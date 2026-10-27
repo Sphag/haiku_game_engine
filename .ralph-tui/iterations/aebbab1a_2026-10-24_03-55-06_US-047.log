@@ -1,0 +1,126 @@
+# Iteration 74 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:55:06.315Z
+- **Ended At**: 2026-10-24T01:32:18.522Z
+- **Duration**: 37m 12s
+- **Input Tokens**: 262
+- **Output Tokens**: 70489
+- **Total Tokens**: 70751
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the terrain code.
+[94m[Bash][0m Inspect progress log and terrain references $ grep -n -i "US-047\|terrain" tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Read PRD story and repo layout $ cat tests/CMakeLists.txt 2>/dev/null | head -120
+The repo has no `engine/world` yet, so the terrain runtime will be new code. Next I'll check how an existing library like `engine/gi` is wired into CMake and whether the Linux toolchain is available.
+[94m[Bash][0m Inspect gi library and build tooling $ grep -n '"name"' CMakePresets.json | head -40
+The Linux toolchain is present. Before writing code I want the test conventions and the existing build state, so I'll read a small existing test file and check the build directory.
+[94m[Bash][0m Read test conventions and build dir $ grep -n "lib\|\[" tests/src/main.cpp | head -30
+I'm going with a CPU-side terrain runtime first, since the GPU path depends on the same tile and LOD logic. I need the `Result` helper's constructors before writing the header.
+[94m[Bash][0m Check Result helper API $ grep -rn "return core::Result\|core::err\|Err(" engine/gi/src/dynamic_grid.cpp | head -5
+[94m[Bash][0m View Result success/failure helpers $ grep -n "failure(\|success(" engine/gi/src/dynamic_grid.cpp | head -3
+I have the API details. Now I'll write the terrain header. Heights live on one global sample grid, so tiles share boundary samples by construction. Stitching uses morphed boundary heights.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/terrain.hpp[0m "#pragma once
+
+// Heightfield terrain runtime (US-047): the CPU side of the tiled landscape. The terrain is one global grid of height samples. A tile
+// covers tile_cells x tile_cells cells, so its edg... (7081 chars)"
+Next is the implementation. The stitch morph uses the coarse endpoints' full attributes, so the fine and coarse tiles agree on height, normal, and splat along the shared edge.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/terrain.cpp[0m "#include "engine/world/terrain.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <utility>
+
+namespace engine::world {
+namespace {
+
+// Keeps a ... (15314 chars)"
+The terrain implementation is in place. Before writing the fixture I need the test tag convention and whether `engine_core` already exposes GLM, since `engine_world` will link against it.
+[94m[Bash][0m Check test tags and GLM linkage $ grep -n "glm" -r cmake/*.cmake | head -3
+GLM comes in through `engine_core`, so `engine_world` only needs to link that. Now the library and test wiring:
+[94m[Bash][0m Add world library and register test sources $ docs/terrain.md describes the contract. add_library(engine_world STATIC   src/terrain.cpp ) target_i...
+Now the fixture. It covers the acceptance items directly: tile boundaries that agree between LODs, no holes or overlaps across a mixed-LOD grid, and LOD switching by distance.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/world_terrain_tests.cpp[0m "// Heightfield terrain runtime (US-047), on the CPU. These cases check the description limits, the sample sharing across tile boundaries, the
+// LOD selection by distance, the stitching of mixed-LOD e... (18073 chars)"
+Reviewing the test file before compiling, I see several mistakes: a nonexistent `TerrainEdge` import, an unused helper that will trip `-Werror`, a `glm::compsum` call that may not be in the base header, and a wrong expected LOD array in the camera test (tile 1 is 16 m away, so it lands at LOD 1, not 0). I'll fix them now.
+[94m[Bash][0m Fix test helper and expectation mistakes $ grep -n '"linux-unit"' -A8 CMakePresets.json | head -12
+The file change notice is from my own scripted edit, so the content is as I intended. Next I'll configure and build the Linux debug tree, then run the terrain tests.
+[94m[Bash][0m Configure and build Linux debug tree $ tail -3 /tmp/build.log
+The build passed. I'll confirm the new files were actually compiled, then run the terrain cases.
+[94m[Bash][0m Run terrain test cases $ ./build/linux-dev/tests/Debug/engine_tests --suite unit "*errain*" 2>&1 | tail -30
+[94m[Bash][0m Run the CPU unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -40
+The whole CPU unit suite passes, with 594 test cases. To confirm the fixture actually detects the failures it targets, I'll inject two temporary defects, a dropped cell and disabled morphing, and check that the right cases fail.
+[94m[Bash][0m Mutation-check the terrain fixture $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -1
+Both mutations fail, but the failing lines don't obviously match the intended checks. I'll look at those lines before trusting the fixture.
+[94m[Bash][0m Inspect failing test lines $ sed -n 287,290p tests/src/world_terrain_tests.cpp
+The first mutation's failures line up exactly with the dropped cell: the index-count checks and the coverage check. The second mutation's output looks identical to the first, which suggests a stale binary. I'll check the build logs and confirm the file is restored before drawing any conclusion.
+[94m[Bash][0m Verify restored source and clean rebuild $ tail -2 /tmp/unit.log
+The second mutation didn't compile: `-Werror` rejected an unused `blend` helper, so the run reused the stale binary from the first mutation. The warnings gate is working as intended. I'll redo the no-morph mutation so it still compiles.
+[94m[Bash][0m Rerun no-morph mutation and restore $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -1
+The no-morph mutation is caught by the morph fixture at line 266. The final `tail` printed nothing, though, so I'll re-run the restored suite and check its exit code directly.
+[94m[Bash][0m Re-run restored unit suite and check exit $ grep -c FAILED /tmp/unit.log
+The restored suite passes with exit 0. Next are the remaining Linux checks: vendor validation, the `linux-unit` ctest preset, and a GCC warnings check on the new files, since the GCC CI job also builds with `-Werror`.
+[94m[Bash][0m Run vendor check, linux-unit ctest, and GCC syntax check $ done 2>&1 | tail -15
+The ctest run passes. The GCC invocation used the wrong standard flag, so I'll fix it and locate the Catch2 headers.
+[94m[Bash][0m Syntax-check new files with GCC $ done 2>&1 | tail -15
+GCC rejects the defaulted friend `operator==` because it wants const-reference parameters. Clang accepted it, so this is a real portability bug. I'll fix it and retry the GCC check with the right Catch2 include root.
+[94m[Bash][0m Fix defaulted operator and recheck with GCC $ ls third_party/catch2 | head
+GCC still rejects the defaulted friend, so I'll write the comparison out by hand. The file also changed on disk after my edit. That was my `sed` on the header, so the content is what I intended.
+[94m[Bash][0m Replace defaulted operator and recheck library $ clang++ -std=c++20 -fsyntax-only -Wall -Wextra -Wpedantic -Wshadow -Werror -Iengine/world/include -I...
+The library now compiles under GCC and Clang with warnings as errors. The test file still needs a GCC check, so I'll build it through the `linux-gcc` preset that the CI job uses, then rebuild the Clang tree with the header change.
+[94m[Bash][0m Configure and build the GCC preset tests $ tail -2 /tmp/gcc-build.log
+The GCC build of the test suite passes. Now I'll run the CI-equivalent GCC unit ctest and rebuild the Clang tree so the final results reflect the current header.
+[94m[Bash][0m Run GCC and Clang ctest unit presets $ tail -3 /tmp/ctest.log
+Both Linux CPU presets pass. The terrain module allocates heavily and the story's memory rule applies, so I'll also run the AddressSanitizer and UBSan preset that the story names.
+[94m[Bash][0m Build and run the ASan/UBSan preset $ tail -3 /tmp/asan-ctest.log
+The ASan/UBSan preset passes too. The remaining acceptance items are the Windows gates and the GPU work. I'll check the saved note on how Windows gates run from WSL before deciding whether I can execute them here.
+[94m[Bash][0m Read Windows gate run notes $ ls /mnt/d/dev/haiku_game_engine/tools | head -30
+The Windows gates can run through `cmd.exe` with a batch file. Before I launch anything, I'll check for an old batch still running, and look for a previous gate script to reuse as the template.
+[94m[Bash][0m Check running batches and find gate template $ [ -n "$f" ] && cat "$f" | tr -d '\r' | head -60
+No batch is running, so I can launch one. I'll adapt the existing template to the four Windows gates this story requires and skip the GPU steps, since terrain has no GPU path yet.
+[94m[Bash][0m Run the Windows gate batch for US-047 $ cat us047_rc.txt 2>/dev/null
+All four Windows gates return 0. The notes warn that short logs can mean a warm build directory, so I'll check the build and ctest logs for the terrain files and for real test counts.
+[94m[Bash][0m Check Windows build and ctest logs $ grep -i "passed\|failed" $T/us047_4.log | head -4
+Both Windows logs show the new terrain sources compiled under MSVC `/W4 /WX`, and the unit and integration ctest suites pass. Now I'll fix a CMake comment that points to a doc I haven't written, and record the status and learnings in the progress log.
+[94m[Bash][0m Fix CMake comment and read progress header $ head -12 .ralph-tui/progress.md
+[94m[Bash][0m Append US-047 progress entry and pattern $ a GPU pass must verify them, or add skirts.   - The mutation check caught a stale-binary trap: a mut...
+The progress log is written. I'll also save a short project memory so a later session knows the terrain state and the open GPU gap without re-deriving it.
+[94m[Bash][0m Save terrain status memory and index pointer $ renderer/shadow/RT terrain paths not started\n" open(p,'w').write(s) EOF tail -2 MEMORY.md
+US-047 is only partly done. I built the CPU terrain runtime and it passes every gate I ran, but the renderer doesn't use terrain yet, so I did not mark the story complete.
+
+**What's in place** (new `engine_world` library in `engine/world`)
+- Heightfield tiles on one shared sample grid. Neighbouring tiles read the same samples on their shared edge, so boundaries agree by construction.
+- LOD per tile by camera distance, and a mesh builder at any LOD.
+- Stitching for mixed-LOD edges. A finer tile morphs its vertices between coarse samples onto the coarse edge, so height, normal and splat agree across the seam.
+- Normals from the height gradient, and four-layer splat weights normalised at read time.
+- A bilinear height query.
+
+**Verification**
+- Fixture: 14 terrain test cases in `tests/src/world_terrain_tests.cpp`. They cover boundaries, LOD switching, stitched-edge geometry, and a 3×3 grid with levels 0–3 that covers every sample point exactly once (no holes, no overlaps).
+- Mutation checks: dropping one cell and disabling the morph both fail the fixture.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, `linux-gcc` (build and `linux-gcc-unit`), and `linux-asan` / `linux-sanitize` all pass. The CPU unit suite passes 594 cases.
+- Windows (through the `cmd.exe` batch): `ValidateVendor`, `win-dev`, `win-debug` build and `win-unit` all return 0. The logs show the terrain sources compiled under `/W4 /WX`.
+
+**Not done**
+- No terrain draw path, shader, or material. Depth, shadow, and RT participation in the full profile are not started.
+- No `engine_bench` workload, and no GPU suite runs, because there is no GPU terrain to test.
+- The stitching uses morphed vertices, not re-triangulated seams. The fixture checks 2D coverage, but cracks from T-junctions at rasterization are not excluded analytically. The GPU pass needs to check those, or add skirts.
+
+**Choices I made**
+- Read "Far LOD" as the LOD distance ranges only. The 9×9 residency window and the 2048 m far extent from the PRD are not implemented.
+- GCC rejects a defaulted friend `operator==` that Clang and MSVC accept, so I wrote it out by hand.
+
+I logged the work and status in `.ralph-tui/progress.md` and saved a memory note so the GPU gap is not forgotten. I did not output the COMPLETE signal, since the story's renderer criteria are open. The next step is a terrain draw path that goes through the render graph, with the seam checks repeated on the GPU.

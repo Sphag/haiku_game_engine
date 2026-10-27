@@ -1,0 +1,45 @@
+# Iteration 741 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:26:50.149Z
+- **Ended At**: 2026-10-26T02:27:04.136Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2089
+- **Total Tokens**: 2111
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress notes and whether the US-076 pieces already exist in the tree.
+[94m[Bash][0m Read progress log and inspect benchmark tree $ git status --short 2>/dev/null | head -30
+The progress log shows this story has been blocked for many passes on the same decision. I'll check the current state once before deciding whether anything new is actionable.
+[94m[Bash][0m Check source mtimes, artifacts, and PRD constraints $ grep -n -i "triangle\|frame budget\|placement" tasks/prd-open-world-engine.md | head -20
+US-076 is not complete, and I have not changed anything this pass. The source, workload, and manifest files are the same as at the last check, so the recorded results still describe the tree.
+
+**What is done**
+- The `render_stress` driver, `--path`, `--disable-mesh-shaders`, per-run counters, screenshots, and the fallback evidence are in place.
+- Eight benchmark reports exist under `artifacts/bench/us076-*` (DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders disabled).
+- Last recorded Linux results: `ValidateVendor` passes, `linux-dev` configures, `linux-debug` builds with 0 warnings, and `linux-unit` passes 30/30.
+
+**What blocks completion**
+1. **Triangle floor and frame budget fail on placement.** The PRD's `render_stress` row requires at least 2,000,000 submitted triangles on the starting frame in the indexed path. The measured count is 312,068. The frame times are p99 35–47 ms against a 16.7 ms budget. Every report exits 1 for this reason.
+2. **Full 1080p profile is not run.** It is unsupported because the vendored FSR 2 permutation headers are missing. Only the native 1080p profile ran.
+3. **Native Linux Vulkan GPU and the linux-gcc gate have not been run.** The Windows gates were not re-run in this pass.
+
+**Decision needed from you**
+Fixing item 1 means changing instance placement or LOD in the workload. That requires bumping `kWorkloadVersion` (currently 1) and regenerating `benchmarks/workload_expected.json`, so I have not done it without your approval. Two options:
+- Approve a placement/LOD change so the starting frame submits at least 2M triangles. Then I rerun all eight reports and the gates.
+- Or close US-076 as measured, recording that the triangle floor and frame budget fail on the current placement.
+
+Item 2 needs FSR 2 permutation headers or a decision to drop the full profile for this story. Item 3 needs a native Linux GPU machine.
+
+I did not append another status entry to `.ralph-tui/progress.md`. The last sixteen entries repeat this same blocker, so one more would add nothing.

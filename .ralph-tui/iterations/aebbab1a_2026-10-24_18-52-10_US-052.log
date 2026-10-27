@@ -1,0 +1,44 @@
+# Iteration 263 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:52:10.314Z
+- **Ended At**: 2026-10-24T15:58:16.179Z
+- **Duration**: 6m 5s
+- **Input Tokens**: 38
+- **Output Tokens**: 3293
+- **Total Tokens**: 3331
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the physics code, since the memory notes say US-052 is already largely done.
+[94m[Bash][0m Read progress log and physics memory notes $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls engine/physics && cat /home/max/.claude/projec...
+The log shows US-052 has been marked Partial for many passes, with the same two blockers each time. I'll check whether either blocker has changed before deciding anything.
+[94m[Bash][0m Check toolchains, sudo, bench target, and physics CMake $ cat engine/physics/CMakeLists.txt | head -60
+Neither blocker has moved: there is still no GCC 11+, sudo needs a password, and no `engine_bench` target exists. I'll rerun the Linux gate on the current tree so the report reflects today's state.
+[94m[Bash][0m Rerun Linux validate, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -n 5
+[94m[Bash][0m Get ctest pass summary line $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|tests fa...
+[94m[Bash][0m Append progress entry to log $ `sudo -n` requires a password. `linux-gcc*` stays blocked (Jolt needs GCC 11+ for `__builtin_bit_cas...
+US-052 is still **Partial**, so I'm not emitting the COMPLETE signal. The adapter and its tests were already in the tree, and nothing I could change in this environment closes the two open items.
+
+**Passing on the current tree (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, no warnings or errors
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22 of 22 (1 unit, 21 integration)
+
+The earlier log entries also record passing Windows gates (validate, win-dev, win-debug, win-unit at 21/21) and a passing linux-asan build plus linux-sanitize run. I did not re-run the Windows gates in this pass.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` are blocked.** Jolt needs GCC 11+ for `__builtin_bit_cast`. The machine has only g++-9 and clang++-10, and `sudo -n` needs a password, so I could not install g++-11. Closing this needs `sudo apt install g++-11` or a CI GCC 11+ job. I have not verified the Linux/GCC CI job.
+- **`engine_bench --suite acceptance` is not run.** No `engine_bench` target exists in a non-vendored CMakeLists.txt; that harness is US-074.
+
+I appended a progress entry to `.ralph-tui/progress.md` with these results. I made no source changes.

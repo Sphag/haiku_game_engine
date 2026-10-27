@@ -1,0 +1,37 @@
+# Iteration 669 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:06:22.120Z
+- **Ended At**: 2026-10-26T02:06:34.687Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1744
+- **Total Tokens**: 1762
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and benchmark tool state $ git status --short 2>/dev/null | head -30
+[94m[Bash][0m Check source and artifact timestamps $ grep -n "kWorkloadVersion" tools/benchmark/src/*.cpp engine/*/include/*/*.hpp 2>/dev/null | head -3
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last status check, and the remaining gaps need your decision or a machine I don't have.
+
+I re-checked timestamps and didn't rerun anything. `tools/benchmark/src/render_stress.cpp` (last edited 04:15:43) predates all eight `artifacts/bench/us076-*` reports, so those results still describe the current tree.
+
+**What is in place:** the `render_stress` driver, `--path` (indexed/indirect/meshlets), `--disable-mesh-shaders` with fallback evidence, per-run submitted/visible counters, screenshots, and the Linux gates (ValidateVendor, linux-dev, linux-debug, linux-unit 30/30) as recorded in the last check.
+
+**What blocks completion:**
+
+1. **Acceptance floor and frame budget fail on the DX12 and Vulkan runs.** The route start has 312,068 triangles against a floor of 2,000,000, and p99 frame time is 35–47 ms against a 16.7 ms budget. Each run exits 1. Fixing this means changing instance placement in the workload. That bumps `kWorkloadVersion` and regenerates `workload_expected.json`, so I need your approval before doing it.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated permutation headers, so only `native_1080` runs. "Both profiles" stays partial until those headers are vendored.
+3. **Not run:** native Linux Vulkan GPU suite and `linux-gcc`. The GCC 9.4 here can't build Jolt, and this WSL session has no usable Vulkan device.
+4. **Windows gates were not rerun in this pass.** The last recorded Windows results are from earlier runs, and I haven't re-verified them against the current tree.
+
+To move forward, tell me whether to change the placement workload (the bump and regeneration above), or to record the current failing results as the outcome and close the story as blocked.

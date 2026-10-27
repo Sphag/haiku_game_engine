@@ -1,0 +1,43 @@
+# Iteration 247 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:09:05.710Z
+- **Ended At**: 2026-10-24T15:11:58.511Z
+- **Duration**: 2m 52s
+- **Input Tokens**: 40
+- **Output Tokens**: 2815
+- **Total Tokens**: 2855
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log against the US-052 criteria.
+[94m[Bash][0m Inspect repo state, physics dir, and progress log $ git status --short 2>/dev/null | head -30
+The progress log says US-052 is Partial: the Linux GCC gate and the acceptance benchmark are open. Before deciding whether anything has changed, I'll check the toolchain and the benchmark target again.
+[94m[Bash][0m Check compilers, bench target, and physics test files $ ls artifacts 2>/dev/null | head
+GCC is still 9.4, and there is still no `engine_bench` target. I'll re-run the Linux build and unit tests to confirm the tree is still green.
+[94m[Bash][0m Build linux-debug and run linux-unit tests $ (cmake --build --preset linux-debug 2>&1 | tail -3) && (ctest --preset linux-unit --output-on-failur...
+[94m[Bash][0m Get ctest pass summary line $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Failed|E...
+The Linux build and unit tests pass again. I'll record this pass in the progress log, then stop without the completion signal because the GCC gate is still unrunnable.
+[94m[Bash][0m Append re-verification entry to progress log $ `/opt` absent. `linux-gcc*` stay blocked (Jolt needs GCC 11+ for `__builtin_bit_cast`). - Benchmark:...
+US-052 is still Partial, so I am not emitting the completion signal. The physics code is in place and the Linux clang gates pass, but the GCC gate cannot run on this machine.
+
+**Blocked:** the `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` gates. The machine has only g++-9.4 (`/usr/bin`, no `/opt` compiler). Jolt needs GCC 11+ for `__builtin_bit_cast`. This needs a GCC 11+ environment or CI.
+
+**Verified this pass:**
+- `cmake --build --preset linux-debug` builds.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22.
+
+**Not run:**
+- `engine_bench --suite acceptance`. There is no `engine_bench` target in any non-vendored CMakeLists.txt, so this is not applicable yet (US-074).
+- The `linux-asan` and `linux-sanitize` gates and the Windows gates were not re-run this pass. The progress log records them as passing on the earlier tree, and I did not change any source.
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. No source files changed.

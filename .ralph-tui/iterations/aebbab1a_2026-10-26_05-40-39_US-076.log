@@ -1,0 +1,43 @@
+# Iteration 779 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:40:39.764Z
+- **Ended At**: 2026-10-26T02:40:53.998Z
+- **Duration**: 14s
+- **Input Tokens**: 14
+- **Output Tokens**: 2320
+- **Total Tokens**: 2334
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo state, progress log, and US-076 PRD section $ ls && tail -n 120 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && wc -l tools/be...
+US-076 is not complete, and I did not emit the completion signal. This pass made no changes and ran no gates or benchmarks. The progress log already records 26 status checks on this story with no source change. The remaining blockers need your decision or a different machine.
+
+**Blocked on you:**
+
+1. **Route-start triangle floor and frame budget fail.** The start frame has 312,068 submitted triangles on the indexed path, against the contract's 2,000,000 minimum (PRD line 875). p99 frame time is 35–47 ms against the 16.7 ms budget. The eight `artifacts/bench/us076-*` runs all exit 1 for these two reasons.
+   - Fixing it changes the fixed contract: bump `kWorkloadVersion` (currently 1), regenerate `benchmarks/workload_expected.json`, and update the manifest hash.
+   - PRD line 722 reserves contract changes for a separate user decision, so I have not made one.
+   - Decision needed: approve the placement/route change, or accept the failing measured runs and close the story as measured with the failure recorded.
+2. **`full_1080` profile is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so `ENGINE_FSR2_AVAILABLE` stays off. Decision needed: which vendoring route to take.
+
+**Blocked on hardware/toolchain, not a decision:**
+
+3. **Native Linux Vulkan GPU run and `linux-gcc` gate.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. These need a native Linux GPU machine and GCC 11+.
+
+**Verified in the log, not re-run now:**
+- Linux `linux-debug` build and `linux-unit` pass 30/30 (status check 23).
+- `engine_workload --check` reports all 4 scenes match.
+- The mesh-shader-disabled runs exist for DX12 and Vulkan (`dx12-meshlets-nomesh`, `vulkan-meshlets-nomesh`). I did not re-check that the fallback reports the disabled feature correctly.
+
+Reply with a decision on items 1 and 2 and I'll carry it out. Item 3 needs a native Linux GPU machine.

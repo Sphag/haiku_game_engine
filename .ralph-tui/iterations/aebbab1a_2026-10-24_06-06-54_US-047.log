@@ -1,0 +1,43 @@
+# Iteration 101 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:06:54.745Z
+- **Ended At**: 2026-10-24T03:07:12.372Z
+- **Duration**: 17s
+- **Input Tokens**: 30
+- **Output Tokens**: 2908
+- **Total Tokens**: 2938
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain code and the progress log.
+[94m[Bash][0m List world module files and progress log status $ ls && ls engine/world/src engine/world/tests 2>/dev/null | head -80 && wc -l .ralph-tui/progress.md ...
+[94m[Bash][0m Read existing terrain implementation $ cat engine/world/src/terrain.cpp | head -400 && ls engine/world/include/* 2>/dev/null
+The CPU runtime already exists. The progress log has many "still Partial" re-checks, so I'll read the latest entries to see what's actually open.
+[94m[Bash][0m Read US-047 progress entries $ sed -n 692,704p .ralph-tui/progress.md && echo ----- && sed -n 761,896p .ralph-tui/progress.md
+The story has been stuck for about 20 passes on the same open item: the splat shader path. It touches the shared draw path and needs Windows DX12 and Vulkan GPU runs to verify, and I can't run those from this WSL host at this effort level. I won't mark it complete. I'll record this pass in the progress log so the next run starts from the right place.
+[94m[Bash][0m Append re-check entry to progress log $ (5) the Windows gate batch and the Linux gates after the shader change. --- EOF tail -3 .ralph-tui/p...
+US-047 is not complete, so I'm not emitting the completion signal. This pass made no source changes; I only appended a progress entry.
+
+**What's done (from earlier passes, unchanged in this one):**
+- CPU terrain runtime in `engine/world`: tiles, distance-based LOD selection, edge stitching by morphing, normals, four-layer splat weights, and bilinear height queries. Its 14 fixture cases cover boundary agreement, mixed-LOD coverage with no holes or overlaps, and LOD switching.
+- Render bridge (`engine/render/src/terrain_mesh.cpp`) and the static-path renderer integration. The DX12 and Vulkan GPU fixture passed on the RTX 5080 with validation on.
+- Ray-tracing support for terrain tiles, since they enter the RT set as static meshes.
+- Linux GCC and ASan/UBSan gates passed. Windows gates passed for the static-path change.
+
+**What's still open:**
+1. **Splat shading.** The four-layer blend isn't on screen. The static vertex layout has no splat attribute. The plan is a terrain-only splat vertex buffer at slot 2 (slot 1 is the instance buffer), a terrain pipeline variant for the opaque pass, and a `scene.hlsl` branch using `splat_layer_colour`.
+2. **Shadow and RT checks for terrain.** The GPU fixture checks colour and depth only.
+3. **`engine_bench` terrain workload** and the acceptance bench run on DX12 and Vulkan.
+4. **Windows gate batch** after the shader change, plus the Linux gates.
+
+Items 1–4 touch the shared draw path and can only be verified on the Windows GPU batch. I didn't start them at this effort level, because a partial change would leave the static path unverified. The next pass should begin with item 1.

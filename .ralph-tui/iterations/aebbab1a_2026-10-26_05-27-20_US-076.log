@@ -1,0 +1,37 @@
+# Iteration 743 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:27:20.452Z
+- **Ended At**: 2026-10-26T02:27:43.073Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 2905
+- **Total Tokens**: 2933
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect progress log and existing benchmark code $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --...
+The log shows many prior status checks, all blocked on the same user decision. Before deciding whether anything is actionable, I'll check whether the source has changed since the last recorded run and what the gate results were.
+[94m[Bash][0m Check source mtimes and recorded gate results $ grep -n "linux-dev\|linux-debug\|linux-unit\|win-unit\|win-debug" .ralph-tui/progress.md | tail -8
+US-076 is not complete, and I'm not going to signal COMPLETE. I'll record this pass in the progress log so the next run has the current state.
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal: the acceptance criteria can...
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing in the tree changed in this pass, and I did not rerun the benchmarks or gates.
+
+**What blocks it:**
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` scene places 312,068 of the 2,000,000 triangles the contract requires, and p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing this means changing the placement, which changes the fixed workload contract: bump `kWorkloadVersion` (currently 1) and regenerate `benchmarks/workload_expected.json`. That needs your approval, and I did not make it on my own.
+2. **full_1080 is unsupported** until the vendored FSR 2 permutation headers exist.
+3. **Not run:** native Linux Vulkan GPU, and the linux-gcc gate. WSL has no Vulkan device, and GCC 9.4 cannot build Jolt.
+
+**Recorded results:** the Windows and Linux quality gates passed on the current tree in earlier runs. The eight `artifacts/bench/us076-*` runs exit 1 on the frame budget and triangle floor, so the acceptance criteria for the scene counts and the benchmark budget are not met.
+
+**Decision needed from you:** should I bump the workload version and rebalance the placement to reach 2,000,000 triangles within budget? Or should the story close as measured, with the failing budget recorded? I appended a status entry to `.ralph-tui/progress.md` with this state.

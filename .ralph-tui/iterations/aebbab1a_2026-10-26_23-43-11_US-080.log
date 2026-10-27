@@ -1,0 +1,44 @@
+# Iteration 1080 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:43:11.215Z
+- **Ended At**: 2026-10-26T20:43:27.272Z
+- **Duration**: 16s
+- **Input Tokens**: 24
+- **Output Tokens**: 2641
+- **Total Tokens**: 2665
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and list artifacts $ tail -n 120 .ralph-tui/progress.md && ls && ls artifacts 2>/dev/null | head && ls artifacts/bench 2>...
+[94m[Bash][0m Find US-079 and US-080 notes $ grep -n "US-080" tasks/prd-open-world-engine.md | head
+[94m[Bash][0m Re-check key US-080 blockers on this host $ print({k:v for k,v in r.items() if 'p99' in k.lower() or 'budget' in k.lower()})" 2>&1 | head -5
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*` needs GCC 11+ or clang 14+. - Stop: US-080 cannot be signed off on this host. No COMPLE...
+US-080 is not complete, so I am not emitting the COMPLETE signal. This host cannot produce the reports the story requires.
+
+**Blocked, with the evidence I re-checked this pass:**
+
+1. **Frame budget not met.** `render_stress` p99 is about 42 ms against the 16.7 ms budget (`artifacts/bench/us076-dx12-meshlets/report.json`). The measured cause has not been profiled, so there is no fix yet. The contract says to fix the implementation, not change the contract.
+2. **No acceptance run.** `artifacts/bench` holds only the us076–us078 runs. The required `engine_bench --suite acceptance` runs (three repeats of 30 s warmup plus 180 s, per scene, profile, and backend) have not been done on DX12, Vulkan, or Linux.
+3. **No native Linux Vulkan GPU.** `/dev/dri` is absent in this WSL environment.
+4. **`all_features` and `full_1080` are not implemented.** `benchmarks/manifest.json` still lists `all_features` as `implementation: none`. `third_party/fsr2` has no `*_permutations.h`, so FSR cannot build. Both need your decision (the route approval, and either the FSR 2 headers or keeping `full_1080` unsupported).
+5. **`linux-gcc*` cannot be verified here.** The host has GCC 9.4 and Clang 10; the preset needs GCC 11+ or Clang 14+.
+
+**Verified on the RTX 5080 in earlier passes:**
+- Windows gates pass: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` (29/29).
+- DX12 GPU suite passes: 72 cases.
+- Vulkan GPU suite passes: 73/73 with zero validation errors, using the pinned layer at `D:\dev\vvl_build\layer`.
+- Linux gates pass: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit`.
+
+**Not run in this pass:** the sanitizer preset, the editor smoke tests, and the Windows gates. This pass changed no source and ran no builds.
+
+I appended a status entry to `.ralph-tui/progress.md`. The next concrete step needs the Windows RTX 5080 machine: a Release `render_stress` capture with per-pass GPU timings and a CPU frame split, so the cause can be named before code changes.

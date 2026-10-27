@@ -1,0 +1,43 @@
+# Iteration 511 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:46:13.487Z
+- **Ended At**: 2026-10-25T07:46:59.325Z
+- **Duration**: 45s
+- **Input Tokens**: 58
+- **Output Tokens**: 5965
+- **Total Tokens**: 6023
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking how much of US-058 already exists in the tree, since the codebase patterns describe `engine/ui/` as built.
+[94m[Bash][0m Inspect UI module and progress log $ ls && ls engine/ui engine/ui/* 2>/dev/null | head -80 && tail -c 6000 .ralph-tui/progress.md
+The progress log shows US-058 stuck at "Partial" across several passes with no source change. The open items are the GCC 11+ gate, a native Linux Vulkan GPU run, and an application host that never calls `set_overlay`. I'll check whether any of these can move now.
+[94m[Bash][0m Find overlay callers, toolchains, and PRD UI notes $ grep -n "US-058\|ui" tasks/prd-open-world-engine.md | head -40
+[94m[Bash][0m Read US-058 PRD section and find app entry points $ grep -rn "main(" --include=*.cpp engine tools 2>/dev/null | grep -v third_party | head
+The runtime application host doesn't exist yet: `engine/runtime` has only `lifecycle.cpp`, and the standalone runtime is US-060. So the running-application check can't be run at this stage. I'll try one thing that is possible here: compile the UI sources with the GCC 9 that is installed, as partial evidence for the GCC gate.
+[94m[Bash][0m Compile UI sources with GCC 9 under warnings-as-errors $ ls third_party | head -50
+[94m[Bash][0m Compile UI sources with GCC 9 using c++2a $ done
+[94m[Bash][0m Compile font.cpp and the C shim with GCC 9 $ echo "shim exit=$?"
+[94m[Bash][0m Retry shim compile with correct include root $ echo "layout test exit=${PIPESTATUS[0]}"
+The first-party UI sources compile cleanly under GCC 9 with `-Wall -Wextra -Wpedantic -Werror`. The shim failure is from my own `-Werror` on vendored C, which is outside the warning policy; I'll recompile it without that flag. Next I'll record the result in the progress log.
+[94m[Bash][0m Confirm shim exit code and append progress entry $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-058 (GCC 9 partial check, still Partial) -...
+US-058 is not complete, so I have not emitted the completion signal. The UI code was already in the tree, and this pass changed no source. The remaining gaps can't be closed in this environment.
+
+**Still open:**
+- **`linux-gcc` gate and CI job:** the only GCC here is 9.4, and the gate needs GCC 11+. I checked what I could: the four first-party UI sources (`geometry`, `surface`, `ui`, `font`) compile with `g++-9 -std=c++2a -Wall -Wextra -Wpedantic -Werror`, and the vendored `truetype_shim.c` compiles with `gcc-9`. That is partial evidence only, not the gate.
+- **Native Linux Vulkan GPU run:** WSL has no usable Vulkan device.
+- **Running-application check with screenshots:** the application host doesn't exist yet. `engine/runtime` contains only `lifecycle.cpp`, and the standalone runtime is US-060. So nothing calls `set_overlay`, and the on-screen composition check can't run. The DX12 and Vulkan GPU tests cover overlay composition after tone mapping, but not in a running app.
+
+**Already verified on record** (from earlier passes, tree unchanged since): the Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit` 21/21), `engine_tests --suite gpu` on DX12 (71 cases) and Vulkan (72 cases) on Windows, and the Linux debug build and `linux-unit` (22/22).
+
+I appended this pass to `.ralph-tui/progress.md` and left the status at **Partial**. Closing the story needs a GCC 11+ toolchain and a native Linux Vulkan machine, plus the US-060/US-061 host for the screenshot check.

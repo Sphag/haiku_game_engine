@@ -1,0 +1,54 @@
+# Iteration 1013 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:57:50.517Z
+- **Ended At**: 2026-10-26T16:01:26.084Z
+- **Duration**: 3m 35s
+- **Input Tokens**: 58
+- **Output Tokens**: 6300
+- **Total Tokens**: 6358
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether `all_features` already exists in the tree.
+[94m[Bash][0m Check progress log and existing all_features references $ ls tools/benchmark tools/benchmark/src 2>/dev/null
+The log shows this story has stalled for about 96 passes. Each one re-checked the same blockers and changed nothing. Before deciding whether to repeat that, I'll check the one thing still unverified: whether the Windows gates can run from here.
+[94m[Bash][0m Read Windows gate memory notes and check running builds $ ps aux | grep -i -E "gate|cmake|ctest|msbuild" | grep -v grep | head
+No batch is running, and the Windows gates can run from here. The Windows gate criteria have not been re-run in recent passes, so I'll run them as one batch.
+[94m[Bash][0m Write and run Windows gate batch via cmd.exe $ echo finished >> /tmp/us079gate/result.txt)
+[94m[Bash][0m Read gate batch result and logs $ tail -5 /mnt/c/Users/bucha/AppData/Local/Temp/us079_ctest.txt 2>/dev/null
+All four Windows gates returned 0. I'll confirm the build log has no warnings and the ctest summary reports every test passing, not just exit code 0.
+[94m[Bash][0m Check build warnings and ctest pass summary $ cat us079_build.txt | tail -3
+The build file's last line stops at step 33 of 171, which could be ninja's carriage-return progress or a truncated log. I'll check for the final step count before trusting `build=0`.
+[94m[Bash][0m Confirm final ninja step and absence of failures $ tr '\r' '\n' < us079_build.txt | grep -c -E "FAILED|warning C|error C"
+The build exits 0 with zero warning or error lines, and ctest reports 29 of 29 passing. I changed no source, so I'll record this pass in the progress log and stop, since the remaining criteria still need your decisions or a GUI session.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows GUI session for the tour and the live editor run. - Stop: no COMPLETE signal. --- EOF ...
+US-079 is not complete, so I'm not signalling COMPLETE. This pass ran the Windows gates, and they pass. The rest of the story is blocked on decisions and a GUI session that only you can provide.
+
+**Passed this pass (Windows, run through cmd.exe):**
+- `cmake -P cmake/ValidateVendor.cmake`: 26 dependencies, 8542 files.
+- `cmake --preset win-dev`: exit 0.
+- `cmake --build --preset win-debug`: exit 0, with no warning or error lines. The build was warm, so the log shows only dyndep steps.
+- `ctest --preset win-unit --output-on-failure --no-tests=error`: 100% passed, 29 of 29.
+
+I changed no source. I appended a status entry to `.ralph-tui/progress.md`.
+
+**Still open:**
+- **`samples/all_features` does not exist.** The manifest entry is `implementation: none`, and its route `all_features_route_v1` is still a proposal (manifest line 152). I did not write the scene because the route fixes the benchmark contract.
+- **GI/RT/upscale profiles and forced geometry paths** are blocked. The vendored FSR 2 has none of its eight `*_permutations.h` headers, so `full_1080` cannot build.
+- **Tour and live editor run** need a Windows GUI session. That covers the screenshots, the action log, and package/relaunch.
+- **Not rerun on the current tree:** the GPU suites on DX12 and Vulkan, the editor suite on each backend, the Linux gates (last passed at check 94), linux-gcc, the ASan/UBSan preset, and `engine_bench --suite acceptance`.
+
+**What I need from you:**
+1. Approve `all_features_route_v1`, or tell me another route to use.
+2. Vendor the FSR 2 permutation headers, or confirm that `full_1080` stays unsupported.
+3. Schedule a Windows GUI session for the tour and the live editor run.

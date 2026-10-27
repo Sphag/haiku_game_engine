@@ -1,0 +1,55 @@
+# Iteration 914 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:03:11.401Z
+- **Ended At**: 2026-10-26T13:11:21.180Z
+- **Duration**: 8m 9s
+- **Input Tokens**: 42
+- **Output Tokens**: 3732
+- **Total Tokens**: 3774
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and the state of the prerequisite stories.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD entry $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-079" -A3 tasks/prd-open-world-engine.md | h...
+[94m[Bash][0m List tools, tests, and search for existing all_features $ grep -rl "all_features" --include=* . 2>/dev/null | grep -v third_party | head
+The log shows 23 prior status checks, all stopped on the same two blockers. Before deciding whether to stop again, I'll check the current state of the all_features tests and the benchmark manifest.
+[94m[Bash][0m Inspect all_features tests and benchmark manifest entry $ grep -rn "tour" --include=*.cpp --include=*.hpp -il tools tests engine | head
+The CPU all_features tests already exist. Since the last recorded gate run, the log says no source has changed, so I'll re-run the Linux gate to confirm the current state rather than rely on that log.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ echo build=$?) && (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Get ctest pass summary and locate test binary $ find build -name engine_tests -type f | head -2
+The Linux gates pass again. I'll record this status check in the progress log, as the earlier iterations did.
+[94m[Bash][0m Append status entry to progress log $ all_features route definition) are still needed from the user. --- EOF tail -3 .ralph-tui/progress.m...
+US-079 is not complete, so I am not emitting the COMPLETE signal.
+
+**Stuck on two decisions only you can make:**
+
+1. **FSR 2 vendoring route.** `third_party/fsr2` has none of the eight generated `*_permutations.h` headers per backend. Without them `ENGINE_FSR2_AVAILABLE` stays off, so the `full_1080` profile and the upscale mode cannot be built or measured. Obtaining those generated files is a vendoring change, so I did not make it.
+2. **The `all_features` route.** `benchmarks/manifest.json` still has `implementation: none` with route "pending final benchmark scene". The GPU tour and the GI/RT/upscale profiles need a defined builtin scene, and defining one changes the fixed benchmark contract.
+
+**Verified this session (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake` passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` configure and `cmake --build --preset linux-debug` succeed.
+- `ctest --preset linux-unit --no-tests=error` passes 30/30. The existing CPU `all_features` tests are part of that run.
+
+**Not done and not reported as passed:**
+- The tour runner with screenshots and an action log.
+- GI/RT/upscale profiles and forced indirect/meshlet geometry paths.
+- The `all_features` GPU route.
+- GUI checks.
+- Native Linux Vulkan GPU runs (no `/dev/dri`).
+- `engine_bench --suite acceptance`.
+- The `linux-gcc*` presets (no GCC 11+ on this host).
+- The ASan preset.
+- Windows gates were not re-run this session; the last recorded Windows run is from status check 21.
+
+I appended a status-check-24 entry to `.ralph-tui/progress.md` with these details. Once you pick the FSR 2 route and the `all_features` route definition, the remaining work is the tour runner, the profiles, and the GPU and GUI runs.

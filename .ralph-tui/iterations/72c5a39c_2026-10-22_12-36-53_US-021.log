@@ -1,0 +1,235 @@
+# Iteration 20 Log
+
+## Metadata
+
+- **Task ID**: US-021
+- **Task Title**: Texture Conversion
+- **Description**: As a material author, I want prepared GPU textures so that the runtime can load resources quickly.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T09:36:53.636Z
+- **Ended At**: 2026-10-22T10:06:12.400Z
+- **Duration**: 29m 18s
+- **Input Tokens**: 464
+- **Output Tokens**: 123215
+- **Total Tokens**: 123679
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the PRD, then look at what the repo already has.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && cat .ralph-tui/progress.md 2>/dev/null | head -300 && echo --- && wc -l tasks/...
+[94m[Bash][0m Locate story references in the PRD $ grep -n "US-021\|US-019\|US-020\|US-004\|US-001" tasks/prd-open-world-engine.md | head -50
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd-open-world-engine.md[0m
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd-open-world-engine.md[0m
+The story depends on US-019 (asset converter CLI), so I need to see what that actually looks like in the repo. Next I'll read the PRD's constraint sections and survey the code.
+[94m[Bash][0m Outline PRD headings and read Non-Goals $ sed -n '/^## Non-Goals/,/^## /p' tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Survey repo files outside build and vendor $ ls build | head
+Much of the converter already exists, and `bc7enc_rdo` and `stb` are vendored. I'll read the rest of the progress log, the converter code, and the relevant docs.
+[94m[Bash][0m Read full progress log $ wc -l .ralph-tui/progress.md && sed -n '1,400p' .ralph-tui/progress.md | tail -n +10 | cut -c1-400
+[94m[Bash][0m Show converter CMake and headers $ wc -l tools/asset_converter/src/* tools/asset_converter/include/asset_converter/* tools/asset_conver...
+The importer interface is already there, and US-021 plugs texture importing into it. Next I'll check the converter API, the PRD's texture-related constraints, and the progress log entries for US-019 and US-020.
+[94m[Bash][0m Read converter API and PRD texture mentions $ cat tools/asset_converter/include/asset_converter/converter.hpp && grep -n -i "texture\|BC7\|BC5\|mi...
+[94m[Bash][0m Read progress entries for US-019/020 $ awk '/US-019|US-020/{p=1} p' .ralph-tui/progress.md | cut -c1-600 | head -120
+The converter, the importer registry, and the model payload pattern are clear. Next I'll read the PRD's Technical Considerations and the performance contract, plus the third-party texture libraries.
+[94m[Bash][0m Read PRD technical considerations section $ sed -n '800,900p' tasks/prd-open-world-engine.md | cut -c1-700
+[94m[Bash][0m Inspect stb and bc7enc vendor dirs and importer.cpp $ cat tools/asset_converter/src/importer.cpp | head -179
+bc7enc_rdo and stb are vendored but not yet compiled anywhere. The BC5 encoder lives in `rgbcx`. Before I design the format, I'll check the build wiring, the vendor codec APIs, cook behavior, and test conventions.
+[94m[Bash][0m Inspect build helpers and vendor codec APIs $ grep -n "#include" third_party/bc7enc_rdo/bc7enc.cpp third_party/bc7enc_rdo/rgbcx.cpp third_party/bc...
+[94m[Bash][0m Check tooling, cook path, and test CMake $ cat tests/CMakeLists.txt | head -120
+Key findings so far:
+
+- The PRD's dependency table says the BC5 encoder lives in the converter, so I'll write BC4/BC5 myself and use `bc7enc_rdo` only for BC7.
+- No PIL here, so I need another way to produce a JPEG fixture.
+- Vendored code needs to stay out of `-Werror`. The existing pattern is SYSTEM includes and a separate target.
+
+Next I'll read the test conventions, the Windows build recipe from the earlier stories, and the prd.json entry.
+[94m[Bash][0m Read model test conventions and Windows recipe notes $ grep -n "vcvars\|\.bat\|cmd.exe\|win-dev" .ralph-tui/progress.md | cut -c1-300 | head -12
+[94m[Bash][0m Read test helpers and prd.json story entry $ grep -n '"US-021"\|"US-020"' -A12 tasks/prd.json | head -60
+The plan is taking shape. Before writing code I'll confirm the vendored BC7 files and their APIs, and check the CMake preset and the Linux build tree.
+[94m[Bash][0m Check BC7 decoder API, manifest entries, presets $ ls build/win-dev | head -5
+BC7 decoding is available from `bc7decomp.cpp`, which means tests can verify BC7 output instead of only checking sizes. The cooked-texture layout will follow the OWMD model payload, so I'll read its reader and writer helpers and the `.meta` sidecar format.
+[94m[Bash][0m Read model payload helpers and meta sidecar $ grep -n "static\|thread_local" third_party/bc7enc_rdo/bc7enc.cpp | head -20
+I have what I need to design this. Here is the plan:
+
+- **Cooked format:** a new `OWTX` v1 payload, following the `OWMD` pattern. It holds metadata, every mip's dimensions, and mip bytes, with validation on both write and read.
+- **Mips:** color is box-filtered in linear light, normals are filtered and renormalized, and linear data is averaged raw. Odd sizes use ceil halving with clamped edge samples.
+- **Encoding:** BC7 comes from the vendored `bc7enc_rdo`, and BC4/BC5 is written first-party as the PRD requires. The `RGBA8` fallback is selectable per asset.
+- **Build:** vendored sources sit in their own target and use SYSTEM includes, so `-Werror` stays on first-party code only.
+
+I'll start with the format header and implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/include/asset_converter/texture_format.hpp[0m "#pragma once
+
+// The cooked texture payload (US-021): every mip of one 2D texture, with the metadata a runtime needs to upload it. The
+// texture importer writes it, and the tests and later stages rea... (3763 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/texture_format.cpp[0m "#include "asset_converter/texture_format.hpp"
+
+#include <cstddef>
+#include <utility>
+
+namespace engine::converter {
+namespace {
+
+using core::Result;
+using core::Unit;
+using core::failure;
+using core::... (9176 chars)"
+The file has two unused helper functions that would fail under `-Werror`, so I'll remove them now.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/texture_format.cpp[0m edit: "std::string_view usage_name(TextureUsage usage) {
+..." → "// Checks"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/texture_format.cpp[0m edit: "#include <cstddef>
+#include <utility>
+
+namespace e..." → "#include <cstddef>
+#include <string>
+#include <uti..."
+Next are the block encoders. BC7 needs the vendored headers, and both `bc7enc.h` and `bc7decomp.h` may define `color_rgba`. I'll check for that conflict before I decide how to split the code.
+[94m[Bash][0m Check for color_rgba conflicts in BC7 headers $ grep -n "struct color_rgba\|class color_rgba\|#include\|^namespace\|bc7enc_compress_block_params_ini...
+`bc7enc.h` defines a global `color_rgba` and `bc7decomp.h` uses a namespaced one. To keep those headers apart, BC7 encode and decode go in separate first-party TUs, and BC4/BC5 gets its own file. The public header declares all four.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/include/asset_converter/block_compression.hpp[0m "#pragma once
+
+// 4x4 block codecs for cooked textures (US-021). The PRD assigns the BC5 encoder to the converter, so BC4/BC5 is encoded
+// and decoded here; BC7 uses the vendored bc7enc_rdo encoder an... (1453 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/bc5_codec.cpp[0m "#include "asset_converter/block_compression.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdlib>
+
+namespace engine::converter {
+namespace {
+
+constexpr std::size_t kBc4BlockBytes = 8;
+
+// The e... (3610 chars)"
+Next are the two BC7 wrappers, each in its own TU so the vendored headers never meet.
+[94m[Bash][0m Write BC7 encode and decode wrapper files $ grep -n "bc7enc_compress_block_params_init_linear_weights\|namespace" ../../../third_party/bc7enc_rd...
+The BC7 wrappers are in place. Next is the texture importer. It decodes PNG/JPEG through the vendored stb, builds mips per usage, encodes, and validates the payload before returning it.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/texture_importer.cpp[0m "#include "asset_converter/block_compression.hpp"
+#include "asset_converter/importer.hpp"
+#include "asset_converter/texture_format.hpp"
+
+#include <nlohmann/json.hpp>
+
+// stb_image is vendored and inclu... (15435 chars)"
+The importer is written. Next I'll register it in the importer header and the built-in registry, then wire the CMake targets.
+[94m[Bash][0m Register texture importer in header and registry $ ''') open(p,'w').write(s) EOF grep -n "texture" include/asset_converter/importer.hpp src/importer.cp...
+Now the CMake wiring. The vendored BC7 sources get their own target without first-party flags, and stb and bc7enc are included as system headers.
+[94m[Bash][0m Add texture sources and vendor BC7 target to CMake $ python3 - <<'EOF' p='CMakeLists.txt' s=open(p).read() old='''add_library(engine_converter STATIC   s...
+The CMake wiring is done. Now the fixtures. PNGs come from a stdlib-only Python script, and the JPEG comes from Windows' System.Drawing, since no JPEG encoder exists here. I'll generate both and check their headers and end markers.
+[94m[Bash][0m Generate PNG and JPEG texture fixtures $ ls -la gradient_9x7.jpg && tail -c 2 gradient_9x7.jpg | od -An -tx1 && head -c 3 gradient_9x7.jpg | ...
+Both fixture types are written, and the JPEG ends with `FFD9`. Next I'll compile the converter on Linux before writing tests, so I catch compile errors early.
+[94m[Bash][0m Configure Linux dev preset and build converter $ tail -3 /tmp/build1.log
+[94m[Bash][0m Inspect bc7decomp color_rgba member names $ grep -n "operator\[\]\|get_\|r()\|m_comps" third_party/bc7enc_rdo/bc7decomp.h | head -12
+The member is `m_comps`, not `m_c`. I'll fix that and rebuild.
+[94m[Bash][0m Fix BC7 member name and rebuild converter $ tail -2 /tmp/build2.log
+The converter builds cleanly under Clang with `-Werror`. Before writing tests I'll check the Catch2 tag convention and how the model tests name their cases.
+[94m[Bash][0m Check Catch2 tag conventions in converter tests $ grep -n "TEST_CASE" tests/src/converter_tests.cpp | head -3
+Build is clean. Now the test file. It covers the format math, payload validation and corrupt-read cases, the BC4/BC5 and BC7 codecs with hand-worked values, the importer's settings and per-usage mip rules, odd sizes, and rejection of truncated or unrecognized input.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/converter_texture_tests.cpp[0m "// Texture conversion (US-021): the cooked texture payload, the BC4/BC5 and BC7 codecs, and the texture importer. The
+// fixtures in tests/fixtures/textures are small enough that the expected values b... (19629 chars)"
+The test file has a few issues I can see before compiling: a nonexistent `ImageMip` using-declaration, a missing `<cstdlib>` for `std::abs(int)`, and hand-typed bit patterns that need checking. I'll compute the packed index bytes with Python and fix those.
+[94m[Bash][0m Compute BC4 index bytes for all-2 indices $ python3 -c " v=sum(2<<(3*i) for i in range(16)) print(', '.join('0x%02X'%((v>>(8*b))&0xFF) for b in ...
+The hand-typed bytes were already correct. I'll fix the other two issues.
+[94m[Bash][0m Fix test includes and register test source $ cd /mnt/d/dev/haiku_game_engine && python3 - <<'EOF' p='tests/CMakeLists.txt' s=open(p).read() old="...
+The notice about the test file is from my own Python edit, so the current content is what I intended. Next I'll build the test binary and run the converter tests.
+[94m[Bash][0m Build all Linux debug targets $ tail -2 /tmp/build3.log
+[94m[Bash][0m Run texture unit and integration tests $ cd /mnt/d/dev/haiku_game_engine && ./build/linux-dev/tests/Debug/engine_tests --list-tests 2>/dev/nu...
+The integration run shows 3 failing test cases. I need the names and the failing assertions.
+[94m[Bash][0m Run integration suite and show failures $ grep -n -B3 -A12 "FAILED" /tmp/int.log | cut -c1-300 | head -150
+Three distinct problems:
+
+1. **My test bug:** `import_texture(source)` uses the default `color` usage, so the normal-map test never got normals. I'll pass `usage: normal`.
+2. **Existing test conflict:** `converter_tests.cpp:382` expects the importer `texture` to be unknown, which is no longer true now that texture is registered. I need to read that test.
+3. **Real codec issue:** BC7 decoding failed on the importer's output block. The unit test passed on the codec directly, so the difference is in the importer path. I'll check the BC7 encoder's failure cases and that test.
+[94m[Bash][0m Read unknown-importer test and BC7 encoder entry $ grep -n "^bool bc7enc_compress_block" -A12 third_party/bc7enc_rdo/bc7enc.cpp | head -30
+The converter test assumed `texture` was an unregistered importer. That was true until this story, so I'll change that test to use a name that is never registered. Next I'll look at the BC7 encoder's `return false` path.
+[94m[Bash][0m Read BC7 encoder tail and failure path $ sed -n '2414,2440p' third_party/bc7enc_rdo/bc7enc.cpp
+That's the cause. `bc7enc_compress_block` returns `false` for opaque blocks, which is a quirk of its return value rather than a failure. My wrapper treated that as an error and zero-filled the block, which decodes as invalid. The encoder always writes the block, so I'll drop the bogus return value from the API. First I'll confirm what the vendored header says.
+[94m[Bash][0m Read BC7 encoder header comment on return value $ sed -n '115,122p' third_party/bc7enc_rdo/bc7enc.h
+The header confirms it: the return value only reports alpha presence, and a block is always encoded. I'll make `encode_bc7_block` a `void` function, fix the importer and the tests, and correct the normal-map test's settings and the converter test's importer name.
+[94m[Bash][0m Make BC7 encode void and fix tests and converter test $ ''')]) print("ok") EOF grep -n "encode_bc7_block" tools/asset_converter/src/*.cpp tests/src/*.cpp
+The change notices are from my own scripted edits, and the content is what I intended. Next I'll rebuild and rerun both suites.
+[94m[Bash][0m Rebuild and run unit and integration suites $ done
+Both remaining failures are my test expectations, not the encoder. A 2D gradient where R and G vary independently is not a line in RGB space. BC7 with two endpoints per subset cannot represent that, so about 17 average error is expected. I'll switch the fixture and unit-test gradient to a line in RGB space, where BC7 should be tight, and keep the bound tight.
+[94m[Bash][0m Use line-in-RGB gradient fixture and rerun suites $ done
+All unit and integration tests pass now. The acceptance criteria also require the cooked container to hold the texture payload, so I'll add an end-to-end test that cooks a texture project and reads the `.cooked` file back. First I'll check the cooked container layout and how the existing converter tests build a project.
+[94m[Bash][0m Read cooked container and converter test helpers $ grep -n "options_for\|ScratchDir\|write_sidecar\|run_checked" -A6 tests/src/converter_tests.cpp | se...
+The cooked container is `OWCK`, a 4-byte version, an 8-byte size, and then the payload at offset 16. I'll check the path helper the existing converter tests use, then add the end-to-end cook test.
+[94m[Bash][0m Check utf8 helper and includes in converter tests $ grep -n "std::string utf8\|^using\|#include \"engine\|Guid::generate" -A3 tests/src/converter_tests....
+[94m[Bash][0m Add end-to-end texture cook test and rebuild $ grep -n "error\|warning:" -A3 /tmp/build6.log | cut -c1-300 | head -30
+The build is clean. I'll run both suites again.
+[94m[Bash][0m Run unit and integration suites with cook test $ ./build/linux-dev/tests/Debug/engine_tests --suite integration "Texture cook*" 2>&1 | tail -2
+Everything passes, including the new end-to-end cook test. Next are the Linux gates: vendor validation, the unit CTest preset, and the GCC and ASan builds. First I'll run the quick ones.
+[94m[Bash][0m Validate vendor manifest and run Linux unit CTest $ tail -8 /tmp/ctest_linux.log
+Vendor validation and the Linux unit CTest both pass (17/17). Next are the GCC and ASan/UBSan presets.
+[94m[Bash][0m Configure, build, and test Linux GCC preset $ tail -3 /tmp/gcc_ctest.log)
+[94m[Bash][0m Configure, build, and run ASan/UBSan preset $ tail -4 /tmp/asan_ctest.log)
+The ASan/UBSan preset passes with no sanitizer reports. The last gates are Windows/MSVC. I'll find the toolchain the existing `win-dev` cache was configured with, so the batch file loads the matching `vcvars64.bat`.
+[94m[Bash][0m Find MSVC toolchain used by Windows cache $ ls "/mnt/c/Program Files/Microsoft Visual Studio/" 2>/dev/null
+[94m[Bash][0m Run Windows gates via vcvars batch file $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" && mk...
+All four Windows gates return 0. Passing exit codes aren't enough, so I'll check the MSVC build log for warnings and the CTest log for the real counts.
+[94m[Bash][0m Check Windows build warnings and ctest summary $ tail -3 rg_validate.log
+[94m[Bash][0m Confirm ctest pass count and build completion $ grep -n "FAILED\|Build finished\|ninja: no work\|ninja:" rg_build.log | head -5
+The Windows build log has only 29 lines, which may mean an incremental no-op. I'll read it to confirm the new sources were actually compiled.
+[94m[Bash][0m Show Windows build log $ cd /mnt/c/Users/bucha/AppData/Local/Temp && cut -c1-160 rg_build.log | head -29
+The MSVC build compiled every new source with zero warnings under `/W4 /WX`, and the Windows unit gate passes 17/17. Before writing docs, I want one measurement: the BC7 encoder runs at its default quality, so I'll time a 2048×2048 texture through the real `asset_converter` CLI to see whether conversion is practical.
+[94m[Bash][0m Time BC7 cook of a 2048x2048 PNG $ time "$BIN" cook --project /tmp/texbench/project --output /tmp/texbench/out --report - | head -c 600
+[94m[Bash][0m Time BC7 cook of 2048 PNG with debug CLI $ ls -la /tmp/texbench/out | head
+A 2048×2048 BC7 cook takes about 5 s in this Debug build, which is fine for an offline step. Next are the docs. I'll look at the existing model-import doc and the converter's importer table so the new doc follows the same style.
+[94m[Bash][0m Read model-import doc style and converter doc $ grep -n "^#\|model\|texture\|Importer\|importer" docs/asset-converter.md | head -40
+I'll write `docs/texture-import.md` next, then update the converter doc's importer table and its "not in this story" list. Before editing the table, I'll read the exact lines.
+[94m[Bash][0m Read importer table lines to edit $ 98,101p' docs/asset-converter.md
+[94m[Bash][0m Update converter doc importer table and tests list $ see [texture-import.md](texture-import.md) |  An audio importer arrives later through the same `Impo...
+Next is the new texture doc. It covers the sidecar settings, the per-usage mip rules, the payload layout pointer, rejection rules, and the limits I measured.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/texture-import.md[0m "# Texture Import
+
+The `texture` importer (US-021) turns PNG and JPEG sources into the engine's cooked texture payload: every mip, block-compressed for the GPU. It runs inside the asset converter, so t... (5942 chars)"
+The doc's claims match the code. Next I'll update `tasks/prd.json` and the progress log, following how the earlier stories recorded their status.
+[94m[Bash][0m Inspect prd.json story status fields $ grep -n '"id": "US-02[01]"' -A3 tasks/prd.json | head
+`prd.json` records completion with `passes` and `completionNotes`, and US-020's entry shows the pattern. I'll update the US-021 entry, check that the JSON still parses, and then add the progress entry and the reusable patterns at the top of the log.
+[94m[Bash][0m Mark US-021 passing in prd.json and validate JSON $ all listed gates pass on Windows MSVC, Linux Clang, Linux GCC, and Linux ASan/UBSan."     },''' s=s[...
+[94m[Bash][0m Append US-021 progress entry and codebase patterns $ read it before trusting a return value.   - BC7 with two endpoints per subset cannot represent a two...
+I'll verify the test case count I wrote into the log, then check the Linux build of the converter one more time after the final edits, and clean up my scratch files outside the repo.
+[94m[Bash][0m Count texture test cases and clean scratch files $ ls /mnt/c/Users/bucha/AppData/Local/Temp | head -3
+The file has 16 test cases, not 17 as I wrote in the log. I'll correct the log. Code hasn't changed since the gates ran, so the results still stand.
+[94m[Bash][0m Correct test case count in progress log $ 16 cases)") open(p,'w').write(s) print('ok') EOF
+US-021 (texture conversion) is implemented, and every quality gate I could run passes. The one gate I didn't run is the benchmark, because there is no harness yet.
+
+**What was built**
+- **Importer:** a `texture` importer decodes PNG and JPEG and produces every mip. Its settings are `usage` (`color`, `normal`, `linear`) and `format` (`auto` or the explicit `rgba8` fallback).
+- **Mips:** color is averaged in linear light, so black and white gives 188 rather than 128. Normals are averaged as vectors and renormalized, with mip 0 renormalized first. Linear data is averaged as stored. Odd sizes use ceil halving, so 5×3 gives 5×3, 3×2, 2×1, 1×1.
+- **Cooked format:** an `OWTX` v1 payload with usage, encoding, sRGB flag, and per-mip sizes and bytes. The reader checks every count before allocating and recomputes each mip size from mip 0.
+- **Encodings:** `auto` gives BC7 for color and linear, and BC5 for normals. BC4/BC5 is written in the converter, as the PRD assigns it. BC7 uses the vendored `bc7enc_rdo`.
+- **Build:** the vendored BC7 code is its own static library, so `-Werror` stays on first-party code only.
+
+**Verification**
+- Windows/MSVC: `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit` 17/17.
+- Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` 17/17.
+- Linux/GCC: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` 17/17.
+- Linux ASan/UBSan: `linux-asan` build, `linux-sanitize` 17/17, with no sanitizer reports.
+- Tests: 16 texture test cases. They cover the sRGB rule, normal renormalization, odd sizes for PNG and JPEG, the size of every mip, corrupt and truncated input, and an end-to-end cook into the `OWCK` container.
+
+**Not run**
+- `engine_bench --suite acceptance`: no benchmark harness exists. Conversion is offline and not on the runtime path. For information only, a 2048×2048 BC7 cook takes about 5 s in a Debug build.
+- GPU suites and GUI checks: not applicable to this story.
+- GitHub CI: not pushed, and this is not a git repository.
+
+**Decisions you may want to review**
+- A PNG must end with its `IEND` chunk, so trailing bytes after it are rejected.
+- 16-bit input is reduced to 8 bits and reported as a note. EXIF orientation, ICC profiles, and gamma chunks are not read and not reported. The doc says so.
+- The BC5 encoder uses min/max endpoints. That is simple and fast, but less accurate than an optimal search.
+
+**Changes to existing tests**
+- `converter_tests.cpp`: the unknown-importer case used `texture` as its unregistered name. It now uses `no_such_importer`, because `texture` is registered by this story.
+- My own BC7 test used a 2D gradient, which two endpoints cannot represent, so it failed with about 17 units of error. I changed the fixture and test to a gradient along a line in RGB. The encoder was correct and the input was the problem. The tolerance is unchanged.
+
+**Bug caught along the way**
+- `bc7enc_compress_block` returns `true` for a block with alpha, not for success. My first wrapper treated `false` as an error and zeroed every opaque block. The wrapper now ignores the return value, and the API is `void`.
+
+**Files and records**
+- Docs: new `docs/texture-import.md`, and `docs/asset-converter.md` updated.
+- Tracking: `tasks/prd.json` marks US-021 passing, and `.ralph-tui/progress.md` has the US-021 entry and new codebase patterns.
+- Nothing was committed, as the workflow requires.

@@ -1,0 +1,96 @@
+# Iteration 870 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:08:43.582Z
+- **Ended At**: 2026-10-26T11:24:04.779Z
+- **Duration**: 15m 21s
+- **Input Tokens**: 176
+- **Output Tokens**: 25675
+- **Total Tokens**: 25851
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing `all_features` state before changing anything.
+[94m[Bash][0m Read progress log and search for all_features $ tail -n 80 .ralph-tui/progress.md && ls && grep -ril "all_features" --include=*.cpp --include=*.hpp ...
+The last log entry says US-079 is partial: the CPU test exists, but the tour runner, profiles, forced paths, and editor scenario are open. I'll read the existing test and the PRD's US-079 section to decide what to build now.
+[94m[Bash][0m Inspect test file, manifest entry, and PRD section $ wc -l tests/src/all_features_tests.cpp && grep -n "all_features" -A3 benchmarks/manifest.json | head...
+The CPU scenario exists. The open items are the editor scenario, GPU profiles, forced geometry paths, and the Windows and GCC gates. Before deciding what to build, I'll check whether an editor scenario on a real project is feasible with the existing editor code.
+[94m[Bash][0m Look for editor tests and project directories $ grep -n "TEST_CASE" tests/src/editor_*tests.cpp 2>/dev/null | head -60
+Editor infrastructure covers Play/Stop, Build Game packaging, and scene undo, so an editor scenario test on a generated project is feasible. I'll read the distribution and play tests to reuse their fixtures.
+[94m[Bash][0m Read distribution test and editor fixture helpers $ sed -n 1,118p tests/src/editor_distribution_tests.cpp && echo ---- && cat tests/src/editor_fixture.h...
+The distribution test already builds a package from a fixture project (`ENGINE_TEST_PACK_PROJECT`), so "this project" can mean that fixture. Next I need the editor model, scene editor, and play session APIs to write the scenario.
+[94m[Bash][0m Read scene and play test setup, and editor API signatures $ sed -n 1,106p tests/src/editor_scene_tests.cpp | head -110 && echo ---- && sed -n 1,92p tests/src/ed...
+I have enough of the editor API for scene, undo, Play/Stop, and packaging. Before writing the scenario, I'll check the fixture project's contents and the material, animation, and terrain document APIs that the remaining edits need.
+[94m[Bash][0m Find fixture project and document edit APIs $ grep -n "class WorldEditor" -A60 engine/editor/include/engine/editor/world_editor.hpp | grep "(" | h...
+Material and animation documents, plus terrain via `WorldEditor`, are reachable. I'll read the animation fixture in the play tests and the terrain test's world setup so the scenario can build them.
+[94m[Bash][0m Read animation fixture, terrain setup, and build API $ sed -n 200,300p tests/src/editor_play_tests.cpp && echo ---- && sed -n 1,60p tests/src/editor_terrai...
+I have the animation and terrain patterns. The material test still needs the node kinds, and the terrain test needs the stroke and undo calls. I'll pull those signatures in one pass.
+[94m[Bash][0m Grep node kinds, transform, terrain editor, and build report $ grep -n "Skeleton\|ClipLibrary" tests/src/editor_play_tests.cpp | head -3
+I have every signature the scenario needs. Last check before writing: how the test target lists sources, and the `Path` string accessor.
+[94m[Bash][0m Check test registration and Path/animation APIs $ grep -rn "class AnimatorSet" engine/animation/include | head -2
+The signatures match what I need. I'll write the editor scenario as a new integration test on a copy of the pack fixture project.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_editor_tests.cpp[0m "// The combined feature scene, editor half (US-079), headless: on a copy of the pack fixture project the scene is edited (create, remove,
+// move) and undone and redone, a material graph and an animat... (9085 chars)"
+The test file is written. I'll register it in the test target next to the other editor sources, then build and run it.
+[94m[Bash][0m Show editor test registrations in CMake $ sed -n 126,134p tests/CMakeLists.txt
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt[0m edit: "  src/editor_distribution_tests.cpp
+" → "  src/editor_distribution_tests.cpp
+  src/all_feat..."
+[94m[Bash][0m Configure and build the Linux debug preset $ grep -n "error\|warning:" /tmp/us079_build.log | head -30
+The only build error is a missing include: `ScriptRunner` is incomplete in my file. The play test includes `engine/script/script_runner.hpp`, so I'll add the same header.
+[94m[Bash][0m Rebuild Linux debug after adding the include $ find build/linux-dev -name engine_tests -type f | head -2
+The build passes. The note about the file changing is my own `sed` edit, so no revert is needed. Next I'll run the editor suite, which includes the new case.
+[94m[Bash][0m Run the editor test suite $ grep -n "FAILED\|with expansion" -A4 /tmp/us079_editor.log | head -60
+The scenario fails at `open_project`. I'll check what `open_project` expects in its path argument and what error it reports.
+[94m[Bash][0m Inspect open_project implementation and test usage $ grep -n "open_project" tests/src/editor_project_tests.cpp | head -3
+[94m[Bash][0m Check how project tests open a project $ grep -n "Project::open\|ProjectSession::open\|open(const" engine/editor/include/engine/editor/projec...
+The fixture has no `project.json`, so it is not an editor project. I'll look at the fixture tree to see what the build reads and whether I can create a project around it.
+[94m[Bash][0m List pack fixture tree and create_project signature $ grep -n "create_project" -B2 -A3 engine/editor/include/engine/editor/project.hpp | head -20
+The editor needs `project.json` and an `assets` folder, but the build reads the fixture's root layout. I'll check how `build_game` uses `options.project` before deciding how to bridge the two.
+[94m[Bash][0m Check how build_game reads the project path $ grep -n "options.project\|project_root\|kProjectAssetsFolder\|scan" engine/editor/src/distribution.c...
+`build_game` scans `options.project` directly as an asset root, while the editor opens a `project.json` root with `assets/` under it. I'll bridge them in the scenario: create an editor project, copy the fixture's `scenes` and `data` into its `assets` folder, open that project, and point the build at the same assets root.
+[94m[Bash][0m Fix fixture layout, rebuild, and rerun editor suite $ tail -n 3 /tmp/us079_editor.log
+The editor suite passes: 106 cases, 1566 assertions, including the new scenario. Next I'll run the integration suite (which includes the `all_features` markers test) and the Linux unit preset.
+[94m[Bash][0m Run integration suite, Linux unit ctest, and vendor validation $ echo "validate exit $?"
+Integration passes with no failures: 135 cases, 129 passed, 6 skipped (the skips are the X11/input cases that need a display). `ctest` needs to run from the repo root, so I'll rerun it there.
+[94m[Bash][0m Run Linux unit ctest preset from repo root $ tail -n 4 /tmp/us079_ctest.log
+Linux unit ctest passes (30/30 tests). I'll append this iteration's entry to the progress log, following the existing format.
+[94m[Bash][0m Append US-079 progress entry $ there is no tour runner, no screenshots, and no action log.   - Profiles (GI/RT/upscale) and forced ...
+US-079 is not complete, so I have not emitted the completion signal. This pass added the editor scenario that was missing, and the Linux gates for the current tree are green.
+
+**What I added**
+- `tests/src/all_features_editor_tests.cpp` (registered in `tests/CMakeLists.txt`). It is a headless integration test that:
+  - creates an editor project and copies the pack fixture's `scenes` and `data` into its `assets` folder, because the fixture has no `project.json` and the editor cannot open it directly;
+  - edits the scene (create, move, remove), then undoes and redoes, then saves;
+  - edits a material graph and an animation graph, undoing and redoing each;
+  - runs a terrain stroke, undoes and redoes it, then saves and reopens it;
+  - plays the animation graph under a Lua driver, asserts the walk state, then stops with no live sessions left;
+  - runs Build Game on the same assets folder, checking that the package verifies from a clean copy.
+
+**Verified on Linux (Debug, clang 10)**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --preset linux-dev`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `engine_tests --suite editor`: 106/106 cases, 1566 assertions.
+- `engine_tests --suite integration`: 135 cases, 129 passed, 6 skipped (X11 display cases), 0 failed.
+- `ctest --preset linux-unit`: 30/30.
+
+**Still open** (recorded in `.ralph-tui/progress.md`)
+- The "tour" is the existing CPU test. There is no tour runner, screenshot, or action log.
+- GI/RT/upscale profiles and forced alternative geometry paths for `all_features` are not run. FSR 2 cannot link because its permutation headers are missing.
+- The package is relaunched only by Build Game's own verify step, not by a separate launch of the published folder.
+- Windows gates are not re-run for this change. The new test is CPU-only, so its Windows result is not known yet.
+- `linux-gcc*` is not run because the host has no GCC 11+.
+- `linux-asan`/`linux-sanitize` are not re-run for this test-only change.
+- Native Linux Vulkan GPU, the acceptance benchmark, and GUI checks are not run.
+
+I read "this project" as the editor project created from the pack fixture, since the repository has no separate all_features project.

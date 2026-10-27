@@ -1,0 +1,92 @@
+# Iteration 11 Log
+
+## Metadata
+
+- **Task ID**: US-024
+- **Task Title**: Runtime Asset Handles
+- **Description**: As a game developer, I want asynchronous resource handles so that loading does not block a frame.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T23:41:15.525Z
+- **Ended At**: 2026-10-22T23:52:18.377Z
+- **Duration**: 11m 2s
+- **Input Tokens**: 166
+- **Output Tokens**: 13501
+- **Total Tokens**: 13667
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log, the PRD, and the repo state.
+[94m[Bash][0m List repo root and progress/PRD sizes $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read the progress log $ cat .ralph-tui/progress.md
+The log shows a pattern: earlier stories were often already in the tree. I'll check the PRD entry for US-024, the prd.json state, and whether any handle code already exists.
+[94m[Bash][0m Find US-024 references in PRD and prd.json $ grep -n -A12 '"US-024"' tasks/prd.json 2>/dev/null | head -60
+[94m[Bash][0m Inspect assets module layout and existing handle code $ grep -rli "handle" engine/assets tests/src | head -30
+An `asset_handle.hpp` and `assets_handle_tests.cpp` already exist. I'll read them alongside the PRD's US-024 entry and the constraint sections.
+[94m[Bash][0m Read existing asset handle header and CMake wiring $ grep -n "assets_handle" -r tests/CMakeLists.txt docs | head
+[94m[Bash][0m Read PRD US-024 entry and top-level constraints $ sed -n 1,135p tasks/prd-open-world-engine.md
+The handle implementation, its tests, and `docs/runtime-assets.md` already exist, with no progress entry for US-024. My job is to verify them against the story and the PRD constraints, then run the gates. I'll check the Windows gate notes and the PRD's constraint sections next.
+[94m[Bash][0m Read memory notes and PRD section headings $ grep -n "^## \|^### Non\|Non-Goal\|Technical Consid\|FR-0[0-9]\|Functional Req" tasks/prd-open-world...
+[94m[Bash][0m Read Non-Goals, Technical Considerations, and perf contract $ grep -n "performance\|benchmark\|p99\|Benchmark" tasks/prd-open-world-engine.md | head -30
+The benchmark harness does not exist yet (earlier logs confirm `engine_bench` has no target), so the acceptance benchmark stays not-applicable. Next I'll review the doc and the test case list against the acceptance criteria.
+[94m[Bash][0m Read runtime-assets doc, test case list, build verification rows $ grep -n "^## " docs/build.md | tail -5
+The code, tests, and docs for US-024 are all in place. The remaining work is to verify them by running the gates, starting with Linux. I'll run the Linux gates first.
+[94m[Bash][0m Run Linux validate, configure, and debug build $ tail -3 /tmp/build.log
+[94m[Bash][0m Run Linux unit ctest preset $ tail -15 /tmp/ctest.log
+Linux clang's configure, build, and unit gate pass (22/22). Next I'll check that the test binary is current, since a warm build can be stale, and start the GCC and sanitizer gates.
+[94m[Bash][0m Verify test binary is fresh and run integration suite $ ./$B --suite integration 2>&1 | tail -4
+The binary is current and the integration suite passes (99 pass, 2 skipped, which are X11 focus cases). Now the GCC and sanitizer gates.
+[94m[Bash][0m Run Linux GCC configure, build, and unit gate $ tail -3 /tmp/gcc-ctest.log
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitize tests $ grep -ci "AddressSanitizer\|runtime error\|LeakSanitizer" /tmp/asan-ctest.log
+Linux passes all gates: clang validate/dev/debug/unit, GCC debug and unit, and ASan/UBSan sanitize, with zero sanitizer reports. Next are the Windows gates. I'll check for a prior batch file to reuse rather than rebuilding the vcvars invocation from scratch.
+[94m[Bash][0m Find a previous Windows gate batch file $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+[94m[Bash][0m Read previous full Windows gate batch $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us023_gates.bat | tr -d '\r'
+I'll adapt that batch for US-024 and run it through `cmd.exe`, writing each exit code to a file.
+[94m[Bash][0m Run Windows gate batch via cmd.exe and read codes $ done
+All five Windows steps exit 0. Before trusting that, I'll check the logs for warnings and a stale-binary risk, as the progress notes advise.
+[94m[Bash][0m Inspect Windows build and ctest logs $ grep -i "warning\|error" $T/us024_vendor.log | head -3
+The build log stops at 13/62, the warm-build pattern the notes warn about. I'll confirm with a `ninja -n` dry run that `engine_tests` is current, and get the ctest totals.
+[94m[Bash][0m Dry-run ninja to confirm Windows binaries are current $ grep "tests passed" us024_ctest.log | tr -d '\r'
+The dry run printed nothing after filtering out DXC lines. I'll check whether that means "no work to do" or whether lines were hidden.
+[94m[Bash][0m Show raw ninja dry-run output $ tr -d '\r' < $T/us024_dry.log | head -8
+Only the DXC stamp steps are pending, so `engine_tests` and `asset_converter` are current. Windows `win-unit` passed 21/21. Linux and Windows gates are green.
+
+Remaining bookkeeping: the `docs/build.md` verification row, the `prd.json` `passes` flag, and the progress entry. I'll check their current format first.
+[94m[Bash][0m Inspect build.md table tail and prd.json passes field $ grep -n "US-024" docs/build.md | head -3
+[94m[Bash][0m Locate passes field in US-024 prd entry $ awk 'NR>=754 && NR<=815 && /passes|notes/{print NR": "$0}' tasks/prd.json
+The US-024 `passes` flag is on line 809. I'll set it, add the `docs/build.md` verification row after US-023, and append the progress entry.
+[94m[Bash][0m Set US-024 passes flag and add build.md verification row $ `ninja -n engine_tests asset_converter` shows only the DXC stamp steps), `win-unit` 21/21. The tests...
+Now the progress log entry, appended at the end of the file.
+[94m[Bash][0m Append US-024 entry to progress log $ `ninja -n` shows only the DXC stamp steps), `win-unit` 21/21. - **Learnings:**   - Handle code and t...
+The progress file changed on disk after I last read it. I'll check that my append is intact and see what else changed.
+[94m[Bash][0m Check progress log entries after external change $ wc -l .ralph-tui/progress.md
+US-024 is verified and marked complete. The runtime asset handles were already in the tree from an earlier pass, so I made no source changes. The work was to check them against the story and the PRD, run every gate, and record the results.
+
+**Verified against the acceptance criteria**
+- **States and lifetime:** `AssetHandle<T>` in `engine/assets/include/engine/assets/asset_handle.hpp` has Loading, Ready, and Failed states. `get()` returns the fallback until a payload is Ready. The manager holds entries weakly, so the last handle release cancels a running load and frees the payload.
+- **Jobs and publication:** loads run as JobSystem jobs. A payload is published only when the decode succeeds, under the entry lock, and only while the load is still pending and not cancelled. `close()` cancels pending loads and refuses later requests.
+- **Tests:** `tests/src/assets_handle_tests.cpp` covers duplicate requests, release and reload, format errors, consumer destruction mid-decode and while queued, world closure, and reloads.
+- **PRD constraints:** the assets library does not link the converter (FR-03), and nothing is stubbed.
+
+**Gates (all exit 0)**
+- Linux Clang: `ValidateVendor`, `linux-dev`, `linux-debug` with 0 warnings, `linux-unit` 22/22.
+- Linux GCC: `linux-gcc`, `linux-gcc-debug` with 0 warnings, `linux-gcc-unit` 22/22.
+- Linux sanitizers: `linux-asan` build and `linux-sanitize` 22/22, with no sanitizer reports.
+- Windows MSVC, run through `cmd.exe` from WSL: `ValidateVendor`, `win-dev`, `win-debug` with 0 `warning C` lines, `win-unit` 21/21.
+- The Windows `win-debug` log stopped at 13/62, which is the warm-build pattern. A `ninja -n` dry run showed only the DXC stamp steps, so `engine_tests` is current.
+
+**Not run, and why**
+- `engine_bench --suite acceptance` is not applicable: the benchmark harness does not exist yet (US-074).
+- GPU suites: the handles have no GPU path.
+- GitHub CI: the work has not been pushed.
+- GUI check: no editor window exists yet.
+
+**Bookkeeping changes**
+- `tasks/prd.json`: US-024 set to `passes: true`.
+- `docs/build.md`: added the US-024 verification row.
+- `.ralph-tui/progress.md`: appended the US-024 entry. The file changed on disk while I was working, and my entry is in place with no conflicting edits.
+
+<promise>COMPLETE</promise>

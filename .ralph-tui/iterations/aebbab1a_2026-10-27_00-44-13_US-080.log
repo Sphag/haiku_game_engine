@@ -1,0 +1,42 @@
+# Iteration 1188 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:44:13.467Z
+- **Ended At**: 2026-10-26T21:44:26.618Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 1524
+- **Total Tokens**: 1542
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log tail and bench artifacts $ grep -n "US-080" -A3 tasks/*.md 2>/dev/null | head -20
+[94m[Bash][0m Re-check Vulkan device, FSR tables, and workload status $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+US-080 is not complete, and I did not signal COMPLETE. The story needs measurements from the RTX 5080 reference machine and decisions only you can make, and this WSL host can't provide either.
+
+I re-checked the blockers just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run can't happen here. The RTX 5080 is visible only through WSL (`nvidia-smi` reports it, driver 617.42).
+- **FSR 2 cannot build.** The tree has 0 `*_permutations.h` files, so `ENGINE_FSR2_AVAILABLE` stays off. Vendoring those tables is a route decision for you.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still has four entries with `"implementation": "none"` (lines 88, 108, 122, 132). A 3×180 s acceptance batch would exit 3 (incomplete) against them.
+- **No acceptance run exists.** `artifacts/bench` has only partial us076/us077/us078/us080 runs.
+
+The Linux quality gates pass on this host, per the last progress entry. I did not re-run them in this session. Windows gates, linux-gcc, linux-asan, the GPU suites, and the acceptance bench have not been run.
+
+To finish US-080, I need:
+
+1. Access to the RTX 5080 machine for the Windows DX12 and Windows Vulkan runs, and a native Linux Vulkan run on that machine.
+2. Your decision on the FSR 2 vendoring route.
+3. Implementations for the four `none` workloads.
+4. Your decision on what to do if a frame budget is exceeded. Changing the contract needs your sign-off; otherwise the cause has to be fixed.
+
+I didn't append another progress entry, since the log already repeats this status many times.

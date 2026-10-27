@@ -1,0 +1,91 @@
+# Iteration 1263 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:34:45.282Z
+- **Ended At**: 2026-10-26T23:41:06.118Z
+- **Duration**: 6m 20s
+- **Input Tokens**: 94
+- **Output Tokens**: 5102
+- **Total Tokens**: 5196
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and the existing docs.
+[94m[Bash][0m Inspect repo layout and progress log tail $ tail -c 3000 .ralph-tui/progress.md
+The log shows earlier passes ended blocked on hardware and user decisions. Before deciding anything, I'll check the docs status and run the Linux gates that can run here.
+[94m[Bash][0m Read acceptance doc and README section headings $ grep -n "^#" README.md
+[94m[Bash][0m Run vendor validation and linux-dev configure $ echo "configure exit=${PIPESTATUS[0]}")
+The docs already cover most of the checklist, and the open items are the same hardware and decision blockers the log records. I'll let the background configure finish and then check its output.
+[94m[Bash][0m Check background configure output $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav4tvkbp.output. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check background configure output $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav...
+[94m[Monitor][0m Wait for linux-dev configure to finish $ tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav...
+[94m[Bash][0m Recheck blocker facts: license, FSR tables, GPU, GCC 11+ $ echo done
+[94m[Monitor][0m Wait for configure completion notice $ tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav...
+[94m[ScheduleWakeup][0m
+Status so far: the story is not signed off, and I'm not emitting the COMPLETE signal.
+
+**What I checked this pass**
+- `cmake -P cmake/ValidateVendor.cmake` passes on Linux: 26 dependencies, 8542 files.
+- `cmake --preset linux-dev` is still configuring in the background. I'll report its result when it finishes.
+- The docs already cover the checklist. `README.md` has the required sections, and `docs/acceptance.md` maps each story to its tests and artifacts. The open items in that file match the machine as it is now:
+  - `/dev/dri` is absent, so there is no native Linux Vulkan device.
+  - Only GCC 9.4 is installed, and linux-gcc needs GCC 11+.
+  - There is no LICENSE file, which is a decision for you.
+  - The FSR 2 `*_permutations.h` tables are missing (0 files under `third_party`).
+
+**Still open, and why I can't close them here**
+- Native Linux Vulkan GPU suite and the Linux GPU report: needs a machine with a Vulkan device.
+- Full `engine_bench --suite acceptance` on the RTX 5080: the render, streaming, all-features, and physics acceptance scenes do not yet produce GPU timestamps, so runs report `incomplete`.
+- Visual editor smoke test with screenshots on Linux, and beyond launch on Windows.
+- linux-gcc gate: needs GCC 11+.
+- A real sample-game package built and launched from a clean directory on each OS.
+- FSR 2 permutations: needs your choice of vendoring route.
+- LICENSE: needs your decision on the license.
+
+I'll wait for the linux-dev configure result, then append this pass to `.ralph-tui/progress.md`. I won't signal COMPLETE while these items are open.
+[94m[Bash][0m Read the completed configure output $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/09d4500d-7f98-43ec-bbfc-5c26e7e62328/tasks/bav4tvk...
+The linux-dev configure finished with exit 0, so I'll record this pass in the progress log.
+[94m[Bash][0m Append this pass's entry to progress log $ start them in the background and watch the output file rather than letting the foreground call time ...
+US-081 is not signed off, so I am not emitting the COMPLETE signal.
+
+**Passed this pass (Linux)**
+- `cmake -P cmake/ValidateVendor.cmake`: passed, 26 dependencies and 8542 files.
+- `cmake --preset linux-dev`: configured and generated, exit 0.
+
+I did not re-run the Linux debug build, the linux-unit ctest, or any Windows gate this pass. Earlier passes recorded those as passed, but this pass does not re-verify them.
+
+**Still open (not achievable on this machine)**
+- Native Linux Vulkan GPU suite: `/dev/dri` is absent.
+- Full `engine_bench --suite acceptance` on the RTX 5080: the render, streaming, all-features, and physics acceptance scenes do not yet produce GPU timestamps, so runs report `incomplete`.
+- Visual editor smoke with screenshots on Linux, and beyond launch on Windows.
+- linux-gcc gate: only GCC 9.4 is installed, and Jolt needs GCC 11+.
+- Package built from a real sample game and launched from a clean directory on each OS.
+- FSR 2 `*_permutations.h`: the tables are missing from the vendored tree; you need to pick a vendoring route.
+- LICENSE: the repo has no license file, and the licence choice is yours.
+
+I appended this pass to `.ralph-tui/progress.md`. Finishing US-081 needs the native Linux Vulkan machine, the RTX 5080 benchmark run, GCC 11+, and your decisions on FSR 2 and the licence.
+Nothing actionable this tick. The repo is not under git, so there is no PR to maintain. US-081 is blocked on the hardware and your decisions, and the linux-dev configure already finished. I'm stopping the loop.
+[94m[ScheduleWakeup][0m
+The autonomous loop is stopped. The last tick found nothing actionable, and this repo is not under git, so there is no PR to maintain.
+
+US-081 is still not signed off, and I have not emitted the COMPLETE signal. The open items need hardware or decisions from you:
+- a native Linux Vulkan device (`/dev/dri` is absent here)
+- the full acceptance benchmark on the RTX 5080
+- GCC 11+ for the linux-gcc gate
+- a visual editor smoke test on Linux, and beyond launch on Windows
+- a package built from a real sample game on each OS
+- your choice of FSR 2 vendoring route
+- your decision on a LICENSE file
+
+The Linux configure is confirmed (exit 0). That run also covered `ValidateVendor`. The Linux build and ctest were not re-run this pass.

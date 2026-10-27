@@ -1,0 +1,34 @@
+# Iteration 737 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:25:41.512Z
+- **Ended At**: 2026-10-26T02:25:53.564Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1648
+- **Total Tokens**: 1666
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and inspect benchmark tool state $ tail -n 120 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && git status --short |...
+[94m[Bash][0m Check source and artifact timestamps for changes $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/workload_expected.json benchmarks/m...
+US-076 is not complete, and I have not signalled COMPLETE. Nothing has changed since the last recorded pass: `render_stress.cpp` is still at 04:15:43 and the eight `us076-*` reports are from 03:08 to 04:45, so I did not rerun the benchmarks or gates.
+
+The work that can be done without you is finished. The render route, the `render_stress` driver, the `--path` and `--disable-mesh-shaders` options, the per-run counters and screenshots, and the mesh-shader-off fallback evidence are all in place. The Windows and Linux gates passed on the current tree in the last full run, except the native Linux Vulkan GPU run and linux-gcc, which cannot run here.
+
+Three acceptance items are blocked on your decision:
+
+1. **Frame budget and triangle floor fail on instance placement.** On DX12 and Vulkan, every indexed, indirect and meshlet run fails the same way. The route start submits 312,068 triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the route start sees only about 330 items. The contract forbids reducing the workload, so the only fix is a placement change. That changes the workload: bump `kWorkloadVersion` (currently 1) and regenerate `benchmarks/workload_expected.json`. Do you approve that change?
+2. **The full_1080 profile is unsupported.** FSR 2 has no generated permutation tables, so only native_1080 runs. Vendoring those tables is a separate decision.
+3. **The native Linux Vulkan GPU run and linux-gcc are not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. These need a native Linux machine or a newer GCC.
+
+If you decide to close the story as measured, the current eight reports are the evidence: the fallback runs show `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`. The contract failures are the measured result, but the acceptance criteria cannot pass on the current placement.

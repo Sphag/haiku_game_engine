@@ -1,0 +1,37 @@
+# Iteration 809 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:54:21.472Z
+- **Ended At**: 2026-10-26T02:54:33.260Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1634
+- **Total Tokens**: 1652
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and benchmark sources $ grep -n "US-076\|render_stress" -r tools/benchmark tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Check mtimes of benchmark files and PRD decision line $ sed -n 718,726p tasks/prd-open-world-engine.md
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing in the tree has changed since the last status check, and the blockers still need your decision.
+
+**Blocked on you:**
+1. **Route-start placement vs. frame budget.** On the indexed reference path the starting frame submits 312,068 triangles, against the contract's floor of 2,000,000. Frame time is p99 35–47 ms against a 16.7 ms budget. Acceptance can't pass on the current placement. Fixing it means either:
+   - changing the placement, which bumps `kWorkloadVersion`, regenerates `workload_expected.json`, and updates the manifest hash, or
+   - implementing LOD/culling so the budget is met with the contract as written.
+
+   The PRD (US-080, around lines 868–871) says a missed budget is fixed in the implementation first, and that workload reductions need a separate user agreement. So I shouldn't pick the workload change myself.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated permutation tables, so that profile can't run until the vendoring route is chosen.
+3. **Not run here:** the native Linux Vulkan GPU suite, `linux-gcc`, and the Windows gates. The local GCC 9.4 can't build Jolt, and WSL has no usable Vulkan device.
+
+**Verified this pass:** `render_stress.cpp`, `workload.cpp`, `workload_expected.json`, and `manifest.json` have the same mtimes as the last several checks. `kWorkloadVersion` is still 1. I did not rebuild or rerun the gates, and I didn't add another progress entry because the last 20-plus entries say the same thing.
+
+Tell me which way to go on item 1 (implementation fix or contract change) and whether to take the FSR vendoring route, and I can pick this up from there.

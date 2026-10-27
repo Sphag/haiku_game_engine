@@ -1,0 +1,42 @@
+# Iteration 1214 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:57:04.270Z
+- **Ended At**: 2026-10-26T21:57:18.174Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1855
+- **Total Tokens**: 1877
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already contains.
+[94m[Bash][0m Read progress log and benchmark layout $ grep -n "US-080" -A3 tasks/prd-open-world-engine.md | head -40
+The log shows about 99 prior status checks, all blocked on the same items. I'll re-verify those blockers directly rather than trust the log.
+[94m[Bash][0m Verify hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+US-080 is not complete, and I did not signal COMPLETE. I re-checked the blockers in this session and they still stand:
+
+- **No native Linux Vulkan device.** `/dev/dri` does not exist in this WSL environment. The RTX 5080 is visible only through WSL (`nvidia-smi` reports driver 617.42).
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still has four `implementation: "none"` entries, so an acceptance run would exit 3 (incomplete).
+- **FSR 2 cannot build.** There are zero `*_permutations.h` files under `third_party`, so FSR stays unavailable until you pick a vendoring route.
+- **No acceptance run exists.** `artifacts/bench` has no acceptance-suite output, and no three-repeat raw reports exist for any combination.
+- **A known CPU budget miss is open.** The us076 meshlets scene measured CPU p99 42.4 ms against a 16.7 ms budget. Fixing it needs a Release profile on the RTX 5080 through cmd.exe, which I did not run.
+
+Making a change now would not move the story forward. Each acceptance criterion needs either the native Linux Vulkan host or the unimplemented workloads, and an honest run cannot pass without them.
+
+Decisions needed from you:
+1. **Native Linux Vulkan host.** Provide a machine with `/dev/dri`, or confirm that native Linux/Vulkan acceptance stays open.
+2. **FSR 2 route.** Choose whether to vendor the generated permutation headers or to keep FSR gated off.
+3. **Workload sources.** Provide the sources for the four `none` workloads, or approve dropping them from the acceptance set.
+4. **Budget decision.** If the render_stress CPU miss stays after profiling, decide whether to change the contract. The task says that needs your decision, not mine.
+
+I did not append another progress entry. The log already holds about 99 identical status checks, and one more would add noise without new information.

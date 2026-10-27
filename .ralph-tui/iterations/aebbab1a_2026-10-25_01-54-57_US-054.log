@@ -1,0 +1,42 @@
+# Iteration 380 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:54:57.222Z
+- **Ended At**: 2026-10-24T22:59:53.548Z
+- **Duration**: 4m 56s
+- **Input Tokens**: 28
+- **Output Tokens**: 2428
+- **Total Tokens**: 2456
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the character controller and the progress log, since the story may already be partly implemented.
+[94m[Bash][0m Inspect repo state and progress log for US-054 $ grep -n "US-054" -r --include=*.md . | head -20
+The log shows US-054 as Partial for many passes. The open items are the `linux-gcc` gate, which this host cannot build, and the benchmark, which has no harness yet. Before deciding anything, I'll rerun the Linux gates that can run here to confirm the tree is still green.
+[94m[Bash][0m Run Linux gates and check for newer source files $ find engine tests cmake -newer .ralph-tui/progress.md -type f | head
+The Linux gates pass again and no source file is newer than the last log entry. I'll record this pass in the progress log, as the workflow asks.
+[94m[Bash][0m Append status entry to progress log $ US-074), `physics_stress` (US-077). - Status call: US-054 stays **Partial**. Open: the `linux-gcc` g...
+US-054 is still **Partial**, so I am not signalling COMPLETE. I found no source change to make this pass.
+
+**Passed this pass (Linux, on the current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0, 26 dependencies and 8542 files checked.
+- `cmake --preset linux-dev`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0, 22 of 22 tests (21 integration, 1 unit).
+
+**Not passed or not run:**
+- **`linux-gcc` gate:** blocked. The host has only GCC 9.4 and clang 10, and Jolt needs GCC 11+. The CI job or a machine with GCC 11+ is required.
+- **`linux-sanitize`:** not rerun this pass. It passed 22 of 22 on this same tree in an earlier pass.
+- **Acceptance benchmark:** `engine_bench` has no harness yet (US-074), and `physics_stress` is US-077. The performance criterion cannot be measured.
+- **Windows gates:** not rerun this pass. The last Windows pass was 21 of 21, and the tree has not changed since.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results. The story stays open until someone with GCC 11+ can run the `linux-gcc` job and the benchmark harness exists.

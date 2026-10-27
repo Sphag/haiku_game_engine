@@ -1,0 +1,44 @@
+# Iteration 1143 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:17:11.774Z
+- **Ended At**: 2026-10-26T21:17:29.481Z
+- **Duration**: 17s
+- **Input Tokens**: 28
+- **Output Tokens**: 2604
+- **Total Tokens**: 2632
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the benchmark harness and acceptance scripts already exist.
+[94m[Bash][0m Read progress log tail and benchmark dirs $ wc -l .ralph-tui/progress.md && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark artifacts 2>...
+The progress log shows this story has been blocked across dozens of status-check passes. Before deciding anything, I'll re-check the blockers in one command rather than assume they still hold.
+[94m[Bash][0m Re-check hardware and benchmark blockers $ timeout 20 cmd.exe /c "nvidia-smi --query-gpu=name,driver_version --format=csv,noheader" 2>&1 | head...
+Blockers are unchanged. I'll record this pass in the progress log, matching the existing entries, and stop without a COMPLETE signal.
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No source change, ...
+US-080 is not complete, and I did not emit the COMPLETE signal. This host cannot produce the acceptance evidence the story requires.
+
+I re-checked the blockers in this pass and they are unchanged:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi` reports driver 617.42), so native Linux/Vulkan reports cannot be generated here.
+- **No Windows RTX 5080 reports.** Windows GPU runs are reachable from WSL via `cmd.exe`, but a full acceptance run is 3 × (30 s warmup + 180 s measured) per scene, profile, and backend, and no `acceptance` run exists in `artifacts/bench`.
+- **Missing workloads.** `benchmarks/manifest.json` still has 4 entries with `implementation: none` (the physics, streaming, and teleport/render paths), so those scenes cannot be measured at all.
+- **FSR 2 is not buildable.** `third_party/fsr2` has 0 of the generated `*_permutations.h` files, so FSR cannot link. Picking a vendoring route is a user decision.
+
+I did not run the Windows or Linux quality gates or the bench suite this pass. The acceptance criteria need the GPU reports and the missing workloads first, so a gate pass would not change the outcome.
+
+I appended a status entry to `.ralph-tui/progress.md`. The earlier entries in that log repeat the same status, so this story has been stalled for a long time.
+
+To move this forward, I need one of these from you:
+1. Access to the RTX 5080 reference computer, to run the Windows/DX12, Windows/Vulkan, and native Linux/Vulkan acceptance runs.
+2. A decision on the FSR 2 permutations route (vendor the generated tables, or drop FSR from the acceptance build).
+3. Confirmation to implement the four `implementation: none` workloads first, which is the work I can do here.

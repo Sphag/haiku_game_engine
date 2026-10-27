@@ -1,0 +1,38 @@
+# Iteration 121 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:43:00.782Z
+- **Ended At**: 2026-10-24T04:43:46.394Z
+- **Duration**: 45s
+- **Input Tokens**: 26
+- **Output Tokens**: 2263
+- **Total Tokens**: 2289
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log, terrain memory, and terrain sources $ git -C /mnt/d/dev/haiku_game_engine status 2>&1 | head -5
+[94m[Bash][0m Build Linux debug preset to verify current state $ find . -maxdepth 3 -name engine_tests -type f 2>/dev/null | head -3
+[94m[Bash][0m Run unit test suite on Linux build $ timeout 600 "$B" --suite unit 2>&1 | tail -5
+[94m[Bash][0m Append progress entry for this verification pass $ (3) no native Linux Vulkan device on this host. - Next step: unchanged. Run the Windows readback of ...
+US-047 is still **Partial**, so I am not emitting the completion signal.
+
+**What I checked this pass**
+- The Linux unit suite passes on the existing `build/linux-asan` binary: 598 cases, 152354 assertions. That binary is older than the 599-case count in the last progress entry, so I did not reconcile the difference.
+- The `linux-debug` build step I ran only completed the `engine_dxc_host` install. I did not confirm that the full `linux-debug` build is clean.
+- I made no source changes.
+
+**Why it stays Partial**
+1. **RT terrain shadow darkening is undiagnosed on DX12 and Vulkan.** The CPU traced reference shadows the hill correctly, but the GPU frame shows no darkening. Several passes have ruled out the geometry, transform, and flags by reading. The next step needs a Windows readback of `RtShadow` for the hill frame, which I can't do from WSL.
+2. **`engine_bench --suite acceptance` does not exist in the tree.** That harness belongs to US-074, so the performance criterion can't run yet.
+3. **There is no native Linux Vulkan device on this host**, so the Linux Vulkan GPU run is not available.
+
+The acceptance criteria for the Windows gates, Linux gates, and the GPU suite are not verified in this pass. I appended a progress entry to `.ralph-tui/progress.md` recording these points.

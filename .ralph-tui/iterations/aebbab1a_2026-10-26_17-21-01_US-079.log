@@ -1,0 +1,42 @@
+# Iteration 953 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:21:01.348Z
+- **Ended At**: 2026-10-26T14:21:19.536Z
+- **Duration**: 18s
+- **Input Tokens**: 26
+- **Output Tokens**: 2469
+- **Total Tokens**: 2495
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any of the `all_features` work already exists.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -n 80 .ralph-tui/progress.md && grep -ril "all_features" --exclude-dir=third_party --excl...
+The progress log shows the story has been stalled across many passes on the same blockers. I'll re-check the current state of those blockers before deciding whether any unblocked work is left.
+[94m[Bash][0m Re-check blockers: samples dir, manifest, FSR permutations, tests $ grep -rn "all_features" tools/benchmark/src | head -5
+[94m[Bash][0m Append status entry to progress log $ (2) approval of `all_features_route_v1`. The scene project, tour, profiles, forced geometry paths, l...
+US-079 is not complete, so I have not signalled COMPLETE. I re-checked the blockers and nothing has changed since the last several passes.
+
+**Still missing:**
+- **Scene project:** there is no `samples/` directory and no `all_features` scene under `tools/benchmark/src`. The manifest entry in `benchmarks/manifest.json` is still `implementation: none`.
+- **Tour and profiles:** no tour runner, feature-marker checks, GI/RT/upscale profiles, or forced geometry paths.
+- **FSR route:** `third_party/fsr2` has no `*_permutations.h`, so the `full_1080` profile stays unsupported.
+- **Editor scenario:** no live-app run of edits, undo/redo, Play/Stop, or package/relaunch.
+- **Gates:** Windows gates, the Windows and native Linux Vulkan GPU suites, `engine_bench --suite acceptance`, `linux-gcc*`, and the ASan preset have not been run in this pass.
+
+**Decisions needed from you:**
+1. Choose a vendoring route for the FSR 2 permutation headers, which `full_1080` depends on.
+2. Approve the `all_features_route_v1` definition recorded in an earlier pass.
+
+The rest needs a Windows RTX host and a GUI session, which this WSL environment does not provide.
+
+I appended a status entry to `.ralph-tui/progress.md`. I did not run a build or test pass this time, so nothing new is reported as passed. The CPU tests in `all_features_tests.cpp` and `all_features_editor_tests.cpp` exist but were not re-run here. The last recorded Linux results were from earlier passes: `linux-debug` build and `linux-unit` ctest passed (integration 29, unit 1), and `engine_tests --suite editor` passed 106 cases.

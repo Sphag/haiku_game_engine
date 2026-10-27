@@ -1,0 +1,39 @@
+# Iteration 1049 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:30:32.148Z
+- **Ended At**: 2026-10-26T16:30:49.681Z
+- **Duration**: 17s
+- **Input Tokens**: 26
+- **Output Tokens**: 2506
+- **Total Tokens**: 2532
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for `all_features` and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features refs $ ls && tail -n 80 .ralph-tui/progress.md && grep -ril "all_features\|all-features\|US-079" --exclude-...
+The progress log shows this story has been blocked for many passes. Before deciding whether to repeat that status, I'll confirm the blockers still hold.
+[94m[Bash][0m Re-check blockers: samples dir, FSR2 headers, manifest route $ grep -n "all_features\|route_v1" -i tasks/prd-open-world-engine.md | head -20
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, and I'm not signalling COMPLETE. The remaining acceptance criteria depend on decisions and hardware I can't supply from here.
+
+**Blocked, needs you:**
+1. **Approve `all_features_route_v1`.** It is still a proposal in `benchmarks/manifest.json` (line 152). The benchmark runner and the `all_features` profiles depend on it.
+2. **FSR 2 permutation headers, or a decision to keep `full_1080` unsupported.** `third_party/fsr2` has zero `*_permutations.h` files, so the FSR profile and the forced upscale path can't build.
+3. **A Windows GPU and GUI session.** The DX12 and Vulkan GPU suites, the editor scenario with package/relaunch, and the tour with screenshots all need a native desktop with a GPU.
+4. **A decision on the runtime component catalog.** It is empty in this build, so `samples/all_features` (PRD line 802) would be refused by the runtime if it had components. The sample project is blocked on this.
+
+**Done and still passing:** the Linux gates were re-run in an earlier pass. `ValidateVendor` passed, `linux-dev` and `linux-debug` built, and `linux-unit` passed 30/30. The integration suite passed 131 with 4 skipped, including `all_features_tests.cpp` and `all_features_editor_tests.cpp`.
+
+**Not run this pass:** I changed no source and ran no builds or tests. I re-checked the blockers above and appended a status entry to `.ralph-tui/progress.md`. Windows gates, `linux-gcc*`, the sanitizer presets, and `engine_bench --suite acceptance` have not been run for this story.
+
+The loop has logged this same status many times, so I'd rather you give decisions 1 and 2 and confirm the native GPU session than have it keep re-checking.

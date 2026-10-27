@@ -1,0 +1,106 @@
+# Iteration 618 Log
+
+## Metadata
+
+- **Task ID**: US-064
+- **Task Title**: Undo/Redo
+- **Description**: As a scene author, I want to undo changes so that I can edit the project safely.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T14:54:40.232Z
+- **Ended At**: 2026-10-25T15:18:01.206Z
+- **Duration**: 23m 20s
+- **Input Tokens**: 266
+- **Output Tokens**: 54009
+- **Total Tokens**: 54275
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress notes $ ls engine/editor
+[94m[Bash][0m Read SceneEditor header and US-064 PRD section $ cat engine/editor/include/engine/editor/scene_editor.hpp && wc -l engine/editor/src/scene_editor.cpp...
+[94m[Bash][0m Find undo references in PRD and read scene_editor.cpp $ cat engine/editor/src/scene_editor.cpp
+[94m[Bash][0m Locate editor call sites for scene edits and menus $ ls tests/src | grep -i editor
+[94m[Bash][0m Read viewport drag loop and UI call sites $ sed -n 255,300p engine/editor/src/editor_ui.cpp
+[94m[Bash][0m Find EditorUi draw functions, input and scene error codes $ grep -n "SceneDocument\b" -A8 engine/scene/include/engine/scene/scene_document.hpp 2>/dev/null | hea...
+[94m[Bash][0m Read error codes, inspector panel and EditorUi header $ grep -n "scene_status_\|void report\|report(" engine/editor/src/editor_ui.cpp | head -5
+[94m[Bash][0m Check test conventions and message-string dependencies $ cat tests/src/editor_fixture.hpp | head -60
+[94m[Bash][0m Read scene test helpers and scene serialization API $ grep -n "to_document\|serialize_scene" engine/scene/include/engine/scene/*.hpp | head
+Now I have the picture. The plan: snapshot-based history in `SceneEditor` (each command stores the document before and after), gesture merging for drags, and UI hooks for Edit menu and Ctrl+Z/Y.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/scene_editor.hpp[0m edit: "    // True when the entity is part of a prefab in..." → "    // True when the entity is part of a prefab in..."
+Now the implementation. I'll replace the mutating functions in `scene_editor.cpp` one at a time.
+[94m[Bash][0m Apply history edits to scene_editor.cpp $ } """) open(p,'w').write(s) EOF grep -n "record(\"create\|commit(document" engine/editor/src/scene_e...
+Next, the viewport: open the gesture when a handle drag begins, and close it wherever the drag ends.
+[94m[Bash][0m Wire viewport drag into gesture begin and end $ }""") open(p,'w').write(s) EOF grep -n "begin_gesture\|end_gesture" engine/editor/src/viewport.cpp
+[94m[Bash][0m Check other drag reset points in viewport header $ sed -n 150,178p engine/editor/include/engine/editor/viewport.hpp
+[94m[Bash][0m Find callers of cancel_drag $ grep -rn "cancel_drag" engine tests tools | grep -v "viewport.hpp"
+No callers, so `cancel_drag` needs no change. Now the UI: Edit menu, shortcuts, and inspector gestures.
+[94m[Bash][0m Read menu bar tail to place Edit menu $ sed -n 200,224p engine/editor/src/editor_ui.cpp
+[94m[Bash][0m Add Edit menu, shortcuts, and inspector gesture to EditorUi $ """) open(p,'w').write(s) EOF grep -n "KeyShift\|KeyCtrl" third_party/imgui/imgui.h | head -3
+[94m[Bash][0m Replace ternary statement with if/else $ }""" assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF grep -n "ImGuiKey_Z\|ImGui...
+[94m[Bash][0m Check key mapping for letter keys $ grep -n "Key" engine/editor/src/imgui_input.cpp | head -20
+Letters map, so Ctrl+Z/Y reach the shortcut code. Now the tests: a new file covering create/delete, reparent, component edits, drag merge, redo clearing, dirty state, and a full-rollback scenario. First I'll check how existing tests set a Guid field.
+[94m[Bash][0m Check existing Guid field test usage and scene API $ grep -n "Scene::set_field\|set_field(" engine/scene/include/engine/scene/scene.hpp
+I'll append the history tests to `editor_scene_tests.cpp`, which already has the light component and console helpers.
+[94m[Bash][0m Append undo/redo test cases to editor scene tests $ } ''' open(p,'w').write(s) EOF grep -n "has_component\|parent(" engine/scene/include/engine/scene/sc...
+Two things to fix before building: `has_component` doesn't exist, and my rollback count is wrong. The scenario is 8 commands after the saved baseline, so the test should roll back to `original` at that point and only then unwind everything.
+[94m[Bash][0m Fix rollback test counts and component check $ """) open(p,'w').write(s) EOF grep -n "component_types" engine/scene/include/engine/scene/scene.hpp
+The redo count should be 24 (12 commands redone after the 12 undone), and in the drag test the second undo returns to the first drag's end value, 2.5, not the press. Fixing both:
+[94m[Bash][0m Fix test expectations and check build directories $ cat CMakePresets.json | grep -n '"name": "linux-dev"\|"name": "linux-debug"'
+[94m[Bash][0m Build linux-debug preset and show errors $ echo "exit=${PIPESTATUS[0]}")
+Two fixes: the file lacks a `scene::` alias, and `Guid` needs a parse call for a `string_view`. Checking the Guid API:
+[94m[Bash][0m Find Guid parsing function $ grep -n "static\|parse" engine/core/include/engine/core/guid.hpp | head
+[94m[Bash][0m Fix test namespace and Guid construction, rebuild $ echo done)
+Build is clean. Running the editor suite and the unit tests:
+[94m[Bash][0m Run the editor test suite $ echo "exit=$?"
+Both failures are mistakes in my tests, not in the history code:
+
+1. The rollback test's "original" was never saved, so the editor is correctly dirty against an empty saved text. I'll save the baseline to a file so the clean-state check is meaningful.
+2. A stray `REQUIRE(editor.redo())` runs with nothing undone, and the later redo count needs to be three, not two.
+[94m[Bash][0m Save rollback baseline and fix redo counts in tests $ """) open(p,'w').write(s) EOF grep -n "engine::scene::serialize_scene(editor.scene().to_document()) ...
+The script aborted before writing, so nothing changed. The line now has the `engine::` prefix, so I'll match that and rerun.
+[94m[Bash][0m Apply test fixes, rebuild, and run editor suite $ ./build/linux-dev/tests/Debug/engine_tests --suite editor 2>&1 | tail -4
+[94m[Bash][0m Show failing assertion details $ ./build/linux-dev/tests/Debug/engine_tests --suite editor 2>&1 | grep -B4 -A8 "FAILED" | head -40
+[94m[Bash][0m Read the failing component test $ sed -n 386,412p tests/src/editor_scene_tests.cpp
+The code is right here and my expectation was wrong: undoing only the mask leaves intensity at 5. The second undo is the one that restores 1.0.
+[94m[Bash][0m Rebuild, run editor and unit suites $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+Editor suite passes (707 assertions in 64 cases) and the unit suite passes. Now the docs and the remaining gates.
+[94m[Bash][0m Find editor doc sections to update $ grep -n "^#\|undo\|Undo\|drag" docs/editor.md | head -40
+[94m[Bash][0m Read scene editing and known limits sections $ sed -n 86,100p docs/editor.md
+[94m[Bash][0m Update editor docs; run vendor validation and linux-unit ctest $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -3)
+Vendor validation passes, and the linux-unit ctest run completed. I'll tidy one doc sentence, then check the Windows gate procedure from memory.
+[94m[Bash][0m Read Windows gate memory notes and list gate scripts $ ls tools | head -30
+I'll reuse the US-062 gate batch as a template. First I'll check that no earlier batch is still running.
+[94m[Bash][0m Check for running batches and read the US-062 gate template $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/us062_gate.bat" 2>/dev/null | tr -d '\r'
+[94m[Bash][0m Write and launch the US-064 Windows gate batch $ cat > us064_gate.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual Studio\18\Community\V...
+While the Windows batch runs, I'll record the progress entry and a Codebase Patterns note.
+[94m[Bash][0m Append progress notes and check Windows gate status $ ps -eo pid,args | grep "us064_gate" | grep -v grep | head -2
+Windows validate, configure, and build all return 0. Waiting on the unit, editor, and GPU steps:
+[94m[Bash][0m Poll Windows gate result file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us064_rc.txt
+[94m[Bash][0m Read Windows build, unit, editor, and GPU logs $ tr -d '\r' < $T/us064_gpu.log | tail -2
+Windows gates all pass with no compiler warnings. Last, I'll confirm the Linux ctest result line and record the Windows results in the progress file.
+[94m[Bash][0m Confirm linux-unit result and update progress notes $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() old="- Gates (Windows): see the Window...
+US-064 is implemented. The Linux and Windows gates the story lists pass, and the story's acceptance criteria are met on the toolchains available here.
+
+**Approach.** Each scene edit is one command that stores the scene document before and after it. Undo and redo reload those documents with `Scene::load`, so GUIDs and references come back exactly. Dirty state is still the comparison with the saved text, so undoing back to the save point makes the scene clean again. A new command clears the redo steps. Opening or creating a scene clears the history.
+
+**Choices I made:**
+- **Drag merging:** a gizmo drag, and a value edited in the inspector, merge their edits into one command. The merge closes when the gesture ends, so a later drag on the same entity starts a new step.
+- **Shortcuts and menu:** Ctrl+Z undoes, Ctrl+Shift+Z or Ctrl+Y redoes, and the shortcuts wait while a text field has the keyboard. An Edit menu shows the command labels, such as "Undo reparent".
+- **Limits:** every command keeps two full copies of the scene document, and the history has no cap. That is fine for editor-sized scenes, but it grows with scene size and session length. This is recorded in `docs/editor.md`.
+
+**Files changed:** `scene_editor.hpp/.cpp`, `viewport.cpp`, `editor_ui.hpp/.cpp`, `tests/src/editor_scene_tests.cpp` (8 new cases), `docs/editor.md`, and `.ralph-tui/progress.md`.
+
+**Gates run:**
+- Linux: `ValidateVendor` passes, `linux-debug` builds with warnings as errors, `linux-unit` passes (30/30), `engine_tests --suite editor` passes (64 cases, 707 assertions), and `--suite unit` passes.
+- Windows, via `us064_gate.bat`: `ValidateVendor`, `win-dev` configure, `win-debug` build (no warnings), `win-unit` (29/29), `editor --backend dx12` (65 cases, 725 assertions), and `gpu --backend dx12` (72 cases, 43923 assertions) all pass.
+
+**Not run:** the running window (no GUI check, so no screenshots or action log), the native Linux Vulkan editor suite, `linux-gcc` (GCC 11+ not installed), and `linux-asan`. The ASan preset is not required by the story's own scope, but the history does allocate memory, so it's a gap if you want that check. `engine_bench` does not apply to an editor-only change.
+
+The rollback test covers an edit scenario of eight commands with a drag in the middle. Undoing them restores the saved document byte for byte, and redoing them returns the edited document exactly.
+
+I did not commit anything, per the workflow.
+
+<promise>COMPLETE</promise>

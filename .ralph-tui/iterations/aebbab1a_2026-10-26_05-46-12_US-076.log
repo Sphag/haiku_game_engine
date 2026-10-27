@@ -1,0 +1,40 @@
+# Iteration 793 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:46:12.670Z
+- **Ended At**: 2026-10-26T02:46:36.770Z
+- **Duration**: 24s
+- **Input Tokens**: 30
+- **Output Tokens**: 2506
+- **Total Tokens**: 2536
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 already has code in the tree.
+[94m[Bash][0m Read progress log and locate render_stress code $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls tools/benchmark tools/benchmark/src && grep -rn...
+The log shows US-076 has been blocked for many passes on one decision. I'll confirm the tree hasn't changed and re-run the cheap workload check before reporting.
+[94m[Bash][0m Check source mtimes, workload version, and workload check $ fi
+[94m[Bash][0m Re-run workload digest check $ ./build/linux-dev/tools/benchmark/Debug/engine_workload --check benchmarks/workload_expected.json 2>...
+[94m[Bash][0m Append status check entry to progress log $ native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/pr...
+US-076 is not complete, and I have not emitted the completion signal. The remaining work depends on decisions only you can make, so I stopped instead of changing the fixed benchmark contract.
+
+**What is stuck:**
+1. **Route-start triangle floor and frame budget.** The acceptance scene at the route start submits 312,068 triangles on the indexed path, against the contract's minimum of 2,000,000. Measured p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this means changing the instance placement (or the start pose), which bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The PRD reserves this kind of change for a separate user decision, so I have not made it. Either approve the change or accept the failing measured run as the result.
+2. **full_1080 profile** is unsupported until the vendored FSR 2 shader permutation headers exist. Choosing how to vendor them is your call.
+3. **Native Linux Vulkan GPU run and the linux-gcc gate** have not been run. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Verified in this pass (no source changes):**
+- `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes match.
+- The source, workload, and expected-digest files are unchanged since the last recorded run.
+- Earlier passes recorded `linux-unit` at 30/30 passing and the Linux debug build succeeding. I did not re-run those here.
+
+I appended a status entry to `.ralph-tui/progress.md`. Once you decide on the placement change and the FSR route, I can make the change, re-measure, and run the remaining gates.

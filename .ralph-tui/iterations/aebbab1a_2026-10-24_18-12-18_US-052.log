@@ -1,0 +1,45 @@
+# Iteration 249 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:12:18.178Z
+- **Ended At**: 2026-10-24T15:18:18.827Z
+- **Duration**: 6m 0s
+- **Input Tokens**: 38
+- **Output Tokens**: 2893
+- **Total Tokens**: 2931
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-052 in the repo.
+[94m[Bash][0m Inspect repo layout and physics state $ tail -n 60 .ralph-tui/progress.md 2>/dev/null | head -80
+The progress log says US-052 is Partial, with the `linux-gcc` gate blocked. I'll check the ASan and Windows record, then re-verify the Linux build.
+[94m[Bash][0m Check US-052 progress records and available compilers $ clang++ --version 2>/dev/null | head -1
+The log shows the Windows gates, ASan/UBSan, and the Linux clang gates already passed, with `linux-gcc` blocked. I'll re-run the Linux build and unit tests to confirm the tree still matches that record.
+[94m[Bash][0m Validate vendor, configure, build, and run Linux unit tests $ echo "exit=$?"
+[94m[Bash][0m Summarize Linux unit test results and compiler $ g++ --version | head -1
+[94m[Bash][0m Append re-verification entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` 100% passed (22 of 22). - Toolchain...
+US-052 is not complete, so I am not emitting the COMPLETE signal. The Jolt physics adapter was already implemented in earlier passes. This pass only re-verified it, and nothing in the source changed.
+
+**Re-verified on Linux today (clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake` passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug` pass.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22.
+
+**Recorded in earlier passes:**
+- The Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) pass.
+- ASan/UBSan runs pass for the integration suite. One X11 focus test failed once and passed on reruns; it is unrelated to physics.
+
+**Still open:**
+- **`linux-gcc` gate:** blocked. Jolt needs GCC 11+ for `__builtin_bit_cast`, and this machine only has g++-9.4. This needs a GCC 11+ environment or CI.
+- **`engine_bench --suite acceptance`:** not run. The benchmark harness is US-074 and does not exist in the tree yet.
+
+I appended a short re-verification entry to `.ralph-tui/progress.md`. Reaching COMPLETE needs a GCC 11+ toolchain for the `linux-gcc` presets, and the benchmark needs US-074.

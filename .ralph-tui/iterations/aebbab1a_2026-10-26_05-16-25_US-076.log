@@ -1,0 +1,36 @@
+# Iteration 704 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:16:25.803Z
+- **Ended At**: 2026-10-26T02:16:38.248Z
+- **Duration**: 12s
+- **Input Tokens**: 22
+- **Output Tokens**: 1706
+- **Total Tokens**: 1728
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark tooling and the progress log.
+[94m[Bash][0m Inspect progress log and benchmark tool layout $ grep -n "US-076" -A3 tasks/prd-open-world-engine.md | head -60
+The log shows this story has been blocked on the same user decision for many passes. I'll verify the current state rather than re-run the whole matrix.
+[94m[Bash][0m Check source timestamps and latest benchmark artifacts $ grep -rho '"exit[^,}]*\|"status"[^,}]*\|"reason"[^,}]*' artifacts/bench/us076-dx12-indexed 2>/dev/nu...
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing changed in this pass: I checked the state and did not re-run the gates or benchmarks.
+
+**What's stuck (needs your decision):**
+
+1. **Triangle floor and frame budget fail on the current placement.** The `render_stress` scene places 312,068 triangles against a 2,000,000 target. Frame time is p99 35–47 ms against a 16.7 ms budget. All eight `us076-*` runs exit 1 with `status: failed`. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`. I won't make that change without your approval, since it changes what the benchmark measures.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated permutation headers, so only `native_1080` runs. The `full_1080` results are recorded as `unsupported`, not passed.
+3. **Not run:** native Linux Vulkan GPU, and the `linux-gcc` gate (local GCC 9.4 can't build Jolt).
+
+**What is done:** The eight path/backend/nomesh combinations (indexed, indirect, meshlets, and the forced-fallback meshlets run, on DX12 and Vulkan) have artifacts under `artifacts/bench/us076-*`, each with a report, raw data, and screenshots. The mesh-shader fallback guard is in `render_stress.cpp`. The source and artifact timestamps are consistent, so the recorded results describe the current tree.
+
+**Decision needed:** Approve a placement change to reach 2,000,000 triangles (a workload version bump, with the expected file regenerated), or close the story as measured and record the failing floor and budget as the result. Say which, and I'll do it. The Windows and Linux quality gates also still need a run after any source change.

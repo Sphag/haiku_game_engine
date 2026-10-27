@@ -1,0 +1,228 @@
+# Iteration 623 Log
+
+## Metadata
+
+- **Task ID**: US-067
+- **Task Title**: Material Graph Compiler
+- **Description**: As a material author, I want a material graph so that I can define shaders without writing HLSL manually.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T17:08:41.877Z
+- **Ended At**: 2026-10-25T17:42:50.488Z
+- **Duration**: 34m 8s
+- **Input Tokens**: 452
+- **Output Tokens**: 164997
+- **Total Tokens**: 165449
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-067, and the current state of the material code.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD story $ grep -n "US-067" -A40 tasks/prd-open-world-engine.md | head -120
+The PRD entry is clear. Next I'll find the existing material and shader code this graph has to compile into.
+[94m[Bash][0m Locate material code, engine modules, and prerequisite stories $ grep -n "US-031\|US-034" -A12 tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Read material header, implementation, and render CMake $ cat engine/render/include/engine/render/material.hpp && cat engine/render/src/material.cpp | head -2...
+The material model and the shader module are both in place. Next I'll read the shader compiler and pipeline-cache APIs, since the graph has to hand its output to them.
+[94m[Bash][0m Read shader module public headers and CMake $ ls engine/shader/include/engine/shader && cat engine/shader/include/engine/shader/*.hpp | head -400 ...
+The shader module exposes the compile and cache calls I need. Next I'll check whether a DXC binary is staged on this machine, how tests are registered, and how `scene.hlsl` consumes material inputs.
+[94m[Bash][0m Check DXC availability, test registration, and scene shader material inputs $ grep -n "Material\|material\|Base\|normal\|Texture2D" engine/render/shaders/scene.hlsl | head -60
+The filesystem-wide `find` is too slow. I'll stop it and search the project tree instead.
+[94m[TaskStop][0m
+[94m[Bash][0m Locate shader compiler usage, build dir, and scene shader material inputs $ grep -n "Material\|material\|Texture2D\|Base\|sample" engine/render/shaders/scene.hlsl | head -60
+The scene shader reads a 64-byte parameter block and five texture slots in set 1, which gives the generated shader a contract to match. Next I'll confirm the DXC path that tests use and whether it's staged on Linux.
+[94m[Bash][0m Inspect shader compiler tests and staged DXC on Linux $ 
+[94m[Bash][0m Check how DXC is staged for Linux test builds $ sed -n 1,80p CMakePresets.json | grep -n "linux-dev" -A8 | head -20
+DXC is staged on Linux, so both shader targets can be compiled here. Next I'll look at how a recent module is wired (library CMake, JSON dependency, test suite labels) so the new one matches.
+[94m[Bash][0m Study engine module CMake, JSON usage, and test labels $ grep -n "linux-unit" -A12 CMakePresets.json | head -40
+The suites are tag-based and the shader compile tests are conditional on the toolchain. Next I'll check how an existing material test is tagged, and how `ShaderProgram` tests take their scratch paths.
+[94m[Bash][0m Read a material test file header and test-suite wiring $ grep -n "ENGINE_TEST_SHADER_SCRATCH\|getenv" tests/src/shader_program_tests.cpp | head -5
+The test wiring is clear. Before designing the module, I need four specifics: the SHA-256 helper, `scene.hlsl`'s texture fetch and sRGB decode (so the generated shader matches them), and how the cache tests build an environment without a device.
+[94m[Bash][0m Check hashing helper, texture fetch, sRGB decode, and cache test env setup $ ls docs
+[94m[Bash][0m Read sRGB decode formulas and cache environment usage $ grep -n "ContentHash::of\|sha256" engine/assets/src/*.cpp | head -3
+The cache takes its environment as a plain string, so tests don't need a device. Next I'll read how `ShaderProgram::reload` drives the cache, so the material compile path reuses the same protocol.
+[94m[Bash][0m Read the shader program reload and cache protocol $ sed -n 1,200p engine/shader/src/shader_program.cpp | head -120
+I now have the design inputs. Two more checks before writing code: the `core::Result` API and how the root CMake adds modules and gates the DXC tests.
+[94m[Bash][0m Check module registration, DXC test gating, and Result API $ grep -n "ENGINE_SHADER_TOOLCHAIN\|engine_add_hlsl_shader" cmake/ShaderToolchain.cmake | head -3
+Everything I need from the existing code is now known. Two last lookups: the RHI descriptor-layout types (so bindings can be checked with the existing `validate_bindings`) and the warning policy that the new library must satisfy.
+[94m[Bash][0m Check RHI binding types and first-party warning policy $ sed -n 210,216p tests/CMakeLists.txt
+I have enough to write the module. The design, in brief:
+
+- **`engine/material_graph`**: a versioned JSON DAG with typed pins, validated into node-specific errors, then generated into HLSL (one source shared by DXIL and SPIR-V), a CPU reference evaluator, and a compile step that caches per material variant.
+- **Instance parameters** live in a constant-buffer block, so their values never enter the shader source or its cache key. Constants and topology do.
+
+I'll start with the graph model, parser, and validator.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/include/engine/material_graph/graph.hpp[0m "#pragma once
+
+// Material graph (US-067): a versioned DAG of material nodes, its JSON form, and its validator. The graph is the source of truth;
+// codegen.hpp turns it into HLSL, evaluate.hpp runs it... (5844 chars)"
+Next is the implementation: JSON parsing with field-level errors, the analysis pass (pins, cycles, types, single output), and canonical serialisation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/src/graph.cpp[0m "#include "engine/material_graph/graph.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <optional>
+#include <set>
+#include <utility>
+
+namespace engine::material_graph ... (24912 chars)"
+The cycle early-return currently searches error text for "closes a cycle", which is fragile. I'll make the DFS report a flag instead.
+[94m[Bash][0m Replace fragile cycle check with an explicit flag $ }''') open(p,'w').write(s) print(s.count('cyclic')) EOF
+Parser and analysis are in place. Next is the code generator. It emits one HLSL source for all variants, with instance parameters in a `cbuffer` and constants and topology baked in, so cache keys change only when the source changes.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/include/engine/material_graph/codegen.hpp[0m "#pragma once
+
+// HLSL generation (US-067). One source serves every variant and both targets: the variant enters as build-time defines
+// (MG_BLEND_MODE, MG_TWO_SIDED), and the shader reads its instanc... (3578 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/src/codegen.cpp[0m "#include "engine/material_graph/codegen.hpp"
+
+#include "engine/assets/content_hash.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <utility>
+
+namespace engine... (15382 chars)"
+I spotted two problems on re-read: `graph_error_for_parameter` is referenced but never defined, and `pack_parameters` moves from a `Result` accessor I haven't confirmed exists. Fixing both now.
+[94m[Bash][0m Define missing parameter error helper and fix error move $ ''') open(p,'w').write(s) EOF grep -n "graph_error_for_parameter\|resolved.error" codegen.cpp | head
+Next is the CPU reference evaluator. It mirrors the generated shader's semantics (same pin conversions, fallbacks, repeat-addressed nearest texels, saturations) so tests can check the graph's meaning without a GPU.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/include/engine/material_graph/evaluate.hpp[0m "#pragma once
+
+// The CPU reference of a material graph (US-067). It runs the graph the way the generated MgEvaluate does: the same pin conversions,
+// the same fallbacks, nearest-texel repeat sampling... (2293 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/src/evaluate.cpp[0m "#include "engine/material_graph/evaluate.hpp"
+
+#include "engine/render/pbr.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <utility>
+
+namespace engine::material_graph {
+namespa... (8248 chars)"
+Evaluator is done. Before writing the compile step, I need the exact `DescriptorType` names for the texture binding declaration.
+[94m[Bash][0m Look up descriptor type enum values $ grep -n "hash_file\|request_key" engine/shader/include/engine/shader/pipeline_cache.hpp | head -3
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/include/engine/material_graph/compile.hpp[0m "#pragma once
+
+// Material compilation (US-067): the generated source of a graph, built for every material variant and both shader targets through
+// the pinned compiler and the pipeline cache (US-031)... (3108 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/material_graph/src/compile.cpp[0m "#include "engine/material_graph/compile.hpp"
+
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <sstream>
+#include <utility>
+
+namespace engine::material_graph {
+na... (8634 chars)"
+The compile step is written. Next I'll wire the module into the build: its own CMake target, the root `add_subdirectory`, and the test target's sources and link list.
+[94m[Bash][0m Register material_graph library and test sources in CMake $ cat > engine/material_graph/CMakeLists.txt <<'EOF' # Material graphs (US-067): the versioned graph a...
+Wiring is in. The tests need a shared sample graph, so I'll put the fixture JSON and a few helpers in a small header that both test files include.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/material_graph_fixture.hpp[0m "#pragma once
+
+// Shared fixtures for the material graph tests (US-067): a graph that uses every node kind, and the text edits the tests make to it.
+
+#include "engine/material_graph/graph.hpp"
+
+#includ... (2741 chars)"
+Next, the CPU unit tests. They cover parsing and version checks, node-specific errors (types, pins, cycles, outputs, reserved names), the parameter block, HLSL source identity, and the CPU evaluator's semantics.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/material_graph_tests.cpp[0m "// CPU checks of the material graph (US-067): the versioned format, node-specific validation, the parameter block, the generated source's
+// identity, and the CPU reference of the surface. The compile... (18932 chars)"
+Re-reading the test file, I see three mistakes to fix before building: `edit` and `errors_of` live in the `tests` namespace, not `material_graph`; `tint` is a `vec4`, so its emitted declaration is `float4`; and `std::memcpy` needs `<cstring>`.
+[94m[Bash][0m Fix namespaces and expected HLSL in unit tests $ ') s=s.replace("#include <cstdint>\n#include <limits>","#include <cstdint>\n#include <cstring>\n#inc...
+Next is the DXC-backed test file. It checks that all twelve variant/target entries build with the right container magic, that a parameter-default change is a pure cache hit, and that a topology change produces new keys and a rebuild.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/material_graph_compile_tests.cpp[0m "// Material graph compilation through the pinned DXC (US-067). Every variant of a graph builds for DXIL and SPIR-V, a repeat compile and
+// a parameter change are served from the pipeline cache, and a... (8100 chars)"
+All sources are written. Next I'll reconfigure the Linux dev preset and build the test target in the background, logging to a file since a full build can run long.
+[94m[Bash][0m Reconfigure the Linux dev preset $ tail -5 /tmp/mg_configure.log
+[94m[Bash][0m Build engine_tests and capture compile errors $ tail -3 /tmp/mg_build.log
+Two errors: my recursive `visit` helper collides with `std::visit` through ADL, and clang 10 can't capture a structured binding in a lambda. Renaming the helper and using an init-capture.
+[94m[Bash][0m Fix name clash and capture, then rebuild engine_tests $ tail -3 /tmp/mg_build.log
+[94m[Bash][0m Locate test file lines behind the Catch2 static_assert $ grep -n "material_graph.*error\|In file included\|required from\|material_graph_.*tests.cpp:[0-9]*:"...
+The chained comparison in the SPIR-V magic `CHECK` on line 100 trips Catch2's decomposer. I'll compute it into a bool first.
+[94m[Bash][0m Rebuild engine_tests after test fix $ tail -2 /tmp/mg_build.log
+The build is clean under `-Wall -Wextra -Wpedantic -Wshadow -Werror`. Now I'll run the unit suite (the CPU material-graph cases are in it) and check for failures.
+[94m[Bash][0m Run the unit suite and summarise results $ grep -n "FAILED\|with expansion\|material_graph" /tmp/mg_unit.log | head -40
+[94m[Bash][0m Show the two failing assertions in detail $ sed -n 10,45p /tmp/mg_unit.log
+Both failures are wrong expectations in my tests, but the second exposes a real gap. An unbound normal-map texture samples white, which decodes to a tilted normal. The renderer's default for an empty normal slot is a flat normal, so the graph needs a per-texture fallback to match. I'll add a `fallback` field (`white`, `black`, `flat_normal`; default `white`) and fix the first test to use a graph with no output.
+[94m[Bash][0m Add texture fallback field and fix the two test expectations $ // A bound"""), ]) print("ok") EOF
+The notices are from my own scripted edits, which all applied (each replacement asserted a single match). Rebuilding and rerunning the unit suite.
+[94m[Bash][0m Rebuild and rerun the unit suite $ grep -n "FAILED" -A4 /tmp/mg_unit.log | head -30
+All 906 unit cases pass. The DXC compile tests are in the integration suite, so I'll run that in the background and check its result when it finishes.
+[94m[Bash][0m Start the integration suite in the background $ echo started
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/material-graph.md[0m "# Material graph (US-067)
+
+A material graph is a versioned DAG of nodes that describes a surface. The engine turns it into HLSL, so a material author does not
+write shader code. The library is `engine... (6954 chars)"
+The doc is written. Checking on the integration run now.
+[94m[Bash][0m Check integration suite progress and failures $ grep -n "FAILED" -A6 /tmp/mg_integ.log | head -60
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -4 /tmp/mg_integ.log grep -n "FAILED" -A6 /tmp/mg_integ.log head -60. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check integration suite progress and failures $ grep -n "FAILED" -A6 /tmp/mg_integ.log | head -60
+[94m[Bash][0m Read the integration log and check for running tests $ ps aux | grep engine_tests | grep -v grep | head -3
+The integration suite is still running (the X11 skips are expected under WSL with no window manager). While it finishes, I'll read the Windows gate notes in memory, since the acceptance list requires the Windows gates too.
+[94m[Bash][0m Read Windows gate run notes from memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-validation-layer...
+Windows gates run via `cmd.exe` with a CRLF batch file. I'll wait for the Linux integration run to finish first, then launch the Windows batch.
+[94m[Bash][0m Wait for integration suite completion and summarise $ grep -n "FAILED" -A5 /tmp/mg_integ.log | head -40
+[94m[Bash][0m Show full validation message and reflection source hints $ grep -n "dxc\|binding 0" /mnt/d/dev/haiku_game_engine/engine/shader/src/reflection.cpp | head -5
+The failure is in my layout, not in DXC: the parameter block at `b0` and the first texture at `t0` both get binding number 0 in set 1, and the RHI keys a set's bindings by number. The fix is to start textures at binding 1, so every number in the set is distinct, as `scene.hlsl` already does.
+[94m[Bash][0m Move textures to binding 1+ and rebuild engine_tests $ tail -1 /tmp/mg_build.log
+Rebuilt cleanly. Rerunning the unit and integration suites together.
+[94m[Bash][0m Rerun unit and integration suites after binding fix $ grep -n "FAILED" -A6 /tmp/mg_integ.log | grep -v "X11\|platform" | head -30
+Both suites pass: 906 unit cases and 117 integration cases (the 5 skips are the WSL window-manager tests, which were already skipping before this change). Next, the Linux quality gates: vendor validation, the full debug build, and the unit ctest preset.
+[94m[Bash][0m Run vendor validation and the full Linux debug build $ tail -2 /tmp/g_build.log
+[94m[Bash][0m Run the Linux unit ctest preset $ grep -n "Failed\|\*\*\*" /tmp/g_ctest.log | head
+The Linux unit gate passes: all 30 test entries across the `unit` and `integration` labels. Now the Windows gates. I'll reuse an earlier gate batch from the user's Temp directory as the template.
+[94m[Bash][0m Find a previous Windows gate batch to reuse as template $ [ -n "$f" ] && cat "$f" | tr -d '\r' | head -60
+I'll write a US-067 gate batch modelled on that one, covering the four Windows gates, and launch it only after confirming no earlier batch is still running.
+[94m[Bash][0m Write and launch the US-067 Windows gate batch $ echo launched
+The Windows batch is running in the background. Meanwhile I'll record the learnings in `.ralph-tui/progress.md`, starting from the top of the file so I can add a reusable pattern to the Codebase Patterns section.
+[94m[Bash][0m Locate section headers in progress log $ sed -n 1,3p .ralph-tui/progress.md | cut -c1-200
+[94m[Bash][0m Add US-067 patterns and entry to progress log $ the visual editor (US-068) is the first consumer. No GPU parity test between the generated shader an...
+The header anchor didn't match exactly. Checking the bytes around it before retrying.
+[94m[Bash][0m Inspect exact header bytes in progress log $ grep -n "## 2026-10-25 - US-066 (verification pass)" .ralph-tui/progress.md
+The header is followed directly by bullets with no blank line. I'll insert after the header line instead.
+[94m[Bash][0m Append US-067 entry and patterns to progress log; check gate status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us067_rc.txt 2>/dev/null
+Windows vendor validation passed; configure is running. I'll wait for the batch's done file, with a bounded wait.
+[94m[Bash][0m Wait for Windows gate batch to finish $ ls /mnt/c/Users/bucha/AppData/Local/Temp/us067_done.txt 2>/dev/null
+All four Windows gates report 0. Memory notes say to check the logs rather than trust exit codes alone, so I'll confirm the MSVC build actually compiled the new sources and check the test totals.
+[94m[Bash][0m Verify Windows build compiled new sources and unit results $ grep -i "validation passed" us067_validate.log
+[94m[Bash][0m Confirm MSVC compiled the new material graph objects warning-free $ grep -c "Warning\|warning" us067_build.log
+MSVC compiled all six new translation units with `/W4 /WX` and no warnings, and `win-unit` passes 29 of 29. I'll record those real Windows results in the progress entry (I had left a placeholder) and wrap one over-long header comment.
+[94m[Bash][0m Record Windows results and rebuild after comment edit $ tail -1 /tmp/mg_build.log
+The rebuild passes. Before finishing, I'll check the PRD's functional requirements and non-goals for anything about material graphs that my design could violate.
+[94m[Bash][0m Search PRD for material graph requirements and non-goals $ grep -n -i "material graph\|material.*graph\|graph.*material\|shader graph\|HLSL manually" tasks/prd...
+US-067 is implemented: a material graph compiles to HLSL for both DX12 and Vulkan across six material variants, with node-specific errors and cache keys that follow the source. All four Windows gates and the four Linux gates pass; the optional gates I couldn't run are listed below.
+
+**What's in place** (`engine/material_graph/`, a new library)
+- **Graph format:** version 1 of `engine.material_graph`. A reader refuses any other version by name. It covers constants, parameters, UVs, texture sampling (sRGB or linear), arithmetic, normal maps, and a single PBR output. A canonical JSON form round-trips.
+- **Errors:** type, pin, cycle, and output-count errors each name the node, its kind, and the pin, e.g. `node 'mul' (arithmetic): inputs 'a' (vec4) and 'b' (vec2) must match, or one must be a float`.
+- **Compile:** one generated source covers every variant. Variants are blend mode (opaque, alpha mask, alpha blend) times two-sided, passed as defines. Each variant is built for DXIL and SPIR-V through the pinned DXC and the pipeline cache.
+- **Instance parameters:** values go into a constant buffer, so changing one is a cache hit with no rebuild. A topology or constant change writes a new source, so it gets new cache keys.
+- **CPU reference:** `SurfaceEvaluator` runs the same graph with the same conversions, fallbacks, and clamps, so tests can check graph meaning without a GPU.
+
+**Choices I made that you may want to change**
+- **Constants are baked into the source;** anything that should vary per instance must be a parameter.
+- **Texture fallback:** I added a per-texture `fallback` (`white`, `black`, or `flat_normal`). An unbound normal map otherwise decodes to a tilted normal, not the flat normal the renderer uses for an empty slot.
+- **Binding layout:** the parameter block is `b0` and textures start at `t1`, so binding numbers in set 1 stay distinct. This matches the convention in `scene.hlsl`.
+- **Pixel output:** the entry `PSGraph` writes three render targets (color and alpha, normal and roughness, emissive and occlusion). It is a contract I defined, not one the scene renderer uses yet.
+
+**Gates**
+- **Windows** (`us067_gate.bat`, MSVC `/W4 /WX`): vendor validation, `win-dev` configure, `win-debug` build, and `win-unit` ctest (29 of 29) all pass. The new sources compiled with no warnings.
+- **Linux** (clang): vendor validation, `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest all pass. `engine_tests --suite unit` runs 906 cases, all passing. `--suite integration` runs 122 cases: 117 pass and 5 skip. The skips are X11 window-manager tests that already skip under WSL.
+
+**Not verified**
+- **`linux-asan` and `linux-gcc`:** not run. The change touches no memory, ECS, jobs, streaming, Lua, or physics path. GCC 9.4 still cannot build Jolt, so `linux-gcc` remains blocked.
+- **GPU suites and `engine_bench`:** not run. No render or physics path changed, and the generated shader is not bound to any pipeline yet.
+- **Not done yet:** the scene renderer does not draw graph materials, and there is no GPU parity test against the CPU reference. The visual editor (US-068) is the first consumer. Graph cooking into packs is also not in this story.
+
+Files changed: the new `engine/material_graph/` module; `CMakeLists.txt` and `tests/CMakeLists.txt` wiring; three test files plus a fixture header under `tests/src/`; `docs/material-graph.md`; and an entry in `.ralph-tui/progress.md`. The repo is not a git repository, so nothing was committed.
+
+<promise>COMPLETE</promise>

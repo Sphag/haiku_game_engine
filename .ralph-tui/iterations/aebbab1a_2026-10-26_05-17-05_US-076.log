@@ -1,0 +1,48 @@
+# Iteration 707 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:17:05.817Z
+- **Ended At**: 2026-10-26T02:17:22.463Z
+- **Duration**: 16s
+- **Input Tokens**: 14
+- **Output Tokens**: 2289
+- **Total Tokens**: 2303
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for US-076.
+[94m[Bash][0m Read progress log and benchmark sources $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls tools/benchmark/src/ && wc -l tools/benchmark/s...
+US-076 is not complete. I did not run anything new this pass: the recorded results still describe the current tree, and the story is blocked on your decision.
+
+**What's blocking it.** The acceptance criteria can't pass on the current instance placement:
+- Instances are spread uniformly over 8192 m, so the route start sees about 330 items.
+- That gives 312,068 triangles against the 2,000,000 floor on every indexed run.
+- p99 frame time is 35–47 ms against the 16.7 ms budget.
+
+The contract forbids reducing the workload. Changing placement is a workload change: it means bumping `kWorkloadVersion`, regenerating `workload_expected.json`, and rerunning all eight acceptance reports (about 10 minutes each). That needs your approval.
+
+**What's done:**
+- The `render_stress` driver with `--path` and `--disable-mesh-shaders` exists and produces counters and screenshots.
+- Forced mesh-shaders-off now falls back to indirect-indexed. Evidence on DX12 and Vulkan: `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, 338–340 visible items, 0 meshlet visible.
+- Windows gates pass on the current tree: validate, win-dev, win-debug build (0 warnings), win-unit (29/29), `engine_tests --suite gpu` for dx12 (72 cases) and vulkan (73 cases), and win-release `engine_bench`.
+- Linux gates pass: ValidateVendor, linux-dev, linux-debug build (0 warnings), linux-unit (30/30).
+
+**What's open:**
+1. The triangle floor and frame budget fail (above). Needs your decision.
+2. The full_1080 profile is unsupported because the FSR 2 permutation headers are missing, so only native_1080 has run.
+3. Native Linux Vulkan GPU and linux-gcc were not run. WSL has no Vulkan device, and GCC 9 can't build Jolt.
+
+**Decision for you:**
+- (a) Close US-076 as measured, with the floor and budget failures recorded as the result.
+- (b) Approve a placement change (a workload change with `kWorkloadVersion` bumped and a full rerun).
+
+I lean toward (b), because a stress scene whose route start sees 330 items doesn't stress the paths it is meant to compare. Either way, the story can't be marked complete until you choose.

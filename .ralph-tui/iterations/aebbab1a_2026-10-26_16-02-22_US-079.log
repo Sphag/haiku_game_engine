@@ -1,0 +1,49 @@
+# Iteration 912 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:02:22.100Z
+- **Ended At**: 2026-10-26T13:02:47.640Z
+- **Duration**: 25s
+- **Input Tokens**: 26
+- **Output Tokens**: 2699
+- **Total Tokens**: 2725
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry, and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect progress log, PRD entry, and existing all_features refs $ grep -n "US-079" -A3 tasks/prd-open-world-engine.md | head -40
+The log shows 20+ status passes with no source change, all blocked on two decisions. Let me check whether the `all_features` route can be defined from what's already in the tree.
+[94m[Bash][0m Check manifest entry, test sizes, FSR and builtin scene references $ grep -rn "builtin" tools/benchmark/src/*.cpp | head -15
+[94m[Bash][0m Append status entry to progress log $ `third_party/fsr2` has 0 `*_permutations.h`, so `full_1080` cannot be built or measured. - The FSR 2...
+US-079 is not complete, so I am not emitting the COMPLETE signal. I made no source changes in this pass. I only appended a status entry to `.ralph-tui/progress.md`.
+
+**What blocks it**
+- **FSR 2 vendoring:** `third_party/fsr2` has no `*_permutations.h` files, so the `full_1080` profile cannot be built or measured. These are generated third-party files. Getting them is a vendoring decision for you, so I did not attempt it.
+- **`all_features` route:** `benchmarks/manifest.json` still has `implementation: none` with route "pending final benchmark scene". The tour, the GI/RT/upscale profiles, and the forced geometry paths all depend on it. Defining it changes the fixed benchmark contract, so it needs your decision.
+
+**Already recorded as passing in earlier passes**
+- Windows: `cmake -P cmake/ValidateVendor.cmake`, `win-dev`, `win-debug` build, and `win-unit` ctest.
+- Linux: validate, `linux-dev`, `linux-debug` build, and `linux-unit` ctest (30/30).
+- Windows DX12 and Vulkan GPU suites (Vulkan 73/73 with the pinned 1.4.363 layer).
+
+**Still not run, and not reported as passed**
+- Tour runner with screenshots and action log, plus GUI checks.
+- GI/RT/upscale profiles and forced indirect/meshlet paths.
+- Native Linux Vulkan GPU (no `/dev/dri` here).
+- `engine_bench --suite acceptance`.
+- `linux-gcc*` (the host has no GCC 11+).
+- The ASan/UBSan preset.
+- Package relaunch beyond Build Game's verify step.
+
+**Decisions I need from you**
+1. FSR 2: supply the generated permutation headers, or keep `full_1080` unsupported and record it as such.
+2. `all_features`: approve a route definition, for example a builtin scene built from the table workload. I can then implement the tour and profiles.

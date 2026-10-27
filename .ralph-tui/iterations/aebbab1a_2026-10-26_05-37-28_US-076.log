@@ -1,0 +1,39 @@
+# Iteration 767 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:37:28.032Z
+- **Ended At**: 2026-10-26T02:37:41.768Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2050
+- **Total Tokens**: 2072
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tool.
+[94m[Bash][0m Read progress log and benchmark tool layout $ grep -n "US-076" -r --include=*.md --include=*.cpp --include=*.hpp --include=*.json . | head -30
+The log shows US-076 has been blocked on the same user decision for many passes. I'll check whether anything has changed since the last entry before deciding whether to rerun anything.
+[94m[Bash][0m Check mtimes and recorded Windows gate status $ grep -n "312,068\|Decision\|decision" .ralph-tui/progress.md | tail -3
+US-076 is not complete, and I did not run anything this pass. Nothing has changed since the last recorded status check, so a rerun would only reproduce the same results.
+
+**What is done (per `.ralph-tui/progress.md`, last recorded runs):**
+- The `render_stress` scene, the seeded workload generator, and the fixture provenance are in place.
+- All eight acceptance reports were rerun on the current tree: indexed, indirect, and meshlets on DX12 and Vulkan, plus meshlets with mesh shaders disabled, under `artifacts/bench/`.
+- Windows gates pass: validate, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` on dx12 (72 cases) and vulkan (73 cases), and the release `engine_bench` build.
+- Linux gates pass: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30). I re-checked the Linux build and unit suite in a previous pass; the mtimes show no source change since.
+
+**What blocks completion:**
+1. **Triangle floor and frame budget fail.** The route-start frame has 312,068 submitted triangles against the required 2,000,000. The measured p99 is 35–47 ms against a 16.7 ms budget. The fix means changing the instance placement, which changes the fixed workload contract: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and update the manifest hash. That is your call. The other option is to accept the failing measured run as the result.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated permutation headers, so that profile cannot run. Which vendoring route to take is your decision.
+3. **Native Linux Vulkan GPU and `linux-gcc` were not run.** WSL has no Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+I have not added another status entry to the progress log, since it would only repeat the blocker. Tell me which option you want for item 1 and whether to vendor FSR 2 for item 2, and I'll proceed from there.

@@ -1,0 +1,43 @@
+# Iteration 1043 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:28:38.436Z
+- **Ended At**: 2026-10-26T16:28:58.897Z
+- **Duration**: 20s
+- **Input Tokens**: 24
+- **Output Tokens**: 2536
+- **Total Tokens**: 2560
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for US-079, and what already exists for `all_features`.
+[94m[Bash][0m Inspect progress log and find all_features references $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features" --include=* -l . 2>/dev/null | ...
+[94m[Bash][0m Read US-079 section of the PRD $ grep -n "US-079" -A40 tasks/prd-open-world-engine.md | head -80
+Prior iterations logged this story as blocked on four user decisions. Before accepting that, I'll check whether those blockers still hold and what the existing `all_features` tests expect.
+[94m[Bash][0m Check manifest route, tests, PRD refs, and FSR2 state $ find third_party/fsr2 -name "*permutations*" | wc -l
+US-079 is not complete, so I am not emitting the COMPLETE signal. The four blockers that earlier iterations logged still hold, and none can be resolved from this environment.
+
+**Verified this pass (read-only, nothing changed):**
+- `samples/` is absent, so `samples/all_features` (PRD line 802) does not exist.
+- `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` cannot be built with FSR 2.
+- `benchmarks/manifest.json` still has `all_features` at `implementation: "none"`. Its route, `all_features_route_v1`, is a written proposal with no approval recorded.
+- `tests/src/all_features_tests.cpp` (292 lines) and `tests/src/all_features_editor_tests.cpp` (248 lines) exist, but no `all_features` runner exists in `tools/benchmark/src`.
+
+**Needed from you:**
+1. Approve `all_features_route_v1` as written in the manifest, or give a replacement route. The runner's timing and workload depend on it.
+2. Vendor the FSR 2 permutation headers, or decide that `full_1080` stays reported as unsupported for this scene. The manifest's `full_1080` profile depends on this.
+3. Decide on the runtime component catalog. It is empty in this build, so `samples/all_features` with components would be refused by the runtime (US-060). Either build the catalog or change the sample's scope.
+4. Provide a Windows GPU and GUI session. The automated tour, the GI/RT/upscale profiles, the forced geometry-path runs, and the live editor scenario (edits, undo/redo, Play/Stop, package/relaunch) all need it. WSL cannot provide a usable Vulkan device, and the editor scenario needs a GUI.
+
+**Not done:** the `all_features` runner, the sample project, the tour, and the editor scenario. I did not rerun the gates this pass. The last recorded Linux results (validate-vendor, linux-dev, linux-debug build, and linux-unit at 30/30) are from earlier iterations.
+
+I also did not add another status entry to `.ralph-tui/progress.md`. The log already has over a hundred identical blocked entries, and one more would add nothing. Once the four decisions are made, the work can resume from the runner.

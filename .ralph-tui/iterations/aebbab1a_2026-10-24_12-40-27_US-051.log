@@ -1,0 +1,41 @@
+# Iteration 172 Log
+
+## Metadata
+
+- **Task ID**: US-051
+- **Task Title**: GPU Particles
+- **Description**: As an effects author, I want a particle system so that I can add dynamic effects to the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T09:40:27.900Z
+- **Ended At**: 2026-10-24T09:44:43.976Z
+- **Duration**: 4m 16s
+- **Input Tokens**: 32
+- **Output Tokens**: 2851
+- **Total Tokens**: 2883
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the particle work against the story's acceptance criteria.
+[94m[Bash][0m Inspect repo state, progress log, and particle memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-gpu-particles.md
+The progress log says US-051 is Partial. Its open items are the `engine_bench` run (no harness yet) and a native Linux GPU report. The ASan/UBSan line is also unresolved: the entry says "see the status line below" but no such line exists. The particle code allocates GPU resources, so that gate applies. I'll run the ASan build and sanitizer tests on the current tree.
+[94m[Bash][0m Run ASan build and sanitizer ctest on the tree $ tail -n 5 /tmp/asan_ctest.log)
+[94m[Bash][0m Check ctest pass count and sanitizer findings $ grep -n "particle" tests/CMakeLists.txt | head
+The ASan/UBSan gate passes on the current tree. I'll record that in the progress log and the memory note, since the log left it unresolved.
+[94m[Bash][0m Append progress entry and update particle memory note $ native Linux GPU (no device in WSL)./' /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memor...
+US-051 stays **Partial**. I did not emit the completion signal because two acceptance items are still open.
+
+**What I verified this pass (Linux, current tree):**
+- `cmake --preset linux-asan` configured, and `cmake --build --preset linux-asan` finished with no warnings or errors.
+- `ctest --preset linux-sanitize --output-on-failure --no-tests=error` passed 22/22, with no AddressSanitizer, LeakSanitizer, or UBSan output.
+
+The progress log had left the ASan/UBSan line unresolved, so this run closes it. I appended an entry to `.ralph-tui/progress.md` and updated the particle memory note to match.
+
+**Still open:**
+- **Native Linux GPU report.** `engine_tests --suite gpu --backend vulkan` has not been run on a native Linux device. WSL has no usable Vulkan device, so this can't be done here.
+- **`engine_bench --suite acceptance`.** No benchmark harness exists in the tree yet. That harness belongs to US-074, which isn't passing.
+
+The earlier entries already record passing results for the other gates: CPU unit tests, Linux GCC, Windows ValidateVendor/win-dev/win-debug/win-unit, and the Windows DX12 (71/71) and Vulkan (72) GPU suites. I didn't re-run those in this pass. The Windows numbers in the log predate this session. Whether to re-run them is your call, since a Windows GPU batch takes several minutes.

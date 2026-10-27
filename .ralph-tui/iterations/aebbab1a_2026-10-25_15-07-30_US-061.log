@@ -1,0 +1,40 @@
+# Iteration 575 Log
+
+## Metadata
+
+- **Task ID**: US-061
+- **Task Title**: ImGui Editor Shell
+- **Description**: As a game creator, I want an editor with panels so that I can work on a project in one application.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T12:07:30.999Z
+- **Ended At**: 2026-10-25T12:07:45.410Z
+- **Duration**: 14s
+- **Input Tokens**: 24
+- **Output Tokens**: 2028
+- **Total Tokens**: 2052
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and editor directory state $ ls
+[94m[Bash][0m Check for edits since last log and Windows lock state $ timeout 60 cmd.exe /c 'tasklist /FI "IMAGENAME eq LockApp.exe" /NH & tasklist /FI "IMAGENAME eq Logo...
+[94m[Bash][0m Check whether Windows session is still locked $ if (-not (Get-Process LogonUI,LockApp -ErrorAction SilentlyContinue)) { 'unlocked-or-no-lock-process...
+US-061 is not complete, so I'm not emitting the COMPLETE signal.
+
+**What I checked this pass**
+- No file under `engine`, `tests`, `tools`, `cmake`, `CMakeLists.txt`, or `CMakePresets.json` is newer than the last progress entry, so the recorded results still describe the current tree.
+- The Windows session is still locked. `Get-Process` shows `LockApp` (58728) and `LogonUI` (52008) running.
+
+**What's blocking completion**
+1. **Windows gates not run.** `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset win-dev`, `cmake --build --preset win-debug`, and `ctest --preset win-unit` all need the unlocked desktop, which I can't reach while the session is locked.
+2. **GUI capture not run.** The screenshot, action sequence, and result log for `game_editor.exe` need the same unlocked session.
+3. **Native Linux Vulkan editor suite not run.** `engine_tests --suite editor --backend vulkan` needs a native Linux Vulkan device, and WSL has none.
+4. **linux-gcc CI job not run.** The local toolchain has no GCC 11+, which the Jolt-based physics code requires.
+
+**Linux gates**
+The last recorded runs passed: `ValidateVendor.cmake`, `linux-dev`, `linux-debug` with no warnings, and `linux-unit`. I did not rerun them this pass because nothing has changed since.
+
+**What would unblock it:** unlock the Windows session. Then I can run the Windows gates and the GUI capture through the batch-file route in the Windows gate-run notes. The native Linux Vulkan suite and the linux-gcc job still need a machine with those toolchains.

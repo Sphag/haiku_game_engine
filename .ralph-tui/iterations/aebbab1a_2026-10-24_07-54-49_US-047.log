@@ -1,0 +1,35 @@
+# Iteration 128 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:54:49.168Z
+- **Ended At**: 2026-10-24T04:55:09.747Z
+- **Duration**: 20s
+- **Input Tokens**: 28
+- **Output Tokens**: 3155
+- **Total Tokens**: 3183
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain state before changing anything.
+[94m[Bash][0m Read progress log and terrain sources $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-047" -r .ralph-tui/progress.md | tail...
+The log shows US-047 has been Partial for many passes. The open item is a GPU-only failure (RT terrain shadow darkens nothing, no validation errors), and earlier passes ruled out the code paths by reading. I'll look once at the fixture and the terrain RT upload for an angle those passes didn't record.
+[94m[Bash][0m Read traced-shadow fixture and terrain renderer hooks $ grep -n "terrain" engine/render/src/scene_renderer.cpp | head -60
+I found no new lead in the fixture or the terrain upload path. The traced-shadow check is relative and the terrain draws share the lit set that the other RT tests already exercise. The remaining cause sits on the GPU side and needs a Windows `RtShadow` readback, which I can't run from WSL. I'll record this pass in the progress log and stop rather than edit the shared RT path blind.
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: the fixture's check is already relati...
+US-047 is still **Partial**, so I am not emitting the COMPLETE signal. This pass changed no source code.
+
+**Open items:**
+1. **Traced terrain shadow on the GPU.** The RT-on hill frame shows no darkening on DX12 or Vulkan (`darkened 0`), with no validation-layer errors. The CPU reference shadows the same tile geometry correctly. I re-read the fixture, the terrain pipeline, and the upload and draw hooks and found no new cause. Finding it needs a Windows readback of `RtShadow` for the hill frame. The renderer doesn't expose that texture to tests yet, so a test accessor has to come first.
+2. **`engine_bench --suite acceptance`** does not exist in the tree. It belongs to US-074, so the performance gate can't close here.
+3. **Linux Vulkan GPU suite** is not-run, because this WSL host has no native Vulkan device.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. It records the same status and what was ruled out. The next useful step is on the Windows host: add the `RtShadow` accessor, run the hill fixture on DX12 and Vulkan, and read the values.

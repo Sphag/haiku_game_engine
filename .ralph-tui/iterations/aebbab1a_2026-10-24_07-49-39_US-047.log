@@ -1,0 +1,48 @@
+# Iteration 127 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:49:39.593Z
+- **Ended At**: 2026-10-24T04:54:48.115Z
+- **Duration**: 5m 8s
+- **Input Tokens**: 46
+- **Output Tokens**: 3672
+- **Total Tokens**: 3718
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain state against the acceptance criteria.
+[94m[Bash][0m Check progress log and terrain source files $ git status 2>&1 | head -3
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md[0m
+The log shows about 40 prior passes that left US-047 Partial, blocked on a GPU traced-shadow fixture that fails on DX12 and Vulkan. Before deciding anything, I'll confirm the current Linux state.
+[94m[Bash][0m Run Linux vendor validation, configure, and debug build $ (cmake --preset linux-dev 2>&1 | tail -3) && (timeout 580 cmake --build --preset linux-debug -j 8 2>...
+The debug build stopped after the DXC host step with no error. I'll rerun it in the background with a log so I can see whether it finished.
+[94m[Bash][0m Build Linux debug preset and log output $ tail -5 /tmp/linux-debug-build.log
+The build exits 0. Next I'll run the Linux unit tests.
+[94m[Bash][0m Run Linux unit tests via ctest $ timeout 580 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -25
+Linux unit tests pass (22/22). The open item is the GPU traced-shadow fixture, which the log says needs a Windows readback that I can't do from WSL on this pass. I'll record this pass in the progress log and stop there.
+[94m[Bash][0m Append this pass's status to the progress log $ (4) the Windows gates, the Linux GCC and ASan presets were not re-run in this pass. - Why no edit: t...
+US-047 is not complete, so I'm not emitting the COMPLETE signal. This pass changed no source. I re-ran the Linux gates on the current tree, and the story stays Partial.
+
+**Verified this pass (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: configured.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 passed (21 integration, 1 unit).
+
+**Still open:**
+- **Traced terrain shadow fixture:** `run_terrain_traced_shadow` reports `darkened 0` on DX12 and Vulkan with no validation-layer errors. The CPU reference over the same tile records passes. Reading the code has not found the cause, and the next step is a Windows `RtShadow` readback for the hill frame. Nothing I could check from WSL settles it, so I did not change the shared RT path on a guess.
+- **Benchmark gate:** `engine_bench` is not in the tree (US-074), so the acceptance benchmark cannot run.
+- **Windows gates:** not re-run in this pass.
+- **Linux GCC and ASan/UBSan presets:** not re-run in this pass.
+- **Native Linux Vulkan GPU run:** no Vulkan device on this host.
+
+I appended this pass to `.ralph-tui/progress.md`. Unblocking the story needs the Windows `RtShadow` readback for the hill frame, which requires a test-only accessor for that texture first.

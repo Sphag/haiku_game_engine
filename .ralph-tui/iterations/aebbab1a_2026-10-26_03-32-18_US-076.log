@@ -1,0 +1,110 @@
+# Iteration 646 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T00:32:18.276Z
+- **Ended At**: 2026-10-26T01:52:04.267Z
+- **Duration**: 1h 19m 45s
+- **Input Tokens**: 262
+- **Output Tokens**: 23773
+- **Total Tokens**: 24035
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-076, and the current state of the benchmark code.
+[94m[Bash][0m Read progress log, PRD story, and benchmark dir $ ls tools/benchmark benchmarks 2>/dev/null
+The log says US-076 is partly done and blocked on a user decision about the triangle floor. Before deciding what to run, I'll check the current artifacts and the Windows gate procedure in memory.
+[94m[Bash][0m Inspect bench artifacts and gate memory notes $ ls /mnt/d/dev/haiku_game_engine | head -50
+Prior work left seven reports void (they predate the post-pass shader fix) and the Windows and Linux gates unrun on the current tree. I'll check how a bench run is invoked and what the existing reports record before rerunning anything.
+[94m[Bash][0m Inspect an existing bench report and build dirs $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i -E "gate|us07|us06" | head -20
+The indexed report is current and shows the triangle-floor and frame-budget failures; the other seven are void. I'll look for the last US-076 gate script so I can reuse its structure for the rerun.
+[94m[Bash][0m Find previous US-076 gate batch and bench presets $ cd /mnt/d/dev/haiku_game_engine && ls artifacts/bench/us076-dx12-indexed/screenshots artifacts/bench...
+There is a bench batch from earlier (`us076_bench.bat`, with a `us076c` run at 03:22). I need to confirm nothing is still running before I start another one.
+[94m[Bash][0m Check previous bench batch and any running processes $ cmd.exe /c "tasklist" 2>/dev/null | grep -i -E "engine_|cmake|ninja|msbuild" | head
+A bench batch (`us076_bench.bat`, pid 23650) is still running `engine_bench.exe`. Per the overlap rule I'll let it finish rather than launch a second batch over the same result files. I'll check its progress.
+[94m[Bash][0m Check batch progress and time $ cmd.exe /c "tasklist" 2>/dev/null | grep -i engine_bench
+The indirect run has been going about ten minutes, and each path takes several minutes (three 180 s repeats). I'll wait for the batch to exit with a bounded poll rather than relaunch.
+[94m[Bash][0m Wait for the running bench batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+The process exited almost at once and `dx12_indirect` returned 1. I'll check the batch state and the indirect log before deciding anything.
+[94m[Bash][0m Inspect finished bench batch logs $ tail -4 us076c_dx12_indexed.log
+Each path takes about ten minutes, so the batch is now on the meshlets run and has about an hour left, including the four Vulkan paths. Linux builds would load the CPU and skew the frame timings, so I'll hold them. Meanwhile I'll check the code for the mesh-shader-off requirement, which is a read-only task.
+[94m[Bash][0m Trace mesh-shader disable path in code $ grep -rn "disabled_features" engine/rhi/src --include=*.cpp | head -20
+The mesh-shader disable path already reports `disabled` rather than `enabled`. I'll wait for the rest of the batch in bounded polls.
+[94m[Bash][0m Poll bench batch until finished (bounded) $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+The loop reported "gone" within seconds, which doesn't fit a ten-minute run. I'll check the meshlets log and the process list directly rather than trust that grep.
+[94m[Bash][0m Check meshlets run and live processes $ cmd.exe /c "tasklist" 2>/dev/null | grep -i -E "engine_bench|cmd.exe"
+The `engine_bench.exe` is alive on the meshlets run, so the earlier "gone" was a bad check. I'll wait on the batch's own WSL process (pid 23650) instead, which is a more reliable signal.
+[94m[Bash][0m Wait for bench batch process to exit $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+[94m[Bash][0m Continue waiting for bench batch to exit $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+The DX12 meshlets and no-mesh-shader runs have finished. The no-mesh run exited 3 (incomplete), which I'll look into once the batch is done. Four Vulkan paths remain.
+[94m[Bash][0m Continue waiting for Vulkan bench runs $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+[94m[Bash][0m Continue waiting for remaining bench runs $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+[94m[Bash][0m Continue waiting for last bench runs $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076c_rc.txt
+The batch has finished. I'll pull the status, failing checks, and incomplete reasons from each report.
+[94m[Bash][0m Summarize each bench report's status and checks $ do python3 -I - "$d/report.json" <<'EOF' import json,sys r=json.load(open(sys.argv[1])) print("==", ...
+The no-mesh-shader run came back incomplete with no checks recorded, which means it didn't measure the frames the contract needs. I'll find out why.
+[94m[Bash][0m Inspect the incomplete no-mesh-shader run $ grep -n -i "ERROR\|fail\|mesh" /mnt/c/Users/bucha/AppData/Local/Temp/us076c_vk_nomesh.log | head
+This is a real gap. With mesh shaders forced off, the meshlets path refuses to run (`attach_meshlets: mesh shaders are not available`), so the run never proves the fallback. FR-06 requires an indirect-indexed fallback without mesh shaders. I'll look at how the path is chosen in the driver.
+[94m[Bash][0m Locate meshlet path selection in render stress driver $ grep -rn "attach_meshlets" engine --include=*.hpp --include=*.cpp | head
+The renderer already names a fallback (`fell back to conventional draws`), but the driver treats the `attach_meshlets` refusal as fatal. I'll read the renderer's geometry-path logic and the driver's populate step together.
+[94m[Bash][0m Read populate step and renderer geometry-path logic $ grep -n "geometry_path\|GeometryPath::Meshlets\|mesh_shaders\|MeshShaders" engine/render/src/scene_r...
+The renderer's own design is that the meshlet path without mesh shaders falls back to conventional draws, but the benchmark's stated fallback is indirect-indexed. I'll check how `geometry_path()` and the draw path interact before choosing where the fallback belongs.
+[94m[Bash][0m Read geometry path and draw path selection $ grep -n "draw_path" engine/render/src/scene_renderer.cpp | head -20
+Without mesh shaders, `geometry_path()` already resolves to conventional, and the run's draw path is already `Indirect`. So the fallback exists in the renderer. The driver fails only because it still calls `attach_meshlets` when the path can't be built. The fix is to skip attaching meshlets when `geometry_path()` isn't `Meshlets`, and to label the feature accurately. I'll read the feature-reporting block before editing.
+[94m[Bash][0m Read feature reporting block in driver $ grep -n "GeometryPath" tools/benchmark/src/render_stress.cpp | head -3
+The feature label says "conventional draws", but the meshlet run's draw path is indirect, so the label is inaccurate. I'll make the populate step skip meshlet attachment when the renderer has resolved to a non-meshlet path, and correct the label.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/render_stress.cpp[0m edit: "        if (path == Path::Meshlets && !cooked.mesh..." → "        // Without mesh shaders the renderer resol..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/render_stress.cpp[0m edit: ""active" : "fell back to conventional draws";" → ""active" : "fell back to indirect-indexed draws (m..."
+Both edits are in. Next I'll rebuild the release bench and rerun the two no-mesh-shader paths. I'll run the Windows gates first, because their builds would perturb timings, then the benchmarks. The batch uses a new name, and I've confirmed the previous batch has exited.
+[94m[Bash][0m Launch Windows gates and no-mesh bench batch $ ps -eo pid,args | grep us076d | grep -v grep
+The batch is running (pid 27858). I'll poll it until it finishes.
+[94m[Bash][0m Poll Windows gate and bench batch $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076d_rc.txt
+Gates so far all return 0. I'll check the build logs for warnings and the test counts while the no-mesh runs proceed.
+[94m[Bash][0m Check Windows gate logs for warnings and results $ cat us076d_validate.log | tail -2
+Windows gates are green with zero warnings: validation, configure, debug build, win-unit 29/29, GPU DX12 72 cases, and GPU Vulkan 73 cases. The no-mesh runs are next, so I'll wait for them.
+[94m[Bash][0m Wait for no-mesh bench runs to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076d_rc.txt | tail -2
+[94m[Bash][0m Wait for the Vulkan no-mesh run $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076d_rc.txt | tail -2
+[94m[Bash][0m Wait for batch to exit $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076d_rc.txt | tail -2
+Both no-mesh runs now exit 1 (measured failures, not incomplete), so the fallback runs and is measured. I'll confirm the fallback is recorded correctly and that mesh shaders are reported as disabled.
+[94m[Bash][0m Check no-mesh runs' features and counters $ ls artifacts/bench/us076-dx12-meshlets-nomesh/screenshots | head -3
+The fallback now works as intended. On both backends, the report records `mesh_shaders: disabled: forced off`, `meshlet_path: fell back to indirect-indexed draws`, indirect draws active with 338–340 visible items, and zero meshlet visibles. Last, the Linux quality gates on the current tree. I'll run them in the background, since the debug build can be slow.
+[94m[Bash][0m Start Linux quality gates in background $ echo DONE >> /tmp/us076_lrc.txt) > /dev/null 2>&1 & echo started
+[94m[Bash][0m Wait for Linux gates and show results $ tail -2 /tmp/us076_lctest.log
+The Linux gates pass with zero warnings. I'll pull the test count and then record this pass in the progress log.
+[94m[Bash][0m Get Linux test count and progress log format $ grep -n "## Codebase Patterns" .ralph-tui/progress.md | head -2
+[94m[Bash][0m Append US-076 progress entry $ (b) change instance placement (a workload change: bump `kWorkloadVersion`, regenerate `workload_expe...
+I'll also add the reusable gotcha to the Codebase Patterns section at the top of the log.
+[94m[Bash][0m Add reusable pattern to progress header $ python3 -I - <<'EOF' p=".ralph-tui/progress.md" s=open(p,encoding="utf-8").read() head="## Codebase ...
+US-076 is measured on both backends and the mesh-shader fallback now works, but the story is not complete. The benchmark contract's own checks fail on every run, and fixing that needs your decision.
+
+**What changed**
+- The forced mesh-shader-off run used to stop with `incomplete` (exit 3). The driver tried to attach meshlets, which the renderer refuses without mesh shaders. It now skips that step when the renderer has resolved away from the meshlet path, so the run falls back to indirect-indexed draws, as FR-06 requires. The change is in `tools/benchmark/src/render_stress.cpp`, and the feature label now reads "fell back to indirect-indexed draws".
+- I reran all eight acceptance reports on the current tree. The seven that predated the post-pass shader fix are replaced. The old results were void and are not cited.
+
+**Results (RTX 5080, native_1080 profile)**
+- Indexed, indirect, and meshlets run on both DX12 and Vulkan. Screenshots and per-frame counters are in `artifacts/bench/us076-*`.
+- Fallback proof on both backends: `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, 338–340 items drawn through the indirect path, and zero meshlet visibles.
+- These runs exit 1 on the contract checks, which is the measured result:
+  - The start frame has 312,068 triangles against the 2,000,000 floor. Every indexed run fails this.
+  - p99 frame time is 34–47 ms against 16.7 ms, and no frames fall within the 16.7 ms budget.
+  - The mesh-shader paths also exceed the 33.3 ms outlier limit.
+- Cause: instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. I did not change the workload, because the contract forbids reducing it.
+
+**Gates on the current tree**
+- Windows: validate, `win-dev`, `win-debug` build, and `win-unit` (29/29) all pass with zero warnings. `engine_tests --suite gpu` passes on DX12 (72 cases) and Vulkan (73 cases). `win-release` engine_bench builds with zero warnings.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30) all pass with zero warnings.
+- Not run: native Linux Vulkan GPU (WSL has no Vulkan device), `linux-gcc` (GCC 9 cannot build Jolt), and the ASan preset (this story does not touch the listed subsystems).
+
+**Decision needed from you**
+- (a) Keep the contract and record these failures as the result. The story's acceptance criteria are met as measurement deliverables, and US-080 is where the budgets must pass.
+- (b) Change instance placement so the route start sees more items. That is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and rerun everything.
+
+I have not emitted the completion marker, because the story is blocked on that choice. The progress log has the full entry, and I added the fallback pattern to its Codebase Patterns section.

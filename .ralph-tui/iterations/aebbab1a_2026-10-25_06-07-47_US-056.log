@@ -1,0 +1,187 @@
+# Iteration 444 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T03:07:47.668Z
+- **Ended At**: 2026-10-25T03:12:51.301Z
+- **Duration**: 5m 3s
+- **Input Tokens**: 118
+- **Output Tokens**: 6963
+- **Total Tokens**: 7081
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check whether US-056 already exists in the tree before changing anything.
+[94m[Bash][0m Inspect repo layout, progress log, and script module $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/script/src engine/script/tests 2>/dev/null && w...
+
+[91m[Error: Exit code 2
+CMakeLists.txt
+CMakePresets.json
+artifacts
+build
+cmake
+docs
+engine
+tasks
+tests
+third_party
+tools
+- What was implemented: no source change. No file under `engine/`, `tests/`, or `cmake/` is newer than the previous entry, so the earlier gate results still apply.
+- Toolchain: `/usr/bin` still has only g++-9, gcc-9, clang++-10 and `/usr/lib/llvm-10`, so `linux-gcc*` cannot build Jolt here.
+- Status call: US-055 stays **Partial**. Open: `linux-gcc` gate and its CI job (needs GCC 11+). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-055 (status re-check, status Partial)
+- What was implemented: no source change. Bindings cover entities, transforms, input, assets, physics queries, and events (`script_bindings.cpp`).
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0; `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 (integration 21, unit 1; 60.4 s).
+- Not rerun this pass: Windows gates and `linux-asan`/`linux-sanitize` (last recorded as passing in the first US-055 entry; no source change since).
+- Status call: US-055 stays **Partial**. Open: `linux-gcc` gate and its CI job (host GCC 9.4 cannot build Jolt). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-055 (status re-check, status Partial)
+- What was implemented: no source change. Re-ran the Linux gates on the current tree.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (integration 21, unit 1; 60.8 s).
+- Status call: US-055 stays **Partial**. Open: the `linux-gcc` gate (`/usr/bin` has only GCC 9.4, which cannot build Jolt). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-055 (status re-check, status Partial)
+- What was implemented: no source change. Lua API unchanged.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (61.3 s).
+- Toolchain: host search (`/usr/bin`, `/usr/local/bin`, `/opt`, `/usr/lib/gcc`) finds only g++-9/gcc-9 and clang++-10; no GCC 11+ or clang 14+, no container runtime.
+- Status call: US-055 stays **Partial**. Open: `linux-gcc` gate and its CI job (needs GCC 11+). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056
+- What was implemented: the script lifecycle in `engine_script`. `ScriptRunner` (`script_runner.hpp/.cpp`) attaches a chunk to an entity and calls `create`, `start`, `fixed_update`, `update`, and `destroy` in the documented order (`begin_frame` runs create/start for pending instances and drops dead entities; `fixed_update` then `update` each frame; `detach`/`stop_all` run destroy). Each instance has its own environment. A raised error faults only that instance and is queued on the engine console queue. `reload` keeps the old state with `ReloadPolicy::PreserveExports` (`export_state`/`import_state`) or starts fresh with `ResetState`. A syntax error on reload changes nothing. Event subscriptions carry an owner tag, released with the instance.
+- Files changed: `engine/script/include/engine/script/{script_runner,event_bus,script_engine}.hpp`, `engine/script/src/{script_runner,event_bus,script_engine,script_bindings}.cpp`, `engine/script/src/script_bindings.hpp`, `engine/script/CMakeLists.txt`, `tests/src/script_lifecycle_tests.cpp` (15 cases, unit label), `tests/CMakeLists.txt`.
+- Gates: Linux `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` 0 warnings; `ctest --preset linux-unit` 100% (integration 21, unit 1 suite; `engine_tests --suite unit` 706 cases pass); `cmake --build --preset linux-asan` exit 0, 0 errors/warnings; `ctest --preset linux-sanitize` 22 of 22, no ASan/UBSan reports. Windows (batch `us056_gates.bat`, MSVC): `ValidateVendor` 0, `win-dev` 0, `win-debug` 0 (0 `warning C` lines), `win-unit` 100%, 21 of 21.
+- Not run: `linux-gcc*` (host GCC is 9.4, which cannot build Jolt; the CI job must cover it), `engine_bench --suite acceptance` (no harness yet, US-074), and GUI checks (no runtime window or editor yet). No GPU work in this story.
+- Deviations: the component is not a reflected ECS component. Attachments live in `ScriptRunner`, keyed by entity handle, because the scene format and component catalog do not yet carry script components. Lua error messages and the console are the same queue as `ScriptEngine::take_errors()`.
+- Status call: US-056 is **Partial**. Every Linux and Windows gate in the story passes. Open: the `linux-gcc` gate and its CI job (needs GCC 11+). No COMPLETE signal.
+- Learnings:
+  - A chunk's main function has `_ENV` as its first upvalue, so `lua_setupvalue(state, -2, 1)` gives it a private environment before the first call.
+  - Lua `__gc` on a value captured by a callback and by an event handler is the cheapest proof that teardown drops every reference. Count finalizers after `collectgarbage('collect')`.
+  - The Windows batch writes each exit code to its own file, so a lost stdout capture cannot hide a failing step.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. Re-verified the existing lifecycle on the current tree.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0 with 0 `warning:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (integration 21, unit 1; 60.5 s).
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (host has only GCC 9.4, which cannot build Jolt). Windows and `linux-asan`/`linux-sanitize` were not rerun in this pass. No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. No file under `engine/script`, `engine/physics`, `engine/render`, or `tests/src/script_lifecycle_tests.cpp` is newer than the previous entry, so the earlier Windows and ASan/sanitize results still apply.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0 with 0 `warning:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (integration 21, unit 1; 59.3 s).
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (host has only GCC 9.4, which cannot build Jolt). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. Re-verified the existing lifecycle on the current tree.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0 with 0 `warning:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (22 of 22, 100%; integration 21, unit 1; 62.2 s).
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (host has only GCC 9.4, which cannot build Jolt). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. Re-verified the existing lifecycle on the current tree (`script_runner.hpp` documents the order and the `PreserveExports`/`ResetState` reload policies; `script_lifecycle_tests.cpp` has 15 cases).
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0 (26 dependencies, 8542 files); `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0 with 0 `warning:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (integration 21, unit 1; 60.5 s).
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (`/usr/bin` has only GCC 9.4, which cannot build Jolt). Windows gates and `linux-asan`/`linux-sanitize` were not rerun in this pass. No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. No file under `engine/script`, `engine/physics`, `engine/render`, or `tests/src/script_lifecycle_tests.cpp` is newer than the previous entry.
+- Toolchain: `/usr/bin` still has only g++-9, gcc-9, clang++-10; no GCC 11+, no container runtime, so `linux-gcc*` cannot run here.
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job. Earlier entries hold the Linux and Windows results. No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. Confirmed the script lifecycle files and the 15-case `script_lifecycle_tests.cpp` are present.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0 with 0 `warning:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (integration 21, unit 1; 58.8 s).
+- Toolchain: `/usr/bin` still has only g++-9, gcc-9, clang++-10; no GCC 11+, no conda/docker/podman, so `linux-gcc*` cannot run here.
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (needs GCC 11+). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-056 (status re-check, status Partial)
+- What was implemented: no source change. No file under `engine/`, `tests/`, or `cmake/` is newer than the previous entry, so the earlier Linux and Windows results still apply. Gates were not rerun in this pass.
+- Toolchain: `/usr/bin` still has only g++-9, gcc-9, clang++-10; no GCC 11+ or clang 14+, so `linux-gcc*` cannot run here.
+- Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (needs GCC 11+). No COMPLETE signal.
+---
+engine/script/src:
+event_bus.cpp
+script_bindings.cpp
+script_bindings.hpp
+script_engine.cpp
+script_runner.cpp][0m
+The progress log already records US-056 as implemented and passing on Linux and Windows, with only the `linux-gcc` gate open. I'll check the files are still present and re-run the Linux gates on the current tree.
+[94m[Bash][0m Verify US-056 files and run Linux gates $ tail -n 4 /tmp/us056_ctest.log
+[94m[Bash][0m Wait for background gate run and show output $ tail -n 4 /tmp/us056_ctest.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/8617e806-1aad-4289-af59-8827fa9209aa/tasks/bha0w0iem.output tail -n 20 echo --- tail -n 4 /tmp/us056_ctest.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Show background gate run output so far $ echo "validate: $(tail -n 2 /tmp/us056_validate.log 2>/dev/null)"
+[94m[Bash][0m Summarize Linux gate results $ grep -E "tests passed|tests failed|Passed|Failed" /tmp/us056_ctest.log | tail -n 3
+[94m[Bash][0m Check whether configure and build steps finished $ pgrep -fa "cmake|ctest" | head -n 3
+The `ctest` log I just read is stale: it's from 06:07, and the configure step started at 06:09 and is still running. I'll wait for the current run to finish before reporting any result.
+[94m[Bash][0m Wait until the fresh configure and test logs are written $ ls -l --time-style=+%T /tmp/us056_*.log | awk '{print $6, $7}'
+That wait condition is muddled, so I'll cancel it and rely on the original background chain's completion notification instead.
+[94m[TaskStop][0m
+[94m[Monitor][0m Wait for the Linux gate chain to finish $ cat /tmp/us056_gate_chain.log
+That monitor watches a log file nothing writes to, so I'll stop it. The original background chain will notify me when it finishes.
+[94m[TaskStop][0m
+The Linux gate chain is still running in the background. I'll report when it finishes, and the result will come from the fresh logs, not the stale ones.
+
+Status so far for US-056:
+
+- **Already implemented.** The lifecycle is in `engine/script` (`script_runner`, `event_bus`, `script_engine`, bindings) with 15 cases in `tests/src/script_lifecycle_tests.cpp`. Those files are present.
+- **Validated this pass:** `cmake -P cmake/ValidateVendor.cmake` exits 0 (26 dependencies, 8542 files).
+- **In progress:** `cmake --preset linux-dev` (configure), then `linux-debug` build, then `ctest --preset linux-unit`. Configure has started but not finished.
+- **Not yet verified this pass:** the build and ctest results. The `ctest` log I read earlier was from a previous run, so I am not reporting it as a result.
+- **Still open per the progress log:** the `linux-gcc` gate and its CI job. The host has only GCC 9.4, which cannot build Jolt, so that gate cannot run here. The Windows gates and `linux-asan`/`linux-sanitize` were last run in the earlier US-056 pass; no source has changed since.
+
+Because of the `linux-gcc` gap, US-056 stays **Partial**, not complete. I'll append a progress entry once the current run's results are in.
+[94m[Bash][0m Pause before checking the background run $ echo waiting
+US-056 is still **Partial**. The lifecycle code and tests are in place, and the Linux gates are running now. I have not finished verifying them.
+
+**What's in place**
+- The script lifecycle lives in `engine/script` (`script_runner`, `event_bus`, `script_engine`, bindings). It has 15 cases in `tests/src/script_lifecycle_tests.cpp`.
+- `cmake -P cmake/ValidateVendor.cmake` passes on Linux (26 dependencies, 8542 files).
+
+**Still running**
+- `cmake --preset linux-dev`, then `cmake --build --preset linux-debug`, then `ctest --preset linux-unit`. These are one background chain. Configure was still running when I last checked.
+- The `ctest` log I read earlier was from an earlier run, so I am not counting it. I'll report the fresh results when the chain finishes.
+
+**Still open**
+- The `linux-gcc` gate and its CI job. The host has only GCC 9.4, which can't build Jolt, so this can't run here. It needs GCC 11+.
+- The Windows gates and the `linux-asan` and `linux-sanitize` runs were last recorded in the earlier US-056 pass. No source has changed since.
+- `engine_bench --suite acceptance` has no harness yet (US-074). GUI checks have no runtime window yet.
+
+When the chain finishes, I'll append a progress entry with the results.
+[94m[Bash][0m Check status of the Linux gate chain $ ls -l --time-style=+%T /tmp/us056_*.log | awk '{print $6, $7}'
+[94m[Bash][0m Check current time and running cmake processes $ ps -o pid,etime,args -C cmake | head -n 5
+The Linux configure step is still running (about a minute in), so the build and `ctest` results aren't in yet. This wake-up was just a short timer, not the gate chain finishing. I'll report when the chain completes.
+
+US-056 stays **Partial**. Nothing has changed since my last message: the lifecycle code is in place, `ValidateVendor` passes, and the `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest are still pending. The `linux-gcc` gate remains blocked on this host.
+[94m[Bash][0m Read results of the Linux gate run $ date +%T
+The fresh run finished: configure, build, and `ctest` all completed after 06:11. I'll record this pass in the progress log.
+[94m[Bash][0m Append US-056 re-check entry to progress log $ 63.5 s). - Status call: US-056 stays **Partial**. Open: the `linux-gcc` gate and its CI job (host ha...
+US-056 is still **Partial**. The Linux gates pass on the current tree, but the `linux-gcc` gate can't run on this host, so I can't mark it complete.
+
+**Linux gates (this pass, fresh logs)**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: passes.
+- `cmake --build --preset linux-debug`: passes with 0 warnings.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 pass (21 integration, 1 unit), including the 15 lifecycle cases.
+
+**Still open**
+- `linux-gcc` gate and its CI job. The host has only GCC 9.4, which can't build Jolt; this needs GCC 11+.
+- Windows gates and `linux-asan`/`linux-sanitize` were not rerun in this pass. The last recorded results are from the earlier US-056 pass, and no source has changed since.
+- `engine_bench --suite acceptance` has no harness yet (US-074). GUI checks have no runtime window yet.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. No source files changed, and I made no commits.

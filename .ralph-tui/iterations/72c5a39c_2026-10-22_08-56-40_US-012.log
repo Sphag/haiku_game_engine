@@ -1,0 +1,314 @@
+# Iteration 11 Log
+
+## Metadata
+
+- **Task ID**: US-012
+- **Task Title**: ECS Handles and Lifetime
+- **Description**: As a developer, I want in-house entity handles so that I can safely reference game objects.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T05:56:40.456Z
+- **Ended At**: 2026-10-22T06:11:09.311Z
+- **Duration**: 14m 28s
+- **Input Tokens**: 736
+- **Output Tokens**: 48893
+- **Total Tokens**: 49629
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l tasks/prd-open-world-engine.md
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+[94m[Bash][0m Find ECS-related PRD sections and progress headings $ grep -n "^## \|^### " .ralph-tui/progress.md | tail -60
+[94m[Bash][0m Read PRD quality gates, US-001..US-012 and progress tail $ sed -n 193,400p .ralph-tui/progress.md
+[94m[Bash][0m List engine, tests, and build files; check prd.json for US-012 $ grep -n "US-012" -A12 tasks/prd.json | head -40
+[94m[Bash][0m Read core CMake, tests CMake, slot table, guid, perf contract $ cat engine/core/include/engine/core/performance_contract.hpp | head -80
+[94m[Bash][0m Read PRD functional requirements, non-goals, and technical notes $ sed -n 172,200p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read WindowId, guid tests, test suite runner, targets $ cat cmake/EngineTargets.cmake | head -80
+[94m[Bash][0m Check platform CMake, Result API, test style, presets $ cat CMakePresets.json | grep -n '"name"' | head -40
+Nothing ECS-related exists yet, so I'll add a new `engine_ecs` module at the `engine/ecs/` path the PRD specifies. Writing the header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/entity.hpp[0m "#pragma once
+
+#include <cstdint>
+
+namespace engine::ecs {
+
+// Reference to an entity inside one World. The index selects a slot, and the generation changes every time that slot
+// is destroyed, so a h... (1096 chars)"
+[94m[Bash][0m Check remaining Result API and assert macro $ grep -rn "ENGINE_ASSERT" engine/core/include/engine/core/assert.hpp | head -5
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/world.hpp[0m "#pragma once
+
+#include "engine/ecs/entity.hpp"
+
+#include "engine/core/guid.hpp"
+#include "engine/core/result.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <unordered_map>
+#i... (2826 chars)"
+[94m[Bash][0m Check source style for a core .cpp $ cat engine/core/src/guid.cpp | head -20
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/world.hpp[0m edit: "    World();
+    ~World();
+
+    World(const World&..." → "    World();
+
+    World(const World&) = delete;"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/src/world.cpp[0m "#include "engine/ecs/world.hpp"
+
+#include <atomic>
+#include <utility>
+
+namespace engine::ecs {
+namespace {
+
+// Process-wide, so two worlds never share an id even when they live on different threads. I... (3658 chars)"
+Now the CMake target, the root wiring, and the test file.
+[94m[Bash][0m Add engine_ecs target and wire it into root and tests $ grep -n "EngineTargets\|engine_ecs\|engine/ecs" -r cmake tools docs 2>/dev/null | head
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_world_tests.cpp[0m "// Entity handles and world lifetime (US-012). CPU-only; these run on every operating system.
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/world.hpp"
+
+#include "engine/core/guid.hpp"
+
+#inclu... (8989 chars)"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_world_tests.cpp[0m edit: "    // Burn an index in the second world so its en..." → "    // Burn a slot in the second world so its enti..."
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -15 /tmp/us012_ctest.log
+[94m[Bash][0m Wait briefly and check background Linux gate output $ ls /tmp/us012_* 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/2c34e81b-e6ef-4b6b-a40b-850e5b7bb934/tasks/bdynhcrcz.output tail -20 ls /tmp/us012_*. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for Linux ctest to finish and report tail $ grep -c "" /tmp/us012_build.log
+[94m[Bash][0m Check status of the background configure/build/test chain $ tail -5 /tmp/us012_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+-- Vendor validation passed: 26 dependencies, 8524 files
+validate=0
+---
+---][0m
+[94m[Monitor][0m Wait for Linux ctest completion $ tail -4 /tmp/us012_ctest.log
+[94m[ScheduleWakeup][0m
+
+[91m[Error: `noop` is required when `stop` is not true.][0m
+[94m[Bash][0m Check progress of Linux build and test logs $ tail -3 /tmp/us012_ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+-rw-r--r-- 1 max max 0 Oct 22 08:59 /tmp/us012_cfg.log
+tail: cannot open '/tmp/us012_build.log' for reading: No such file or directory][0m
+[94m[Bash][0m Check running cmake and compiler processes $ date
+[94m[Monitor][0m Wait for configure to finish and report logs $ tail -3 /tmp/us012_ctest.log 2>/dev/null
+[94m[Monitor][0m Wait for full Linux gate chain to finish $ tail -3 /tmp/us012_ctest.log
+[94m[Monitor][0m Wait for ctest summary in Linux log $ grep -i "warning" /tmp/us012_build.log | head -5
+[94m[Monitor][0m Check build and test progress after a few minutes $ ps aux | grep -c "[c]make\|[n]inja"
+[94m[Bash][0m Inspect running build processes and logs $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/2c34e81b-e6ef-4b6b-a40b-850e5b7bb934/tasks/bdynhcr...
+[94m[Bash][0m Stop stalled configure and inspect linux-dev preset $ cd /mnt/d/dev/haiku_game_engine && sed -n 49,70p CMakePresets.json && ls build/linux-dev | head
+[94m[Bash][0m Restart Linux configure in background with a log $ ps aux | grep "[c]make --preset" | wc -l
+
+[91m[Error: Exit code 144][0m
+[94m[Bash][0m Confirm no stale cmake processes remain $ cd /mnt/d/dev/haiku_game_engine && pwd
+[94m[Bash][0m Configure Linux dev preset, logging to file $ echo "configure=$?" >> /tmp/us012_cfg.log
+[94m[Bash][0m Check configure progress after a minute $ ps aux | grep "[c]make --preset" | awk '{print $8}'
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -5 /tmp/us012_cfg.log ps aux grep "[c]make --preset" awk '{print $8}'. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure progress $ ps aux | grep "[c]make --preset" | awk '{print $8}'
+[94m[Monitor][0m Wait for Linux configure to finish $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Wait for Linux configure to finish $ tail -5 /tmp/us012_cfg.log
+[94m[Bash][0m Check docs and prd.json pass markers $ grep -n "passes\": true" tasks/prd.json | wc -l
+[94m[Monitor][0m Wait for Linux configure completion $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Check configure log after a few minutes $ tail -3 /tmp/us012_cfg.log
+[94m[Monitor][0m Wait for configure completion (retry) $ tail -5 /tmp/us012_cfg.log
+The Linux configure is still running on the `/mnt/d` filesystem, which is slow here. I'll wait for it to finish before building.
+[94m[Monitor][0m Idle wait while configure runs $ tail -2 /tmp/us012_cfg.log
+[94m[Monitor][0m Wait for configure completion $ tail -5 /tmp/us012_cfg.log
+[94m[Bash][0m Inspect the configure process state $ cat /tmp/us012_cfg.log | tail -3
+[94m[Bash][0m Show child processes of configure $ cat /tmp/us012_cfg.log | head -20
+An old build from the first chain is still running and would race the new configure. Stopping it.
+[94m[Bash][0m Stop stale build from the earlier chain $ ps -eo pid,stat,etime,args | grep -E "[n]inja|cmake --build|ctest" | head
+
+[91m[Error: Exit code 144][0m
+[94m[Bash][0m List remaining cmake, ninja, and ctest processes $ ps -eo pid,stat,etime,args | grep -E "[n]inja|cmake --build|ctest|cmake --preset" | cut -c1-150 | he...
+[94m[Bash][0m Stop stale ninja build process $ echo killed
+[94m[Monitor][0m Wait for configure after clearing stale build $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Wait for configure result $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Check configure output after five minutes $ tail -3 /tmp/us012_cfg.log
+[94m[Monitor][0m Wait for configure result, final attempt $ tail -5 /tmp/us012_cfg.log
+[94m[Bash][0m Check whether configure is still making progress $ cat /tmp/us012_cfg.log | tail -3
+[94m[Bash][0m Kill regenerating ninja chain that conflicts with configure $ echo done
+[94m[Bash][0m Read configure log $ cat /tmp/us012_cfg.log | tail -15
+[94m[Bash][0m Relaunch Linux configure detached with logging $ echo "configure=$?" >> /tmp/us012_cfg.log' > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for detached configure to finish $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Check configure progress after five minutes $ ps -eo stat,etime,args | grep "[c]make --preset" | cut -c1-80
+[94m[Monitor][0m Wait for detached configure completion $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Idle wait while configure runs $ echo tick
+[94m[Bash][0m Read configure log and running cmake processes $ ps -eo pid,stat,etime,args | grep -E "[c]make|[n]inja" | cut -c1-120
+Two configure runs are now racing on the same build directory. Stopping the older one.
+[94m[Bash][0m Stop the older duplicate configure process $ ps -eo pid,stat,etime,args | grep -E "[c]make --preset" | cut -c1-100
+[94m[Monitor][0m Wait for the single remaining configure run $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Idle wait while single configure runs $ echo tick
+[94m[Bash][0m Check configure log and process $ ps -eo pid,stat,etime,args | grep -E "[c]make --preset" | cut -c1-100
+[94m[Bash][0m Inspect open files of stuck configure process $ cat /tmp/us012_cfg.log | wc -c
+[94m[Monitor][0m Wait for configure to report completion $ tail -5 /tmp/us012_cfg.log
+[94m[Monitor][0m Idle wait for slow configure $ echo tick
+[94m[Bash][0m Check configure status and time $ ps -eo pid,stat,etime,args | grep -E "[c]make --preset" | cut -c1-100
+[94m[Monitor][0m Wait for configure completion notice $ tail -5 /tmp/us012_cfg.log
+Waiting on the Linux configure, which is blocked on slow I/O under `/mnt/d`. I'll pick it up when it reports.
+Configure finished (exit 0). Starting the Linux debug build and unit tests, detached with markers.
+[94m[Bash][0m Build Linux debug and run unit tests detached $ echo "ctest=$?" >> /tmp/us012_ctest.log' >/dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for Linux build and unit test results $ tail -6 /tmp/us012_ctest.log
+[94m[Monitor][0m Wait for build and ctest completion, report results $ tail -6 /tmp/us012_ctest.log
+[94m[Bash][0m Check build and test progress $ ps -eo etime,args | grep -E "[n]inja|[c]test" | cut -c1-90
+Configure is confirmed (the repeated notices are from earlier monitors). The build is now compiling the pinned DXC host toolchain first, which takes a while. Waiting on the current build-and-test watch.
+[94m[Monitor][0m Wait for Linux build and unit test completion $ tail -6 /tmp/us012_ctest.log
+[94m[Monitor][0m Wait for build and unit tests to finish $ tail -6 /tmp/us012_ctest.log
+[94m[Monitor][0m Final wait for build and unit test results $ tail -6 /tmp/us012_ctest.log
+I'm still waiting on the Linux build and unit-test run, which hasn't reported yet. Nothing has been verified on Linux so far beyond the configure step, and the Windows gates and ASan run haven't started.
+
+Work done so far:
+- **New module `engine_ecs`** (`engine/ecs/`): `EntityHandle` carries index, generation, and world id. `World` is move-only and gives each instance a process-unique id. It supports create/destroy with generation-checked stale-handle rejection, plus optional persistent GUIDs that are unique per world and kept separate from indices.
+- **Wiring**: `add_subdirectory(engine/ecs)` in the root `CMakeLists.txt`, and `ecs_world_tests.cpp` added to `engine_tests`, which links `engine_ecs`.
+- **Tests** (`tests/src/ecs_world_tests.cpp`, tagged `[unit]`): repeated destruction, stale handles after slot reuse, 500 create/destroy cycles, 20,000-entity bulk creation with partial destruction and refill, foreign-world handles, GUID independence and uniqueness, GUID reuse after destruction, the same GUID in two worlds, 5,000 tagged entities, and move semantics.
+
+Progress so far:
+- `cmake -P cmake/ValidateVendor.cmake` passed on Linux.
+- `cmake --preset linux-dev` passed (exit 0). Configure takes about 94 seconds because of slow I/O under `/mnt/d`.
+- The `linux-debug` build and `linux-unit` ctest are running. The build first compiles the pinned DXC host toolchain.
+
+Still to do:
+- Confirm the Linux build has zero warnings and the ctest run passes, then check the output.
+- Run the Windows gates (`win-dev`, `win-debug`, `win-unit`), using the `.bat`-via-`vcvars64` approach in progress.md.
+- Run the ASan/UBSan sanitize preset, since ECS is on the PRD's sanitizer list.
+- Run the GCC preset, since `engine_ecs` is new first-party code.
+- Update `.ralph-tui/progress.md`, `tasks/prd.json` (US-012 `passes`), and `docs/`.
+
+I'm not reporting US-012 as complete until these results are in.
+That notification came from an early monitor, so I'll check the logs directly before trusting it.
+[94m[Bash][0m Verify build and ctest logs directly $ ps -eo etime,args | grep -E "[n]inja|[c]test" | cut -c1-100
+The Linux debug build exits 0 with no warnings, and ctest passes 10/10. Next I'll confirm the new ECS cases actually ran in the unit suite.
+[94m[Bash][0m Run unit suite and confirm ECS tests execute $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -3
+[94m[Bash][0m Confirm ECS test cases are included in unit run $ ./build/linux-dev/tests/Debug/engine_tests --suite unit -s 2>/dev/null | grep -c "A stale handle doe...
+[94m[Bash][0m Confirm ECS test names are compiled into the test binary $ grep -c "A stale handle does not revive when its slot is reused" build/linux-dev/tests/Debug/engine_...
+
+[91m[Error: Exit code 1][0m
+[94m[Bash][0m Check whether ECS test source was compiled into the build $ grep -c "ecs" build/linux-dev/build-Debug.ninja
+The ECS test object was compiled and linked. My string grep on the binary returned nothing, which I want to explain before relying on the unit count.
+[94m[Bash][0m Check ECS test strings are present in the binary $ ./build/linux-dev/tests/Debug/engine_tests --suite unit -r compact 2>&1 | tail -1
+Linux gate is green: the debug build has zero warnings, ctest is 10/10, and the unit suite runs 175 cases including the ECS tests (the binary contains the test strings; the runner has no name filter, so I can't isolate them). Next, the sanitizer gate, which the PRD requires for ECS.
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitizer tests detached $ echo "ctest=$?" >> /tmp/us012_sanitize.log' >/dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for sanitizer run result $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Wait for sanitizer test completion $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Wait for sanitizer results (final) $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Wait for sanitizer test run to finish $ tail -4 /tmp/us012_sanitize.log
+[94m[Bash][0m Check ASan build progress $ ps -eo etime,args | grep -E "[n]inja|[c]make --|[c]test" | cut -c1-80
+The ASan configure is running, so I'm waiting for the sanitizer run to finish before doing anything else.
+[94m[Monitor][0m Final wait for sanitizer completion $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Wait for sanitizer completion, report $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Wait for sanitizer run (repeat until result) $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Sanitizer completion check $ tail -4 /tmp/us012_sanitize.log
+[94m[Monitor][0m Sanitizer completion check (continued) $ tail -4 /tmp/us012_sanitize.log
+[94m[Bash][0m Check ASan build and sanitizer test state $ ps -eo etime,args | grep -E "[n]inja|[c]make --|[c]test" | cut -c1-70
+The ASan configure is still in progress on the slow mount. Waiting for it to complete.
+[94m[Monitor][0m Wait for ASan configure, build, and sanitizer tests $ tail -4 /tmp/us012_sanitize.log
+I'm still waiting on the sanitizer gate. The Linux debug build and unit tests are green, but the ASan/UBSan run, the GCC gate, and the Windows gates are not done, so US-012 is not complete yet.
+
+**Done (Linux/Clang debug):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed.
+- `cmake --preset linux-dev`: passed.
+- `cmake --build --preset linux-debug`: exit 0, no warnings.
+- `ctest --preset linux-unit`: 10/10 passed. The unit suite runs 175 cases, and the ECS test object is compiled into `engine_tests`.
+
+**In progress:** `linux-asan` configure, build, and `linux-sanitize` ctest. The log will show any sanitizer reports.
+
+**Not started:**
+- Linux/GCC gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`).
+- Windows gates (`win-dev`, `win-debug`, `win-unit`) via the `.bat`/`vcvars64` route in progress.md.
+- Updating `.ralph-tui/progress.md` and setting US-012 `passes` in `tasks/prd.json`.
+
+Two process notes: an early configure and build chain overlapped with my retries, and I killed the duplicate processes. The configure step takes about 94 seconds on `/mnt/d`. Once the sanitizer result is in, I'll run the GCC gate, then Windows.
+[94m[Bash][0m Check ASan configure, build, and sanitizer status $ ps -eo etime,args | grep -E "[n]inja|[c]make --preset|[c]test" | cut -c1-70
+That notification is from an old idle monitor. The real state is that the ASan configure is still running, at 1m24s, with no output yet. I'll keep waiting for the sanitizer result.
+[94m[Monitor][0m Wait for ASan sanitizer completion $ tail -4 /tmp/us012_sanitize.log
+The ASan/UBSan run is still in progress. I'll report when it finishes.
+[94m[Bash][0m Check ASan job state $ ps -eo etime,args | grep -E "[n]inja|[c]make --preset|[c]test" | cut -c1-70 | head -3
+[94m[Monitor][0m Wait for ASan build and sanitizer tests to finish $ tail -4 /tmp/us012_sanitize.log
+The ASan build is nearly finished (32 of 33 steps) and the sanitizer tests come next. I'll report the result when they complete.
+[94m[Bash][0m Check ASan build and sanitizer status $ tail -4 /tmp/us012_sanitize.log 2>/dev/null
+
+[91m[Error: Exit code 1
+[29/33] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/platform_replay_tests.cpp.o
+[31/33] Performing install step for 'engine_dxc_host'
+[32/33] Completed 'engine_dxc_host'
+---][0m
+[94m[Monitor][0m Wait for sanitizer run completion $ tail -4 /tmp/us012_sanitize.log
+The ASan/UBSan run is still in progress, with the build at step 32 of 33. I'll report the sanitizer result when it finishes. The Linux/GCC and Windows gates have not started.
+[94m[Bash][0m Check ASan build and sanitizer status $ ps -eo etime,args | grep -E "[n]inja|[c]test" | cut -c1-70 | head -3
+The ASan build exits 0, and the sanitizer unit test passes. The integration tests are running now.
+[94m[Monitor][0m Wait for sanitizer integration tests to finish $ tail -4 /tmp/us012_sanitize.log
+The ASan build passes, and the sanitizer unit test passes. The sanitizer integration tests are still running, so I'll report when they finish.
+[94m[Bash][0m Read final sanitizer results $ grep -c "warning:" /tmp/us012_asan.log
+The sanitizer gate passes with no UBSan or ASan reports. Next, the Linux/GCC gate. GCC 9 is the risky part, because `unordered_map::contains` is C++20 and may not be available there.
+[94m[Bash][0m Run Linux GCC configure, build, and unit tests detached $ echo "ctest=$?" >> /tmp/us012_gcc_ctest.log' >/dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for GCC build and unit test results $ tail -4 /tmp/us012_gcc_ctest.log
+[94m[Monitor][0m Wait for GCC gate completion $ tail -4 /tmp/us012_gcc_ctest.log
+The sanitizer gate is green. The GCC configure, build, and unit tests are running now.
+[94m[Monitor][0m Wait for GCC gate to finish (repeat) $ tail -4 /tmp/us012_gcc_ctest.log
+[94m[Bash][0m Check GCC job progress $ grep -c "error:" /tmp/us012_gcc.log 2>/dev/null
+[94m[Monitor][0m Wait for GCC configure, build, and unit tests $ tail -4 /tmp/us012_gcc_ctest.log
+The GCC gate is running: configure, then the debug build, then unit tests. I'll report its result once it finishes.
+[94m[Bash][0m Check GCC gate progress $ ps -eo etime,args | grep -E "[n]inja|[c]make --preset|[c]test" | cut -c1-70 | head -3
+The GCC configure is still running, so I'll keep waiting for the gate to report. Stale sanitizer monitors are still firing, and their output is already reported above.
+[94m[Bash][0m Check GCC gate progress again $ ps -eo etime,args | grep -E "[n]inja|[c]make --preset" | cut -c1-70 | head -3
+Still in the GCC configure step (about 26 seconds in, with no output yet). The job is running; I'll report when it finishes.
+[94m[Bash][0m Read GCC gate results $ tail -1 /tmp/us012_gcc_ctest.log
+The Linux/GCC gate passes: configure, a zero-warning debug build, and unit tests at 10/10. Windows is next. I'll check the cached MSVC version first, as progress.md warns.
+[94m[Bash][0m Check Windows cache compiler and VS install $ which cmd.exe
+The cache was configured with the VS 18 / MSVC 14.51 toolchain, so I'll load that `vcvars64.bat`. I'll write the gate script to `C:\Windows\Temp` with CRLF line endings and run it detached.
+[94m[Bash][0m Write and launch Windows gate script detached $ cat > /mnt/c/Windows/Temp/us012_gates.bat <<'EOF' @echo off call "C:\Program Files\Microsoft Visual ...
+[94m[Monitor][0m Wait for Windows gate results $ tr -d '\r' < /tmp/us012_win.log | grep -i "validate=\|configure=\|build=\|ctest=\|error C\|warning C...
+[94m[Monitor][0m Wait for Windows gate completion $ tr -d '\r' < /tmp/us012_win.log | grep -i "validate=\|configure=\|build=\|ctest=\|error C\|warning C...
+[94m[Monitor][0m Wait for Windows gates to finish (final) $ tr -d '\r' < /tmp/us012_win.log | grep -i "validate=\|configure=\|build=\|ctest=\|error C\|warning C...
+The Windows gate script (vendor validation, `win-dev` configure, `win-debug` build, `win-unit` ctest) is running detached. I'll report its results when it finishes.
+[94m[Bash][0m Confirm Windows build warnings and test summary $ tr -d '\r' < /tmp/us012_win.log | grep -i "Passed\|Failed" | tail -3
+All required gates now pass on Linux/Clang, Linux/GCC, Linux ASan/UBSan, and Windows/MSVC. Last, I'll record the result: set `passes` for US-012 in `prd.json` and append a progress entry.
+[94m[Bash][0m Locate passes field for US-012 in prd.json $ grep -n '"id": "US-012"' tasks/prd.json
+[94m[Bash][0m Inspect passes line context for US-012 $ sed -n 386,392p tasks/prd.json | cat -A | cut -c1-80
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m edit: "      "priority": 12,
+      "passes": false,
+     ..." → "      "priority": 12,
+      "passes": true,
+      ..."
+[94m[Bash][0m Check end of progress log for append point $ tail -c 300 .ralph-tui/progress.md | cat -A | tail -3
+[94m[Bash][0m Append US-012 entry to progress log $ a Windows ASan run (ASan is Linux-only in this repo). - **Learnings:**   - `cmake --preset` on `/mnt...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "*Add reusable patterns discovered during developme..." → "*Add reusable patterns discovered during developme..."
+US-012 is complete. Entity handles and worlds are implemented in a new `engine_ecs` target, and every required gate passes on the platforms I could run.
+
+**What was built** (`engine/ecs/`)
+- `EntityHandle` holds index, generation, and world id. Destroying an entity bumps its slot's generation, so a stale handle never resolves after the slot is reused. A handle from another world is rejected even when index and generation match.
+- `World` is move-only and has a process-unique id. It supports `create`, `create(guid)`, `destroy`, `alive`, `find(guid)`, and `persistent_id`.
+- Persistent GUIDs are stored beside the entity and are unique per world. Nil and duplicate GUIDs are rejected. GUIDs never affect indices or generations, and destroying an entity releases its GUID.
+
+I read the PRD's Functional Requirements, Non-Goals, and Technical Considerations. The ECS sits at the path the PRD specifies, with no ready-made ECS. The benchmark contract doesn't apply yet because no harness exists, so I didn't run `engine_bench`.
+
+**Tests** (`tests/src/ecs_world_tests.cpp`, all `[unit]`): repeated destruction, stale handles after slot reuse, 500 create/destroy cycles, 20,000-entity bulk creation with partial destruction and refill, foreign-world handles, GUID uniqueness and reuse, the same GUID in two worlds, 5,000 tagged entities, and move semantics.
+
+**Gate results** (exit codes checked directly)
+| Gate | Result |
+|---|---|
+| Linux/Clang: ValidateVendor, `linux-dev`, `linux-debug` build, `linux-unit` | Pass (0 warnings, ctest 10/10, unit suite 175 cases) |
+| Linux ASan/UBSan: `linux-asan` build, `linux-sanitize` | Pass (no sanitizer reports) |
+| Linux/GCC: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | Pass (0 warnings, ctest 10/10) |
+| Windows/MSVC 14.51: ValidateVendor, `win-dev`, `win-debug`, `win-unit` | Pass (0 `warning C`, ctest 10/10) |
+
+Not run: GPU suites and the benchmark (no GPU backend or benchmark harness exists yet), and GitHub CI (nothing has been pushed). The `engine_tests` runner has no name filter, so I confirmed the ECS cases are in the unit suite by count and by the test object in the build, not by running them alone.
+
+**Files changed**
+- New: `engine/ecs/CMakeLists.txt`, `engine/ecs/include/engine/ecs/{entity,world}.hpp`, `engine/ecs/src/world.cpp`, `tests/src/ecs_world_tests.cpp`.
+- Changed: root `CMakeLists.txt` (adds `engine/ecs`), `tests/CMakeLists.txt` (adds the test and links `engine_ecs`), `tasks/prd.json` (US-012 `passes: true`), and `.ralph-tui/progress.md` (a Codebase Patterns entry and a US-012 section).
+
+**Choices I made**
+- The handle includes a world id beyond the index and generation the story asks for. This is how a foreign-world handle is rejected.
+- `World` is move-only because a copy would share the source's world id.
+
+I did not create git commits, as the workflow asks.

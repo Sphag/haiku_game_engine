@@ -1,0 +1,45 @@
+# Iteration 680 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:09:48.100Z
+- **Ended At**: 2026-10-26T02:10:02.524Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1936
+- **Total Tokens**: 1958
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tool $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && gre...
+[94m[Bash][0m Check US-076 artifact directories and source mtime $ done 2>/dev/null | head -60
+[94m[Bash][0m Read status field of each US-076 report $ done
+US-076 is not complete, and I have not signaled COMPLETE. The benchmark runs fail the contract, and the fix needs your decision.
+
+**What is stuck**
+
+1. **Triangle floor and frame budget fail on placement.** All eight `us076-*` reports have `"status": "failed"`. The start frame has 312,068 triangles against the 2,000,000 floor, and p99 is 35–47 ms against 16.7 ms. The cause is placement: instances are spread uniformly over 8192 m, so the route start sees about 330 items. Changing that is a workload change, so `kWorkloadVersion` must be bumped and `workload_expected.json` regenerated. The contract forbids reducing the workload, so I have not made that change without your approval.
+2. **Full profile not run.** `full_1080` is unsupported because the FSR 2 shader permutation headers are missing, so only `native_1080` ran.
+3. **Not run:** native Linux Vulkan GPU and the linux-gcc gate. WSL has no Vulkan device, and GCC 9 cannot build Jolt.
+
+**What is done**
+
+- The forced mesh-shader-off run now falls back to indirect-indexed draws. Each run reports `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and 338–340 visible items on the indirect path.
+- Screenshots and submitted/visible counters are recorded for all eight runs.
+- Gates on the current tree, from the log of the last full pass: Windows `validate`, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and `win-release` `engine_bench` all pass. Linux `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30) pass.
+- I checked this pass without rerunning anything. The last source edit (`render_stress.cpp`, 04:15) predates all eight reports, so the recorded results still describe the tree. The Windows gates were not rerun in this pass.
+
+**Decision needed from you**
+
+- **(a)** Keep the contract as written and close US-076 with these failures recorded as the measured result. The acceptance criteria cannot pass on the current placement.
+- **(b)** Approve a placement change (bump `kWorkloadVersion`, regenerate `workload_expected.json`), then rerun the eight DX12 and Vulkan reports, about 10 minutes each.
+
+Once you choose, I can carry it out. I can also leave the full-profile and native Linux Vulkan items for a machine that has them.

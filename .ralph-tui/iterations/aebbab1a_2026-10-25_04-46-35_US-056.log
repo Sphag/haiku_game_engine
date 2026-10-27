@@ -1,0 +1,202 @@
+# Iteration 436 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T01:46:35.067Z
+- **Ended At**: 2026-10-25T02:32:09.504Z
+- **Duration**: 45m 34s
+- **Input Tokens**: 518
+- **Output Tokens**: 82090
+- **Total Tokens**: 82608
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress notes and whether US-056 already exists in the tree.
+[94m[Bash][0m Inspect repo root, progress log, and lifecycle references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -rn "US-056\|lifecycle\|reload" --include=*.md...
+The tree already has `engine/runtime/src/lifecycle.cpp` and `tests/src/lifecycle_tests.cpp`. Next I'll read the US-056 PRD section and the existing lifecycle and script code.
+[94m[Bash][0m Read US-056 PRD section and script/lifecycle layout $ grep -n "lifecycle\|script" tests/CMakeLists.txt engine/*/CMakeLists.txt | head -40
+[94m[Bash][0m Read script engine, event bus, and lifecycle sources $ cat engine/script/src/script_bindings.hpp
+The lifecycle header is only a three-state machine. US-056 needs a script-component layer on top of the Lua engine. Next I'll check the US-055 progress entry, the existing script tests, and the Windows gate instructions in memory.
+[94m[Bash][0m Read Windows gate notes, US-055 log, and script test style $ ls engine/ecs/include/engine/ecs/ | head -50
+US-055 is Partial, so the Lua layer is the foundation I'll build on. Next I'll check how bindings push entities and subscribe handlers, and how the ECS reports liveness.
+[94m[Bash][0m Inspect bindings helpers, ECS liveness API, and console references $ grep -rn "console\|Console" engine --include=*.hpp -l | head
+I have the key APIs. Before designing the change, I'll read the entity helpers and the event binding so I can reuse them.
+[94m[Bash][0m Read bindings helpers, event binding, and script CMake $ grep -n "script" docs/*.md | head -5
+The bindings already give me the entity userdata and event hooks I need. Last, I'll check the `Result` API and how the existing Lua tests bind services and check results, so the new tests follow the same pattern.
+[94m[Bash][0m Read existing Lua test fixture and Result API $ grep -n "world()" engine/ecs/include/engine/ecs/registry.hpp | head -3
+I have what I need. My design:
+
+- **`ScriptRunner`** (new) owns one Lua environment per attached instance, so each script's globals are isolated. It runs `create`, `start`, `fixed_update`, `update`, and `destroy` in a fixed order, and keeps each instance's Lua errors contained.
+- **Event subscriptions** get an owner tag, so teardown releases everything an instance subscribed to.
+- **Reload** compiles the new code first, so a syntax error leaves the running code untouched.
+
+I'll start with the event bus owner tags.
+[94m[Bash][0m Add owner tags and size to the event bus $ }  }  // namespace engine::script EOF echo ok
+Next I'll expose the Lua state and the entity push helper that the runner needs.
+[94m[Bash][0m Expose Lua state and push_entity for the runner $ cat engine/script/src/script_bindings.hpp
+Now the runner itself: the header documents the callback order, reload policy, and error rules.
+[94m[Bash][0m Write script runner header with documented lifecycle $ }  // namespace engine::script EOF echo ok
+The header is in place. Now the implementation. I'm keeping the Lua stack discipline the bindings use: every path restores the base stack depth, and each error is copied out before its Lua value is popped.
+[94m[Bash][0m Implement the script runner lifecycle and reload $ }  }  // namespace engine::script EOF echo ok
+One inconsistency to fix before building: the runner reports through the engine's event-bus error queue, but I also left a separate `errors_` member. I'll drop the member and have `take_errors()` drain the engine's single queue.
+[94m[Bash][0m Drop duplicate error queue and register the runner source $ cat CMakePresets.json | grep -n '"name"' | head -30
+Now the tests. Each case checks one lifecycle or ownership guarantee, and they all use the same log-in-`_G` technique as the existing Lua tests.
+[94m[Bash][0m Write lifecycle tests, register them, and build Linux debug $ echo BUILD_EXIT=${PIPESTATUS[0]})
+The build exceeded the foreground timeout and moved to the background. I'll wait for it to finish, then check the result.
+[94m[Bash][0m Check test registration and build progress $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/77b80592-11cc-4edd-bccc-1072824843e0/tasks/bnh...
+[94m[Bash][0m List compiler errors from the build log $ grep -n "error" /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/77b80592-11cc-4edd-bccc-1072824843e0/t...
+Four compile errors, all in my test file: `INFO` can't take a ternary, and two `attach` results were discarded despite `[[nodiscard]]`. I'll fix those and rebuild.
+[94m[Bash][0m Fix test compile errors and rebuild Linux debug $ tail -3 /tmp/us056_build.log
+[94m[Bash][0m Poll build log for completion and errors $ grep -n "error\|warning:" /tmp/us056_build.log | head
+
+[91m[Error: <tool_use_error>Blocked: sleep 115 followed by: tail -4 /tmp/us056_build.log grep -n "error\|warning:" /tmp/us056_build.log head. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for Linux debug build to finish $ grep -c "error:\|warning:" /tmp/us056_build.log
+[94m[Monitor][0m Wait for build exit marker $ grep -c "error:\|warning:" /tmp/us056_build.log
+[94m[Monitor][0m Wait for build exit marker (retry) $ grep -c "error:\|warning:" /tmp/us056_build.log
+The build is still running. Meanwhile I'll prepare the Windows gate batch from the memory template so it's ready once the Linux build passes.
+[94m[Bash][0m Check for running Windows batches and Temp dir $ ls /mnt/c/Program\ Files/Microsoft\ Visual\ Studio/ 2>/dev/null | head -3
+[94m[Bash][0m Read an earlier gate batch as a template $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/gates_us025.bat" | head -40
+I'll write the batch using the same pattern, with each step's exit code saved to a file so the result doesn't depend on stdout capture. I'm not launching it until the Linux build passes.
+[94m[Bash][0m Write Windows gate batch for US-056 with CRLF $ echo written
+[94m[Monitor][0m Wait for Linux debug build exit marker $ grep -c "error:\|warning:" /tmp/us056_build.log
+[94m[Monitor][0m Wait for Linux build exit marker $ grep "^EXIT=" /tmp/us056_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check build progress and errors $ grep -n "error:" /tmp/us056_build.log | head -10
+[94m[Bash][0m Check whether compiler processes are running $ ps -eo pid,etime,args | grep -E "clang|ninja|cmake" | grep -v grep | cut -c1-200 | head
+The Linux debug build passes with zero warnings. Next I'll run the Linux unit gate in the background, since it takes about a minute.
+[94m[Bash][0m Run Linux unit tests in background and check output $ tail -5 /tmp/us056_ctest.log
+The Linux unit gate passes. To confirm the new cases actually ran, I'll check the count against the suite total.
+[94m[Bash][0m Run unit suite binary and count test cases $ ls build/linux-debug | head -3
+[94m[Bash][0m Locate the Linux engine_tests binary $ echo "$B"
+[94m[Bash][0m List build directories for the Linux presets $ ls build/linux-dev/tests/Debug 2>/dev/null | head -3
+[94m[Bash][0m Run unit suite and confirm lifecycle cases present $ timeout 120 $B --list-tests 2>/dev/null | grep -i "Callbacks run in the documented\|Repeated Play\|s...
+All 706 unit cases pass, and the new suite compiles with `-Werror`. Next I'll run the two remaining gates: the ASan/UBSan build for Lua changes, and the Windows batch. I'll check for an already-running Windows batch first, as my notes require.
+[94m[Bash][0m Check for running batch, clear stale results, start ASan build $ echo started
+[94m[Monitor][0m Wait for ASan build exit marker $ grep -c "error:\|warning:" /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check ASan build progress $ tail -2 /tmp/us056_asan_build.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -2 /tmp/us056_asan_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check ASan build progress $ tail -2 /tmp/us056_asan_build.log
+[94m[Monitor][0m Wait for ASan build completion $ grep "^EXIT=" /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Monitor][0m Wait for ASan build exit marker $ tail -1 /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Inspect ASan build log tail and active compilers $ ps -eo pid,etime,args | grep -E "clang|cmake" | grep -v grep | cut -c1-120 | head -4
+The ASan build is running; its process is only about 19 seconds old, so it's early in the run. I'll wait for the completion notice.
+[94m[Monitor][0m Wait for ASan build completion marker $ grep "^EXIT=" /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check ASan build status after wait $ ps -eo pid,etime,args | grep -E "clang\+\+|cmake --build" | grep -v grep | cut -c1-100 | head -3
+The process still shows only 25 seconds of elapsed time after several wait cycles, so the reconfigure step may be stuck. I'll check its CPU use and open files.
+[94m[Bash][0m Check CPU state of the regenerating CMake process $ date
+The process is in disk wait while regenerating on the `/mnt/d` filesystem, so it's progressing, just slowly. I'll keep waiting on the completion marker.
+[94m[Monitor][0m Wait for ASan build completion marker (second watch) $ grep "^EXIT=" /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check ASan build progress and time $ ps -eo pid,etime,stat,args | grep -E "clang|cmake" | grep -v grep | cut -c1-110 | head -3
+The clock moved only seconds, so my scheduled waits aren't tracking real time; the completion monitors are the reliable signal. Meanwhile the Windows gate runs on separate build directories, so I'll start it now in parallel, after checking no other batch is running.
+[94m[Bash][0m Launch Windows gate batch from WSL in background $ echo launched
+[94m[Monitor][0m Wait for Windows gate batch completion marker $ grep "^CMD_EXIT=" /tmp/us056_cmd_result.txt
+[94m[Monitor][0m Wait for ASan build completion (third watch) $ grep "^EXIT=" /tmp/us056_asan_build.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check progress of ASan build and Windows batch $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us056
+Both jobs are underway: the Windows batch has started `ValidateVendor`, and the ASan build is still regenerating. I'll wait for their completion notices.
+[94m[Monitor][0m Wait for Windows gate batch completion (second watch) $ grep "^CMD_EXIT=" /tmp/us056_cmd_result.txt
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check ASan build and Windows validate progress $ tail -c 300 /mnt/c/Users/bucha/AppData/Local/Temp/us056_validate.log 2>/dev/null
+Status: the Linux work is done and verified. The Windows gates and the ASan build are still running, so this is a checkpoint, not the finished story.
+
+**Done and verified on Linux (clang 10, debug):**
+- `engine/script/include/engine/script/script_runner.hpp` and `src/script_runner.cpp` are new. `ScriptRunner` gives each attached instance its own Lua environment and runs the callbacks in this order:
+  - `attach` runs the chunk and calls no callback.
+  - `begin_frame` tears down dead entities, then runs `create` and `start`.
+  - `fixed_update` runs once per fixed step, then `update` runs once per frame.
+  - `detach` and `stop_all` run `destroy`.
+- A callback that raises marks only its own instance `Faulted`. Its later callbacks, including `destroy`, do not run, and the error is queued in the engine's console queue.
+- `reload` compiles the new chunk first, so a syntax error leaves the running instance untouched. With `PreserveExports` it carries `export_state` into `import_state`; with `ResetState` it starts clean.
+- Event subscriptions now carry an owner tag, so teardown releases everything an instance subscribed to.
+- `tests/src/script_lifecycle_tests.cpp` has 15 cases. They cover order, error isolation, reload, and Play/Stop with 20 cycles and a finalizer count to prove no Lua references remain. They also cover streaming-style entity destruction and per-instance subscription ownership.
+- Results: `cmake --build --preset linux-debug` passes with zero warnings, and `ctest --preset linux-unit` passes 100%. The full unit suite runs 706 cases, all passing.
+
+**Still running:**
+- `cmake --build --preset linux-asan`, then `ctest --preset linux-sanitize`.
+- The Windows gate batch (`us056_gates.bat`): ValidateVendor, `win-dev`, `win-debug` build, `win-unit`. I launched it from WSL, and its results go to `%TEMP%\us056_rc_*.txt`.
+
+**Not done yet:**
+- The progress log entry for US-056.
+- The status call. US-056 stays open until the ASan and Windows results are in, and the linux-gcc CI job still needs GCC 11+, which this host lacks.
+- `engine_bench` (no harness exists yet) and GUI checks are not applicable to this story.
+
+I'll record the results and the status call in `.ralph-tui/progress.md` when the remaining gates report.
+The Windows gates all returned 0. I'll check the ASan build and the Windows build log for warnings before I trust those codes.
+[94m[Bash][0m Check ASan status and Windows build warnings and test tail $ tail -3 $W/us056_test.log
+[94m[Bash][0m Confirm Windows unit test summary line $ grep -c "script_lifecycle" $W/us056_build.log
+Windows gates pass: ValidateVendor, `win-dev`, `win-debug`, and `win-unit` (100%, 21 of 21, 0 `warning C` lines). I'm waiting on the ASan build before the sanitizer run.
+[94m[Monitor][0m Wait for ASan build completion (fourth watch) $ grep "^EXIT=" /tmp/us056_asan_build.log
+The Windows results are in. The ASan build is still going, so I'll end this turn and resume when its completion notice arrives.
+
+**Status so far**
+- **Windows gates:** all four pass: `ValidateVendor`, `win-dev`, `win-debug` build (no `warning C` lines), and `win-unit` at 100%, 21 of 21.
+- **Linux gates:** `ValidateVendor`, `linux-dev`, `linux-debug` build with zero warnings, and `linux-unit` at 100% all pass. The unit suite runs 706 cases, all passing.
+- **Still running:** `cmake --build --preset linux-asan`. After it finishes I'll run `ctest --preset linux-sanitize`.
+- **Not run:** `linux-gcc` (this host has only GCC 9.4, which cannot build Jolt; the CI job must cover it). `engine_bench` and GUI checks don't apply yet.
+
+When the ASan build and sanitizer run finish, I'll write the US-056 entry in `.ralph-tui/progress.md` with the results and the status call.
+[94m[Bash][0m Check whether the ASan build is still running $ ps -eo pid,etime,stat,args | grep -E "clang\+\+|cmake" | grep -v grep | cut -c1-110 | head -3
+The ASan build is at the link step for the test binary. I'll re-arm the watch with a longer timeout.
+[94m[Monitor][0m Wait for ASan build completion (re-armed) $ grep "^EXIT=" /tmp/us056_asan_build.log
+The ASan build is still linking the sanitizer test binary, so the sanitizer run hasn't started. My watch on the build's completion marker has been re-armed, and I'll resume with the `linux-sanitize` run once it reports. The Windows gates and Linux dev/debug/unit gates already pass, so I'm holding the progress entry until the sanitizer result is in.
+[94m[Bash][0m Check ASan build status $ ps -eo pid,etime,args | grep -E "clang\+\+|cmake --build" | grep -v grep | cut -c1-90 | head -3
+The ASan link is still running; the watch expired without an event, so I'll re-arm it.
+[94m[Monitor][0m Wait for ASan build completion (re-armed again) $ grep "^EXIT=" /tmp/us056_asan_build.log
+The ASan build is still in its link step (the sanitizer test binary), so the `linux-sanitize` run hasn't started. I've re-armed the completion watch. The Windows gates and the Linux dev, debug, and unit gates already pass. I'll write the progress entry once the sanitizer result is in.
+[94m[Bash][0m Check ASan build status again $ ps -eo pid,etime,args | grep -E "clang\+\+|cmake --build" | grep -v grep | cut -c1-90 | head -3
+The ASan build is still linking `engine_tests` with sanitizers, about three minutes in, and its 1800-second timeout hasn't been reached. I'm not starting the `linux-sanitize` run until the build reports success. The Windows gates and the Linux dev, debug, and unit gates already pass, and the progress entry waits for the sanitizer result.
+The ASan build finished with exit 0. Next I'll run the `linux-sanitize` tests.
+[94m[Bash][0m Run sanitizer test suite in background $ echo "EXIT=$?" >> /tmp/us056_sanitize.log) & echo started
+[94m[Monitor][0m Wait for linux-sanitize ctest completion $ grep -c "ERROR: \|runtime error" /tmp/us056_sanitize.log
+The ASan build finished with exit 0 and no compiler errors or warnings. I've started `ctest --preset linux-sanitize` in the background, and I'm waiting for it to finish. The progress entry follows once the sanitizer result is in.
+[94m[Bash][0m Check sanitizer test progress and sanitizer reports $ grep "^EXIT=" /tmp/us056_sanitize.log
+The sanitizer test run has started and is still in progress, with no sanitizer reports so far. I'll wait for its exit marker before writing the progress entry.
+[94m[Bash][0m Check sanitizer run progress $ grep -c "ERROR: AddressSanitizer\|runtime error" /tmp/us056_sanitize.log
+[94m[Monitor][0m Wait for linux-sanitize ctest exit marker (re-armed) $ grep -c "ERROR: AddressSanitizer\|runtime error" /tmp/us056_sanitize.log
+The `linux-sanitize` run is still going: the unit suite under ASan/UBSan hasn't finished, and no sanitizer reports have appeared. I've re-armed the watch for its exit marker. The progress entry waits on that result.
+[94m[Bash][0m Confirm sanitizer pass line and progress file layout $ grep -n "^## Codebase Patterns" .ralph-tui/progress.md
+Sanitizer run passes: 22 of 22, no reports. I'll record the story in the progress log, with the codebase pattern at the top and the entry at the end.
+[94m[Bash][0m Append US-056 progress entry and codebase pattern $ the CI job must cover it), `engine_bench --suite acceptance` (no harness yet, US-074), and GUI check...
+US-056 is implemented, and every Linux and Windows gate I could run passes. The story is **Partial**, not complete: the `linux-gcc` gate can't run on this host, which has only GCC 9.4, and Jolt needs GCC 11+. The CI job has to cover it.
+
+**What's in place**
+- `ScriptRunner` (`engine/script/src/script_runner.cpp`) attaches a Lua chunk to an entity. Each instance has its own environment, and the callbacks run in this order:
+  - `begin_frame`: `create`, then `start`, for each new instance.
+  - `fixed_update` runs once per fixed step, then `update` once per frame.
+  - `detach` and `stop_all`: `destroy`.
+- A callback that raises faults only its own instance, which then gets no further callbacks, `destroy` included. The error goes to the engine's console queue, and other instances keep running.
+- `reload` compiles the new code before it touches the old code, so a syntax error leaves the running instance unchanged. With `PreserveExports`, `export_state` values are passed to `import_state`; with `ResetState`, the new code starts fresh.
+- Event subscriptions are tagged with their owning instance and released with it. Repeated Play/Stop and entity destruction (streaming) leave no subscriptions or Lua references behind.
+
+**Gates**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` (zero warnings), `linux-unit` (100%), and the `linux-asan` build all pass. `linux-sanitize` passes 22 of 22 with no ASan or UBSan reports.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` (no `warning C` lines), and `win-unit` (21 of 21) all pass.
+- The new test file, `tests/src/script_lifecycle_tests.cpp`, has 15 unit cases, and all 706 unit cases pass.
+
+**Not run**
+- `linux-gcc*`, which needs GCC 11+.
+- `engine_bench --suite acceptance`. There is no bench harness yet (US-074).
+- GUI checks. No runtime window or editor exists yet.
+
+**Choices I made that you may want to change**
+- Script attachments live in `ScriptRunner`, keyed by entity handle, rather than as a reflected ECS component. The scene format and component catalog don't carry script components yet.
+- A dead entity's instance is torn down silently at the next `begin_frame`, with no `destroy` call.
+
+The progress entry is in `.ralph-tui/progress.md`.
+Nothing left to advance: US-056 is complete except the `linux-gcc` gate, which needs a GCC 11+ CI job this host can't provide, and the repo has no PR to maintain. I'm stopping the loop.
+[94m[ScheduleWakeup][0m
+Nothing is left to advance on US-056, so I've stopped the loop. The only open item is the `linux-gcc` gate, which needs the GCC 11+ CI job. No PR exists for this work, and no monitors are still armed.

@@ -1,0 +1,40 @@
+# Iteration 447 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T03:13:30.011Z
+- **Ended At**: 2026-10-25T03:13:46.945Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2802
+- **Total Tokens**: 2824
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the script lifecycle code and the progress log.
+[94m[Bash][0m List script engine files and recent progress log $ tail -n 80 .ralph-tui/progress.md
+The log shows US-056 implemented and every gate passing except `linux-gcc`, which needs GCC 11+. Before repeating the same re-check, I'll see whether a newer compiler exists and whether anything changed since the last entry.
+[94m[Bash][0m Check compilers and files changed since last log entry $ find engine tests cmake -newer .ralph-tui/progress.md -type f | head
+US-056 is not complete, so I'm not emitting the COMPLETE signal. The lifecycle code is implemented and every gate I can run here passes. The one blocker is the Linux/GCC gate, which this machine cannot run.
+
+**What's verified (from the log, no source change since):**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, `linux-unit` (22 of 22), `linux-asan` build, and `linux-sanitize` (22 of 22, no ASan/UBSan reports).
+- Windows (MSVC): `ValidateVendor`, `win-dev`, `win-debug` with 0 `warning C` lines, and `win-unit` (21 of 21).
+- Lifecycle tests: 15 cases in `tests/src/script_lifecycle_tests.cpp`, covering the create/start/update/fixed_update/destroy order, per-instance faulting, reload with `PreserveExports` or `ResetState`, and owner-tagged subscription release.
+
+**What's open:**
+- **`linux-gcc` gate and its CI job.** The Jolt code needs GCC 11+. This machine has only g++-9 and clang++-10, so `cmake --preset linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` cannot run here. Installing a newer compiler would be a system change outside the repo, so I didn't attempt it.
+- **`engine_bench --suite acceptance`.** There is no harness yet (US-074), so this is not run.
+- **GUI checks.** None apply, since there is no runtime window or editor yet.
+
+I did not re-run the gates or add another progress entry. The last several entries were identical re-checks with no source change, and nothing under `engine/`, `tests/`, or `cmake/` has changed since the last one.
+
+**To finish:** install GCC 11+ (for example `sudo apt install g++-11`) and run the three `linux-gcc` commands. If that passes, the story can be closed. Otherwise I'd leave US-056 as Partial.

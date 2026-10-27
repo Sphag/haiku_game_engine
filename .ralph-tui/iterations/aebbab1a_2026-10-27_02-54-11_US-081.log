@@ -1,0 +1,121 @@
+# Iteration 1275 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:54:11.934Z
+- **Ended At**: 2026-10-26T23:54:41.723Z
+- **Duration**: 29s
+- **Input Tokens**: 36
+- **Output Tokens**: 4206
+- **Total Tokens**: 4242
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and what the quality gates need.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The progress log shows US-081 has been re-checked several times and left open on environment blockers. Before repeating any gate, I'll check whether anything changed since the last recorded run, and read the Windows gate notes.
+[94m[Bash][0m Check changes since last gate run and read Windows gate notes $ which g++-11 clang++-14 2>&1
+
+[91m[Error: Exit code 1
+total 968
+drwxrwxrwx 1 max max   4096 Oct 27 02:28 .
+drwxrwxrwx 1 max max   4096 Oct 27 02:20 ..
+-rwxrwxrwx 1 max max   1698 Oct 27 02:20 win-debug-build.log
+-rwxrwxrwx 1 max max    320 Oct 27 02:20 win-editor-dx12.log
+-rwxrwxrwx 1 max max 976043 Oct 27 02:28 win-editor-smoke-launch.png
+-rwxrwxrwx 1 max max    322 Oct 27 02:27 win-editor-vulkan.log
+-rwxrwxrwx 1 max max    465 Oct 27 02:20 win-gpu-dx12.log
+-rwxrwxrwx 1 max max    482 Oct 27 02:20 win-gpu-vulkan.log
+-rwxrwxrwx 1 max max   4208 Oct 27 02:20 win-unit-ctest.log
+---
+./tasks/prd.json
+./docs/acceptance.md
+./third_party/dxc/utils/GetCommitInfo.py
+./artifacts/reports/us081/win-editor-smoke-launch.png
+---
+---
+name: reference-windows-gate-runs
+description: "How to run the Windows quality gates and the real-GPU suite from WSL for this repo (cmd.exe + .bat in the user's Temp dir)"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: a4687e22-62cc-49f2-88b8-2ac41e53e24d
+  modified: 2026-10-22T22:06:46.509Z
+---
+
+Windows gates cannot run from WSL's toolchain. They run through `cmd.exe` on the Windows host, which is the same tree at `D:\dev\haiku_game_engine`.
+
+- Write a `.bat` that calls `vcvars64.bat` (VS 18 Community), `cd /d D:\dev\haiku_game_engine`, then runs each gate and prints `name=%ERRORLEVEL%` on its own line with no redirect. Copy it to `/mnt/c/Users/bucha/AppData/Local/Temp/` and launch from WSL as `cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\<name>.bat" > result.txt 2>&1`, then read the codes from `result.txt`.
+- The `.bat` needs CRLF line endings: after writing it from WSL, run `sed -i 's/$/\r/' <file>`.
+- Do not write exit codes with `echo name=%ERRORLEVEL%>> "%RES%"`. On 2026-10-22 that line printed a blank code and wrote no file, even with CRLF. The stdout capture above worked, and it is the only method checked so far.
+- On 2026-10-23 (US-017) the `echo step=%ERRORLEVEL%` lines did not reach the stdout capture, which held only `[exited with code 0]`. Use `set RC=%ERRORLEVEL%` then `(echo rc=%RC%)> %TEMP%\rc.txt` on its own line, and read the per-step logs from Temp.
+- Run one gate batch at a time. A second `cmd.exe` during a run makes both fail on file locks.
+- The Windows host has a real NVIDIA GeForce RTX 5080, so `engine_tests --suite gpu --backend dx12` runs there and is a valid GPU report. WSL and software adapters are not.
+- Check the logs, not only exit codes: a build log can be short when the build directory is already warm.
+- On 2026-10-23 (US-033) a relaunch while the first run was still going mixed both runs in one `*_rc.txt`, and the GPU suites ran a stale `engine_tests.exe`. Before relaunching, wait until `pgrep -f <bat name>` finds nothing, and delete the result file then. A failed build does not stop the batch, so the test steps after it run an old binary: check the build log before you trust `unit=0` or `gpu=0`.
+---
+---
+name: feedback-windows-gate-overlap
+description: "Before launching a Windows gate or GPU batch from WSL, confirm no earlier cmd.exe batch is still running; a stale batch keeps running its GPU steps after a relaunch"
+metadata:
+  node_type: memory
+  type: feedback
+  originSessionId: 30fb1424-41dc-4e24-9498-83de33d6f9dd
+  modified: 2026-10-23T19:50:41.209Z
+---
+
+On 2026-10-23 (US-038) a relaunch of the Windows gate batch started while the first batch was still in its GPU step. Two batches shared
+the Temp result files, and the first one kept running a stale `engine_tests.exe`. The fix was to terminate the matching processes and relaunch.
+
+**Why:** the first batch had reported `build=2` (a compile error) and then went on to the GPU steps with the old binary, so its numbers
+looked like results of the new code.
+
+**How to apply:**
+- Before each launch, check for the batch by its own name in the process list (`ps -eo pid,args | grep <name>.bat`). Use a name that
+  does not also appear in the command you run to check.
+- To stop leftovers, use PowerShell `Get-CimInstance Win32_Process` filtered by command line, then `Invoke-CimMethod ... Terminate`. The
+  filter string also matches the PowerShell process itself, so use a pattern that the check command does not contain.
+- A build failure does not stop the batch. Read the build log before trusting `unit=` or `gpu_*=` lines.
+- Keep one background waiter per batch, and make it wait on the batch's done file with a bounded timeout. Repeated Monitors on the same
+  file re-deliver the same result many times.
+- 2026-10-23 (US-043) it happened again: I relaunched after the done file was written, but the batch's GPU steps were still running, so
+  the link failed with LNK1168 (`engine_tests.exe` locked) and the rc file mixed both runs. Check the process list after the done file,
+  not only the done file. `tasklist /FI` fails under WSL's `cmd.exe` quoting; run `cmd.exe /c tasklist` and grep, or run a `.ps1` file.
+  Kill a stale batch with `taskkill /PID <pid> /T /F` (the `/T` takes its children), then relaunch.
+
+See [[reference-windows-gate-runs]] for the batch template.
+- 2026-10-24 (US-045): `pgrep -f "us04.*gate.bat"` matched its own bash shell, because the pattern sat in the command line, so it looked like a stale batch. Check with `ps -eo pid,args | grep <name>.bat | grep -v grep` and a name that the check command does not contain.
+---
+ls: cannot access '/dev/dri': No such file or directory][0m
+Windows gate logs exist from 02:20, newer than the last progress note. I'll read them and the acceptance doc to see what's already recorded.
+[94m[Bash][0m Read recorded gate logs and acceptance doc $ cat /mnt/d/dev/haiku_game_engine/docs/acceptance.md
+The recorded evidence matches the tree. Nothing under source, tests, or build changed after the 02:20 gate runs, so re-running them would add no evidence. I'll log this pass in the progress file.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. The documentation and the gate evidence are in place, but several acceptance items need hardware, a decision from you, or code that doesn't exist yet.
+
+**What I checked this pass**
+- Nothing under source, tests, or build changed after the 02:20 gate runs (`find -newer` on `artifacts/reports/us081`). I did not re-run the gates.
+- The recorded results in `artifacts/reports/us081/` agree with `docs/acceptance.md`:
+  - Windows debug build and unit ctest passed.
+  - `engine_tests --suite gpu` passed on DX12 and Vulkan on the RTX 5080.
+  - `engine_tests --suite editor` passed on DX12 and Vulkan.
+- The docs listed in the story exist under `docs/`, and the README covers the required sections.
+
+**What blocks sign-off**
+1. **Native Linux Vulkan GPU report.** `/dev/dri` is absent here, so no native Linux device is available. WSL does not count.
+2. **Full acceptance benchmark.** `engine_bench --suite acceptance` does not complete on DX12 or Vulkan. The render, streaming, all-features, and physics scenes do not yet produce GPU timestamps, so runs report `incomplete`. This is engineering work, not a rerun.
+3. **FSR 2 permutations.** The vendored tree lacks the generated `*_permutations.h` files, so temporal upscaling is unavailable. This needs your choice of vendoring route.
+4. **linux-gcc.** The local GCC 9.4 cannot build Jolt. The gate needs GCC 11 or newer.
+5. **LICENSE.** The repository has no license file. This is your decision, so I did not add one.
+6. **Visual smoke tests.** Windows has a launch-only screenshot. The full action sequence is not run, and Linux has no native run.
+7. **Real sample-game package.** The packaging path is covered by the editor suite, but no package from a real game has been built on either OS.
+
+I appended a status entry to `.ralph-tui/progress.md`. The next useful step depends on your answers to items 3 and 5, and on whether you want the timestamp work for item 2 started.

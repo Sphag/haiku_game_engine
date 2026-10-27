@@ -1,0 +1,44 @@
+# Iteration 654 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:01:43.228Z
+- **Ended At**: 2026-10-26T02:02:09.114Z
+- **Duration**: 25s
+- **Input Tokens**: 42
+- **Output Tokens**: 4403
+- **Total Tokens**: 4445
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark code.
+[94m[Bash][0m Read progress log and benchmark tool layout $ grep -n "US-076" -r .ralph-tui/progress.md | head
+The progress log shows US-076 is blocked on a user decision, so I'll check whether anything has changed since the last status check before deciding whether to rerun anything.
+[94m[Bash][0m Check source changes since last benchmark reports $ ls artifacts/bench/us076-*/ 2>/dev/null | head -30
+[94m[Bash][0m Compare source and report timestamps $ date
+The timestamps contradict the last status note: six of the eight reports predate the final `render_stress.cpp` edit, not postdate it. I'll check whether that edit could change those runs.
+[94m[Bash][0m Locate attach and path guard in driver $ grep -n "attach_meshlets\|geometry_path\|disable_mesh\|Meshlets" tools/benchmark/src/render_stress.c...
+The guard only changes behaviour when the path is `Meshlets` and the renderer has no mesh shaders, so the six older reports still describe the current code. I'll record the correction in the progress log so the next pass doesn't repeat the wrong claim.
+[94m[Bash][0m Append correction entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. The story is not complete, so no COMPLETE signal....
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing new was run this pass, and it is blocked on your decision.
+
+**What is stuck**
+1. **Scene counts fail the contract.** At the route start the scene has 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. The instances are spread uniformly over 8192 m, so the route start sees about 330 items. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `workload_expected.json`. The contract forbids reducing the workload, so I need you to approve that change or tell me to report these as the measured result.
+2. **The full_1080 profile is unsupported.** The vendored FSR 2 permutation headers are missing, so only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and `linux-gcc` (GCC 9.4 cannot build Jolt).
+
+**What is done**
+- The eight `artifacts/bench/us076-*` reports cover indexed, indirect and meshlet paths on DX12 and Vulkan, plus forced mesh-shader-off runs. The fallback resolves correctly, and disabled features are not reported as enabled.
+- The Windows and Linux gates passed on the earlier tree. The Linux gates were re-checked in the last pass.
+
+**Correction to the last status note.** It said every report postdates the final `render_stress.cpp` edit at 04:15:43. That was wrong. Six reports predate it. The edit only adds a `geometry_path() == Meshlets` check to the `attach_meshlets` guard at `render_stress.cpp:242`. Indexed and indirect runs never reached that attach, and mesh-shader-on meshlet runs still take it, so the six reports remain valid and I did not rerun them. I appended this correction to `.ralph-tui/progress.md`.
+
+**What I need from you:** a decision on the placement change in item 1. Everything else waits on it.

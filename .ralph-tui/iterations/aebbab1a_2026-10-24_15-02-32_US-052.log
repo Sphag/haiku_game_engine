@@ -1,0 +1,41 @@
+# Iteration 191 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T12:02:32.404Z
+- **Ended At**: 2026-10-24T12:07:35.742Z
+- **Duration**: 5m 3s
+- **Input Tokens**: 30
+- **Output Tokens**: 3118
+- **Total Tokens**: 3148
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current physics code to see how much of US-052 already exists.
+[94m[Bash][0m Read progress log tail and physics memory $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls engine/physics && echo ---- && cat /home/max/.c...
+The log shows US-052 has been re-verified many times and held at Partial, blocked on the `linux-gcc` gate. I'll check whether a GCC 11+ compiler has appeared since then, and re-run the Linux gates on the current tree.
+[94m[Bash][0m Check toolchains and run Linux clang gates $ tail -n 3 /tmp/ut.log
+[94m[Bash][0m Get unit pass count and check for source changes $ echo "newer-count: $(find engine/physics tests/src/physics_world_tests.cpp -newer .ralph-tui/progres...
+[94m[Bash][0m Append re-verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is still **Partial**, so I'm not emitting the COMPLETE signal. Two gates can't run on this machine, and no source changed this pass.
+
+**Re-verified on this Linux tree (clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, 0 warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 passed
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`: blocked.** Only GCC 9.4 is installed. Jolt needs GCC 11+ (`__builtin_bit_cast`), and there is no conda, micromamba, or docker, and `sudo` needs a password. This needs a GCC 11+ environment to close.
+- **`engine_bench --suite acceptance`: not runnable.** No benchmark harness exists yet (US-074).
+- **Windows gates: not re-run this pass.** The earlier progress entry records them passing on the same source, and no physics file has changed since.
+
+I appended a short re-verification entry to `.ralph-tui/progress.md`. The log already has many near-identical Partial entries, so it may be worth consolidating them.

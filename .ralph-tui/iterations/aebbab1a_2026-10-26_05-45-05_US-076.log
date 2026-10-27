@@ -1,0 +1,39 @@
+# Iteration 789 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:45:05.758Z
+- **Ended At**: 2026-10-26T02:45:21.249Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1587
+- **Total Tokens**: 1609
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and whether any of US-076 already exists.
+[94m[Bash][0m Inspect repo root, progress log, and US-076 references $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-076" -r --include=*.md --include=*.cpp --in...
+The progress log shows 27 prior status checks, all blocked on a user decision. I'll confirm the state hasn't changed before deciding anything.
+[94m[Bash][0m Check mtimes, workload version, PRD decision line, and latest bench runs $ ls -l --time-style=+%H:%M tools/benchmark/src/render_stress.cpp tools/benchmark/src/workload.cpp ben...
+US-076 is not complete, and I did not make any changes this pass. Nothing in the tree has moved since the last status check: the sources, workload, and manifest have the same timestamps, and `kWorkloadVersion` is still 1.
+
+**What's blocked:** the measured `render_stress` run fails the contract. The route start has 312,068 submitted triangles against the required 2,000,000 on the indexed path (PRD line 875). Frame time is p99 35–47 ms against a 16.7 ms budget. The triangle count comes from the seeded placement, and the start pose comes from the manifest route. Both are pinned by digest and hash. Changing either one changes the fixed contract, and PRD line 722 reserves that for your decision.
+
+**What I need from you (pick one):**
+1. Approve a placement or route-start change. I would then bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, update the manifest hash, and re-run the measurements.
+2. Accept the failing measured run as the US-076 result, and record the shortfall in the report rather than fixing it.
+
+**Other open items, independent of that decision:**
+- The `full_1080` profile is unsupported until the FSR 2 permutation tables exist. The vendoring route is also your call.
+- Native Linux Vulkan GPU runs and the linux-gcc gate have not been run. WSL has no Vulkan device, and GCC 9.4 cannot build Jolt.
+- The Linux unit suite passed 30/30 and `engine_workload --check` matched 4 scenes in the last pass. I re-ran the workload check this session only to confirm the state, not for a new build.
+
+I have not emitted the COMPLETE signal, because the acceptance criteria cannot pass on the current placement.

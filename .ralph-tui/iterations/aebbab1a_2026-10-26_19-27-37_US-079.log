@@ -1,0 +1,44 @@
+# Iteration 1040 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:27:37.990Z
+- **Ended At**: 2026-10-26T16:27:52.587Z
+- **Duration**: 14s
+- **Input Tokens**: 24
+- **Output Tokens**: 2186
+- **Total Tokens**: 2210
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether the prerequisite stories exist.
+[94m[Bash][0m Inspect repo root, progress log, and US-079 references $ grep -n "US-079\|all_features" -r --include=*.md --include=*.cmake --include=*.txt --include=*.json ...
+[94m[Bash][0m List tools, benchmarks, and examples directories $ git status 2>&1 | head -3
+The progress log shows this story has been blocked for many passes on user decisions. I'll re-verify the blockers and then report.
+[94m[Bash][0m Re-verify the blocking facts for US-079 $ grep -n "US-079" -A3 tasks/*.md 2>/dev/null | head -5
+US-079 is not complete, so I am not emitting the COMPLETE signal. I re-checked the blockers in this pass and made no source changes.
+
+**What is missing, verified just now:**
+- **No `all_features` runner.** `tools/benchmark/src` has no all_features file. The tests `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp` exist, but the scene they exercise does not.
+- **No sample project.** `samples/` does not exist, so the `samples/all_features` deliverable is absent. The runtime component catalog is empty in this build, so a scene with components would be refused. That needs a decision.
+- **The benchmark route is still a proposal.** `benchmarks/manifest.json` has `all_features` with `implementation: none`, and its route `all_features_route_v1` is unapproved. The fixed benchmark contract depends on it.
+- **FSR 2 permutation headers are missing.** `third_party/fsr2` has 0 `*_permutations.h`, so `full_1080` can only be reported unsupported.
+- **Windows GPU and GUI runs are not done.** The tour, the profiles, and the live editor run with package and relaunch need a Windows GPU and display session.
+
+**Linux gates:** the last run, in the log's check 116, passed: ValidateVendor, `linux-dev`, `linux-debug` build, and `linux-unit` at 30/30. I did not re-run them in this pass. The Windows gates were not run here.
+
+**What I need from you to proceed:**
+1. Approve `all_features_route_v1` as written in the manifest, or give a revision.
+2. Either vendor the FSR 2 permutation headers, or confirm that `full_1080` stays unsupported for this story.
+3. Decide how to handle the runtime component catalog for `samples/all_features`.
+4. Arrange a Windows GPU and GUI session for the tour, profiles, and editor scenario.
+
+Once you answer 1 to 3, I can build the `all_features` runner and the sample scene. Item 4 is needed before the Windows and GPU acceptance items can be marked done.

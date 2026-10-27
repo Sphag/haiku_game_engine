@@ -1,0 +1,49 @@
+# Iteration 645 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T00:31:44.261Z
+- **Ended At**: 2026-10-26T00:32:17.233Z
+- **Duration**: 32s
+- **Input Tokens**: 36
+- **Output Tokens**: 4229
+- **Total Tokens**: 4265
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and locate render_stress references $ ls tools/benchmark/src benchmarks 2>/dev/null
+A previous US-076 session left notes: the driver exists, but the DX12 acceptance runs fail the frame-time and triangle checks. I'll check the contract and the current manifest before deciding what to do next.
+[94m[Bash][0m Read manifest, PRD story, and bench artifacts $ ls artifacts/bench/* 2>/dev/null | head -30
+The earlier session left artifacts for DX12 and Vulkan across all four paths. I'll read their reports to see which runs finished and what they measured.
+[94m[Bash][0m Summarize each US-076 bench report $ done
+Most of the reports are stale. They show `missing shader for post taa`, the bug the last session fixed, so only the DX12 indexed rerun reflects the current code. I'll record this state in the progress log rather than rerun the GPU batch, since the frame-time result depends on a contract decision.
+[94m[Bash][0m Append US-076 status entry to progress log $ (b) change instance placement (a workload change: bump `kWorkloadVersion`, regenerate `workload_expe...
+US-076 is not complete. The render benchmark exists, but the acceptance runs do not pass and most of the evidence is stale. I did not rerun anything this pass, so no new results are claimed.
+
+**What the code and reports show**
+- **Scene and route:** `benchmarks/manifest.json` defines `render_stress` with the contract counts and `render_route_v1`. `tools/benchmark/src/render_stress.{hpp,cpp}` is the driver, with `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`. The last session's notes say its unit tests pass (`engine_tests --suite unit`: 1019 passed) and the Linux gates passed.
+- **DX12 indexed, current code:** exit 1. The start frame submits 312,068 triangles against the 2,000,000 floor, and p99 is over 16.7 ms. The screenshots are in `artifacts/bench/us076-dx12-indexed/screenshots`.
+- **Other seven reports:** DX12 indirect, meshlets, and meshlets-nomesh, and all four Vulkan paths, predate the post-TAA shader fix. They show `missing shader for post taa` and exit 3, so they are void and must be rerun.
+
+**Decision needed from you**
+The triangle floor and frame budget fail because instances are placed uniformly over the 8192 m world. The route start sees about 330 items. The contract says not to reduce the workload, so there are two options:
+1. Keep the contract and report the failing numbers as the measured result.
+2. Change instance placement so more content is in view at the route start. This changes the workload digests, so `kWorkloadVersion` and `benchmarks/workload_expected.json` would need regenerating.
+
+I'd suggest option 2, but it is a workload change, so I'll wait for your call.
+
+**Still open after that decision**
+- Rerun the seven void reports on the current tree.
+- Mesh-shader-off evidence on the current code (the `nomesh` run is one of the void reports).
+- Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) and Linux gates on the current tree. The last session reported these passing, but they were run before the latest changes.
+
+I appended a status entry to `.ralph-tui/progress.md` recording all of this.

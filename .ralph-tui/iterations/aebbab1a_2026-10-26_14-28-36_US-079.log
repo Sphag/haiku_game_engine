@@ -1,0 +1,55 @@
+# Iteration 883 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:28:36.588Z
+- **Ended At**: 2026-10-26T11:28:53.669Z
+- **Duration**: 17s
+- **Input Tokens**: 20
+- **Output Tokens**: 2035
+- **Total Tokens**: 2055
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any `all_features` work already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features references $ ls && wc -l .ralph-tui/progress.md && tail -80 .ralph-tui/progress.md && grep -ril "all_features" --...
+[94m[Bash][0m Check for changes since last log and host toolchain $ ls /dev/dri 2>/dev/null)
+
+[91m[Error: Exit code 2
+---
+-rwxrwxrwx 1 max max 666076 14:26 .ralph-tui/progress.md
+-rwxrwxrwx 1 max max   9732 14:15 tests/src/all_features_editor_tests.cpp
+-rwxrwxrwx 1 max max  11846 13:35 tests/src/all_features_tests.cpp
+---
+g++ (Ubuntu 9.4.0-1ubuntu1~20.04) 9.4.0
+clang version 10.0.0-4ubuntu1 
+LICENSE.txt
+src
+0][0m
+The story is not complete, and I did not change any code this iteration. I'm not emitting the COMPLETE signal.
+
+**Where things stand**
+
+- `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` hold the CPU-side work from earlier iterations. The combined scene, the editor scenario (scene, material, animation, and terrain edits with undo/redo, Play/Stop, and a Build Game verify), and the markers test all pass on Linux.
+- Nothing under `engine`, `tools`, `tests`, `benchmarks`, `docs`, or `cmake` is newer than the last recorded gate run (14:26 in `.ralph-tui/progress.md`), so the recorded results still describe this tree.
+- The Windows gates (`win-dev`, `win-debug`, `win-unit`, and the DX12 and Vulkan GPU suites) were recorded as passing in the 14:24 run.
+
+**Open acceptance items I could not close on this host**
+
+- **Automated tour with screenshots and an action log.** The current test checks markers in a CPU run. It has no GUI tour runner, so there are no screenshots or action log. This needs a native Windows GUI session.
+- **GI/RT/upscale profiles for `all_features`.** FSR 2 cannot link because `third_party/fsr2` has no `*_permutations.h` files (0 found). The GI and RT profiles need a GPU.
+- **Forced indirect and meshlet geometry paths.** These need a GPU run on Windows or native Linux.
+- **Package relaunch.** Only Build Game's own verify step runs. A second launch of the published folder has not been done.
+- **Native Linux Vulkan GPU suite.** This host has no `/dev/dri` render device, so WSL cannot run it.
+- **`engine_bench --suite acceptance`.** `all_features` is `implementation: none` in `benchmarks/manifest.json`, so there is no runner to execute.
+- **Linux/GCC gate (`linux-gcc*`).** The host has only g++ 9.4 and clang 10. The GCC 11+ requirement is unmet.
+
+Finishing these needs a Windows GPU session, a native Linux Vulkan device, a GCC 11+ host, and the FSR 2 permutation headers. Once those are available, the remaining work is the tour runner, the profile and forced-path runs, the package relaunch, and the acceptance bench entry for `all_features`.

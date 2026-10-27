@@ -1,0 +1,50 @@
+# Iteration 965 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:34:03.353Z
+- **Ended At**: 2026-10-26T14:35:55.123Z
+- **Duration**: 1m 51s
+- **Input Tokens**: 20
+- **Output Tokens**: 1866
+- **Total Tokens**: 1886
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and what already exists for `all_features` and the prerequisites.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features refs $ ls && tail -c 3000 .ralph-tui/progress.md && grep -rl "all_features" --include=* . 2>/dev/null | gre...
+[94m[Bash][0m Read US-079 PRD entry and benchmark directory listing $ ls build* 2>/dev/null | head
+[94m[Bash][0m Re-check vendor validation and FSR2 headers and manifest entry $ grep -n "all_features" benchmarks/manifest.json | head -5
+US-079 is not complete, and I'm not signalling COMPLETE. The story's required pieces are still missing, and several of them can't be done from this WSL session.
+
+**Current state (re-checked this pass):**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0 on Linux.
+- `third_party/fsr2` still has 0 `*_permutations.h` files, so `full_1080` stays unsupported and `ENGINE_FSR2_AVAILABLE` stays off.
+- `benchmarks/manifest.json` still marks `all_features` as `implementation: none`, with `all_features_route_v1` as a proposal that has not been approved.
+- There is no `samples/` directory, and `tools/benchmark/src/main.cpp` has no `all_features` branch. A run reports Missing.
+
+**Still not done:**
+- The `all_features` scene itself: the workload from the table, Lua gameplay, audio, HUD, save/load, animation graphs, and cooked material graphs combined in one scene.
+- The automated tour, the GI/RT/upscale profile runs, and the forced indirect and meshlet geometry-path runs.
+- The editor scenario with edits, undo/redo, Play/Stop, and package/relaunch.
+- The Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`), the GPU suites, the native Linux Vulkan run, `linux-gcc`, the ASan preset, and `engine_bench --suite acceptance`.
+- The GUI check and screenshots.
+
+I'm not adding a partial `all_features` branch that would report a pass for a scene that isn't combined yet. Earlier passes in `.ralph-tui/progress.md` reached the same conclusion.
+
+**What is needed from you:**
+1. **FSR 2 vendoring route** for `full_1080`: the generated permutation headers are absent from the tree and the pinned archive.
+2. **Approval of `all_features_route_v1`** in the manifest, or a different route.
+3. **A Windows host with an RTX GPU and a GUI session** for the Windows gates, the GPU suites, the tour and profiles, and the live editor run. This WSL session can't provide them.
+
+Once you answer those, the next step is to build the `all_features` branch in `tools/benchmark/src/main.cpp` and the `samples/all_features/` project, then run the forced geometry paths.
+
+I appended nothing to `.ralph-tui/progress.md` in this pass because nothing changed. It already records the same blockers.

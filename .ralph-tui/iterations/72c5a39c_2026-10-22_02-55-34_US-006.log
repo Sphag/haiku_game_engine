@@ -1,0 +1,79 @@
+# Iteration 1 Log
+
+## Metadata
+
+- **Task ID**: US-006
+- **Task Title**: Jobs and Controlled Shutdown
+- **Description**: As a developer, I want background task execution so that I do not block the main loop.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-21T23:55:34.376Z
+- **Ended At**: 2026-10-22T00:05:22.969Z
+- **Duration**: 9m 48s
+- **Input Tokens**: 140
+- **Output Tokens**: 12658
+- **Total Tokens**: 12798
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log, then check what already exists in the repo.
+[94m[Bash][0m List repo root and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md
+[94m[Bash][0m Read PRD structure and story index $ cat tasks/prd-open-world-engine.md | wc -l && grep -n "US-00\|Non-Goal\|Technical Consid\|Functional...
+[94m[Bash][0m Read PRD top sections and US-001 to US-006 $ sed -n 1,130p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read PRD requirements and existing repo files $ sed -n 730,830p tasks/prd-open-world-engine.md && find engine tests cmake tools docs -type f | head ...
+A `jobs.hpp`, `jobs.cpp`, and `core_jobs_tests.cpp` already exist, so US-006 may be partly done. I'll read them along with the lifecycle code and the test wiring.
+[94m[Bash][0m Read existing jobs header, source, and tests $ cat engine/core/include/engine/core/jobs.hpp && echo ======CPP && cat engine/core/src/jobs.cpp && ec...
+[94m[Bash][0m Read lifecycle code and test CMake wiring $ cat engine/runtime/include/engine/runtime/lifecycle.hpp && echo ======CPP && cat engine/runtime/src/...
+The job system is already substantially written. I'll read the rest of the header and the implementation to see what's actually there.
+[94m[Bash][0m Read remainder of jobs header $ wc -l engine/core/include/engine/core/jobs.hpp engine/core/src/jobs.cpp tests/src/core_jobs_tests.cp...
+[94m[Bash][0m Read job system implementation $ cat engine/core/src/jobs.cpp
+[94m[Bash][0m Read job tests first half $ cat tests/src/core_jobs_tests.cpp | head -250
+[94m[Bash][0m Read job tests second half $ sed -n 250,447p tests/src/core_jobs_tests.cpp
+[94m[Bash][0m Check build state, CI, and assert API $ grep -rn "ENGINE_ASSERT\|hpp\|AssertionFailure" engine/core/include/engine/core/assert.hpp | head -3...
+The job system, its tests, and the shutdown logic look largely implemented already. Next I'll check the tracker state for US-006, what toolchain is installed, and whether the build directories are current.
+[94m[Bash][0m Check tracker status and available toolchain $ g++ --version | head -1
+[94m[Bash][0m Inspect CI workflow and docs mentions $ ls tests/src | wc -l
+The docs say US-006 gates already passed in an earlier iteration, but the tracker still shows it open and `progress.md` has no US-006 entry. I'll re-run the Linux gates myself rather than trust the old record.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -15
+The Linux Debug gates pass. The CTest entries are coarse (one entry runs all Catch2 unit tests), so I'll confirm the job tests actually ran, then run the GCC and ASan/UBSan presets that US-006 requires.
+[94m[Bash][0m Confirm job tests run and run ASan/UBSan gate $ echo asan=$?
+[94m[Bash][0m Run GCC preset build and unit tests $ echo gcc=$?
+Both sanitizer and GCC ctest runs finished, but my `echo` reported the exit status of `tail`, not ctest. I'll locate the binary and check the real Catch2 counts and exit codes directly.
+[94m[Bash][0m Run Catch2 suites directly and check exit codes $ tail -2 /tmp/asan-ctest.log
+Linux Debug, ASan/UBSan, and GCC gates pass, with all 78 unit and 20 integration Catch2 cases green. Next I'll check whether the Windows/MSVC gates can run from this WSL shell.
+[94m[Bash][0m Check for Visual Studio on Windows side $ ls /mnt/d/dev/haiku_game_engine/build/win-dev | head -5
+Visual Studio is installed, so I can run the Windows gates through `vcvars64` from `cmd.exe`.
+[94m[Bash][0m Run Windows MSVC quality gates via vcvars $ tail -5 /tmp/win.log
+The inline quoting broke when passed through `cmd.exe /c`. I'll put the gate sequence in a batch file in a scratch directory outside the repo and run that instead.
+[94m[Bash][0m Run Windows gates through a scratch batch file $ tail -4 /tmp/win.log
+The Windows gates pass (`GATES_OK`). Two earlier results were pipe-masked: the GCC ctest exit code and the Linux-debug ctest exit code. I'll re-check both with real exit codes and scan the logs for first-party warnings.
+[94m[Bash][0m Re-run ctest presets with real exit codes $ grep -i "warning" /tmp/build.log /tmp/gcc-build.log | grep -v "third_party" | head -5
+Every gate passes with real exit codes and no first-party warnings. Nothing in the code needed changing, so this iteration's work is verification plus the progress log entry, which was missing. I'll append it now.
+[94m[Bash][0m Append US-006 entry to progress log $ the test uses a throwing assert handler to check the failure is caught inside the job. --- EOF grep ...
+The Windows gate run is a reusable pattern, so I'll also add it to the Codebase Patterns section at the top.
+[94m[Bash][0m Add reusable Windows-gate pattern to progress log $ python3 - <<'EOF' p = ".ralph-tui/progress.md" s = open(p, encoding="utf-8").read() old = "*Add reus...
+[94m[Bash][0m Remove scratch batch directory $ rm -rf /mnt/c/Windows/Temp/us006 && echo removed
+US-006 was already implemented in an earlier iteration. This pass re-verified it against the acceptance criteria and the quality gates. I didn't change any code, but I did append a US-006 entry and a reusable pattern to `.ralph-tui/progress.md`.
+
+**What's in place**
+- `JobSystem`, `TaskGroup`, `JobHandle`, and `CancellationToken` in `engine/core/include/engine/core/jobs.hpp` and `engine/core/src/jobs.cpp`. They cover dependencies, task groups, cancellation (pending and running), and completion waits.
+- Shutdown has two policies. `Drain` runs everything already submitted. `CancelPending` cancels queued jobs, asks running jobs to stop, then joins the workers. The destructor uses `CancelPending`. Handles keep the scheduler alive, so they stay valid after the pool is destroyed.
+- `tests/src/core_jobs_tests.cpp` covers dependency ordering, failure propagation, cancellation before and during a run, group cancel, drain and cancel-pending shutdown, post-shutdown submissions, repeated startup/shutdown across 24 cycles, and the self-wait assertion.
+
+**Gate results (exit codes checked directly)**
+- Windows/MSVC: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` ctest all pass.
+- Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` ctest all pass. The Catch2 run has 78 unit and 20 integration cases, all green.
+- Linux/ASan+UBSan: `linux-asan` build and `linux-sanitize` ctest pass.
+- Linux/GCC 9.4: `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` pass.
+- No first-party warnings appear in any build log.
+
+**Not verified**
+- The GitHub Actions jobs (`ci.yml`, `gpu.yml`) have not run. Pushing would be outward-facing, so I didn't do it. The Windows and Linux results above come from local runs, not from CI.
+- The GPU and performance gates don't apply to this story: the benchmark harness and GPU suites don't exist yet.
+
+The tracker in `.ralph-tui/session.json` still shows US-006 as open. The engine updates that, so I left it alone.
+
+<promise>COMPLETE</promise>

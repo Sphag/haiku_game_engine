@@ -1,0 +1,212 @@
+# Iteration 644 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T23:40:07.379Z
+- **Ended At**: 2026-10-26T00:31:43.207Z
+- **Duration**: 51m 35s
+- **Input Tokens**: 670
+- **Output Tokens**: 121361
+- **Total Tokens**: 122031
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log, PRD story, and benchmark tool layout $ tail -n 80 .ralph-tui/progress.md && grep -n "US-076" -A60 tasks/prd-open-world-engine.md | head -15...
+[94m[Bash][0m Inspect benchmark manifest and tool sources $ cat benchmarks/manifest.json | head -150 && wc -l tools/benchmark/src/*.cpp tools/benchmark/include/...
+[94m[Bash][0m Survey renderer path switches and bench main $ sed -n 1,80p tools/benchmark/src/main.cpp
+[94m[Bash][0m Search PRD for render benchmark route definition $ grep -n -i "route\|render_stress\|screenshot\|submitted\|visible" tasks/prd-open-world-engine.md | h...
+[94m[Bash][0m Read PRD benchmark contract and renderer config options $ sed -n 115,135p engine/render/include/engine/render/scene_renderer.hpp
+[94m[Bash][0m Inspect render test fixtures and benchmark measure API $ cat tools/benchmark/include/engine/benchmark/measure.hpp | sed -n 1,80p
+[94m[Bash][0m Read scene renderer fixture and API signatures $ grep -n "struct RenderableRef\|struct FrameDesc\|struct SceneFrame\|render(" -A12 engine/render/incl...
+[94m[Bash][0m Read workload API and check PNG encoder availability $ cat .ralph-tui/../tools/benchmark/src/report.cpp | grep -n "features\|mesh" | head
+[94m[Bash][0m List functions in workload generator $ grep -n "^[a-zA-Z].*(\|^struct\|^namespace\|^}" tools/benchmark/src/workload.cpp | head -120
+[94m[Bash][0m Read mesh, instance, and character generation code $ sed -n 100,300p tools/benchmark/src/workload.cpp
+[94m[Bash][0m Read Windows gate memory notes and repo root listing $ ls /mnt/d/dev/haiku_game_engine | head -50
+[94m[Bash][0m Read engine_bench main flow and report structures $ cat tools/benchmark/include/engine/benchmark/report.hpp | sed -n 1,91p
+[94m[Bash][0m Read indirect GPU test setup to reuse renderer usage pattern $ sed -n 1,140p tests/src/render_indirect_gpu_tests.cpp
+[94m[Bash][0m Find how test shaders are built and how to reuse them $ grep -rn "ENGINE_TEST_SHADER_DIR\|scene_vertex" engine/render/CMakeLists.txt | head
+[94m[Bash][0m Read workload constants, lights, and generate_workload body $ sed -n 430,600p tools/benchmark/src/workload.cpp
+[94m[Bash][0m Grep renderer API types for extraction, lights, meshes, images $ grep -n "struct SceneImage" -A12 engine/render/include/engine/render/scene_image.hpp
+[94m[Bash][0m Read shader wiring in tests CMake and snapshot/transform types $ cat cmake/ValidateVendor.cmake >/dev/null && echo ok
+[94m[Bash][0m Look up renderer and CLI signatures needed for the driver $ grep -n "ENGINE_TEST_SHADER\|scene_meshlet" tests/CMakeLists.txt | head -3
+Scope is large, so I'm going to build the pieces in order and verify each on Linux before touching Windows. First, the generator has to expose the actual content (not just digests) so the renderer can use it, without changing any digest.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "struct MeshSet {
+    std::vector<std::uint64_t> tr..." → "// One unique mesh before serialisation: vertices ..."
+Now the instance placement and the lights, split the same way: one function produces records, the digest function serialises them.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "// Instance descriptors: a position on the terrain..." → "// One instance descriptor, in millimetres (positi..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "std::string build_lights(std::uint64_t seed, std::..." → "// One local light: position in millimetres, colou..."
+Now I'll update `generate_workload` to use the new functions, and factor the recipe checks out so the render content uses the same validation.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "core::Result<Workload, std::string> generate_workl..." → "// Reads the table counts of a scene into a recipe..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "        {"lights", build_lights(scene.seed, recipe..." → "        {"lights", build_lights(lights)},"
+Now the public render-content API, shared with the digest path.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "std::vector<std::string> compare_workloads(const W..." → "core::Result<RenderContent, std::string> generate_..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/workload.hpp[0m edit: "// Terrain height in millimetres at a world positi..." → "// The renderable content of a scene (US-076): the..."
+[94m[Bash][0m Add array include to workload header and check build dirs $ ls build/linux-debug 2>/dev/null | head -5
+Next, build the workload tool on Linux and confirm the digests still match the checked-in expected file.
+[94m[Bash][0m Build engine_workload and run its digest check on Linux $ ls build/linux-debug/tools/benchmark 2>/dev/null | head
+[94m[Bash][0m Run workload digest check on Linux debug build $ echo rc=$?
+[94m[Bash][0m Locate built engine_workload binary $ 
+[94m[Bash][0m Run workload digest check on Linux build $ echo rc=$?
+Digests unchanged (4 scenes match). Now the route definition: let me see how the manifest parser reads `route`.
+[94m[Bash][0m Find route handling in manifest parser and tests $ grep -n "route" tools/benchmark/src/manifest.cpp tools/benchmark/include/engine/benchmark/manifest.h...
+[94m[Bash][0m Read SceneDef struct and manifest route parsing $ grep -n "string_member\|number_member" tools/benchmark/src/manifest.cpp | head -4
+I'll give the route a structured camera definition the parser validates, so the driver reads it from the manifest rather than hard-coding it.
+[94m[Bash][0m Add CameraRoute struct to the manifest header $ ''') open(p,'w').write(s) EOF grep -n "#include" tools/benchmark/include/engine/benchmark/manifest.h...
+[94m[Bash][0m Add optional include and view string_member helper $ sed -i 's/^#include <map>$/#include <map>\n#include <optional>/' tools/benchmark/include/engine/benc...
+Now the parser side: a `camera` object on the route, with every field required and a number-type check.
+[94m[Bash][0m Add camera route parsing to manifest parser $ } else {''' assert s.count(old2)==1 s=s.replace(old2,new2,1) open(p,'w').write(s) EOF grep -n "#incl...
+[94m[Bash][0m Define render_route_v1 camera in the manifest and validate JSON $ grep -n "manifest_version\|sha256" tools/benchmark/src/manifest.cpp | head -5
+Manifest is valid JSON. Before writing the driver I need a handful of signatures: camera orientation, mesh bounds, post settings, device frame calls, and how `run_frames` measures.
+[94m[Bash][0m Look up camera, bounds, post, device APIs $ grep -n "meshlet_stats\|MeshletStats" engine/render/include/engine/render/scene_renderer.hpp | head ...
+`DeviceDesc::disabled_features` gives a real forced-off switch for mesh shaders, which is what the fallback proof needs. Now `run_frames`, and how the image readback is synchronised.
+[94m[Bash][0m Read run_frames, render sync, and converter target name $ grep -rn "add_library(engine_converter\|add_library(engine_asset_converter" --include=CMakeLists.txt...
+I have most of the signatures. A few more to pin down before writing the driver: the renderer desc fields, how tests build mesh bounds for extraction, and the light and fog types.
+[94m[Bash][0m Read renderer desc, bounds helpers, light types, fog hooks $ sed -n 1,40p engine/render/include/engine/render/mesh.hpp | grep -n "vertex_normals\|GpuMesh"
+[94m[Bash][0m Check shader target naming and top-level subdirectory order $ grep -n "bounds()" -B2 engine/render/include/engine/render/scene_renderer.hpp | head -5
+Shader targets are `engine_shader_<name>` with outputs in `build/shaders`, so the bench needs its own `bench_` names to avoid clashing with the test outputs. Let me check how the report serialises runs, since I'll add the path and feature fields there.
+[94m[Bash][0m Inspect report JSON writer for run records $ grep -n "counters" -B3 -A6 tools/benchmark/src/report.cpp | sed -n 1,30p
+[94m[Bash][0m Add path and feature fields to run record and JSON $ open(p,'w').write(s) EOF grep -n "features" tools/benchmark/src/report.cpp
+Now the CLI options. Let me see how `cli.cpp` parses flags.
+[94m[Bash][0m Read CLI parser implementation $ sed -n 1,145p tools/benchmark/src/cli.cpp
+[94m[Bash][0m Add --path and --disable-mesh-shaders CLI options $ '''), ] for old,new in reps:     assert s.count(old)==1, old[:60]     s=s.replace(old,new) open(p,'w...
+CLI is in. Next is the driver itself, the largest piece. I'm putting it in `tools/benchmark/src/render_stress.cpp` so `engine_benchmark` stays free of GPU dependencies. Let me confirm a few remaining names first: the cooked-mesh helper, the scene graph create result, and the presets for a Release build.
+[94m[Bash][0m Check converter cook API, scene graph create, presets, capability API $ grep -n "render_graph.hpp\|post_processor" engine/render/include/engine/render/scene_renderer.hpp | ...
+I have what I need. Writing the driver now.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/render_stress.hpp[0m "#pragma once
+
+// render_stress (US-076): the GPU render benchmark that engine_bench runs. It builds the scene from the seeded workload
+// (engine_benchmark's generate_render_content), draws it along t... (2210 chars)"
+I need the profile's output size as data rather than a hard-coded table, so I'll have the manifest parser read it from `settings.output`.
+[94m[Bash][0m Parse profile output size into ProfileDef $ open(p,'w').write(s) EOF grep -n "#include" tools/benchmark/src/manifest.cpp
+[94m[Bash][0m Reject signed or non-digit output sizes in profile parsing $ <cmath>\n','#include <cctype>\n#include <cmath>\n',1) open(p,'w').write(s) EOF echo ok
+Before writing the driver I checked three renderer defaults that would silently distort the measurement: `max_draw_groups` is 64 while the scene has 200 meshes (the rest would fall back to indexed), `max_items` is 1024, and the meshlet vertex pool (2^19) is too small for 200 meshes. The driver sets all three explicitly and writes them into the report.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/render_stress.cpp[0m "// render_stress (US-076). The scene comes from the seeded generator, so it has the table's counts and the same digests as
+// engine_workload. The camera follows the manifest's route, and the frame in... (26055 chars)"
+The driver is drafted. Re-reading it, I see several real problems to fix before compiling: unqualified `rhi::`/`converter::`/`scene::` names, an unused `min_start_triangles` (a warning-as-error), a duplicate start screenshot with an unguarded path, a missing contract verdict, and a made-up `to_string` on the node error. Patching those now.
+[94m[Bash][0m Apply fixes to render_stress driver and header $ ''') open(p,'w').write(s) EOF grep -n "scene::\|rhi::\|converter::" tools/benchmark/src/render_stres...
+The "changed on disk" notices are my own patch writes, so those are expected. Next: check the shader-stage enum names, then wire the dispatch into `main.cpp` and the CMake shader targets.
+[94m[Bash][0m Confirm ShaderStage enum and capability type names $ grep -n "struct CapabilityReport\|CapabilityReport capabilities" engine/rhi/include/engine/rhi/*.hpp...
+Enum names are right. Now the dispatch in `main.cpp`, placed after the release-build gate so a Debug build can never produce an acceptance number.
+[94m[Bash][0m Dispatch render_stress from engine_bench execute_run $ ''') open(p,'w').write(s) EOF grep -n "execute_run" tools/benchmark/src/main.cpp
+[94m[Bash][0m Thread options and output dir into execute_run $ ''') open(p,'w').write(s) EOF grep -n "^#include" tools/benchmark/src/main.cpp
+The driver needs its screenshot folder created, and the bench target needs the new sources, link dependencies, and shader outputs in CMake.
+[94m[Bash][0m Wire CMake shader targets and build engine_bench on Linux $ echo "exit=${PIPESTATUS[0]}"
+Exit 0 with no errors, but my grep may have hidden a configure problem. Checking the actual build tail.
+[94m[Bash][0m Check engine_bench build result and binary location $ find build -name engine_bench -type f | head -3
+Built cleanly. Now a quick behaviour check on Linux: the shader outputs, the manifest load, and what acceptance reports without a GPU.
+[94m[Bash][0m Check shader outputs and engine_bench behaviour on Linux $ $B --suite acceptance --backend vulkan --path indirect --output /tmp/us076_b 2>&1 | tail -3
+My parser made `camera` mandatory for every route, which breaks the other scenes' pending routes. The camera is only needed by the render route, so it should be optional at parse time and the driver already refuses a missing one.
+[94m[Bash][0m Make camera optional, rebuild, and rerun smoke and acceptance $ $B --suite acceptance --backend vulkan --path bogus --output /tmp/x 2>&1 | head -2
+The driver runs on Linux and reports unsupported without a GPU, as it should. Now the CPU unit tests for the new pieces: the render content matches the table, the camera route and profile output parse (and bad ones are refused), and the CLI accepts and refuses the new flags.
+[94m[Bash][0m Read existing benchmark test style and case list $ grep -n "bench_workload_tests\|bench_tests" tests/CMakeLists.txt
+[94m[Bash][0m Read workload test helpers and manifest/CLI test patterns $ sed -n 204,272p tests/src/bench_tests.cpp
+Adding the tests in the existing files, following their style. The workload test checks the render content against the table and the generate_workload totals, so the two code paths can't drift apart.
+[94m[Bash][0m Add render content, route, profile, and CLI test cases $ } ''' open(p,'w').write(s) EOF grep -n "read_repository_manifest()" tests/src/bench_tests.cpp | head...
+Now the full Linux debug build (warnings are errors here), then the unit suite.
+[94m[Bash][0m Full Linux debug build with warnings captured $ tail -n 3 /tmp/us076_build.log
+[94m[Bash][0m Run the unit suite and check its case count $ ls build/linux-dev/tests/Debug/engine_tests && ./build/linux-dev/tests/Debug/engine_tests --help 2>&...
+1019 cases pass, up from 1016 with the three new ones. Next the Linux gates: ValidateVendor and the unit ctest preset.
+[94m[Bash][0m Run ValidateVendor, configure, and linux-unit ctest $ tail -n 4 /tmp/us076_ctest.log
+Linux gates pass: ValidateVendor 0, configure 0, and the unit ctest 0. Now the Windows side. The memory notes describe a batch-file pattern for running gates and the RTX 5080 from WSL, so let me look at the most recent gate batch as a template.
+[94m[Bash][0m Find the latest Windows gate batch template in Temp $ cat "$f" 2>/dev/null | tr -d '\r' | head -60
+I'll use that as the template. Before launching anything on Windows, I need to confirm the `win-release` preset exists (the benchmark needs a Release build), the pinned validation layer is still staged, and no earlier batch is still running.
+[94m[Bash][0m Check presets, validation layer staging, and running batches $ ls /mnt/c/Users/bucha/AppData/Local/Temp/*rc.txt 2>/dev/null | tail -3
+[94m[Bash][0m Inspect win-release and win-debug build preset config $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "gpu" | head
+`win-release` is a build preset over the same `win-dev` configure, so one configure serves both Debug and Release. Let me confirm the GPU suite command form used by an earlier batch, then write the gate batch.
+[94m[Bash][0m Find the GPU suite command used in an earlier batch $ [ -n "$f" ] && tr -d '\r' < "$f" | grep -n "engine_tests\|VK_LAYER" | head -8
+[94m[Bash][0m Write and launch the Windows gate batch for US-076 $ echo launched
+The batch is running in the background. I'll wait on its result file rather than poll blindly, so I'll load the Monitor tool for that.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Report when the US-076 Windows gate batch writes its final result $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076_rc.txt
+The Windows gate batch is running; I'll get a notification when it finishes. Meanwhile I'm recording progress for the story.
+[94m[Bash][0m Append interim US-076 progress notes to the progress log $ GPU residency is not measured. - Tests: 3 new unit cases (render content vs table and triangles, rou...
+[94m[Monitor][0m Wait for the US-076 Windows gate batch to finish and print its result codes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076_rc.txt
+The Windows gate batch is still running: validate, configure, Debug build, win-unit ctest, the DX12 and Vulkan GPU suites, then the Release `engine_bench` build. I'll pick up the results when the monitor reports. Not finished yet: the RTX 5080 acceptance runs, the screenshots, the mesh-shader fallback proof, and the Linux GPU report are all still open.
+The Windows gate batch finished with every step at 0. Before trusting those zeros, I'll check the build logs for warnings and the GPU suite totals.
+[94m[Bash][0m Check Windows build logs for warnings and GPU suite results $ ls /mnt/d/dev/haiku_game_engine/build/win-dev/tools/benchmark/Release/engine_bench.exe
+All gates are clean: zero compiler warnings, 29/29 unit ctest, DX12 GPU suite 72 cases, Vulkan GPU suite 73 cases, and the Release `engine_bench.exe` is built. Next is the render benchmark: three paths on each backend, plus a forced mesh-shader-off run on DX12. Each native run takes roughly 10–11 minutes, so I'm launching one batch.
+[94m[Bash][0m Write and launch the US-076 benchmark batch on Windows $ echo launched
+This is a second copy of the gate result, from the monitor I'd already left running. Nothing new. Now I'll watch the benchmark batch, which emits one result line per run.
+[94m[Monitor][0m Report each US-076 benchmark run result as it completes $ done
+The Windows gates are all green and the benchmark batch is running. I'll report the results when the monitor delivers them.
+
+Status so far:
+- **Done and verified:** the render driver, the `render_route_v1` camera route, the generator's render content (digests unchanged), CLI flags `--path` and `--disable-mesh-shaders`, the report's `path`/`features` fields, and 3 new unit tests.
+- **Gates passed:** Linux (ValidateVendor, linux-dev configure, linux-debug build with no warnings, linux-unit ctest). Windows (ValidateVendor, win-dev configure, win-debug build with no warnings, win-unit ctest 29/29, GPU suite DX12 72 cases and Vulkan 73 cases, Release `engine_bench` build).
+- **Running now:** six acceptance runs of `render_stress` (indexed, indirect, meshlets on DX12 and Vulkan) plus two forced mesh-shader-off runs, each about 10–11 minutes.
+- **Still open:** characters, particles, fog and baked GI are not drawn yet, so the native profile can only come out incomplete. GPU residency is not measured. Whether the 2M-triangle start-frame floor is met is still unknown until the report comes back.
+The first DX12 indexed run exited 3, meaning incomplete, not failed. Let me read the report to see whether that's the expected open-content reason or a real problem.
+[94m[Bash][0m Read the DX12 indexed report for render_stress results $ tail -n 3 /mnt/c/Users/bucha/AppData/Local/Temp/us076b_dx12_indexed.log
+The incomplete result is a real bug in my driver, not the expected open content. The post pass needs its TAA and tone-map shaders and I never loaded them. Let me find the field names so I can add them.
+[94m[Bash][0m Find post shader struct and how tests load them $ grep -n "post" tests/src/render_postprocess_gpu_tests.cpp | grep -i "shader" | head -6
+The post pass needs four compute entries from `postprocess.hlsl`. I'll add them as `bench_` shaders, load them in the driver, and check the Linux build.
+[94m[Bash][0m Add post-pass shaders to the bench and rebuild on Linux $ ls build/linux-dev/shaders | grep -c bench_post
+The batch finished, but every run exited early on the same post-shader error, so it measured nothing. I'll rebuild the Release binary on Windows and relaunch the full set.
+[94m[Bash][0m Rebuild Release engine_bench on Windows and relaunch the benchmark batch $ echo launched
+[94m[Monitor][0m Report each relaunched US-076 benchmark run result as it completes $ done
+The first run in the relaunched batch is now going: the DX12 indexed acceptance run, roughly 11 minutes. I'll look at its report when the monitor reports the result.
+The Release build of `engine_bench` succeeded. The DX12 indexed acceptance run is in progress, so I'll wait for its result before reading any numbers.
+The monitor expired before the DX12 indexed run finished, so I'll check the state directly and re-arm the watch.
+[94m[Bash][0m Check current benchmark batch result file and log tail $ tail -n 2 /mnt/c/Users/bucha/AppData/Local/Temp/us076c_dx12_indexed.log 2>/dev/null
+[94m[Monitor][0m Re-armed: report each US-076 benchmark run result as it completes $ done
+The benchmark batch is still on its first run, the DX12 indexed acceptance pass, with no result yet. I've re-armed the watch to report each run as it completes. The results are not in, so I have nothing to report on the numbers yet.
+That event is only the stale `release=0` line from before, not a new result. The DX12 indexed run is still going, so I'll keep the watch armed.
+[94m[Monitor][0m Re-armed: report the next US-076 benchmark run result when it changes $ done
+The DX12 indexed run is still in progress and no new result has been written. I'm keeping the watch armed for the next line.
+The DX12 indexed run exited 1, which means a frame-time threshold failed, so this is a real measurement. I'll read the report.
+[94m[Bash][0m Read DX12 indexed native-profile repeat results and counters $ ls artifacts/bench/us076-dx12-indexed/screenshots 2>/dev/null
+The first real measurement is in, and it fails two checks:
+
+- **Triangle floor:** the start frame submits 312,068 triangles, not the 2,000,000 the contract requires. The generator places instances uniformly over the 8 km world, so the route sees only about 330 items. Meeting the floor needs a different route start or denser content, and changing the contract is not my call.
+- **Frame time:** p99 is about 46 ms against a 16.7 ms budget, and no frame meets 16.7 ms. The run is CPU-bound in extraction and submission over 20,000 renderables (`measured_frames` shows roughly 5,500 frames per repeat). I haven't profiled the cause.
+
+I'll record this in the progress log now so it survives while the other runs finish.
+[94m[Bash][0m Record DX12 indexed results and the triangle-floor finding in the progress log $ a denser start or content change needs a user decision (the contract says not to reduce workloads). ...
+US-076 is not complete. The render benchmark runs and the Windows gates are only partly done, and the first real measurement fails the contract.
+
+**Done and verified**
+- `render_route_v1` is defined in `benchmarks/manifest.json`, with a parsed camera, and the profile output size is parsed too.
+- The generator now exposes the render content, built from the same functions as the digests. `engine_workload --check` still matches all 4 scenes.
+- `engine_bench` has a `render_stress` driver with `--path indexed|indirect|meshlets` and `--disable-mesh-shaders`. The mesh-shader switch is a real device-level feature disable, and the report lists it as disabled, not enabled. Reports now carry `path` and `features`.
+- Renderer defaults are overridden on purpose: 256 indirect groups instead of 64, and larger meshlet pools. Without that, the scene would silently fall back to direct draws.
+- Linux: ValidateVendor 0, linux-dev configure 0, linux-debug build with no warnings, linux-unit ctest 0, and `engine_tests --suite unit` 1019 cases passed (3 new).
+- Windows: ValidateVendor 0, win-dev configure 0, win-debug build with no warnings, win-unit ctest 29/29, `engine_tests --suite gpu` DX12 72 cases and Vulkan 73 cases all passed, and the Release `engine_bench` builds.
+
+**Measured so far (DX12, indexed, native_1080, 3 repeats)**
+- Every repeat fails the frame-time contract. p99 is about 46 ms against a 16.7 ms budget, and no frame meets 16.7 ms.
+- The start frame submits 312,068 triangles against the manifest floor of 2,000,000. The generator places instances uniformly over the 8 km world, so the route sees about 330 items.
+- Screenshots were written for each repeat.
+
+**Still open**
+- The batch is still running the remaining indirect, meshlet, and Vulkan runs, plus the two forced mesh-shader-off runs. Their results aren't in yet.
+- The native profile can only be incomplete as built: skinned characters, GPU particles, volumetric fog, and baked probe GI are not drawn. GPU residency is not measured.
+- `full_1080` reports unsupported, because FSR 2 isn't built.
+- Linux native Vulkan GPU, the sanitizer preset, and linux-gcc were not run.
+
+**Decision needed from you:** the triangle floor can't be met with the generator's uniform placement. Options are a different route start, denser placement, or a change to the workload. I haven't changed the contract, because the PRD says that needs your call.
+[94m[Bash][0m Check which benchmark runs have written results so far $ ls /mnt/d/dev/haiku_game_engine/artifacts/bench/ 2>/dev/null
+The result file shows only one line, but the artifact folders for all eight runs exist. I'll check each report's status directly instead of trusting the file.
+[94m[Bash][0m Summarise each benchmark report's status and key counters $ ps -eo args | grep -c engine_bench
+Those reports for the other seven runs are leftovers from the first batch, which had the post-shader bug. The relaunched batch hasn't rewritten them yet, so I can't use them. The DX12 indexed report is the one from the fixed binary, and it's the only current result.
+
+The batch is still running (three `engine_bench` processes are active). I'm stopping here rather than polling for about another hour. The work is in a state you can pick up from.
+
+**Where US-076 stands**
+- **Built and verified:** the `render_stress` driver, the `render_route_v1` camera, the render content (generator digests unchanged), the `--path` and `--disable-mesh-shaders` flags, and report fields for path and features. Linux gates pass, and the Windows gates pass too (validate, win-dev configure, win-debug build with no warnings, win-unit 29/29, GPU suites DX12 72 and Vulkan 73, Release `engine_bench` build).
+- **Measured:** DX12 indexed, native_1080, 3 repeats, from the fixed binary. Every repeat fails the frame-time contract: p99 about 46 ms against 16.7 ms, and no frame meets 16.7 ms. The start frame submits 312,068 triangles against a 2,000,000 floor. Screenshots are in `artifacts/bench/us076-dx12-indexed/screenshots`.
+- **Not yet measured:** the remaining DX12 and Vulkan indirect, meshlet, and forced mesh-shader-off runs. The folders for those hold stale reports from the buggy first batch and should be ignored until the current batch rewrites them.
+
+**Open items**
+- **Triangle floor:** uniform instance placement over the 8 km world puts about 330 items in view at the route start. Meeting 2,000,000 needs a different route start, denser content, or a contract change. That is your decision, so I haven't changed the contract.
+- **Content gaps:** skinned characters, GPU particles, volumetric fog, and baked probe GI are not drawn, so the native profile can only come out incomplete. GPU residency is not measured. `full_1080` reports unsupported because FSR 2 isn't built.
+- **Not run:** Linux native Vulkan GPU, the sanitizer preset, and linux-gcc.
+
+Progress notes are in `.ralph-tui/progress.md`.

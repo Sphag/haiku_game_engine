@@ -1,0 +1,39 @@
+# Iteration 660 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:03:41.121Z
+- **Ended At**: 2026-10-26T02:04:00.398Z
+- **Duration**: 19s
+- **Input Tokens**: 26
+- **Output Tokens**: 2751
+- **Total Tokens**: 2777
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Inspect progress log and existing benchmark files $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -n "US-076" -r --include=*.md --include=*.cpp...
+The progress log shows US-076 has been stalled for several passes on the same two open items. Before I report, I'll confirm nothing has changed since the last recorded check.
+[94m[Bash][0m Check source and artifact timestamps and report statuses $ print(f.split('/')[2], r.get('status'), r.get('exit_code', ''))" 2>/dev/null
+[94m[Bash][0m Append status check entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. --- EOF tail -n 3 .ralph-tui/progress.md
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last recorded check, and the remaining items need your decision or hardware this machine doesn't have.
+
+**What's done**
+- The `render_stress` driver, the `render_route_v1` route, the `--path` and `--disable-mesh-shaders` options, per-run counters, and screenshots are in place.
+- Mesh-shader-off fallback works on DX12 and Vulkan. The run reports `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, with 338–340 visible items on the indirect path. The fallback runs themselves exit 1 on the frame budget and triangle floor, as the measured results below.
+- Gates on the current tree, from earlier runs in this log: Linux ValidateVendor, linux-dev, linux-debug build (0 warnings), and linux-unit (30/30) pass. Windows validate, win-dev, win-debug build (0 warnings), win-unit (29/29), and `engine_tests --suite gpu` on dx12 (72 cases) and vulkan (73 cases) pass.
+
+**Blocked on you**
+1. **Triangle floor and frame budget fail on placement.** Every indexed run reports 312,068 triangles at the route start against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the start view sees about 330 items. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `workload_expected.json`. The contract forbids reducing workloads, so I need your approval before changing it. Without that change, the honest result is these failures.
+2. **full_1080 is unsupported.** The FSR 2 shader permutation headers are missing, so only native_1080 runs and "both profiles" is only partly covered.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and the linux-gcc job (GCC 9 cannot build Jolt).
+
+I appended a status entry to `.ralph-tui/progress.md`. If you approve the placement change, I'll make it, regenerate the expected file, rerun the eight acceptance reports (about 10 minutes each), and rerun the gates.

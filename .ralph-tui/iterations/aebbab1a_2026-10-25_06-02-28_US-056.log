@@ -1,0 +1,48 @@
+# Iteration 442 Log
+
+## Metadata
+
+- **Task ID**: US-056
+- **Task Title**: Lua Lifecycle and Reload
+- **Description**: As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T03:02:28.704Z
+- **Ended At**: 2026-10-25T03:07:28.033Z
+- **Duration**: 4m 59s
+- **Input Tokens**: 36
+- **Output Tokens**: 3719
+- **Total Tokens**: 3755
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the script lifecycle code and the progress log against the US-056 criteria.
+[94m[Bash][0m Inspect repo layout, script module, and progress log $ tail -60 .ralph-tui/progress.md 2>&1 | head -80
+The progress log says US-056 is implemented and every gate passes except the `linux-gcc` job, which this host can't build. Before I accept that, I'll confirm the files and the toolchain claim directly.
+[94m[Bash][0m Verify US-056 files, gcc preset, and available compilers $ grep -c "TEST_CASE\|SCENARIO" tests/src/script_lifecycle_tests.cpp
+The file list and toolchain match the log: only GCC 9.4 and Clang 10 are installed. I'll run the Linux build and unit suite once on the current tree to confirm it still passes.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -4 /tmp/us056_ctest.log
+The Linux gates pass on the current tree. I'll add a short progress entry for this pass.
+[94m[Bash][0m Append US-056 re-check entry to progress log $ no GCC 11+, no conda/docker/podman, so `linux-gcc*` cannot run here. - Status call: US-056 stays **P...
+US-056 is not complete, so I'm not signalling COMPLETE. The code and the Linux gates pass, but the `linux-gcc` gate can't run on this machine.
+
+**Blocker:** the `linux-gcc` preset and its CI job need GCC 11 or newer, because Jolt requires C++20 and `__builtin_bit_cast`. This host has only GCC 9.4 and Clang 10, and no conda, docker, or podman to get a newer compiler. Until someone runs `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit` on a GCC 11+ machine, that criterion stays open.
+
+**Verified in this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, no warnings
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0, 22 of 22 (integration 21, unit 1)
+
+**Recorded in earlier passes, not rerun now:**
+- Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) passed on MSVC, 21 of 21.
+- `linux-asan` build and `linux-sanitize` tests passed with no sanitizer reports.
+
+**Not run, and reported as such:**
+- `engine_bench --suite acceptance`: the benchmark harness doesn't exist yet (US-074).
+- GUI checks: there is no runtime window or editor yet.
+
+I appended one short entry to `.ralph-tui/progress.md` recording this pass. No source changed.

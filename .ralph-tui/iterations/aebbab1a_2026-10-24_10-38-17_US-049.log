@@ -1,0 +1,47 @@
+# Iteration 165 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:38:17.262Z
+- **Ended At**: 2026-10-24T07:44:12.644Z
+- **Duration**: 5m 55s
+- **Input Tokens**: 40
+- **Output Tokens**: 4159
+- **Total Tokens**: 4199
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD section for US-049.
+[94m[Bash][0m Read progress log and PRD entry for US-049 $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-049" -A40 tasks/prd-open-world-engine.m...
+The progress log says US-049 is Partial: the CPU streaming code and tests are in, but the Windows gates, the GCC job and the benchmark were still open. I'll check what's in the tree now and whether the Linux gates still pass.
+[94m[Bash][0m Check streaming files, bench target, and gate memory notes $ ps aux | grep -i -E "gate|cmake|ctest" | grep -v grep | head
+The Windows gates were last run on this source (per the log), and the benchmark harness is still absent. I'll re-run the Linux gates now to confirm the current tree.
+[94m[Bash][0m Run Linux validate, configure, build, and unit ctest $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -5
+[94m[Bash][0m Confirm ctest pass count and streaming test cases $ ls build | head -20
+Linux gates pass on the current tree. I'll record this pass in the progress log, as the workflow asks, without claiming completion.
+[94m[Bash][0m Append this verification pass to the progress log $ US-074 not passing). - Status call: US-049 stays **Partial**. The `streaming_stress` workload and re...
+US-049 is not complete, so I'm not emitting the completion signal. The CPU streaming work is in place and the Linux gates pass on it, but the benchmark-backed criteria are still open.
+
+**Verified this pass (Linux, clang, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --preset linux-dev`: pass
+- `cmake --build --preset linux-debug`: pass, 0 warning or error lines
+- `ctest --preset linux-unit`: 22/22 pass
+
+**Not verified this pass:**
+- **Windows gates** (ValidateVendor, win-dev, win-debug, win-unit): not re-run. The previous log entry records them passing on this same source, but I did not re-run them here.
+- **linux-gcc** and **linux-asan / linux-sanitize**: not re-run. The previous pass recorded them passing.
+- **`engine_bench --suite acceptance` and the `streaming_stress` workload** (200 000 instances, 5400 m route at 30 m/s, teleport case, residency budgets): not run. There is no benchmark target in the tree, and US-074, which provides it, is not passing. The residency numbers the criteria ask for come from that run.
+- **GPU suites**: not run. The streaming manager has a GPU-upload byte budget, but no GPU path changed.
+
+I appended a progress entry to `.ralph-tui/progress.md` recording this pass. Nothing in source changed.
+
+**Next step:** once US-074 provides the harness, run `streaming_stress` on both Windows and Linux to get the transient-residency numbers. Then re-run the Windows gates, since the story cannot be closed without them.

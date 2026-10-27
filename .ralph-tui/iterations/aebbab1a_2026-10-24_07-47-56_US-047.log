@@ -1,0 +1,69 @@
+# Iteration 126 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:47:56.036Z
+- **Ended At**: 2026-10-24T04:49:38.551Z
+- **Duration**: 1m 42s
+- **Input Tokens**: 130
+- **Output Tokens**: 17805
+- **Total Tokens**: 17935
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see how much of US-047 already exists.
+[94m[Bash][0m Read progress log and find terrain sources $ grep -rn "terrain" --include=*.cpp --include=*.hpp --include=*.txt --include=*.hlsl --include=*.cmak...
+The story has been "Partial" for many passes. The open blocker is the RT terrain shadow test, which reports `darkened 0` on both DX12 and Vulkan. I'll read the fixture and the Windows-run notes before deciding whether a fresh look can find the cause.
+[94m[Bash][0m Read Windows run notes and RT fixture $ sed -n 380,520p tests/src/render_terrain_gpu_tests.cpp
+The fixture sets `low_sun(false)`, so `casts_shadow` is false. Before anything else, I'll check whether the RT shadow pass gates on that flag, since the notes ruled out only the lit shader's gate.
+[94m[Bash][0m Check RT shadow gating on casts_shadow $ grep -n "low_sun" -A12 tests/src/render_terrain_gpu_tests.cpp | head -30
+The RT path reads the sun from the frame, not from `casts_shadow`, so that isn't the gate. Next I'll read the RT frame setup to check the sun and the camera-relative inputs against the trace.
+[94m[Bash][0m Read RT frame setup in scene renderer $ sed -n 1596,1720p engine/render/src/scene_renderer.cpp
+The RT frame setup looks consistent with the CPU reference. One part I don't see checked in the notes is the BLAS geometry: index format and which buffers the BLAS reads for terrain versus static meshes. I'll compare those paths.
+[94m[Bash][0m Locate BLAS build and index format code $ grep -n "build_bottom_level\|index_format\|IndexFormat\|rt_triangles\|ray_traced_triangles\|upload_g...
+[94m[Bash][0m Read triangle records, BLAS desc, and geometry upload $ sed -n 2101,2160p engine/render/src/scene_renderer.cpp
+The BLAS side matches the static path: same index format, stride, and graph. A better lead is that terrain now takes the direct draw path, so I'll check whether the traced-shadow texture is bound on that path the same way as on the others.
+[94m[Bash][0m Find traced shadow binding in scene renderer $ grep -n "rt_shadow\|RtShadow\|traced_shadow\|shadow_target\|dummy" engine/render/src/scene_renderer....
+The lit set is shared across draws, so the direct path reads the same traced texture. I'll check how the passing static-mesh RT test sets up its sun, since the terrain fixture is the only one using `casts_shadow = false`.
+[94m[Bash][0m Compare static RT test sun setup $ grep -n "TopLevelInstance\|mask" engine/render/src/rt_effects.cpp | sed -n 1,30p
+The static test is a different scene, so its sun setup doesn't settle it. Next I'll read the GPU shadow entry in `rt_effects.hlsl` for the primary ray's basis and distance limits, which the CPU reference might not share.
+[94m[Bash][0m Inspect ray setup in rt_effects shaders $ grep -n "kRtPrimaryDistance\|RayDesc\|TraceRay\|RayQuery\|TMax\|TMin\|primary\|Primary" engine/rende...
+[94m[Bash][0m Read shadow trace and main entry in rt_effects.hlsl $ sed -n 215,275p engine/render/shaders/rt_effects.hlsl
+The primary ray and shadow ray look right. Next I'll check `SunBlocked` and how it uses the surface normal, because a back-facing test there would skip the shadow ray for terrain.
+[94m[Bash][0m Read SunBlocked and SurfaceAt $ grep -n "Surface SurfaceAt" -A30 engine/render/shaders/rt_effects.hlsl | head -45
+The shadow-ray and normal code looks right on re-reading. Before any more reading, I'll check which debug lighting views exist. If one shows the traced shadow, the fixture can read it directly on Windows without new accessors.
+[94m[Bash][0m List lighting views and traced reads in shader $ grep -n "bias" engine/render/src/rt_effects.cpp | head -5
+The `ShadowFactor` view already reports the product of visibilities, including the traced term. I'll read the lit-pass gate and `LoadTraced` next to see exactly where the traced value enters.
+[94m[Bash][0m Read traced shadow read in scene shader $ sed -n 640,668p engine/render/shaders/scene.hlsl
+The traced read is gated on the sun type only, as the notes said. One piece I haven't seen is what `Trace` returns, since `SunBlocked` depends on it. I'll read the tail of `Trace`.
+[94m[Bash][0m Read end of Trace function $ sed -n 150,165p engine/render/shaders/rt_effects.hlsl
+I've now checked the shadow path end to end: the primary ray, the shadow ray, `SunBlocked`, `Trace`'s return, the BLAS index format, and the direct-path bindings. None of them explains `darkened 0`, which matches the earlier passes. Without a Windows readback of `RtShadow` I can't settle it, and that's a shared RT path, so I won't guess at an edit.
+
+I'll record this pass in the progress log so the next run doesn't re-read the same code. I'll also fix the stale terrain memory, which still says the renderer and RT paths aren't started.
+[94m[Bash][0m Read stale terrain memory file $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+[94m[Bash][0m Update stale terrain status memory $ and `engine_bench` does not exist in the tree, so the acceptance workload cannot run yet.",  "Shadow...
+The memory file now reflects the current state, and the change on disk matches my edit, so I'll leave it as is. Next I'll append this pass to the progress log.
+[94m[Bash][0m Append progress entry for this pass $ (3) no native Linux Vulkan device on this host. - Why no edit: nothing read points at the fault, and...
+US-047 is not complete, so I'm not signalling COMPLETE. The story stays Partial because of one failing GPU check I still haven't diagnosed.
+
+**Blocker:** the traced terrain shadow fixture (`run_terrain_traced_shadow` in `tests/src/render_terrain_gpu_tests.cpp`) fails on DX12 and Vulkan with `darkened 0`. The debug layers report no errors. The CPU reference over the same tile records passes, so the fault is on the GPU side.
+
+**What I checked this pass (by reading, no edits):** the lit-pass gate, the primary and shadow ray setup, `SunBlocked`, `Trace`'s return value, the surface normal, the BLAS descriptor (index format, stride, graph), and the `RtShadow` binding on the direct draw path. None of them explains the result.
+
+**Not done, and why:**
+- **Diagnosis:** the next step is a Windows readback of the `RtShadow` texture for the hill frame. That needs a small test accessor first, and it's a change to the shared RT path, so I didn't guess at a fix.
+- **`engine_bench --suite acceptance`:** the harness doesn't exist in the tree (it's US-074). The performance criterion can't run until then.
+- **Native Linux Vulkan GPU suite:** no Vulkan device on this WSL host, so it's not-run here.
+- **Windows and Linux gates:** I didn't re-run them this pass because no source changed. The last recorded Windows batch passed everything except the traced-shadow case.
+
+**Changes made:**
+- `.ralph-tui/progress.md`: appended a re-check entry recording what was ruled out and the next step.
+- Memory `project-terrain-runtime.md`: it was stale and didn't mention the failing traced case. It now does.

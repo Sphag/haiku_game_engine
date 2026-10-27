@@ -1,0 +1,43 @@
+# Iteration 164 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:35:28.996Z
+- **Ended At**: 2026-10-24T07:38:16.217Z
+- **Duration**: 2m 47s
+- **Input Tokens**: 40
+- **Output Tokens**: 3052
+- **Total Tokens**: 3092
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any streaming code already exists.
+[94m[Bash][0m Read progress log and find streaming code $ grep -n "US-049\|US-048" .ralph-tui/progress.md | head
+The log says US-049 is Partial: CPU streaming and Windows/GCC gates pass, but the benchmark is blocked on US-074. I'll check the remaining acceptance points against the code, especially the render consumer and the test list.
+[94m[Bash][0m Inspect streaming API, tests, and render consumers $ ls engine/render/include/engine/render | head -80 | tr '\n' ' '
+The code matches the log: the lifecycle, safe-point, render-consumer, cancellation, teleport, missing-cell, budget, and shutdown cases are all there. I'll re-run the Linux unit suite on the existing build to confirm it is still green before recording the status.
+[94m[Bash][0m Rebuild linux-debug and run linux unit ctest $ (cmake --build --preset linux-debug 2>&1 | tail -3) && (ctest --preset linux-unit --output-on-failur...
+[94m[Bash][0m Summarize ctest results and streaming unit cases $ ls build 2>/dev/null | head
+The Linux unit suite passes 22/22 on the current tree. I'll append this pass to the progress log.
+[94m[Bash][0m Append re-verification entry to progress log $ linux-asan/linux-sanitize 22/22. - Not run: `engine_bench --suite acceptance` and the `streaming_str...
+US-049 is not complete, so I am not emitting the completion signal. The CPU streaming work is in place and passing; the benchmark it depends on does not exist yet.
+
+**What I checked this pass (no source changes):**
+- The streaming manager (`engine/world/include/engine/world/streaming.hpp`, `src/streaming.cpp`) covers the lifecycle, safe-point activation, the render-consumer draw list, cancellation under rapid direction changes, teleport, missing cells, per-stage budgets, and shutdown with requests in flight. These are the 7 cases in `tests/src/world_streaming_tests.cpp`.
+- Linux clang: `linux-debug` rebuilt, and `ctest --preset linux-unit` passes 22/22.
+- Windows MSVC and Linux GCC gates, plus Linux ASan/UBSan, passed in earlier passes. The source has not changed since, so I did not re-run them.
+
+**What is still open:**
+- `engine_bench --suite acceptance` and the `streaming_stress` workload (200 000 instances, 5400 m route at 30 m/s, a teleport case, and the GPU/host residency budgets in the PRD). There is no `engine_bench` target in the tree, and that harness is US-074.
+- Without that run there are no real transient or resident-memory numbers, so the "measure transient residency" criterion is only partly met. The unit test checks that the peak is non-zero, not what it is.
+- GPU suites were not run because no GPU path changed.
+
+I appended a re-verification entry to `.ralph-tui/progress.md` that records the status as Partial, with the blocking item named.

@@ -1,0 +1,41 @@
+# Iteration 711 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:18:12.493Z
+- **Ended At**: 2026-10-26T02:18:25.679Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1798
+- **Total Tokens**: 1820
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && wc ...
+The progress log shows 13 prior status checks, all blocked on the same decision. I'll confirm nothing has changed since the last check before reporting.
+[94m[Bash][0m Check source and artifact timestamps and contract floor $ grep -rn "triangle" benchmarks/*.json | head -5
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing has changed since the last recorded check, and the remaining blocker needs your decision.
+
+**What's done (from the progress log, re-checked by timestamps):**
+- The `render_stress` driver, `--path` (indexed, indirect, meshlets), `--disable-mesh-shaders`, per-run counters, and screenshots are in place.
+- Eight reports exist under `artifacts/bench/us076-*`: DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders forced off.
+- The forced-off runs show the fallback working: `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and indirect draws active. Disabled features are not reported as enabled.
+- Gates passed on the last run: ValidateVendor, linux-dev, linux-debug build (0 warnings), linux-unit (30/30), and on Windows validate, win-dev, win-debug build, win-unit (29/29), and the DX12 and Vulkan GPU suites.
+
+**What blocks completion:**
+1. **Workload contract failures.** Start-frame triangles are 312,068 against the 2,000,000 floor. Frame times are p99 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over 8192 m, so the route start sees about 330 items. The runs exit 1, which is the measured result. Fixing this means changing instance placement, which bumps `kWorkloadVersion` and regenerates `benchmarks/workload_expected.json`. The contract forbids reducing workloads, so I haven't made that change without your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 permutation tables are missing, so only `native_1080` runs and "both profiles" is only partly met.
+3. **Not run:** native Linux Vulkan GPU, and linux-gcc (GCC 9 cannot build Jolt).
+
+**Decisions I need from you:**
+- Approve a placement change (a workload version bump and regenerated expected file), or keep the contract and close US-076 as measured failures.
+- Whether a missing FSR 2 permutation set should block this story or be recorded as unsupported.

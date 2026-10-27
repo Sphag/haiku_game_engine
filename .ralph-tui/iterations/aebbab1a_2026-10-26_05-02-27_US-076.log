@@ -1,0 +1,47 @@
+# Iteration 656 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:02:27.587Z
+- **Ended At**: 2026-10-26T02:02:47.836Z
+- **Duration**: 20s
+- **Input Tokens**: 30
+- **Output Tokens**: 3249
+- **Total Tokens**: 3279
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark tool and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD story $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-076...
+The log says US-076 is blocked on a decision about instance placement. Before I report that, I'll confirm the recorded artifacts and source timestamps still match.
+[94m[Bash][0m Check bench artifacts and any sources changed since last run $ done 2>/dev/null | head -n 20
+The directory timestamps don't match the times in the log, so I'll compare the source files against the report files directly.
+[94m[Bash][0m Compare source and report modification times $ ls -l --time-style=+%m-%d_%H:%M:%S tools/benchmark/src/render_stress.cpp tools/benchmark/CMakeLists....
+US-076 is not complete, so I'm not signalling COMPLETE. The remaining failures need a decision from you, and I haven't made it.
+
+**What I checked this turn:** the eight `artifacts/bench/us076-*` reports are unchanged and match the last log entry. Six predate the last `render_stress.cpp` edit (04:15:43), which only guards the mesh-shader attach and doesn't touch the paths those six runs exercise, so they still stand. I did not rerun anything.
+
+**What works (recorded in the log and in these reports):**
+- `render_stress` counts match the contract: 20,000 instances, 200 meshes, 100 characters, 128 lights, 1 sun, 100,000 particles.
+- The indexed, indirect, and meshlet paths run on DX12 and Vulkan, with screenshots and submitted/visible counters.
+- Forced mesh-shader-off falls back to indirect-indexed on both backends, and the report shows mesh shaders as disabled.
+- Last recorded gates: Linux (ValidateVendor, linux-dev, linux-debug, linux-unit 30/30) and Windows (win-dev, win-debug, win-unit 29/29, `engine_tests --suite gpu` for DX12 and Vulkan) all passed on the current tree.
+
+**What fails:**
+- **Triangle floor and frame budget.** Every indexed run measures 312,068 triangles at the route start against the 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms. The cause is placement: instances are uniform over the 8192 m world, so the route start sees about 330 items.
+- **Both profiles.** `full_1080` reports unsupported because the vendored FSR 2 permutation headers are missing. Only `native_1080` runs.
+- **Not run here:** native Linux Vulkan (WSL has no Vulkan device) and `linux-gcc` (GCC 9.4 can't build Jolt).
+
+**Decision needed:** fixing the triangle floor means changing instance placement. That is a workload change, so it needs `kWorkloadVersion` bumped and `workload_expected.json` regenerated. The contract forbids reducing workloads, so I'll wait for your call. Options:
+1. Keep the contract and report these failures as the measured result. The story can then be closed with the failures recorded.
+2. Approve a placement change (for example, clustering instances near the route) and I'll make it, regenerate the expected file, and rerun the eight reports.
+
+Separately, the FSR 2 permutation headers have to be vendored before `full_1080` can run. That is tracked in the existing FSR memory note.

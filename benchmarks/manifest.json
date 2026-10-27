@@ -1,0 +1,183 @@
+{
+  "manifest_version": 1,
+  "description": "Versioned benchmark contract (PRD performance contract and benchmark scene table). Changing a workload, profile, or timing here changes what engine_bench measures; bump manifest_version when that happens.",
+  "world": {
+    "size_m": 8192,
+    "cell_m": 256,
+    "grid_cells": 32,
+    "tile_height_samples": 257,
+    "detail_window_cells": 9,
+    "far_terrain_lod_m": 2048,
+    "object_draw_distance_m": 1000,
+    "vertical_fov_deg": 60
+  },
+  "profiles": {
+    "builtin": {
+      "description": "Harness self-check workload. Not a contract profile.",
+      "frame_contract": false,
+      "requires_features": [],
+      "settings": {}
+    },
+    "native_1080": {
+      "description": "Native 1920x1080, TAA without upscaling, no RT.",
+      "frame_contract": true,
+      "requires_features": [],
+      "settings": {
+        "output": "1920x1080",
+        "internal": "1920x1080",
+        "aa": "taa",
+        "upscale": "none",
+        "geometry": "meshlets for static meshes, indirect for the rest",
+        "main_shadows": "4 directional cascades at 2048^2; 4 local shadow lights in a 4096^2 atlas",
+        "gi": "baked diffuse probes + IBL",
+        "reflections": "SSR + environment fallback",
+        "rt_shadows": false,
+        "dynamic_gi": false,
+        "volumetric_fog_grid": [160, 90, 64],
+        "frame_generation": false,
+        "dynamic_resolution": false
+      }
+    },
+    "full_1080": {
+      "description": "Native 1920x1080 output from 1280x720 internal resolution with FSR 2 Quality; requires ray tracing.",
+      "frame_contract": true,
+      "requires_features": ["RayTracing"],
+      "settings": {
+        "output": "1920x1080",
+        "internal": "1280x720",
+        "aa": "fsr2_quality",
+        "upscale": "fsr2",
+        "geometry": "meshlets for static meshes, indirect for the rest",
+        "main_shadows": "RT directional + 4 local shadow lights in a 4096^2 atlas",
+        "gi": "dynamic ray-traced diffuse probes + IBL",
+        "reflections": "half-internal-resolution RT, 1 ray/pixel, 1 bounce, max 100 m, environment fallback",
+        "rt_shadows": true,
+        "dynamic_gi": {"grid": [32, 8, 32], "spacing_m": 4, "rays_per_probe": 64, "update_fraction": "1/16 per frame"},
+        "volumetric_fog_grid": [160, 90, 64],
+        "frame_generation": false,
+        "dynamic_resolution": false
+      }
+    },
+    "physics_visual": {
+      "description": "Physics stress with the visual runtime; the FPS contract applies.",
+      "frame_contract": true,
+      "requires_features": [],
+      "settings": {"runtime": "visual", "vsync": false, "fps_limiter": false, "frame_generation": false}
+    },
+    "physics_headless": {
+      "description": "Physics stress without rendering, for CPU diagnostics only; no FPS contract.",
+      "frame_contract": false,
+      "requires_features": [],
+      "settings": {"runtime": "headless"}
+    },
+    "streaming_headless": {
+      "description": "Streaming stress on the CPU: cell IO, decode, activation, and residency with no renderer. A CPU diagnostic with no FPS contract.",
+      "frame_contract": false,
+      "requires_features": [],
+      "settings": {"runtime": "headless", "fixed_step_hz": 60}
+    }
+  },
+  "scenes": {
+    "calibration": {
+      "implementation": "builtin",
+      "seed": 1,
+      "workload": {"items": 4096, "rounds_per_frame": 32},
+      "route": null
+    },
+    "render_stress": {
+      "implementation": "none",
+      "seed": 7401,
+      "workload": {
+        "renderable_instances": 20000,
+        "unique_meshes": 200,
+        "animated_characters": 100,
+        "bones_per_character": 64,
+        "live_gpu_particles": 100000,
+        "local_lights": 128,
+        "shadowed_local_lights": 4,
+        "directional_suns": 1,
+        "min_submitted_triangles_indexed_start_frame": 2000000
+      },
+      "route": {
+        "name": "render_route_v1",
+        "definition": "Camera starts at (4096 m, 4096 m) two metres above the terrain, looks down +X with a -4 degree pitch, and moves at 2 m/s. Frame n is at n/60 s, so every run sees the same camera at the same frame.",
+        "camera": {"start_m": [4096, 4096], "heading_deg": 90, "pitch_deg": -4, "height_m": 2, "speed_m_per_s": 2}
+      }
+    },
+    "physics_stress": {
+      "implementation": "none",
+      "seed": 7701,
+      "workload": {
+        "active_dynamic_bodies": 2000,
+        "static_colliders": 200,
+        "constraints": 100,
+        "characters": 20,
+        "raycasts_per_s": 1000,
+        "shape_casts_per_s": 100,
+        "simulation_hz": 60
+      },
+      "route": {"name": "physics_action_sequence_v1", "definition": "Fixed 60 Hz steps in simulated time (frame n is at n/60 s). Every dynamic body is kicked every 30 frames, staggered by index, with a seeded horizontal push and an upward lift. Every physics character walks a circle at 1.5 m/s and jumps on a staggered 180-frame period. Raycasts run at 1000/s and shape casts at 100/s from seeded origins over the world centre. The reference bounds are 400 m horizontally from the centre and heights from -50 m to 400 m. The headless profile reports and judges the run; no sleeping-body substitution."}
+    },
+    "streaming_stress": {
+      "implementation": "none",
+      "seed": 7801,
+      "workload": {
+        "descriptors": 200000,
+        "speed_m_per_s": 30,
+        "route_length_m": 5400
+      },
+      "route": {"name": "streaming_route_v1", "definition": "Shared world centre (4096, 4096) m. Waypoints relative to the centre: (-1200, -600), (1200, -600), (1200, 600), (-600, 600); 5400 m in total. The camera walks it at 30 m/s in simulated time, forward and then back, so each traversal crosses cell boundaries and the route backtracks. Frames run on the fixed 60 Hz step. A separate teleport case jumps from the route start to a point 2816 m (11 cells) east of it, past the 10-cell teleport threshold, and must settle on exactly the new active window."}
+    },
+    "all_features": {
+      "implementation": "none",
+      "seed": 7901,
+      "workload": {
+        "descriptors": 100000,
+        "resident_renderables": 10000,
+        "animated_characters": 50,
+        "bones_per_character": 64,
+        "active_dynamic_bodies": 1000,
+        "constraints": 50,
+        "live_particles": 50000,
+        "local_lights": 64,
+        "shadowed_local_lights": 4,
+        "terrain_layers": 4,
+        "audio_emitters": 16,
+        "lua_gameplay_and_input": true,
+        "music_stream": true,
+        "hud_menu": true,
+        "save_load_fixtures": true,
+        "material_and_animation_graphs": true
+      },
+      "route": {"name": "all_features_route_v1", "definition": "Shared world centre (4096, 4096) m with the streaming_route_v1 waypoints (-1200, -600), (1200, -600), (1200, 600), (-600, 600), walked at 30 m/s in simulated time on the fixed 60 Hz step, forward and back, so the 10 000 resident renderables, 50 000 particles and dynamic bodies stay in view while cells stream. The Lua gameplay, audio emitters, HUD, save/load fixtures and cooked material and animation graphs run on every frame. full_1080 is reported unsupported until FSR 2 permutation headers are vendored (ENGINE_FSR2_AVAILABLE off), the same policy render_stress uses."}
+    }
+  },
+  "suites": {
+    "smoke": {
+      "description": "Harness self-check on any CPU. Reports timings only; no performance contract applies.",
+      "timing": {"warmup_s": 0.5, "duration_s": 2, "repeats": 1},
+      "runs": [{"scene": "calibration", "profile": "builtin"}]
+    },
+    "acceptance": {
+      "description": "Performance acceptance on a native OS/backend pair. Timing is fixed by the contract: 30 s warmup, 180 s measured, 3 repeats.",
+      "timing": {"warmup_s": 30, "duration_s": 180, "repeats": 3},
+      "runs": [
+        {"scene": "render_stress", "profile": "native_1080"},
+        {"scene": "render_stress", "profile": "full_1080"},
+        {"scene": "streaming_stress", "profile": "native_1080"},
+        {"scene": "streaming_stress", "profile": "full_1080"},
+        {"scene": "all_features", "profile": "native_1080"},
+        {"scene": "all_features", "profile": "full_1080"},
+        {"scene": "physics_stress", "profile": "physics_visual"},
+        {"scene": "physics_stress", "profile": "physics_headless"}
+      ]
+    },
+    "streaming_soak": {
+      "description": "Streaming stress on the CPU for residency stability: 30 s warmup, then a 30-minute soak paced at the 60 Hz step (about ten traversals of streaming_route_v1). A CPU diagnostic; not part of the performance acceptance suite.",
+      "timing": {"warmup_s": 30, "duration_s": 1800, "repeats": 1},
+      "runs": [
+        {"scene": "streaming_stress", "profile": "streaming_headless"}
+      ]
+    }
+  }
+}

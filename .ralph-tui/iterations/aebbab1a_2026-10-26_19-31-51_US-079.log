@@ -1,0 +1,43 @@
+# Iteration 1053 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:31:51.325Z
+- **Ended At**: 2026-10-26T16:37:50.345Z
+- **Duration**: 5m 59s
+- **Input Tokens**: 30
+- **Output Tokens**: 3197
+- **Total Tokens**: 3227
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress notes, and all_features references $ grep -rn "all_features" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=*...
+The progress log shows this story stalled on the same blockers for many passes. I'll confirm the current Linux state before deciding whether anything actionable is left.
+[94m[Bash][0m Re-run Linux gates and check blocker state $ grep -n "all_features" benchmarks/manifest.json | head -5
+[94m[Bash][0m Get ctest pass summary for linux-unit $ ctest --preset linux-unit --no-tests=error 2>&1 | grep -E "tests passed|Failed|Passed" | tail -3
+[94m[Bash][0m Append status check entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, and I'm not signalling COMPLETE. Most of the acceptance criteria are blocked on decisions or hardware that only you can provide.
+
+**Verified this pass (Linux, WSL):**
+- `cmake -P cmake/ValidateVendor.cmake` passed (26 dependencies, 8542 files).
+- `cmake --build --preset linux-debug` passed.
+- `ctest --preset linux-unit` passed, 30/30.
+
+**Still open, and why I can't close it here:**
+- **Route approval:** `all_features_route_v1` is still a proposal in `benchmarks/manifest.json` (line 152), and `all_features` is `implementation: none`. Until you approve it, there is no GPU scene for the acceptance bench or the profiles.
+- **FSR 2 permutations:** the vendored FSR 2 has 0 `*_permutations.h` headers, so `full_1080` cannot link. Either vendor the headers or confirm that `full_1080` stays unsupported.
+- **Windows GPU and GUI session:** the tour with screenshots and an action log, the GI/RT/upscale profiles, the forced indirect/meshlet paths, the editor scenario with package and relaunch, and the GUI checks all need a Windows GPU session.
+- **Runtime component catalog:** `samples/` does not exist. The runtime catalog is empty in this build, so a `samples/all_features` project with components is refused. Someone needs to decide how to handle that.
+- **Not run here:** the Windows quality gates (not rerun in this pass), the editor suite on Windows, `linux-gcc*`, the sanitizer presets (the host has only GCC 9.4), and native Linux Vulkan GPU.
+
+I added a status entry to `.ralph-tui/progress.md`. No source files changed.
+
+If you approve the route and decide on the FSR 2 and catalog questions, I can start on the tour runner and the `all_features` scene. The Windows GPU and GUI runs will still need a Windows session.

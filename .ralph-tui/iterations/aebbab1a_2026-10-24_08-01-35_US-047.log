@@ -1,0 +1,41 @@
+# Iteration 130 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T05:01:35.079Z
+- **Ended At**: 2026-10-24T05:02:13.529Z
+- **Duration**: 38s
+- **Input Tokens**: 34
+- **Output Tokens**: 6939
+- **Total Tokens**: 6973
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log tail and check US-047 entries $ git status --short 2>/dev/null | head -40
+[94m[Bash][0m Read recent progress entries and terrain memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md
+[94m[Bash][0m Read traced shadow fixture and terrain references in renderer $ grep -n "terrain" engine/render/src/scene_renderer.cpp | head -80
+[94m[Bash][0m Read hill terrain, sun, and camera helpers in the fixture $ grep -n "make_hill_terrain\|low_sun\|top_down_camera\|kTileCount\|make_terrain_scene" -A12 tests/src...
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Next step: add the `RtShadow` accessor, then run t...
+US-047 is not complete, so I am not emitting the COMPLETE signal. This pass changed no source. I only appended a progress entry.
+
+**What is done** (from the progress log and the fixtures it cites):
+- CPU runtime in `engine/world`: tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat weights, height query, and the 14-case fixture for coverage, holes, and LOD switching.
+- Render bridge (`terrain_mesh.cpp`) and the terrain draw path: 48-byte terrain stride, splat tinting the albedo, terrain pipelines, and terrain groups routed past the meshlet and indirect branches.
+- Gates from the last full run: ValidateVendor, win-dev, win-debug, and win-unit passed on Windows. GPU DX12 and Vulkan (with validation) passed the stitching, LOD, and splat fixtures. Linux debug, GCC, and ASan/UBSan passed.
+
+**What is still open:**
+1. **Traced terrain shadow fails on both DX12 and Vulkan.** `run_terrain_traced_shadow` reports `darkened 0` with no layer errors. The fixture geometry looks valid: the sun is about 31° above the horizon, so the hill's shadow falls where the top-down camera can see it. The CPU reference over the same tiles passes. Reading the code has not found the cause. The next step is a Windows readback of `RtShadow` for the hill frame, which needs a test accessor for that texture first. This is also the blocker for the "terrain participates in shadows and RT in the full profile" criterion.
+2. **`engine_bench` does not exist in the tree.** The acceptance benchmark run cannot happen. The criterion applies once the harness exists, and the progress log ties the harness to US-074.
+3. **No native Linux Vulkan device on this host.** The Linux Vulkan GPU run is not-run here, not passed.
+
+**What I did this pass:** read the traced-shadow fixture, its helpers, and the sun and camera setup. I appended a re-check entry to `.ralph-tui/progress.md` with the status and the next step. I did not re-run the gates, since no source changed and the earlier results stand for this tree.
+
+**Recommendation:** the next pass should add the `RtShadow` accessor and run the Windows `us047` batch once for DX12 and Vulkan, then read the hill-frame values before changing the shared RT path.

@@ -1,0 +1,45 @@
+# Iteration 324 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T19:25:03.605Z
+- **Ended At**: 2026-10-24T19:25:30.911Z
+- **Duration**: 27s
+- **Input Tokens**: 42
+- **Output Tokens**: 4003
+- **Total Tokens**: 4045
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-053 already has code in the tree.
+[94m[Bash][0m Check progress log and physics directory state $ ls -la && grep -n "US-053" .ralph-tui/progress.md | head -50 && ls engine/physics/ && git status 2>&...
+The log shows US-053 as Partial through many passes. I'll read the latest entries to see what's still open.
+[94m[Bash][0m Read recent US-053 progress entries $ sed -n 2205,2330p .ralph-tui/progress.md
+The log shows US-053 stuck at Partial for many passes, with no source change since the last full gate run. The remaining blocker is a missing GCC 11+, which earlier passes treated as unfixable. I'll try once to get one without root, by downloading the Debian package and extracting it locally.
+[94m[Bash][0m Check whether GCC 11 packages are available without root $ cat /etc/os-release | head -2
+[94m[Bash][0m Show candidate versions for GCC 10 and 11 $ cd /tmp && apt-cache policy gcc-11 g++-11 gcc-10 g++-10 2>&1 | grep -E "^[a-z+-]+[0-9]*:|Candidate"
+GCC 11 is not in the Focal repositories. Only GCC 10 is, and Jolt needs GCC 11+ for `__builtin_bit_cast`, so that route is closed without a PPA or a source build. I'll record this pass in the progress log, as the workflow asks.
+[94m[Bash][0m Append this pass's findings to the progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-053 (toolchain route check, status Partial...
+US-053 is not complete, so I am not emitting the COMPLETE signal. I made no source changes in this pass.
+
+**What is done (from earlier passes, recorded in `.ralph-tui/progress.md`):**
+- Colliders for box, sphere, capsule, convex hull, mesh, and heightfield, with layers, masks, triggers, raycasts, shape casts, and collider replacement.
+- Queries that return entity identity, tested before and after origin rebases.
+- Streamed collision cells: a deferred unload keeps bodies that are still falling toward the cell, and `cancel_unload` handles reactivation.
+- Terrain tile heightfields via `terrain_tile_cell`.
+- Gates that pass on this tree: Linux `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (22/22); the Linux ASan/UBSan sanitize run (22/22); Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21 on the last full pass).
+
+**What is still open:**
+1. **`linux-gcc` gate.** Jolt needs GCC 11+ for `__builtin_bit_cast`. This machine has only GCC 9.4. I checked this pass: the Ubuntu 20.04 repositories top out at GCC 10.5, which is also too old. Reaching GCC 11 needs a PPA or a source build, and I did not attempt either. This gate needs a GCC 11+ machine or the CI job.
+2. **Acceptance benchmark.** No `engine_bench` target exists in any non-vendored CMake file. That harness belongs to US-074, so the benchmark is not run.
+3. **Windows `engine_tests_cli_help` flake.** It failed twice with empty stdout and exit 0, then passed on the next runs. I have not found the cause, and the single test passes when run alone. It needs repeated Windows runs of that one test.
+
+The last many passes repeated the same checks with no change. The next useful step is either a GCC 11+ environment for the `linux-gcc` gate, or US-074 to supply the benchmark. Repeated status-only runs will not move the story.

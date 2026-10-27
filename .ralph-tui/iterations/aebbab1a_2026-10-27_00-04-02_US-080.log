@@ -1,0 +1,47 @@
+# Iteration 1097 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:04:02.087Z
+- **Ended At**: 2026-10-26T21:04:17.828Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2133
+- **Total Tokens**: 2155
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and existing bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Re-check hardware, FSR permutations, and manifest gaps $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ host compilers g++ 9.4 and clang 10. - No source change, build, or bench run this pass. Open items a...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. This host can't produce the measurements the story requires, and nothing I could change in code this pass would move that.
+
+I re-checked the blockers in this session:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. `nvidia-smi` sees the RTX 5080 under WSL, but that does not satisfy the native Linux/Vulkan requirement.
+- **No Windows acceptance run.** `artifacts/bench` has only the two `us080-dx12-*readback-off` runs. There is no three-repeat `--suite acceptance` run for any backend.
+- **Frame budget still missed.** The last DX12 numbers (from the earlier readback fix) show `render_stress` native_1080 CPU p99 over 16.7 ms on repeats 2 and 3. About 15 ms of CPU per frame is still unprofiled.
+- **Residency not measured.** Residency is not wired, so native_1080 cannot pass by design yet.
+- **Workloads missing.** Four manifest entries are still `implementation: none`, covering physics, streaming, and `all_features`.
+- **FSR 2 permutations missing.** `third_party/fsr2` has 0 `*_permutations.h`, so `full_1080` is unsupported. Vendoring that is a user decision.
+- **Compilers too old for linux-gcc.** The host has g++ 9.4 and clang 10. Jolt needs GCC 11+ or clang 14+.
+
+I did not run the quality gates or any new benchmark this pass. The previous entries' Windows gate and GPU suite results still stand as recorded in the log.
+
+I appended a status entry to `.ralph-tui/progress.md`. Its content matches the previous status checks, so it adds no new information.
+
+**What's needed to finish:**
+1. A Windows Release run on the RTX 5080 to profile the unexplained CPU cost in `render_stress` (the extract of ~20k renderables and render submission are the suspects).
+2. Residency measurement wired into the benchmark.
+3. The physics, streaming, and `all_features` workloads implemented.
+4. A user decision on FSR 2 permutations (vendor the generated tables, or drop `full_1080`). Changing the contract needs a separate decision from you.
+5. A native Linux machine with a Vulkan device, and GCC 11+ or clang 14+ for the `linux-gcc*` presets.
+6. Three-repeat acceptance runs on DX12, Vulkan, and native Linux Vulkan, plus the editor smoke tests on both OSes.

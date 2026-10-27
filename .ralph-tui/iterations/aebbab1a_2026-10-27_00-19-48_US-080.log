@@ -1,0 +1,39 @@
+# Iteration 1153 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:19:48.454Z
+- **Ended At**: 2026-10-26T21:20:03.187Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1955
+- **Total Tokens**: 1977
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and benchmark directories $ ls benchmarks tools/benchmark 2>/dev/null
+[94m[Bash][0m Re-check GPU device, FSR permutations, and acceptance runs $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -1
+[94m[Bash][0m Append status note to progress log $ no `acceptance` run in `artifacts/bench`. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL onl...
+US-080 is not complete, and I have not emitted the COMPLETE signal. This host cannot produce the reports the story requires.
+
+**What blocks it (re-checked just now):**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL `nvidia-smi` (driver 617.42), which does not satisfy the native Linux/Vulkan requirement.
+- **No acceptance reports.** `artifacts/bench` has no `acceptance` run. The existing entries are diagnostic runs (us076, us077, us080, us078).
+- **Missing workloads.** `benchmarks/manifest.json` still has 4 entries marked `implementation: none` (physics, streaming, teleport/render).
+- **FSR 2 cannot link.** `third_party/fsr2` has 0 `*_permutations.h` files, so `ENGINE_FSR2_AVAILABLE` stays off. Choosing how to vendor them is your decision, not something I should make silently.
+- **Windows reports need the reference machine.** The contract requires 3 × (30 s warmup + 180 s measured) per scene, profile, and backend, on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. The 4 `none` workloads mean the contract cannot be fully measured even on Windows.
+
+**What I did:** made no source changes and ran no builds or benchmarks. I appended a status note to `.ralph-tui/progress.md`. The log already has about 50 identical "status check" entries from earlier passes, so further repeats would add nothing.
+
+**What would unblock it:**
+1. Run the acceptance matrix on the RTX 5080 reference computer, or give this environment native Linux access to the GPU (`/dev/dri` plus a Vulkan ICD).
+2. Decide how FSR 2 permutations get vendored (regenerate them, or pull a pinned archive that includes them).
+3. Have the physics, streaming, and teleport/render workloads implemented, or explicitly descoped by you. Descoping changes the contract, so that needs your decision.

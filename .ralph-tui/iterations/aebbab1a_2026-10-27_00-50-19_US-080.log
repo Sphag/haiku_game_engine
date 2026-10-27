@@ -1,0 +1,43 @@
+# Iteration 1191 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:50:19.192Z
+- **Ended At**: 2026-10-26T21:50:34.883Z
+- **Duration**: 15s
+- **Input Tokens**: 24
+- **Output Tokens**: 2089
+- **Total Tokens**: 2113
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current benchmark state before deciding what this run can verify.
+[94m[Bash][0m Read progress tail and benchmark layout $ git status 2>&1 | head -5
+The log shows this story has been blocked across many prior passes. I'll re-check the blockers in one command rather than trust the old notes.
+[94m[Bash][0m Re-check hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ artifacts/bench holds only partial us076/us077/us078/us080 runs, no acceptance suite. nvidia-smi see...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I re-checked the blockers on this host and nothing has changed since the earlier passes.
+
+**What is blocked**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42), which does not satisfy the native Linux/Vulkan report requirement.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still marks four entries `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run would exit 3 (incomplete) while they remain.
+- **FSR 2 cannot build.** There are 0 `*_permutations.h` files under `third_party`, so `ENGINE_FSR2_AVAILABLE` stays off. This needs a decision on how to vendor the generated shader tables.
+- **No acceptance suite has been run.** `artifacts/bench` has only partial us076/us077/us078/us080 runs, with no three-repeat, 30 s / 180 s acceptance batch.
+
+**What I did**
+- Re-verified the blockers above.
+- Appended a status entry to `.ralph-tui/progress.md`. No code changed, and I did not run builds, gates, or benchmarks, because they would only exit 3 or fail for the reasons above.
+
+**What's needed to finish**
+1. Run the Windows DX12 and Vulkan acceptance batches and the native Linux Vulkan batch on the RTX 5080 machine. Each needs three 180 s repeats with raw reports retained.
+2. Decide the FSR 2 vendoring route.
+3. Implement the four `none` workloads, including `all_features`, which has no source.
+4. If any frame budget is exceeded, the cause must be fixed. Changing the contract needs your separate decision.

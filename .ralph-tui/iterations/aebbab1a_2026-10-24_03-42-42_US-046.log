@@ -1,0 +1,48 @@
+# Iteration 54 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:42:42.782Z
+- **Ended At**: 2026-10-24T00:42:55.291Z
+- **Duration**: 12s
+- **Input Tokens**: 22
+- **Output Tokens**: 1470
+- **Total Tokens**: 1492
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-046 already has in the tree.
+[94m[Bash][0m Read progress log tail and repo state $ git status 2>&1 | head -5
+The log shows US-046 blocked on a vendoring decision for several iterations. I'll check whether that has changed before deciding anything.
+[94m[Bash][0m Check FSR 2 permutation headers and recent changes $ find engine tests cmake docs tools third_party -newer .ralph-tui/progress.md -type f | head
+US-046 is still blocked, and I have not made any changes this run. The story can't be completed until you choose how to get the FSR 2 shader tables.
+
+**What I checked**
+- `third_party/fsr2` still holds only `LICENSE.txt` and `src`.
+- `find third_party engine/rhi -name "*_permutations.h"` returns 0 files, so `ENGINE_FSR2_AVAILABLE` stays off and both backends return `Unsupported` for upscale.
+- Nothing under `engine`, `tests`, `cmake`, `docs`, `tools` or `third_party` has changed since the last progress entry.
+
+**What's done (from earlier runs)**
+- The CPU contract is in place and tested: fixed profile resolutions, FSR 2 jitter phases, the benchmark policy and the history reset rule.
+- The RHI upscaler contract and both backend wrappers exist, compiled only when FSR 2 is available.
+
+**What's left and depends on FSR 2 being callable**
+- The upscale call on both backends, and the reactive mask.
+- `SceneRenderer` switching to profile sizes and composing the UI after upscaling.
+- Every GPU and gate check that exercises an upscale.
+
+I did not add the profile switch on its own. Without a working FSR 2 it would ship an unupscaled 720p image.
+
+**Decision needed from you**
+1. Vendor the hash-pinned outputs of the archive's `tools/sc/FidelityFX_SC.exe`. This needs a documented exception to the no-prebuilt-tools rule.
+2. Regenerate the permutation headers with the engine's pinned DXC through a first-party generator. This is more work but stays within the rule.
+
+Once you pick one, I can carry out the vendoring and then the remaining steps. The details are in `docs/upscaling.md` and the memory note on the missing FSR 2 permutations.

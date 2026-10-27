@@ -1,0 +1,39 @@
+# Iteration 47 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:38:55.494Z
+- **Ended At**: 2026-10-24T00:39:10.832Z
+- **Duration**: 15s
+- **Input Tokens**: 24
+- **Output Tokens**: 1775
+- **Total Tokens**: 1799
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the FSR 2 state the memory notes flag as blocking.
+[94m[Bash][0m Inspect progress log and FSR2 build gating $ ls third_party 2>/dev/null | head -50
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-fsr2-permutations-missing.md[0m
+The progress log shows US-046 blocked on an FSR 2 vendoring decision across several earlier passes. I'll re-check whether that changed.
+[94m[Bash][0m Re-check FSR2 permutation headers and recent changes $ find engine tests cmake docs tools third_party -newer .ralph-tui/progress.md -type f | head
+US-046 is still blocked, so I have not signaled COMPLETE and made no source changes this pass.
+
+**What's blocking it:** The vendored FSR 2 tree is missing the generated `*_permutations.h` headers that both backends include for their precompiled shader tables. The count is 0 in `third_party/` and `engine/rhi/`, and `third_party/fsr2` still holds only `LICENSE.txt` and `src/ffx-fsr2-api`. The pinned upstream archive doesn't contain them either. Without them FSR 2 can't compile or link, so the backends return `Unsupported`, and none of the upscale-dependent criteria (profile sizes, UI after upscale, GPU upscale tests, the Windows and Linux gates that exercise it) can be met.
+
+**Decision needed from you**, choosing one route:
+1. **Vendor the archive's generated outputs.** Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the rule against vendoring prebuilt tools in `third_party/manifest.json`.
+2. **Regenerate the blobs ourselves.** Use the engine's pinned DXC through a first-party generator. This keeps the no-prebuilt-tools rule but is more work, and the bytes will differ from upstream.
+
+I won't add stub headers. They would hide the failure until pipeline creation.
+
+**Already done and verified in earlier passes (per `.ralph-tui/progress.md`):** the CPU upscaler contract and its tests, the RHI upscale contract with its validation hooks, the FSR 2 Vulkan forwarding shims, and the Linux clang and GCC gates on the RHI change. The Windows GPU suites ran with validation on and passed, with no new GPU test. Still not run: `linux-asan`/`linux-sanitize`, the native Linux Vulkan GPU suite, the Release benchmark, and CI.
+
+Once you pick a route, the next steps are: vendor or generate the headers, fix the two known Linux compile issues in the FSR sources (`_countof` and `std::wstring_convert`), then wire the upscale call and the profile-size switch into both backends.

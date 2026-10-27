@@ -1,0 +1,34 @@
+# Iteration 409 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:39:19.198Z
+- **Ended At**: 2026-10-25T00:39:37.728Z
+- **Duration**: 18s
+- **Input Tokens**: 22
+- **Output Tokens**: 1921
+- **Total Tokens**: 1943
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-055 is already in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout, script module, and progress log $ grep -n "US-055" -r --include=*.md --include=*.txt --include=*.cmake --include=CMakeLists.txt . 2>/d...
+The progress log says US-055 is implemented and every gate passes except `linux-gcc`, which needs GCC 11+. Before deciding anything, I'll check whether that compiler is now on the host.
+[94m[Bash][0m Check host compilers and whether the script sources changed $ grep -n "linux-gcc" CMakePresets.json | head -5
+US-055 is still **Partial**, so I'm not signalling COMPLETE.
+
+**What's already in the tree:** the Lua API in `engine/script/` (entities, transforms, input, assets, physics queries, events) with 15 headless unit cases. Destroyed-entity access raises a controlled script error, and handles are `EntityHandle` values, not pointers. The earlier log entries record these gates as passing:
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, and `linux-asan` plus `linux-sanitize`.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`, run through the Windows batch.
+
+**What's open:** the `linux-gcc` gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`). Jolt needs GCC 11+, and this host still has only g++-9.4 and clang++-10, so I can't run that gate here. The CI job has to cover it.
+
+**This pass:** I made no source changes and reran no gates. The script sources are unchanged since the last full pass, and the compiler check confirmed the `linux-gcc` blocker is unchanged. I also didn't add another "status re-check" entry to `.ralph-tui/progress.md`, since the log already has about ten identical ones.

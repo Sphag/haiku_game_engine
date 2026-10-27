@@ -1,0 +1,232 @@
+# Iteration 36 Log
+
+## Metadata
+
+- **Task ID**: US-045
+- **Task Title**: Denoising and Volumetrics
+- **Description**: As a player, I want stable RT effects and volumetric light so that the full profile is usable for gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T22:02:13.717Z
+- **Ended At**: 2026-10-23T22:49:13.140Z
+- **Duration**: 46m 59s
+- **Input Tokens**: 584
+- **Output Tokens**: 167776
+- **Total Tokens**: 168360
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-045 is already partly implemented.
+[94m[Bash][0m Inspect progress log and search for US-045 traces $ ls
+US-045 has no trace in the code yet; the log ends at US-044. Next I'll read the PRD story and the existing render layout.
+[94m[Bash][0m Read US-045 PRD text and render module layout $ sed -n 430,450p tasks/prd-open-world-engine.md && sed -n 735,760p tasks/prd-open-world-engine.md && ...
+The story needs a real denoiser and froxel fog, each with GPU passes and tests. Before designing either, I'll read the existing RT effects module and the memory notes on running the Windows gates.
+[94m[Bash][0m Read memory notes and RT effects header $ cat engine/render/include/engine/render/rt_effects.hpp
+The RT effects module is the pattern to follow. I'll read its GPU implementation, the shader, and how the render library and tests are registered in CMake.
+[94m[Bash][0m Read RtEffects GPU implementation $ sed -n '/RtEffects::create/,$p' engine/render/src/rt_effects.cpp
+[94m[Bash][0m Read render CMake and RT shader $ cat engine/render/shaders/rt_effects.hlsl | head -80
+The RT pass shows the pattern: a descriptor layout, a pipeline, a per-frame parameter upload, and a CPU reference. I'll check whether the RHI supports 3D textures (the froxel grid needs one) and how the dynamic GI GPU test builds its device and shader.
+[94m[Bash][0m Check RHI texture dimensions and GPU test setup $ sed -n 1,60p tests/src/render_dynamic_gi_gpu_tests.cpp
+[94m[Bash][0m Inspect TextureDesc and dynamic GI shader/source $ ls engine/render/src/dynamic_gi.cpp && grep -n "^[A-Za-z].*(" engine/render/src/dynamic_gi.cpp | hea...
+The RHI has no 3D or depth textures, so the froxel volume will live in a buffer, following the dynamic GI pattern. Next I'll check how tests are registered and how GPU readback is done in an existing GPU test.
+[94m[Bash][0m Find test registration and GPU readback helpers $ grep -n "TEST_CASE" tests/src/render_dynamic_gi_gpu_tests.cpp | head
+Next I'll read the GPU test's device setup and readback helpers so the new GPU cases follow the same pattern.
+[94m[Bash][0m Read GPU test fixture and helper code $ sed -n 380,420p tests/src/render_dynamic_gi_gpu_tests.cpp
+I have the GPU test pattern. Before writing shaders, I need three facts: which formats exist (for the depth, normal, and motion inputs), whether the RHI has GPU timestamps for "separate GPU passes", and how the dynamic GI shader traces its shadow rays.
+[94m[Bash][0m Check formats, timestamps, and ray query usage $ grep -n "RayQuery\|TraceRay" engine/render/shaders/rt_effects.hlsl | head
+The formats I need are present: R32Float for linear depth, R32G32Float for motion, and R16G16B16A16Float for values and normals. I still need the buffer usage flags, the shared upload helper, and how timestamps are used elsewhere.
+[94m[Bash][0m Read upload helper, buffer usage, timestamp usage $ sed -n 1,40p engine/render/src/dynamic_gi.cpp | grep -n "kBufferUsage\|constexpr"
+The render graph already times each pass it runs, so these passes will be measured by registering them as graph passes, the same way RT effects run. I have enough context to write the code. I'll start with the denoiser: its public header, which holds the CPU reference types and the GPU class.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/denoiser.hpp[0m "#pragma once
+
+// In-house temporal and spatial denoiser for the ray-traced signals (US-045). TemporalDenoiser filters one target at a time (the RT shadow
+// or the RT reflection of rt_effects.hpp). Ea... (8467 chars)"
+The header needs three corrections before I write the implementation. The age belongs in the normal history's alpha channel, so the output's alpha stays the signal's own alpha. The parameter block is 32 bytes, not 48. The output is a full RGBA value.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/denoiser.hpp[0m edit: "inline constexpr std::uint32_t kDenoiseParameterBy..." → "inline constexpr std::uint32_t kDenoiseParameterBy..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/denoiser.hpp[0m edit: "// The per-pixel geometry the denoiser reads and k..." → "// The per-pixel geometry the denoiser reads and k..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/denoiser.hpp[0m edit: "struct DenoiseReference {
+    std::vector<glm::vec..." → "struct DenoiseReference {
+    std::vector<glm::vec..."
+The header is corrected. Before writing the implementation I'll check the `using` declarations and helper idioms at the top of `rt_effects.cpp` so the new file matches them.
+[94m[Bash][0m Read rt_effects.cpp includes and helpers $ grep -n "bool finite\|isfinite" engine/render/src/*.cpp | head -3
+Now the denoiser implementation: the CPU reference, the parameter packing, and the GPU ping-pong pass.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/denoiser.cpp[0m "#include "engine/render/denoiser.hpp"
+
+#include "engine/core/result.hpp"
+#include "engine/render/render_graph.hpp"
+#include "gpu_upload.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#... (19350 chars)"
+I left a stray unused array in `create()`. I'll remove it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/denoiser.cpp[0m edit: "    // The history textures. The value keeps the d..." → "    // The history textures. The value keeps the d..."
+The denoiser's CPU reference is done. Next the HLSL shader, which mirrors the reference step for step.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/denoise.hlsl[0m "// Temporal and spatial denoiser for the ray-traced signals (US-045): the compute pass that TemporalDenoiser (engine/render/src/denoiser.cpp)
+// dispatches. One thread filters one pixel: a depth- and ... (6074 chars)"
+Next is the volumetric fog header. It covers the froxel grid, the CPU reference, and a two-pass GPU class (inject with temporal reprojection, then integrate).
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/volumetric_fog.hpp[0m "#pragma once
+
+// Froxel volumetric fog (US-045). The view frustum is cut into a grid of froxels: width x height columns of pixels, and depth slices whose
+// far edges grow exponentially from near to f... (11157 chars)"
+The header has a bogus member (`unused_`) and a stray `shadows_` flag, and it's missing the top-level handle. I'll fix those.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/volumetric_fog.hpp[0m edit: "    rhi::ResourceState integrated_state_ = rhi::Re..." → "    rhi::ResourceState integrated_state_ = rhi::Re..."
+The fog header is settled. Now the fog implementation: the CPU reference, the parameter layout, and the two GPU passes with their ping-pong grids.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/volumetric_fog.cpp[0m "#include "engine/render/volumetric_fog.hpp"
+
+#include "engine/core/result.hpp"
+#include "engine/render/render_graph.hpp"
+#include "gpu_upload.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstr... (27244 chars)"
+The fog implementation is in place. Its shaders need to share one file, and both entries declare resources, so their register numbers must not collide. I'll check whether the RHI requires contiguous binding numbers before I pick them.
+[94m[Bash][0m Check RHI rules on descriptor binding numbers $ grep -rn "binding" engine/rhi/src/*.cpp engine/rhi/src/*/*.cpp 2>/dev/null | grep -i "contig\|sorted...
+DX12 appends ranges in layout order with each binding's own register, so non-contiguous numbers are fine. I'll give the integrate pass registers 0, 4, and 5, so the shader file can keep one set of register numbers per entry.
+[94m[Bash][0m Move integrate pass bindings to registers 0, 4, 5 $ !written.ok()) {''' assert s.count(old_w)==1 s=s.replace(old_w,new_w) open(p,'w').write(s) print("ok...
+That notice is from my own scripted edit, so the file is in the state I intended. Next, the fog shader with its two entries.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/volumetric_fog.hlsl[0m "// Froxel volumetric fog (US-045): the two compute passes that VolumetricFog (engine/render/src/volumetric_fog.cpp) dispatches.
+// CSFogInject lights each froxel (the sun and up to 16 local lights, ea... (11883 chars)"
+The shader is written. The integrate entry declares the same file-wide acceleration-structure global, so I'll compile both fog entries at SM 6.5 with ray queries, the way the dynamic GI pass is built. Then I'll register the shaders, the sources, and the test files in CMake.
+[94m[Bash][0m Register shaders, sources, and test files in CMake $ grep -n "add_executable\|render_dynamic_gi" tests/CMakeLists.txt | head -3
+The CMake registration is done. Next, the CPU unit tests for the denoiser: settings validation, cut detection, history rejection, reset, age decay, motion, and NaN handling.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_denoise_tests.cpp[0m "// The denoiser's CPU reference and its contracts (US-045): the settings' ranges, the camera-cut and light-change tests, the spatial prefilter,
+// the reprojection with its disocclusion rejection, the... (11277 chars)"
+A few of my test expectations need correcting. The NaN case should average to 14/9, since the two bad samples count as zero inside the prefilter, and the test needs `<cstring>` for `memcpy`.
+[94m[Bash][0m Fix denoiser test expectations and includes $ ''') open(p,'w').write(s) print('ok') EOF
+Next the fog's CPU unit tests: validation, slice and density math, the homogeneous transmittance check, sun and local-light visibility, reset and temporal blend, and the apply step.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_volumetric_tests.cpp[0m "// The froxel fog's CPU reference and its contracts (US-045): the frame's validation, the slice and density math, the phase function, the
+// homogeneous transmittance, the sun and local-light visibili... (11383 chars)"
+The fog tests have a bug. `inject_reference` takes the visibility function by value, so passing a counter by value makes the counter in the test never increment. I'll wrap those counters in `std::ref`, and compare the shadow direction with a tolerance instead of exact float equality.
+[94m[Bash][0m Fix visibility counters and comparisons in fog tests $ \n'), ] for a,b in reps:     assert s.count(a)==1, a[:60]     s=s.replace(a,b) s=s.replace('''// A v...
+Both CPU test files are written. The CMake list also references the two GPU test files, so I'll create minimal placeholders so the configure and build can run now. I'll replace them with real GPU cases after the CPU side compiles.
+[94m[Bash][0m Configure and build Linux debug to catch compile errors $ grep -n "error\|warning:" /tmp/build.log | head -40
+Four compile errors: glm has no `length2`, `DenoiseHistory` has no `index()`, a structured-binding loop copies a pair, and `reset_` is unused. I'll fix each one.
+[94m[Bash][0m Fix compile errors and rebuild Linux debug $ grep -n "error" /tmp/build.log | head -30
+The C++ side now compiles. The remaining errors come from the shader step, so I'll look at the lines it flags.
+[94m[Bash][0m Show shader lines flagged by the build $ sed -n 1,12p /tmp/build.log | cut -c1-300
+`point` is a reserved keyword in HLSL, so I'll rename that local to `centre`, and also rename `index` to `cell_index` to avoid clashing with the name of a built-in.
+[94m[Bash][0m Rename HLSL keyword collisions and rebuild $ grep -n "error\|warning" /tmp/build.log | grep -v "^.*-I" | head -30
+The shaders now get past the compiler. The tests need `Catch::Approx`, so I'll check which header existing tests include for it.
+[94m[Bash][0m Find the Catch2 header that provides Approx $ grep -rln "Approx" tests/src | xargs grep -h "include <catch2" | sort | uniq -c
+[94m[Bash][0m Add Approx header and rebuild Linux debug $ grep -n "error\|warning:" /tmp/build.log | grep -v " -I" | head -30
+[94m[Bash][0m Fix lambda capture and rebuild Linux debug $ grep -n "error\|warning:" /tmp/build.log | grep -v " -I" | head -20
+The Linux debug build passes with zero warnings-as-errors failures. Next I'll run the unit suite, which covers the new CPU tests along with the existing ones.
+[94m[Bash][0m Run the unit suite on Linux $ "$B" --suite unit 2>&1 | tail -60
+[94m[Bash][0m Locate build output directory $ 
+[94m[Bash][0m Run the unit suite on Linux $ "$B" --suite unit 2>&1 | tail -40
+All 566 unit cases pass on Linux, including the new ones. Now the GPU tests. I need to know how the RHI uploads and reads back textures, so I'll check the device and command-list APIs.
+[94m[Bash][0m List RHI device and command list APIs $ grep -n "virtual" engine/rhi/include/engine/rhi/command_list.hpp | cut -c1-170 | head -40
+Texture upload and readback go through `copy_buffer_to_texture` and `copy_texture_to_buffer`, so I can use textures with exactly representable half-float values. For the fog's shadow case I need a ray-traced scene, so I'll read how the dynamic GI GPU test builds its scene and fence.
+[94m[Bash][0m Read GPU test scene setup and RT fixture helpers $ grep -n "inline\|^[A-Za-z].*(" tests/src/render_rt_fixture.hpp | head -30
+The fog shadow test needs a box occluder, with a CPU visibility that matches the GPU ray. I'll check how the RT fixture defines its box mesh and instance transform, so the CPU ray-box test uses the same extents.
+[94m[Bash][0m Read RT fixture box mesh and instance helpers $ sed -n 108,120p tests/src/render_rt_fixture.hpp
+The box is the unit cube scaled by `half` and translated by `center`, so its bounds are `center ± half`. Before writing texture readback, I need to know whether the RHI pads texture-to-buffer rows, so I'll check how an existing GPU test reads a texture back.
+[94m[Bash][0m Check texture readback usage and row layout rules $ grep -n "row\|pitch\|align" engine/rhi/include/engine/rhi/command_list.hpp | head
+[94m[Bash][0m Read copy row pitch rules and existing half decoding $ grep -rn "half_to_float\|from_half\|half_to" tests/src engine/*/include 2>/dev/null | head -4
+[94m[Bash][0m Read how RT GPU test decodes half-float readback $ grep -n "half" tests/src/render_rt_gpu_tests.cpp tests/src/render_rt_fixture.hpp | head -5
+I have what I need for the denoise GPU test. Half-float packing and unpacking use `glm::packHalf4x16` and `unpackHalf4x16`, as the RT GPU test does, and rows are padded with `copy_row_pitch`. The test runs four frames of a moving scene, including a camera cut, and compares the GPU output with the CPU reference after each frame.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_denoise_gpu_tests.cpp[0m "// The temporal denoiser on real GPUs (US-045). Each case runs TemporalDenoiser on DX12 and on Vulkan with the debug layers on, over a short
+// sequence of frames: a moving wall, a disocclusion that c... (15015 chars)"
+The normal upload is written as an awkward inline lambda. I'll pull it into a named variable before building.
+[94m[Bash][0m Simplify normal upload in denoise GPU test $ ''' assert s.count(a)==1 s=s.replace(a,b) open(p,'w').write(s) print('ok') EOF
+Next is the fog GPU test. It builds a ray-traced box occluder, and the CPU reference uses an analytic segment-versus-box visibility that matches the GPU's ray. The test covers three frames: an unshadowed start, a sun move that exercises temporal reuse, and a camera cut that must reset history.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_volumetric_gpu_tests.cpp[0m "// Froxel volumetric fog on real GPUs (US-045). Each case runs VolumetricFog on DX12 and on Vulkan with the debug layers on, over a box
+// occluder in a top-level structure. The cases compare the inje... (17109 chars)"
+Two cleanups before building. The shadow-effect case is CPU-only but sits under a GPU test name, so I'll fold its check into `check_frames`. I'll also drop an unused `kRtBoxMesh` alias.
+[94m[Bash][0m Fold shadow check into the fog GPU case $ ''') open(p,'w').write(s) print('ok') EOF grep -n "FogFrame first\|const FogFrame first" tests/src/r...
+Now I'll rebuild on Linux, which compiles the GPU test files along with everything else.
+[94m[Bash][0m Rebuild Linux debug with GPU test files $ grep -n "error\|warning:" /tmp/build.log | grep -v " -I" | head -30
+The build passes with the GPU test files included. Next is the Linux unit ctest preset, the gate the story requires.
+[94m[Bash][0m Run Linux unit ctest and list new test cases $ $B --list-tests 2>/dev/null | grep -i "denois\|fog\|volumetric" | head -40
+[94m[Bash][0m Confirm new CPU test cases run and pass $ grep -i "tests passed\|failed" /tmp/ctest.log | head
+The ctest preset passes 22 of 22. The test binary rejects the list flag, so I'll confirm that the new CPU cases are among the 566 by asking Catch2 directly for test names.
+[94m[Bash][0m Count new unit test names via Catch2 $ $B --suite unit 2>&1 | tail -1
+[94m[Bash][0m Check the test runner's reporting options $ sed -n '/Runs the CPU/,$p' <(./build/linux-dev/tests/Debug/engine_tests --help) | head -20
+The runner has its own argument parser, so I'll verify inclusion by checking that the new test names are compiled into the binary, then trust the unit tag selection.
+[94m[Bash][0m Confirm new test names are compiled into the binary $ strings build/linux-dev/tests/Debug/engine_tests | grep -c "denoiser's settings\|fog's frame is chec...
+The CPU tests are in the binary and run under the unit tag. The Windows GPU gates are the real evidence for this story, so I'll look for the batch template from earlier stories and check that no gate batch is still running.
+[94m[Bash][0m Find existing Windows gate batch templates and running batches $ ps -eo pid,args | grep -i "\.bat" | grep -v grep | head
+[94m[Bash][0m Read the last gate batch template and its results $ ls -t | grep "us044d\|us045\|us046" | head -30
+The earlier batch template is clear, and no batch is running. I'll write a new batch for this story under its own name, `us045b`, with the same gates in the same order, and launch it in the background.
+[94m[Bash][0m Create and launch the Windows gate batch in background $ echo launched
+The `pgrep` printed PID 16211 before my launch, so a gate batch may still be running. My memory notes warn that overlapping batches share result files, so I'll check what that process is before going further.
+[94m[Bash][0m Check for an overlapping gate batch process $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us045b_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+  PID  PPID     ELAPSED COMMAND
+16223       00:05 /init /mnt/c/Windows/system32/cmd.exe cmd.exe /c C:\Users\bucha\AppData\Local\Temp\us045b_gate.bat][0m
+PID 16211 was my own `pgrep` shell matching its own command line, so nothing stale was running. The batch that's running now is 16223. While it works, I'll run the Linux gates the story also requires: vendor validation, the GCC preset, and the ASan and UBSan preset.
+[94m[Bash][0m Run Linux vendor validation and GCC gate $ tail -2 /tmp/lgcc_ctest.log)
+
+[91m[Error: Exit code 1
+linux_validate=0
+gcc_configure=0
+gcc_build=0
+0][0m
+The chain stopped early because `grep -c` exits 1 when it finds zero matches, which is the result I want. I'll run the GCC unit ctest on its own.
+[94m[Bash][0m Run Linux GCC unit ctest preset $ tail -3 /tmp/lgcc_ctest.log
+[94m[Bash][0m Run Linux ASan build and sanitizer test preset $ cat /tmp/asan_cfg.log | tail -1
+The ASan build and the sanitizer preset both pass with no warnings. I'll check on the Windows batch.
+[94m[Bash][0m Check Windows gate batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us045b
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us045b_rc.txt ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us045b. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Windows gate batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us045b
+The Windows build, vendor check, and unit ctest all pass. Both GPU suites fail with exit 1, so I'll read their logs.
+[94m[Bash][0m Read DX12 GPU suite log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && tr -d '\r' < us045b_5.log | grep -v "^\s*$" | head -80
+DX12 has three failures, and two share one cause. The denoiser's value history and the fog's integrated grid don't have `CopySource` usage, so the test's readback fails. The first denoise failure is my own wrong expectation: `set_inputs` with valid handles succeeds. I'll check the Vulkan log for the same pattern before fixing anything.
+[94m[Bash][0m Read Vulkan GPU suite log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && tr -d '\r' < us045b_6.log | grep -v "^\s*$" | grep -v "...
+Vulkan shows the same three failures, so the causes are the same on both backends. I'll fix all three: add `CopySource` to the denoiser's value history and to the fog's integrated grid (it's the readback path), and change the denoise API check to use invalid handles.
+[94m[Bash][0m Fix readback usage flags and wrong API check $ ''')]) print('ok') EOF grep -n "TextureUsage::CopySource\|BufferUsage::CopySource" engine/render/src...
+The denoiser sets `desc.usage` once for all three textures, so my match string was wrong. I'll look at the actual text before editing.
+[94m[Bash][0m Find denoiser texture usage lines $ grep -n "desc.usage\|debug_name = \"denoiser" engine/render/src/denoiser.cpp
+[94m[Bash][0m Apply readback usage fixes and correct API check $ ''')]) print('ok') EOF sed -n 220,245p engine/render/src/denoiser.cpp
+All three fixes are in. I'll rebuild on Linux to confirm they compile, then relaunch the Windows batch under a new name, after checking that the previous batch has exited.
+[94m[Bash][0m Rebuild Linux debug and check no batch is running $ ps -eo pid,args | grep "us045b_gate" | grep -v grep | wc -l
+[94m[Bash][0m Relaunch Windows gate batch with the fixes $ echo launched
+The batch is running. I'll start a background waiter on its done file, and write the docs while it runs.
+[94m[Bash][0m Wait for Windows gate batch to finish $ echo waited=$i
+While that runs, I'll check how the existing docs record a story. I want the new doc and the build table row to match.
+[94m[Bash][0m Read doc style and the US-044 build row $ sed -n 99,112p docs/ray-tracing-effects.md
+The existing docs record scope limits explicitly, and I'll match that. I'll write the new doc now, and it will state plainly what is not wired into the renderer.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/denoise-volumetrics.md[0m "# Denoising and volumetric fog (US-045)
+
+The full profile's ray-traced signals (US-043 shadows and reflections, US-044 diffuse probes) are one frame of noisy samples. This story adds
+an in-house tempo... (6534 chars)"
+Next I'll add a US-045 row to the build table, after the US-043 row, in the same format.
+[94m[Bash][0m Add US-045 row to the build documentation table $ a froxel fog with sun and local-light shadows (inline ray queries), Henyey-Greenstein phase, and rep...
+[94m[Bash][0m Check interim Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us045c_rc.txt 2>/dev/null
+The batch is still running, and the vendor check passed. I'll wait for the done file.
+[94m[Bash][0m Wait for Windows gate batch to finish $ echo waited=$i
+Every Windows gate now exits 0. Before trusting that, I'll check the logs: the GPU counts should include the new cases, and the build log should contain no `warning C` or `error C` lines.
+[94m[Bash][0m Verify Windows gate logs show new cases and no warnings $ tr -d '\r' < us045c_2.log | tail -2
+Windows is fully green on the fixed tree. The DX12 suite ran 64 cases (60 existing plus 4 new), Vulkan ran 65, and the Windows build has zero warnings. My Linux runs before the last fix predate it, so I'll rerun the Linux gates on the current tree.
+[94m[Bash][0m Rerun Linux gates on the final tree $ grep -c "warning:" /tmp/gcc_b.log /tmp/asan_b.log /tmp/build.log
+All Linux gates pass on the final tree: vendor validation, linux-dev, linux-debug with zero warnings, linux-unit, linux-gcc debug and unit, and the ASan build with the sanitizer preset. The Linux GPU suite has no device here, so it stays not-run. Last, I'll record the work in the progress log and the reusable patterns section.
+[94m[Bash][0m Append US-045 progress entry and codebase patterns $ both fixed, and us045c is the run above.   - Linux clang: `ValidateVendor` 0, `linux-dev` configure ...
+The progress entry is in. The only memory worth updating is the batch-overlap note, which should record the `pgrep` self-match trap. I'll add it to the existing file rather than create a duplicate.
+[94m[Bash][0m Record pgrep self-match pitfall in batch overlap memory $ cat >> "$M" <<'EOF' - 2026-10-24 (US-045): `pgrep -f "us04.*gate.bat"` matched its own bash shell, b...
+US-045 is only partly done. The two GPU passes are built and verified on Windows, but the frame does not use them yet. I have not emitted the completion signal.
+
+**Built and verified**
+- **Denoiser** (`TemporalDenoiser`): a depth- and normal-aware spatial prefilter, then temporal reprojection with the motion vector. History is rejected on disocclusion, off-screen samples, or a camera cut. The blend weight never falls below 1/(age+1), so stale history cannot persist.
+- **Froxel fog** (`VolumetricFog`): sun and local lights, Henyey-Greenstein phase, shadows from inline ray queries against the scene's top-level structure, and temporal reprojection. It runs as two passes, inject and integrate.
+- Each pass has a CPU reference, and the GPU tests compare against it on DX12 and Vulkan.
+
+**Gates**
+- **Windows:** `ValidateVendor`, `win-dev`, `win-debug` (no warnings), `win-unit` 21/21, `gpu dx12` 64 cases, `gpu vulkan` 65 cases. All pass on the RTX 5080 with the debug and validation layers on.
+- **Linux:** `ValidateVendor`, `linux-dev`, `linux-debug` (no warnings), `linux-unit` 22/22, `linux-gcc-debug` and `linux-gcc-unit`, and `linux-asan` with `linux-sanitize`. All pass.
+
+**Not done**
+- Neither pass runs in `SceneRenderer`. The RT shadow and reflection targets are not denoised, and the fog is not composited into the lit scene. So the frame shows neither effect, and the render graph does not time either pass. This is the main acceptance gap.
+- The `light_changed` reset has no caller. A moving light relies on the age floor alone.
+- The native Linux Vulkan GPU suite was not run (no device here), and `engine_bench` has no numbers (US-074 is not built). I did not claim either.
+
+I took "complete the story" to mean the two passes and their verification, with renderer wiring left for the next step. Changing that would mean adding normal and linear-depth targets to the renderer, which is a larger change than this pass covered.
+
+Files are in `engine/render/` (denoiser and fog sources, headers, and shaders), with tests under `tests/src/render_*denoise*` and `render_*volumetric*`, and docs in `docs/denoise-volumetrics.md`. I appended the US-045 entry to `.ralph-tui/progress.md` and added the build table row. I did not commit.

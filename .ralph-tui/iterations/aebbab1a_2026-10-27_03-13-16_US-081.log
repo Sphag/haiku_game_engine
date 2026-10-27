@@ -1,0 +1,46 @@
+# Iteration 1302 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:13:16.754Z
+- **Ended At**: 2026-10-27T00:13:34.178Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2079
+- **Total Tokens**: 2101
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and the existing docs.
+[94m[Bash][0m Inspect repo layout, progress log, and docs $ ls cmake | head -50
+The progress log shows several earlier passes on US-081, each ending blocked on hardware and user decisions. Before deciding whether to re-run anything, I'll check the acceptance doc's open items and whether anything changed since the last recorded gate run.
+[94m[Bash][0m Check acceptance open items and recent changes $ ls /dev/dri 2>&1 | head -2
+US-081 is not complete, so I'm not emitting the COMPLETE signal. I made no changes in this pass.
+
+**What's in place**
+- The documentation deliverables exist under `docs/`: README, architecture, schemas, capability matrix, vendor manifest, benchmarks, distribution, and `acceptance.md`.
+- `docs/acceptance.md` maps each gate to its state and log. Windows gates, the Windows DX12 and Vulkan editor suites, the Windows and Linux release builds, the Linux ASan/UBSan run, and the offline clean-copy build are recorded as passed, each with a log or a stated run.
+
+**What blocks final acceptance**
+- **Native Linux Vulkan GPU report:** `/dev/dri` is absent. This machine is WSL2 with no usable Vulkan device.
+- **Full acceptance benchmark:** no GPU timestamps yet, so the run is `incomplete`.
+- **FSR 2:** the vendored tree lacks its generated shader permutations. Choosing a vendoring route is your decision.
+- **`linux-gcc`:** the local GCC 9.4 cannot build Jolt. The gate needs GCC 11 or newer.
+- **Visual editor smoke test:** Windows has a launch-only screenshot, with no action sequence. Linux has no run.
+- **LICENSE file:** none exists. That is a decision for you.
+
+The story asks for actual GPU reports on the RTX 5080 and a native Linux visual smoke test. Neither can be produced from this environment, and the progress log already records several passes that re-checked the same blockers. I didn't repeat them. Nothing in the tree changed since the last recorded gate run, so a re-run would add no new evidence.
+
+**What would unblock it**
+- A native Linux machine with a Vulkan device, to produce the GPU report and the smoke test.
+- A GCC 11+ toolchain, to run `linux-gcc`.
+- A decision on FSR 2 vendoring and on the LICENSE.
+- The RTX 5080 run for the acceptance benchmark with GPU timestamps.

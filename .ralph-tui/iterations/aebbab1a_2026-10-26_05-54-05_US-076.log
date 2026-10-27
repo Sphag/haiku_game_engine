@@ -1,0 +1,42 @@
+# Iteration 808 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:54:05.198Z
+- **Ended At**: 2026-10-26T02:54:20.423Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2401
+- **Total Tokens**: 2423
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing benchmark code, and the PRD section for US-076.
+[94m[Bash][0m Read progress log, benchmark dir, and PRD story $ grep -n "US-076" -A30 tasks/prd-open-world-engine.md | head -80
+The log shows US-076 blocked for many passes on a user decision about the route-start triangle floor and frame budget. Before deciding whether anything actionable remains, I'll check the earlier US-076 entries for which gates were actually run.
+[94m[Bash][0m Find US-076 entries and gate results in progress log $ ls artifacts 2>/dev/null | head -30
+US-076 is still not complete, and I made no changes this pass. The remaining blocker needs your decision.
+
+**Done and recorded in the log:**
+- `render_stress` scene counts match the benchmark contract. `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes matching.
+- Indexed, indirect, and meshlet paths ran on DX12 and Vulkan at native_1080 (3 repeats each), with screenshots and counters under `artifacts/bench/us076-*`.
+- The forced mesh-shader-off fallback ran on both backends. Its reports are `us076-*-meshlets-nomesh`.
+- Windows gates passed on the current tree: validate, win-dev, win-debug build (0 warnings), win-unit 29/29, `engine_tests --suite gpu` on dx12 (72 cases) and vulkan (73 cases), and the win-release `engine_bench` build.
+- Linux gates passed on the current tree: ValidateVendor, linux-dev, linux-debug build (0 warnings), linux-unit 30/30.
+
+**Blocked:**
+- **Measured contract failures.** Every indexed run starts with 312,068 triangles against the manifest floor of 2,000,000. p99 frame time is 35–47 ms against the 16.7 ms budget, with 0% of frames within budget. The mesh-shader paths also show 17–22% of frames over 33.3 ms on DX12 meshlets. All eight runs exit 1.
+- **Decision needed.** PRD US-080 says a missed budget must be fixed in the implementation first, and changing the workload or thresholds needs your agreement. Two options:
+  - Keep the placement and fix the cause, probably LOD or culling. That is a renderer task of its own.
+  - Change the route start or instance placement. That bumps `kWorkloadVersion`, regenerates `workload_expected.json`, and updates the manifest hash.
+- **Not run.** Native Linux Vulkan GPU (WSL has no Vulkan device), linux-gcc (GCC 9.4 cannot build Jolt), linux-asan, and `full_1080` (unsupported until the FSR 2 permutations exist).
+
+I did not re-run anything or add another status entry to the progress log, since the last 30 passes repeated the same blocker. If you pick one of the two options, I'll start on it. The log will then need a new entry for the chosen route.

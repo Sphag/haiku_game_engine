@@ -1,0 +1,62 @@
+# Shared input replay (US-010). One physical sequence, written with the native codes of both backends. Every line must
+# produce the same normalized events on Windows (Win32 virtual keys, UTF-16 units, Raw Input wheel deltas, XInput bits)
+# and on Linux (X11 keysyms and buttons, evdev codes). The expected events follow '|', separated by ' ; '. An empty
+# expectation means the line produces nothing.
+#
+# Line forms (whitespace-separated fields; hex values start with 0x):
+#   key        win=<virtual key>  x11=<keysym>  down|up
+#   text       win=<UTF-16 units, comma-separated>  x11=<keysym>
+#   pad        xinput=<XINPUT_GAMEPAD bit>  evdev=<EV_KEY code>  down|up
+#   wheel      win=<WHEEL_DELTA>  x11=<button 4..7>  [axis=h for a horizontal step]
+#   mouse      dx=<int>  dy=<int>
+#   focus-loss
+#   frame
+
+# A press and release of A, with a repeated press in the same frame (auto-repeat) that must not repeat the edge.
+frame
+key   win=0x41 x11=0x61 down | KeyPressed A
+text  win=0x61 x11=0x61 | TextInput a
+key   win=0x41 x11=0x61 down |
+key   win=0x41 x11=0x61 up | KeyReleased A
+frame
+
+# Shift and an uppercase letter: the keysym for a shifted letter is the uppercase one.
+key   win=0xA0 x11=0xffe1 down | KeyPressed LeftShift
+text  win=0x41 x11=0x41 | TextInput A
+key   win=0xA0 x11=0xffe1 up | KeyReleased LeftShift
+frame
+
+# Unicode text: a Latin letter with diaeresis, a Cyrillic letter (Unicode keysym), and an emoji (a surrogate pair).
+text  win=0x00FC x11=0x00FC | TextInput ü
+text  win=0x0444 x11=0x01000444 | TextInput ф
+text  win=0xD83D,0xDE00 x11=0x0101F600 | TextInput 😀
+frame
+
+# Enter sends a control character, which is never text.
+key   win=0x0D x11=0xFF0D down | KeyPressed Enter
+text  win=0x0D x11=0xFF0D |
+key   win=0x0D x11=0xFF0D up | KeyReleased Enter
+frame
+
+# Gamepad: connection, face and shoulder buttons. The first pad line also reports the connection.
+pad   xinput=0x1000 evdev=0x130 down | GamepadConnected 0 ; GamepadButtonPressed 0 A
+pad   xinput=0x1000 evdev=0x130 up | GamepadButtonReleased 0 A
+pad   xinput=0x0100 evdev=0x136 down | GamepadButtonPressed 0 LeftShoulder
+pad   xinput=0x0100 evdev=0x136 up | GamepadButtonReleased 0 LeftShoulder
+frame
+
+# Wheel: one notch up and one down, vertical; a horizontal tilt to the right.
+wheel win=120 x11=4 | MouseWheelScrolled 0 1
+wheel win=-120 x11=5 | MouseWheelScrolled 0 -1
+wheel win=120 x11=7 axis=h | MouseWheelScrolled 1 0
+frame
+
+# Relative motion is in device counts.
+mouse dx=3 dy=-2 | MouseMoved 3 -2
+frame
+
+# Focus loss: a held key is released, so nothing stays down when the window loses focus.
+key   win=0x41 x11=0x61 down | KeyPressed A
+focus-loss | KeyReleased A
+key   win=0x41 x11=0x61 up |
+frame

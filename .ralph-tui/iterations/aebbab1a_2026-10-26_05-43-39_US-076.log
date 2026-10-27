@@ -1,0 +1,42 @@
+# Iteration 783 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:43:39.812Z
+- **Ended At**: 2026-10-26T02:43:56.034Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 1901
+- **Total Tokens**: 1923
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and find existing US-076 traces $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -rn "US-076" --include=*.md --include=*.cpp -...
+The log shows this story has been stalled for many passes on one user decision. I'll confirm the current state and the PRD wording before reporting.
+[94m[Bash][0m Check PRD decision note, workload version, and latest bench result $ cat artifacts/bench/$(ls -t artifacts/bench | head -1)/*.json 2>/dev/null | head -c 1500
+US-076 is not complete, so I am not emitting the COMPLETE signal. The work is blocked on decisions only you can make, and I made no changes this pass.
+
+**Verified just now**
+- Source and workload files are unchanged since the last recorded run. `kWorkloadVersion` is still 1.
+- The latest bench output is the Vulkan run on the RTX 5080 (Windows, MSVC, Release). It exits 1, and the contract is not met.
+
+**What is blocking acceptance**
+1. **Route-start triangle floor and frame budget fail.** The start frame submits 312,068 triangles on the indexed path, against the required 2,000,000. Frame time is p99 35–47 ms against the 16.7 ms budget. The cause is instance placement in the seeded generator, and the route is pinned by manifest SHA-256. Fixing it changes the fixed benchmark contract: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and update the manifest hash. The PRD reserves contract changes for a separate user decision (US-080 says so explicitly). I have not made that change.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated permutation headers, so that profile cannot run until you choose a vendoring route.
+3. **Not run here:** native Linux Vulkan GPU runs (no Vulkan device under WSL) and the `linux-gcc` gate (local GCC 9.4 cannot build Jolt). The Windows gates and the Windows GPU runs were not re-run in this pass.
+
+**What I need from you**
+- Approve or reject the workload change for item 1. If approved, I will bump the version, regenerate the expected file and manifest hash, and rerun the measurements.
+- Choose a route for the FSR 2 permutations, or accept `full_1080` as unsupported for now.
+- Confirm whether a failing measured run should close the story as measured, or stay open until the budget passes.
+
+The progress log already has 27 identical status entries for this story. I did not add another, since nothing changed.

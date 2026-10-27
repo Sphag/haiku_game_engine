@@ -1,0 +1,41 @@
+# Iteration 329 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T19:33:54.965Z
+- **Ended At**: 2026-10-24T19:36:39.849Z
+- **Duration**: 2m 44s
+- **Input Tokens**: 34
+- **Output Tokens**: 2783
+- **Total Tokens**: 2817
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file and the current state of the physics code, since memory notes say US-053 may already be partly done.
+[94m[Bash][0m Read progress notes and list physics sources $ ls engine/physics/ engine/physics/* | head -60
+The physics code and terrain wiring are already in the tree, and the progress log shows the same blockers recorded over many passes: no GCC 11+ for `linux-gcc`, and no `engine_bench` target yet. Before I decide anything, I'll check the acceptance-criteria coverage in the tests and confirm the build is still green.
+[94m[Bash][0m Check physics test coverage and rerun Linux build and unit tests $ timeout 600 ctest --preset linux-unit --no-tests=error 2>&1 | tail -4
+The test coverage matches the acceptance criteria. The tail cut off the ctest summary line, so I'll pull it.
+[94m[Bash][0m Rerun Linux unit tests and show pass summary $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Append US-053 status entry to progress log $ US-074), Windows gates in this pass (last full pass on this tree was 21 of 21). - Status call: US-05...
+US-053 is still **Partial**, so I am not signalling COMPLETE. The code and tests are in place. Two acceptance gates cannot run on this machine.
+
+**What I checked this pass**
+- The tree already has the features the story asks for. The unit tests cover filters, triggers, raycasts, and shape casts. They also cover capsule, convex, mesh, and heightfield colliders, collider replacement, and queries before and after an origin rebase. Streamed scene cells and terrain tile cells are covered too.
+- `cmake --build --preset linux-debug` passes.
+- `ctest --preset linux-unit --no-tests=error` passes, 22 of 22, exit 0.
+
+**What is still open**
+- **`linux-gcc` gate:** Jolt needs GCC 11 or newer. The machine has only GCC/G++ 9 and clang-10, and earlier passes found no route to GCC 11 here. This needs the CI job or a machine with GCC 11+.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists yet. That is US-074.
+- **Windows CLI help flake:** `engine_tests_cli_help` failed with empty stdout in two earlier Windows runs and passed in the third. Its cause is still unknown. I did not rerun Windows in this pass, so the last full Windows result (21 of 21) stands for this tree.
+
+I appended a short entry to `.ralph-tui/progress.md` recording these results. No source files changed.

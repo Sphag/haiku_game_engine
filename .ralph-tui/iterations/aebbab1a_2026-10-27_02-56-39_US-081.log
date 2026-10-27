@@ -1,0 +1,49 @@
+# Iteration 1281 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:56:39.233Z
+- **Ended At**: 2026-10-26T23:56:54.440Z
+- **Duration**: 15s
+- **Input Tokens**: 24
+- **Output Tokens**: 2136
+- **Total Tokens**: 2160
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the docs, the progress log, and the build presets.
+[94m[Bash][0m Inspect repo layout, docs, and presets $ grep -n '"name"' CMakePresets.json | head -80
+[94m[Bash][0m Read the tail of the progress log $ tail -n 120 .ralph-tui/progress.md
+The log shows several earlier passes that found the same blockers. I'll check whether anything has changed since the last recorded gate before deciding whether to re-run anything.
+[94m[Bash][0m Check for changes since last gate and blockers $ find third_party -name '*_permutations.h' | wc -l
+US-081 is not signed off, so I am not emitting the COMPLETE signal.
+
+**Checked this pass:**
+- Nothing in the source, tests, or build has changed since the last recorded gate run. The only files newer than `artifacts/reports/us081` are `tasks/prd.json`, `docs/acceptance.md`, and the editor launch screenshot. I did not re-run any gate, since the tree is unchanged.
+- The README and `docs/` cover the documentation items in the story: OS/SDK requirements, offline CMake, editor, Lua API, asset pipeline, packaging, architecture, schemas, vendor notices, benchmarks, capability matrix, and the acceptance map.
+
+**What is still blocking sign-off (confirmed again just now):**
+- **No native Linux GPU device:** `/dev/dri` is absent, so the Linux Vulkan GPU suite and the Linux visual smoke test cannot run here.
+- **linux-gcc cannot be built:** only GCC 9.4 is installed. Jolt needs GCC 11+, and the linux-gcc gate needs that compiler.
+- **FSR 2 is not buildable:** there are 0 `*_permutations.h` files under `third_party`. This needs your choice of vendoring route.
+- **No LICENSE file:** the licence choice is yours to make.
+- **Acceptance benchmark incomplete:** the acceptance scenes do not yet produce GPU timestamps, and there is no RTX 5080 acceptance run.
+- **Remaining items on both OSes:** a visual editor smoke test with an action sequence and screenshots, and a standalone package built from a real sample game on each OS.
+
+The Windows results recorded in `artifacts/reports/us081/` already cover the Windows gates, including the DX12 and Vulkan GPU and editor suites on the RTX 5080.
+
+**What I need from you to finish:**
+1. Pick the licence and add the LICENSE file.
+2. Pick the FSR 2 vendoring route (regenerate the permutations, or drop FSR from the release).
+3. Install GCC 11+ or clang 14+ for the linux-gcc gate, or accept that gate as not run.
+4. Provide a native Linux machine with a GPU for the Vulkan suite and the visual smoke test.
+
+I did not add a new progress entry. The log already has about ten identical status entries from earlier passes, and another one would add nothing new.

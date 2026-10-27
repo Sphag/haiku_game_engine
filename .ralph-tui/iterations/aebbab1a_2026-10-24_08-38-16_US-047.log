@@ -1,0 +1,38 @@
+# Iteration 133 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T05:38:16.506Z
+- **Ended At**: 2026-10-24T05:38:36.475Z
+- **Duration**: 19s
+- **Input Tokens**: 32
+- **Output Tokens**: 2748
+- **Total Tokens**: 2780
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the terrain code.
+[94m[Bash][0m Read progress log tail and list repo root $ ls
+The log says US-047 is still Partial. The RT terrain shadow failure is fixed and the Windows and Linux gates passed on the last pass. Before I decide anything, I'll check whether the tile-boundary, hole, and LOD fixtures the acceptance criteria call for already exist.
+[94m[Bash][0m Check terrain test coverage and engine_bench presence $ grep -rl "engine_bench" --include=CMakeLists.txt --include=*.cpp --include=*.json . 2>/dev/null | gr...
+[94m[Bash][0m List terrain test cases and LOD coverage $ grep -n "LOD\|lod" tests/src/world_terrain_tests.cpp | head -20
+The CPU and GPU fixtures for tile boundaries, holes, LOD switching, and the traced shadow all exist. The blockers have not changed since the last pass: `engine_bench` is still absent from the tree, and this host has no native Linux Vulkan device. I'll record this pass in the progress log and not signal completion.
+[94m[Bash][0m Append re-check entry to progress log $ no source changed since the last Windows and Linux gate run (re-check 47 and the entry above it). - ...
+US-047 is still **Partial**, so I am not signalling COMPLETE.
+
+Nothing in source changed this pass. I checked the tree against the acceptance criteria, and two items stay open:
+
+1. **Performance gate:** `engine_bench --suite acceptance` does not exist. No CMake target or source file defines it, and it appears only in `tasks/prd.json`. The bench tool belongs to US-074, which is not a prerequisite here. So the terrain workload and the acceptance run cannot happen.
+2. **Native Linux Vulkan GPU run:** this WSL host has no usable Vulkan device, so `engine_tests --suite gpu --backend vulkan` has not run on native Linux.
+
+The rest of the story is in place. The CPU and GPU fixtures cover tile boundaries, holes, overlaps, stitched-edge agreement, LOD switching, and the traced terrain shadow. The earlier passes also reported the Windows and Linux gates green. The traced-shadow failure was a fixture problem, and the fix is in the last source change. I did not re-run the gates this pass, since nothing changed.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. It records the status and the two blockers.

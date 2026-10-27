@@ -1,0 +1,41 @@
+# Iteration 788 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:44:52.788Z
+- **Ended At**: 2026-10-26T02:45:04.716Z
+- **Duration**: 11s
+- **Input Tokens**: 14
+- **Output Tokens**: 1544
+- **Total Tokens**: 1558
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Check progress log and existing US-076 traces $ ls tools/benchmark/src tools/benchmark 2>/dev/null
+US-076 is not complete. Every check I can run passes, but the acceptance criteria cannot pass on the current scene, and resolving that needs your decision.
+
+**The blocker: the start-frame triangle count.** The PRD (line 875) requires at least 2,000,000 submitted triangles on the indexed path at the route's start frame. The current `render_stress` scene submits 312,068. The 2M figure is set by the manifest camera route, which is pinned by SHA-256, and the instance placement comes from a seeded generator whose digests are pinned. Fixing it changes a fixed benchmark contract, so I have not changed it. The progress log records p99 frame times of 35–47 ms against a 16.7 ms budget at this scene size.
+
+Choose one:
+1. **Approve a placement or route change.** I would raise the instance count or move the start pose so the start frame reaches 2M triangles. That bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash.
+2. **Accept the failing measured run as the result.** The story would close as measured, with the shortfall stated. The PRD line 722 reserves the frame-budget decision for you, so this is your call.
+
+**Other open items, not caused by the blocker:**
+- `full_1080` is unsupported until the FSR 2 `*_permutations.h` tables exist. Vendoring them is your choice of route.
+- Native Linux Vulkan GPU runs and the linux-gcc job have not run. WSL has no Vulkan device, and the local GCC 9.4 cannot build Jolt.
+- Windows gates were not re-run in this pass.
+
+**What I verified this pass:** I read the progress log and found the state unchanged from the last check. I did not rebuild or re-run the gates, so the results below are from the previous status check (27), not this turn.
+- `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes match.
+- Linux: `linux-debug` builds, and `linux-unit` passes 30/30.
+
+I have not added another progress entry. The log already has 27 status checks, all blocked on the same decision.

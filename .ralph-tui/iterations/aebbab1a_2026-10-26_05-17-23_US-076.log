@@ -1,0 +1,39 @@
+# Iteration 708 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:17:23.505Z
+- **Ended At**: 2026-10-26T02:17:44.628Z
+- **Duration**: 21s
+- **Input Tokens**: 24
+- **Output Tokens**: 3759
+- **Total Tokens**: 3783
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tool $ ls && tail -n 120 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && gi...
+[94m[Bash][0m Read US-076 section of the PRD $ grep -n "US-076" -A60 tasks/prd-open-world-engine.md | head -150
+The log shows US-076 has been blocked on one user decision across many passes. Before I repeat that status again, I'll check whether anything changed and whether the contract actually fixes instance placement.
+[94m[Bash][0m Check source mtimes, artifacts, and contract placement wording $ ls -l --time-style=+%H:%M:%S tools/benchmark/src/render_stress.cpp benchmarks/manifest.json | awk '{...
+US-076 is still not complete, and I have not changed anything in this pass. The source and manifest timestamps are the same as the last recorded pass, so the existing results still describe the current tree and I did not rerun the benchmarks or gates.
+
+**What is done:** the `render_stress` counts match the contract, and `render_route_v1` is defined. Indexed, indirect and meshlet paths ran on DX12 and Vulkan, plus a forced mesh-shader-off run. The fallback works: the renderer resolves to indirect-indexed, and the report says `mesh_shaders: disabled: forced off` rather than enabled. Screenshots and per-frame counters are under `artifacts/bench/us076-*`. The Linux gates pass on the current tree (ValidateVendor, linux-dev, linux-debug with 0 warnings, linux-unit 30/30). The last full Windows gate run was on the same tree.
+
+**What blocks it, and needs your decision:**
+
+1. **Triangle floor and frame budget fail on placement.** The contract requires at least 2,000,000 submitted triangles on the starting frame. The route start sees about 312,000, because instances are spread uniformly over the 8192 m world and only about 330 fall in the start view. p99 frame time is 35–47 ms against the 16.7 ms budget. Changing placement is a workload change: it bumps `kWorkloadVersion`, regenerates `workload_expected.json`, and reruns all eight reports (about 80 minutes). The contract does not fix the placement, so my recommendation is to cluster instances near the route start so the start view meets the floor. Counts and route stay the same, so this is not a reduction. Say yes or no.
+2. **`full_1080` is unsupported.** The FSR 2 shader permutation headers are missing from the vendored tree, so only `native_1080` runs. Meeting "both profiles" needs a vendoring route for FSR 2, which is also your decision.
+3. **Not run:** native Linux Vulkan GPU, and linux-gcc (GCC 9.4 cannot build Jolt here).
+
+Even with item 1 fixed, the 16.7 ms p99 budget may still fail. That is a measured performance result, and US-080 is where it gets fixed. Whether to close US-076 as measured, with failures recorded, is also your call.
+
+I have not added another status entry to `.ralph-tui/progress.md`, because the log already has a dozen identical ones. I will not emit the COMPLETE signal until items 1 and 2 are settled.

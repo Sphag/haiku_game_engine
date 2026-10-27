@@ -1,0 +1,41 @@
+# Iteration 52 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:40:33.703Z
+- **Ended At**: 2026-10-24T00:42:22.787Z
+- **Duration**: 1m 49s
+- **Input Tokens**: 26
+- **Output Tokens**: 2539
+- **Total Tokens**: 2565
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for US-046, and the FSR 2 blocker recorded in memory.
+[94m[Bash][0m Inspect repo state, progress log, and FSR memory $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-046" -A3 tasks/prd-open-world-engine.md | h...
+[94m[Bash][0m Re-verify FSR 2 blocker and vendor validation $ echo "validate exit $?"
+The blocker still holds, so I'll record this check in the progress log and stop.
+[94m[Bash][0m Append re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ec...
+US-046 is still blocked, so I have not marked it complete and did not emit the COMPLETE signal.
+
+**The blocker:** The vendored FSR 2 tree is missing the eight generated `*_permutations.h` files per backend. They hold the shader blobs and permutation tables that the Vulkan and DX12 FSR code includes. The pinned upstream archive does not contain them either. Re-checking today confirmed this: `find third_party engine/rhi -name "*_permutations.h"` finds 0 files, and `third_party/fsr2` holds only `LICENSE.txt` and `src`.
+
+**What I checked:** `cmake -P cmake/ValidateVendor.cmake` exits 0. Nothing in source changed in this run.
+
+**Decision needed from you**, on how to get the blobs:
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the no-prebuilt-tools rule in `third_party/manifest.json`.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This is more work and produces different bytes.
+
+I'd lean toward option 1 for speed, since the generator and its hashes are already pinned. Option 2 keeps the no-prebuilt-tools rule intact. I did not stub the permutation headers, because that would only hide the failure at pipeline creation.
+
+Until FSR 2 links, the rest of the story can't be verified. The upscale call on both backends stays `Unsupported`, and the profile resolution switch and UI-after-upscale both depend on a working upscale. The Windows and Linux gates, and the GPU suites, are not run.
+
+I appended a re-check entry to `.ralph-tui/progress.md` recording this state. Once you pick a route, I can vendor the outputs and continue with the upscaler integration.

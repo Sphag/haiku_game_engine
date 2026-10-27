@@ -1,0 +1,34 @@
+# Iteration 733 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:24:33.818Z
+- **Ended At**: 2026-10-26T02:24:47.367Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1852
+- **Total Tokens**: 1874
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and prior US-076 mentions $ ls && tail -c 3000 .ralph-tui/progress.md && grep -rn "US-076" --include=*.md --include=*.cpp --incl...
+[94m[Bash][0m Check source and artifact mtimes for US-076 $ grep -n "kWorkloadVersion" -r tools/benchmark | head -3
+[94m[Bash][0m Append status check note to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal: acceptance cannot pass on t...
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing has changed since the last status check, and I did not rerun any benchmark or gate.
+
+**What blocks it:**
+1. **Frame budget and triangle floor fail.** The `render_stress` placement gives 312,068 triangles against a floor of 2,000,000, with p99 at 35–47 ms against a 16.7 ms budget. Fixing that means changing the workload: bump `kWorkloadVersion` (currently 1 in `tools/benchmark/include/engine/benchmark/workload.hpp`) and regenerate `benchmarks/workload_expected.json`. The contract reserves that for an approved change, so this needs your decision.
+2. **full_1080 profile is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so the upscaled profile cannot be built or measured.
+3. **Native Linux Vulkan GPU run and `linux-gcc` gate have not been run.** Neither is available from this WSL environment.
+
+**What I did:** I checked the mtimes of `render_stress.cpp`, `workload_expected.json`, and `manifest.json`, and they are unchanged from the earlier runs. I appended a status-16 entry to `.ralph-tui/progress.md` recording the same blockers.
+
+**What would unblock it:** approve the workload change (new `kWorkloadVersion`, regenerated expected file) and choose a route for the FSR 2 permutation tables. I can then rerun the acceptance benchmark and the gates.

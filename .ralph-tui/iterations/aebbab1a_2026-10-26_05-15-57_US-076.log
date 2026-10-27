@@ -1,0 +1,44 @@
+# Iteration 702 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:15:57.994Z
+- **Ended At**: 2026-10-26T02:16:11.993Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1968
+- **Total Tokens**: 1990
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-076 and the progress log.
+[94m[Bash][0m Inspect benchmark tool and progress log $ git status 2>&1 | head -3
+The progress log shows US-076 has been through many status checks. I'll read the latest entries to see what's still open.
+[94m[Bash][0m Read latest US-076 progress entries $ sed -n 4193,4264p .ralph-tui/progress.md
+US-076 is not complete, so I'm not emitting the COMPLETE signal. The story has been blocked on your decision for several status checks, and I ran nothing new this turn.
+
+**What's done (per the progress log, on the current tree):**
+- `render_stress` counts match the contract: 20,000 instances, 200 meshes, 100 characters (6,400 bones), 100,000 particles, 128 lights, 4 shadowed, 1 sun.
+- The indexed, indirect, and meshlet paths ran on DX12 and Vulkan on native_1080, with screenshots and submitted/visible counters.
+- The forced mesh-shader-off run falls back to indirect-indexed draws. It reports `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`.
+- Windows gates pass: ValidateVendor, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` on dx12 and vulkan, and the win-release engine_bench build.
+- Linux gates pass: ValidateVendor, linux-dev, linux-debug build, and linux-unit (30/30).
+
+**What blocks completion:**
+1. **Triangle floor and frame budget fail on every run.** The route start draws 312,068 triangles against a 2,000,000 floor, and p99 is 35–47 ms against 16.7 ms. The cause is instance placement: instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. The contract forbids reducing the workload, so the fix is a placement change. That changes the workload, so it needs `kWorkloadVersion` bumped and `benchmarks/workload_expected.json` regenerated.
+2. **full_1080 is unsupported** because the vendored FSR 2 permutation headers are missing. Only native_1080 has run, so "both profiles" is not met.
+3. **Not run here:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (GCC 9.4 cannot build Jolt).
+
+**Decision needed from you:**
+- **(a)** Close US-076 as measured, with the failing acceptance numbers recorded as the result.
+- **(b)** Approve the placement change. I'd then bump the workload version, regenerate the expected file, and rerun the eight reports, which takes about 80 minutes. The acceptance criteria may still fail after that.
+
+Either way, the FSR 2 permutation gap stays open until the vendoring route is chosen.

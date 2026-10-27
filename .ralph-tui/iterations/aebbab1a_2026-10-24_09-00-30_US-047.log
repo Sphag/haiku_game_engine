@@ -1,0 +1,45 @@
+# Iteration 147 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:00:30.779Z
+- **Ended At**: 2026-10-24T06:00:48.609Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2303
+- **Total Tokens**: 2325
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and list repo root $ ls
+[94m[Bash][0m Verify bench target and Vulkan device blockers still hold $ grep -rn "RtShadow" tests/src/render_terrain_gpu_tests.cpp | head -3
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` with the terrain workload (US-074). --- EOF tail -n 3 .ralph-t...
+US-047 is still Partial, so I am not emitting the COMPLETE signal. Nothing in the source changed this pass.
+
+I re-checked the two blockers that keep it open:
+
+- **`engine_bench --suite acceptance` does not exist.** The name appears only in `tasks/prd.json`. There is no CMake target or source file for it, and US-074 (the bench harness) is not implemented. The performance gate cannot run.
+- **Native Linux Vulkan GPU run is not possible here.** `/dev/dri` is absent and `vulkaninfo` is not installed. WSL is not a substitute under the acceptance criteria.
+
+The earlier work stands. The traced terrain shadow fixture was fixed in the test, not the renderer: the hill frame used the default uniform environment, which filled the shadow with ambient light. With a black environment, the Windows gates passed on the current tree:
+
+- `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit` (21/21).
+- `engine_tests --suite gpu` passed on DX12 (67 cases) and Vulkan (68 cases), with validation layers on.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` (22/22), `linux-gcc-debug`, and `linux-gcc-unit` passed.
+
+I did not rerun the Windows gates in this pass, and I did not rerun the ASan preset after the test-only change. This pass verified the two blockers by reading the tree only.
+
+Remaining before this story can close:
+
+1. A native Linux host with a Vulkan device, to run `engine_tests --suite gpu --backend vulkan`.
+2. The bench harness (US-074), then `engine_bench --suite acceptance --backend dx12|vulkan` on Windows and native Linux.
+
+I appended a short re-check entry to `.ralph-tui/progress.md`. Further re-checks on this host will not change the status.

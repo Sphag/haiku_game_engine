@@ -1,0 +1,46 @@
+# Iteration 1245 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:22:34.709Z
+- **Ended At**: 2026-10-26T23:22:49.917Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2330
+- **Total Tokens**: 2358
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress file, then work out which acceptance items this environment can actually verify.
+[94m[Bash][0m Inspect repo root and recent progress notes $ ls tasks 2>/dev/null
+The progress log shows several earlier US-081 passes, each stopped on hardware or tooling blockers. I'll check whether anything has changed since the last recorded gate run.
+[94m[Bash][0m Check for changes since last gate run and blockers $ grep -n -i "open\|not-run\|incomplete\|blocked" docs/acceptance.md | head -40
+[94m[Bash][0m Read the acceptance open-items list $ sed -n 120,145p docs/acceptance.md
+US-081 is not complete, so I'm not emitting the COMPLETE signal. Nothing has changed since the last recorded pass, and the remaining blockers are hardware and tooling that this machine does not have.
+
+**What's verified (from the recorded gate runs in `artifacts/reports/us081/`, still current because no source, test, or CMake file is newer than them):**
+- Windows: `ValidateVendor.cmake`, `win-dev`, `win-debug` build, and `win-unit` ctest (29/29) pass. `win-release` build passes.
+- Windows GPU on the RTX 5080: `engine_tests --suite gpu` passes on DX12 (72 cases) and Vulkan (73 cases), with validation on. Windows editor suite on DX12 passes (107 cases).
+- Linux: `ValidateVendor.cmake`, `linux-dev`, `linux-debug` and `linux-unit` pass. `linux-release` builds and `linux-release-unit` passes (30/30). The Linux editor CPU suite passes (106 cases).
+- README and the `docs/` set cover the required sections, and `docs/acceptance.md` maps stories to tests and artifacts.
+
+**Still open, and why I can't close them here:**
+1. **Native Linux Vulkan GPU report.** `/dev/dri` is absent, so there is no usable Vulkan device on this machine. WSL does not count.
+2. **Full acceptance benchmark** (`engine_bench --suite acceptance`) on DX12 and Vulkan. The render, streaming, all-features, and physics scenes do not yet produce GPU timestamps, so an acceptance run reports `incomplete`.
+3. **FSR 2.** The vendored tree lacks its generated shader permutations, so upscaling is unavailable.
+4. **linux-gcc gate.** The local compiler is GCC 9.4, and Jolt needs GCC 11 or newer.
+5. **Visual editor smoke tests** on Windows and Linux. No screenshot-backed run exists.
+6. **Standalone package smoke test** from a clean directory, built from a real sample game on each OS. Only the Linux editor test (which builds from the sample project) has run.
+7. **LICENSE.** The repo has no license file. This needs a decision from you.
+
+**What would settle these:** a native Linux box with a Vulkan device and GCC 11+, a decision on the license, and the visual smoke tests and sample-game package runs on both OSes. Until those exist, this story should stay open.
+
+I did not append another progress entry, since the last several status passes recorded the same blockers and added no new evidence.

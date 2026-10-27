@@ -1,0 +1,41 @@
+# Iteration 797 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:50:55.642Z
+- **Ended At**: 2026-10-26T02:51:07.232Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1685
+- **Total Tokens**: 1703
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and benchmark tool state $ ls
+[94m[Bash][0m Check file mtimes and PRD decision line $ sed -n 715,726p tasks/prd-open-world-engine.md
+US-076 is not complete, and I did not signal completion. The blocker is a decision only you can make, and nothing has changed since the last several passes.
+
+**What's stuck:** On the indexed path, the `render_stress` start frame submits 312,068 triangles against the contract's floor of 2,000,000 (PRD line 875). Every indexed run also misses the frame budget: p99 is about 35–47 ms against 16.7 ms. The cause is instance placement. Instances are spread uniformly over 8192 m, so the route start sees only about 330 items. Fixing that means changing the workload, which bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The contract forbids reducing workloads, and PRD line 722 reserves threshold and contract changes for a separate user decision, so I did not make the change.
+
+**Your options:**
+1. Approve a placement change. I'd bump `kWorkloadVersion`, regenerate the expected file, and re-run the indexed, indirect, and meshlet paths on both profiles.
+2. Accept the current measured failures as the result of this story. The reports would record the failures honestly rather than as passes.
+
+**Other open items:**
+- The `full_1080` profile is unsupported until the FSR 2 permutation tables exist (see the memory note on FSR 2 permutations).
+- Native Linux Vulkan GPU and the `linux-gcc` gate have not been run.
+
+**Verified in this pass:**
+- The source, workload, and manifest files are unchanged since the last runs.
+- `engine_workload --check` reports 4 scenes matching.
+- The fallback evidence stands: with mesh shaders forced off, the meshlet path falls back to indirect, and disabled features are reported as disabled.
+
+I did not re-run the Windows gates or the full Linux gate set in this pass. The earlier results are in `.ralph-tui/progress.md`, and I did not add another identical status entry.

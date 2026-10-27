@@ -1,0 +1,45 @@
+# Iteration 1104 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:06:08.412Z
+- **Ended At**: 2026-10-26T21:06:23.181Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1918
+- **Total Tokens**: 1940
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Re-check hardware and benchmark blockers $ ls samples 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. - No source change, build, or bench run this pass. Open items unchanged from stat...
+US-080 is not complete, so I have not emitted the COMPLETE signal. I re-checked the blockers and nothing has changed since the last several status passes.
+
+What's blocking it on this host:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. WSL sees the RTX 5080 through `nvidia-smi`, but that does not count as native Linux Vulkan. The Linux/Vulkan reports and the Linux GPU gate cannot run here.
+- **FSR 2 permutations are missing.** `third_party/fsr2` has no `*_permutations.h` files, so `full_1080` cannot be built or measured. Choosing how to vendor them is a user decision.
+- **Workloads are incomplete.** `benchmarks/manifest.json` still has 4 entries with `implementation: none`. Physics, streaming, and all_features workloads are unimplemented.
+- **No acceptance run exists.** `artifacts/bench` contains no three-repeat acceptance run. The only US-080 runs are two DX12 readback-off runs.
+- **Frame budget is unmet.** In the earlier render_stress runs, native_1080 CPU p99 went over 16.7 ms on repeats 2 and 3, at about 15 ms of CPU per frame without profiling.
+- **Other gaps.** Residency is not measured. `linux-gcc*` needs GCC 11+ or clang 14+, and the host has GCC 9.4 and clang 10. The visual editor smoke tests have not been run.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these findings. No code, build, or benchmark changed in this pass.
+
+To make progress, one of these needs to happen:
+
+1. Run on a machine with a native Linux Vulkan device (or a native Linux install with the RTX 5080 exposed).
+2. Decide how FSR 2 permutations get vendored.
+3. Give the go-ahead to implement the physics, streaming, and all_features workloads.
+4. Install GCC 11+ or clang 14+ for the linux-gcc gates.
+
+Until those are resolved, the acceptance criteria cannot be met on this host, and changing the performance contract would need a separate decision from you.

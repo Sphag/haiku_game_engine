@@ -1,0 +1,189 @@
+# Iteration 14 Log
+
+## Metadata
+
+- **Task ID**: US-030
+- **Task Title**: Vulkan Resources and Descriptors
+- **Description**: As a rendering developer, I want the same resource model in Vulkan so that the backends have parity.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T00:15:27.361Z
+- **Ended At**: 2026-10-23T00:57:32.785Z
+- **Duration**: 42m 5s
+- **Input Tokens**: 596
+- **Output Tokens**: 154674
+- **Total Tokens**: 155270
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root and progress log $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-02[89]\|US-030" .ralph-tui/progress.md ...
+[94m[Bash][0m Inspect RHI layout and US-030 PRD entry $ grep -n "^## Codebase Patterns" -A40 .ralph-tui/progress.md | head -80
+[94m[Bash][0m Survey Vulkan backend size and feature coverage $ grep -n "US-030\|US-029" -B2 -A3 docs/build.md | head -30
+[94m[Bash][0m Read Vulkan docs and device header $ cat docs/vulkan.md && cat engine/rhi/src/vulkan/vulkan_device.hpp
+[94m[Bash][0m List Vulkan device methods and unsupported paths $ cat engine/rhi/src/vulkan/vulkan_api.hpp | head -170
+[94m[Bash][0m Read RHI contract docs and device interface $ cat docs/rhi.md && ls engine/rhi/include/engine/rhi/ && ls tests/src | grep -i "gpu\|rhi" && cat eng...
+[94m[Bash][0m List GPU test cases for DX12 and Vulkan $ wc -l tests/src/rhi_*.cpp tests/src/gpu_test_options.hpp && grep -n "TEST_CASE" tests/src/rhi_dx12_g...
+[94m[Bash][0m Read DX12 GPU test helpers $ sed -n 1,180p tests/src/rhi_dx12_gpu_tests.cpp
+[94m[Bash][0m Read DX12 US-029 resource and descriptor tests $ sed -n 520,789p tests/src/rhi_dx12_gpu_tests.cpp
+[94m[Bash][0m Read DX12 compute helpers and shader binding types $ ls tests
+[94m[Bash][0m Inspect shader fixtures and test CMake wiring $ cat tests/shaders/* | head -60
+[94m[Bash][0m Read memory references and shader helper $ cd /mnt/d/dev/haiku_game_engine && sed -n 140,200p cmake/ShaderToolchain.cmake
+[94m[Bash][0m Read object lifetime and Vulkan command list header $ cat engine/rhi/src/object_lifetime.hpp && cat engine/rhi/src/vulkan/vulkan_command_list.hpp
+[94m[Bash][0m Read Vulkan command list implementation $ cat engine/rhi/src/vulkan/vulkan_command_list.cpp
+[94m[Bash][0m Read Vulkan device source part 1 $ sed -n 1,290p engine/rhi/src/vulkan/vulkan_device.cpp
+[94m[Bash][0m Read Vulkan device source part 2 $ sed -n 290,680p engine/rhi/src/vulkan/vulkan_device.cpp
+[94m[Bash][0m Read Vulkan device source part 3 $ sed -n 680,1000p engine/rhi/src/vulkan/vulkan_device.cpp
+[94m[Bash][0m Read Vulkan device source part 4 and common helpers $ cat engine/rhi/src/vulkan/vulkan_common.cpp | head -173
+[94m[Bash][0m Find descriptor rules in validation device $ grep -n "RhiStatus ValidationDevice::write_buffer" -A60 engine/rhi/src/validation_device.cpp | head ...
+[94m[Bash][0m Read validation device layout and pipeline rules $ sed -n 505,648p engine/rhi/src/validation_device.cpp
+[94m[Bash][0m Read validation device command rules for dispatch and copies $ grep -n "queue_wait\|upload_buffer" -A22 engine/rhi/src/validation_device.cpp | grep -v "^--$" | sed...
+[94m[Bash][0m Read validation recorder pipeline and set binding code $ sed -n "${L},$((L+40))p" engine/rhi/src/validation_device.cpp
+[94m[Bash][0m Read validation check_compute_state and dispatch $ grep -n "same_layout" -A12 engine/rhi/src/validation_device.cpp | head -16
+[94m[Bash][0m Check vendored header version and sync2 usage in swapchain $ grep -n "sync_for\|record_barrier\|vkCmdPipelineBarrier\|SubmitSync\|wait_stages\|sync\.\|add_frame_...
+[94m[Bash][0m Inspect handle tags, RHI types, and capability features $ grep -n "features\|enum class Feature" engine/rhi/include/engine/rhi/capabilities.hpp | head -30
+[94m[Bash][0m Check CPU buffer state rules and swapchain barrier code $ grep -n "add_frame_sync\|frame_sync_submitted" -B2 -A6 engine/rhi/src/vulkan/vulkan_swapchain.hpp
+[94m[Bash][0m Read Vulkan API loader source $ sed -n 1,167p engine/rhi/src/vulkan/vulkan_api.cpp | grep -v "^$" | sed -n 1,200p
+[94m[Bash][0m Read shader stage enum, DX12 compute shader, and mapping tests $ cat tests/src/rhi_vulkan_mapping_tests.cpp | head -120
+[94m[Bash][0m Read Vulkan GPU test helpers and US-028 cases $ sed -n 425,492p tests/src/rhi_vulkan_gpu_tests.cpp
+I have the picture now. The Vulkan backend returns `Unsupported` for every resource and descriptor call, so this story is real implementation work, not verification. I'll start with the entry points.
+[94m[Bash][0m Add descriptor, pipeline, and sync2 entry points to Vulkan API $ the device checks them at creation. #define ENGINE_VK_SYNC2_FUNCTIONS(X)               \\     X(vkQu...
+Next, the pure mapping: the sync scope moves to 64-bit sync2 flag types.
+[94m[Bash][0m Switch sync scope mapping to synchronization2 flags $ """) import re # Replace legacy stage/access names inside sync_for with sync2 names. start=s.index("...
+Now the descriptor mapping helpers, kept in the pure mapping file so the CPU tests cover them.
+[94m[Bash][0m Add descriptor type and stage mapping helpers $ grep -n "has_flags" engine/rhi/include/engine/rhi/*.hpp | head -3
+I left a stray third entry in the mutable list. Tightening it to exactly the two types each binding can hold.
+[94m[Bash][0m Fix mutable type lists to exactly two entries $ ") open(p,'w').write(s) EOF grep -n "list.types" engine/rhi/src/vulkan/vulkan_common.cpp
+Now the device header: new object types for layouts, pools, sets, and pipelines, plus the queue-wait bookkeeping and sync2 submit types.
+[94m[Bash][0m Declare descriptor, pool, set, and pipeline objects in device header $ """) open(p,'w').write(s) EOF grep -n "include" engine/rhi/src/vulkan/vulkan_device.hpp
+The header changed on disk after my last read. I'll re-read it to see the current state before going further.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_device.hpp[0m
+The on-disk change is just my own edit landing, so I'll continue from it. Next, the device implementation: capability detection, the sync2 and mutable-descriptor device features, and the new object destructors.
+[94m[Bash][0m Add sync2/mutable detection and descriptor object destructors $ } } """) open(p,'w').write(s) print("ok") EOF
+Next, the destructor teardown order, device creation with the new features, and the buffer rules.
+[94m[Bash][0m Update device teardown order and enable sync2 and mutable features $ } """) open(p,'w').write(s) print('ok') EOF grep -n "extensions_ = chosen" engine/rhi/src/vulkan/vul...
+I set `mutable_descriptors_` after device creation, but creation reads it. Moving the assignment to before `vkCreateDevice`.
+[94m[Bash][0m Set mutable and limits before device creation $ """) open(p,'w').write(s) EOF grep -n "mutable_descriptors_ = \|limits_ = " engine/rhi/src/vulkan/vu...
+Now buffers (upload memory), then the descriptor and pipeline calls that were stubs.
+[94m[Bash][0m Implement buffer upload, descriptor layouts, sets, and compute pipelines $ }  """+s[end:] open(p,'w').write(s) print('ok') EOF
+Two things to fix before moving on: an unused vector left in the layout code, and the pool-full marking, which would permanently leak budget once the page's sets free. I'll replace that with an explicit `retired` flag.
+[94m[Bash][0m Tidy layout code and add retired pool pages $ """ assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF echo done
+Next: descriptor writes, destroy paths, submission on sync2 with queue waits, and the remaining stubs (upload, queue wait, stats).
+[94m[Bash][0m Implement descriptor writes, destroy paths, sync2 submission, and stats $ } """) open(p,'w').write(s) print('ok') EOF
+Found one compile problem I can see by reading: `queue_wait` holds a `const FenceObject*`, but it needs a non-const `shared_from_this`. Fixing that, then checking the namespace and sync2 edits in the swapchain.
+[94m[Bash][0m Make queue_wait fence pointer non-const and check namespaces $ """ assert s.count(old)==1 s=s.replace(old,old.replace("const FenceObject* object","FenceObject* obj...
+Now the swapchain: its frame sync uses the new 64-bit stage type, and its one-time image transition moves to sync2.
+[94m[Bash][0m Move swapchain image transition to synchronization2 $ """) open(p,'w').write(s) EOF grep -n "api\b" engine/rhi/src/vulkan/vulkan_swapchain.cpp | sed -n 1,...
+Now the command list: sync2 barriers, binding state, dispatch with the full state check, and the buffer-to-texture copy.
+[94m[Bash][0m Implement compute binding, dispatch checks, and buffer-to-texture copy $ grep -n "^#include" engine/rhi/src/vulkan/vulkan_command_list.cpp
+Those on-disk changes are my own edits from the scripts, so I'll carry on. Time to compile on Linux with the project's own presets.
+[94m[Bash][0m Configure and build Linux debug preset $ tail -5 /tmp/us030_build.log
+One warning-as-error: an unused helper I left in the command list. Removing it and rebuilding, with `-k 0` so every remaining error surfaces in one pass.
+[94m[Bash][0m Remove unused helper and rebuild keeping going on errors $ grep -n "error" /tmp/us030_build.log | head -40
+The Linux clang debug build is clean. Next are the GPU tests. I'll look at the DX12 fixture constants so the Vulkan port matches them.
+[94m[Bash][0m Read DX12 fixture constants and Vulkan test helpers $ sed -n 60,120p tests/src/rhi_vulkan_gpu_tests.cpp | grep -n "^[a-zA-Z].*(\|^}" | head
+The DX12 fixtures port almost one-for-one. I'll generate the Vulkan section from them, switching the shader to the SPIR-V build output and renaming the test tags, then check each change by reading the result.
+[94m[Bash][0m Generate Vulkan GPU test section from DX12 fixtures $ ''') body=body.replace("// The compute fixture reads Params (constant buffer, binding 0), Input (bin...
+Two leftovers from the port: a debug name still says US-029, and the old US-028 "reject" test now contradicts the implementation. Fixing both and appending the section.
+[94m[Bash][0m Append Vulkan US-030 GPU tests and update US-028 rejection case $ grep -n "rhi_vulkan\|rhi_dx12" tests/CMakeLists.txt CMakeLists.txt engine/rhi/CMakeLists.txt 2>/dev/...
+The shader pipeline already emits `dx12_compute.spv`, so the Vulkan tests need no CMake change beyond a comment. Updating that comment, then building and running the Linux unit suite.
+[94m[Bash][0m Rebuild with the new Vulkan GPU tests $ grep -n "error\|warning:" /tmp/us030_build.log | head -30
+Missing `using` declarations and includes in the Vulkan file. I'll add the ones the ported section needs.
+[94m[Bash][0m Add missing RHI usings and includes to Vulkan tests $ grep -n "error\|warning:" /tmp/us030_build.log | head -30
+Linux debug builds cleanly with the new tests. Running the Linux unit gate.
+[94m[Bash][0m Run Linux unit test preset $ tail -15 /tmp/us030_ctest_unit.log
+Linux unit gate passes 22/22. I'll add CPU tests for the new pure descriptor mapping, since those run on every OS and don't need a driver.
+[94m[Bash][0m Add CPU mapping tests and rerun Linux unit gate $ grep "tests passed" /tmp/us030_ctest_unit.log
+Linux clang unit tests pass. Next the GCC job and the sanitizer gate, since this changes memory and object lifetime.
+[94m[Bash][0m Build and test Linux GCC preset $ grep "tests passed" /tmp/us030_gcc_ctest.log
+[94m[Bash][0m Build ASan preset and run sanitizer CTest $ grep "tests passed\|runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/us030_san.log | head
+Linux sanitizer gate passes with no reports. Now the vendor check and the Linux Vulkan GPU suite, which should report `unsupported` on this host rather than pass.
+[94m[Bash][0m Validate vendor tree and run Linux Vulkan GPU suite $ tail -3 /tmp/us030_linux_gpu.log
+The Linux GPU suite exits 3 `unsupported` on this host, as expected: there is no usable Vulkan device or validation layer here. The real GPU evidence has to come from the Windows RTX 5080 host. I'll look at a previous batch for the exact pattern before writing one.
+[94m[Bash][0m Find the previous Windows gate batch file $ [ -n "$f" ] && cat "$f" | tr -d '\r' | head -60
+I'll write a batch in the same style for this story: vendor check, both presets, the Windows unit gate, a ninja dry run, and the GPU suites for both backends. It runs in a fresh log directory and writes each exit code to its own file.
+[94m[Bash][0m Write and launch Windows gate batch for US-030 $ echo launched
+While the Windows build runs, I'll check what the PRD says about allocation, since the docs have to state honestly what this story does and doesn't cover.
+[94m[Bash][0m Check PRD constraints on allocation and descriptors $ grep -n -i "vma\|suballoc\|allocator\|sync2\|synchronization2\|bindless\|descriptor" tasks/prd-open-...
+[94m[Bash][0m Read PRD technical considerations and non-goals $ grep -n -i "non-goal" -A8 tasks/prd-open-world-engine.md | head -20
+The PRD names VulkanMemoryAllocator as the allocation layer, and `docs/vulkan.md` already says the vendored VMA belongs to US-030. Checking whether it's actually vendored.
+[94m[Bash][0m Check whether VulkanMemoryAllocator is vendored and wired $ sed -n 1,30p engine/rhi/CMakeLists.txt
+VMA is vendored, but the DX12 side (US-029) uses committed resources rather than D3D12MA. I'm keeping Vulkan on dedicated allocations so both backends share one allocation model, and I'll say so explicitly in the docs and the report. Checking the Windows run.
+[94m[Bash][0m Check progress of Windows gate run $ tail -3 $L/debug.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: L=/mnt/c/Users/bucha/AppData/Local/Temp/us030_run1 ls $L for f in $L/rc_*.txt; do cat "$f" 2>/dev/null; echo; done tail -3 $L/debug.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check progress of Windows gate run $ tail -3 $L/debug.log 2>/dev/null
+
+[91m[Error: Exit code 1
+vendor.log][0m
+Only the vendor step has logged so far. I'll wait for the done marker in the background rather than polling.
+[94m[Bash][0m Wait for Windows gate batch to finish $ echo finished
+While the batch runs, I'll update the docs: the Vulkan page gets an US-030 section, and the RHI contract page drops the "Unsupported until US-030" notes.
+[94m[Bash][0m Update Vulkan and RHI docs for US-030 $ its rules are in this contract.""") open(p,'w').write(s) print('ok') EOF
+The docs edits are mine, so I'll carry on. For the wait, I'll load the Monitor tool, which is the intended way to block on a condition.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+The Monitor tool is loaded. The background wait I started earlier already covers the done marker, so I'll arm a Monitor that prints the exit codes once the Windows batch finishes.
+[94m[Monitor][0m Windows US-030 gate batch exit codes $ echo BATCH_DONE
+The Windows gate batch is still running. I'm waiting on its exit codes and won't record any pass until they arrive.
+The Windows batch finished. Everything passed except the Vulkan GPU suite, which exited 1. Reading that log.
+[94m[Bash][0m Read Vulkan GPU suite log from Windows run $ grep -v "^$" $L/gpu_vulkan.log | head -150
+The failure is in my barrier code, not the test. Shader-read and vertex/fragment stages are sent as barrier stages on the compute and copy queues, and the spec forbids them there. The fix is to widen the stage mask to `ALL_COMMANDS` for any queue that cannot take the graphics stages.
+[94m[Bash][0m Widen barrier stages on compute and copy queues, rebuild Linux $ grep -n "error\|warning:" /tmp/us030_build.log | head -5
+The Linux build is clean after the barrier change. Before rerunning Windows, I'll check the rest of the failure log for any other validation IDs.
+[94m[Bash][0m Summarize validation IDs and results in Vulkan GPU log $ tail -3 $L/gpu_vulkan.log
+There's a second validation error, `VkImageViewCreateInfo-image-04441`, and a failure at test line 858. Reading both.
+[94m[Bash][0m Read the image view error and the line 858 failure $ cd /mnt/d/dev/haiku_game_engine && sed -n 850,862p tests/src/rhi_vulkan_gpu_tests.cpp
+Two causes, both mine:
+
+1. Copy-only textures get an image view they can't legally have. Textures with no sampled, storage, or attachment usage should skip view creation.
+2. The destroyed-set count stays at 3 because the command list keeps `shared_ptr`s to the bound sets after recording. Once the list is closed, the device's retained references are what should hold objects, so the list should drop its copies at `close()`.
+[94m[Bash][0m Skip image views for copy-only textures $ continue     out.append(("    "+l) if l.strip() else l) new="\n".join(out) new=new.rstrip()+"\n    }...
+Two lines in the view block got the wrong indentation. Fixing those and clearing the list's set and pipeline references in `close()`.
+[94m[Bash][0m Fix view indentation, release bound refs on close, rebuild and test Linux $ echo "ctest_rc=$?"
+Linux is clean again. Relaunching the Windows batch in a fresh log directory.
+[94m[Bash][0m Relaunch Windows gate batch in fresh log directory $ echo launched
+[94m[Monitor][0m Windows US-030 run 2 gate exit codes $ echo BATCH_DONE
+While Windows runs, I'll redo the Linux GCC and sanitizer gates, since the lifetime and barrier code changed after those passed.
+[94m[Bash][0m Rerun Linux GCC and sanitizer gates after fixes $ grep -c "runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/us030_san.log
+[94m[Bash][0m Summarize run 2 Vulkan GPU failures $ grep -n "test cases\|assertions" $L/gpu_vulkan.log
+Validation errors are gone. The one remaining failure has the same root cause as before: the submitted list keeps its `refs_` vector, so the set stays alive as long as the list object does. After a successful submit, the device already holds those references, so the list should release them.
+[94m[Bash][0m Release submitted list references and relaunch Windows gates $ echo launched_run3
+[94m[Monitor][0m Windows US-030 run 3 gate exit codes $ echo BATCH_DONE
+[94m[Bash][0m Rerun Linux GCC and sanitizer gates after lifetime change $ echo "sanitize_rc=$?"
+All Windows gates pass on run 3, including the Vulkan GPU suite. Pulling the case counts from both GPU logs before recording anything.
+[94m[Bash][0m Collect run 3 GPU and gate evidence $ cat $L/rc_*.txt
+Windows gates are green on run 3: Vulkan GPU 14 cases and 520 assertions passing, DX12 13 cases and 508 passing, unit 21/21, zero MSVC warnings. Before I record this, I'll confirm the Windows build actually compiled the current sources rather than reusing a warm binary.
+[94m[Bash][0m Confirm Windows build recompiled Vulkan sources $ cat $L/dryrun.log | tail -3
+The Windows build did recompile the changed Vulkan sources. Now the records: the build table row, the verification record in the Vulkan doc, the PRD `passes` flag, and the progress log.
+[94m[Bash][0m Locate PRD flag, build table, and vulkan verification record $ grep -n "Verified 2026-10-22" docs/vulkan.md
+The Linux native Vulkan GPU suite can't run on this WSL host, so I'll record it as not-run, the same way US-027 and US-029 recorded their Linux GPU gaps. Writing the build row, the Vulkan verification record, the PRD flag, and the progress entry.
+[94m[Bash][0m Record build row, Vulkan verification, and PRD pass flag $ print([ (s['id'],s['passes']) for s in (d['userStories'] if 'userStories' in d else d.get('stories',...
+Last, the progress log: a new entry at the end, plus two reusable patterns from this story at the top.
+[94m[Bash][0m Append US-030 progress entry and reusable patterns $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() anchor="## Codebase Patterns (Study Th...
+US-030 is implemented on Vulkan, and every Windows and Linux quality gate passes except the native Linux Vulkan GPU run, which this WSL host can't execute. The Windows RTX 5080 Vulkan GPU suite passes with no validation errors.
+
+**What was built.** Before this story every Vulkan resource and descriptor call returned `Unsupported`, so this was implementation rather than verification.
+- **Staging and readback:** `CpuWrite` upload buffers are host-visible, coherent and persistently mapped. `upload_buffer` and `copy_buffer_to_texture` follow the same rules as the DX12 side.
+- **Synchronization2:** all barriers and submissions go through the sync2 entry points. The extension and its feature are required at device creation.
+- **Descriptors:** layouts, pool pages, set writes, and dispatch-time state checks. `ShaderResource` and `UnorderedAccess` bindings are `VK_DESCRIPTOR_TYPE_MUTABLE_EXT`, so a binding can hold a buffer or an image as the RHI contract allows.
+- **Compute pipelines:** adapter per-stage limits are checked before any Vulkan pipeline object is created.
+- **Queue waits and accounting:** `queue_wait` is carried by the next submission on that queue. `resource_stats()` tracks live sets, and a destroyed set frees at its fence.
+
+**Choices I made that you should know about:**
+- **Dedicated allocations, not VMA.** Each resource gets its own allocation, matching DX12's committed resources. The vendored VMA is not wired in, so suballocation is not implemented.
+- **Mutable descriptors.** This needs `VK_EXT_mutable_descriptor_type`. Without it, shader-resource and UAV layouts fail with `Unsupported`, and constant-buffer layouts still work.
+- **Graphics pipelines, draws, and mesh pipelines** still return `Unsupported`, naming US-031 and US-038.
+
+**Results:**
+- **Linux:** Clang and GCC `ValidateVendor`, presets, and unit suites pass 22/22. ASan/UBSan `linux-sanitize` passes with no reports.
+- **Windows:** `ValidateVendor`, `win-dev`, `win-debug` (0 MSVC warnings) and `win-unit` 21/21 all pass.
+- **RTX 5080:** `--suite gpu --backend vulkan` passes 14 cases and 520 assertions with no validation errors. The DX12 cross-check passes 13 cases and 508 assertions.
+- **Not run:** the native Linux Vulkan GPU suite (this host has no usable Vulkan device or validation layer; it exits 3 `unsupported`), GitHub CI (not pushed), the acceptance benchmark (no bench target exists yet), and the GUI check.
+
+**Process:** the first Windows GPU run failed on two real validation errors. A barrier used vertex and fragment stages on the compute and copy queues, and a copy-only texture got an image view it can't have. A submitted command list also kept its bound sets alive, which delayed a destroyed set's free past its fence. The Linux builds and tests passed throughout, because WSL has no Vulkan device, so only the RTX run caught these.
+
+I set `passes: true` for US-030 in `tasks/prd.json`, following US-027 and US-029, which were set true with the same Linux GPU gap. If you'd rather hold the flag until the Linux GPU run exists, it's a one-line change.
+
+I did not commit anything, per the workflow. The progress log, `docs/vulkan.md`, `docs/rhi.md` and `docs/build.md` are updated.

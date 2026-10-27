@@ -1,0 +1,45 @@
+# Iteration 167 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:49:03.252Z
+- **Ended At**: 2026-10-24T07:51:47.150Z
+- **Duration**: 2m 43s
+- **Input Tokens**: 38
+- **Output Tokens**: 4322
+- **Total Tokens**: 4360
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for US-049, and whether any streaming code already exists.
+[94m[Bash][0m Inspect progress log, PRD story, and streaming code $ git status 2>&1 | head -3
+The log shows US-049 at Partial. Every gate the tree can run passes, and the open item is the `streaming_stress` benchmark. I'll check whether that benchmark is this story's deliverable or US-074's, and confirm the current tests still pass.
+[94m[Bash][0m Check benchmark story ownership and rerun Linux build and tests $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Identify which story owns the streaming_stress criterion $ sed -n 690,706p tasks/prd-open-world-engine.md
+The `streaming_stress` workload belongs to US-078, not US-049, and the harness it needs is US-074. Neither is in this story's prerequisites. The criterion is also conditional ("once the benchmark harness... exist"). So the benchmark is not a US-049 deliverable. I'll confirm the unit pass count and then record the closing status.
+[94m[Bash][0m Get linux-unit ctest pass count $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|tests fa...
+[94m[Bash][0m Append US-049 closing entry to progress log $ US-074). - Status call: US-049 COMPLETE against its own deliverables. Benchmark numbers are deferred...
+US-049 is complete against its own deliverables. I changed no source this pass. I re-checked the existing streaming implementation and appended a closing entry to `.ralph-tui/progress.md`.
+
+**What is verified**
+- **Linux (clang):** `linux-debug` build completes, and `linux-unit` ctest passes 22/22 on the current tree.
+- **Earlier passes on this same source:** Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21); Linux GCC gates; `linux-asan` build and `linux-sanitize` ctest (22/22).
+- **Lifecycle:** cells move through IO, decode, and GPU upload under per-update byte budgets. Activation, deactivation, and unload happen only at safe points. Subscribers receive every step.
+- **Safety:** jobs capture only their own request, so cancelled or abandoned jobs cannot touch the manager. Teleport, rapid direction changes, and missing cells are covered by tests.
+- **Transient residency:** `peak_transient_bytes` is measured per update, and the teleport test asserts it is non-zero.
+
+**What is not run**
+- **`engine_bench --suite acceptance` and the `streaming_stress` workload:** I did not run these. The `streaming_stress` workload (200 000 instances, 5400 m route, teleport case, 30-minute soak) is the deliverable of US-078, not US-049. Its harness is US-074, which is not one of US-049's prerequisites. The PRD also makes the benchmark criterion conditional on the harness existing, and there is no `engine_bench` target in the tree. Real residency numbers therefore wait for US-078.
+- **GPU suites:** not run, because no GPU path changed.
+- **Windows gates and Linux GCC/ASan:** not re-run this pass. They passed earlier on the same source, which has not changed since.
+
+**Why I closed it now**
+Earlier entries kept the status at Partial because of the benchmark. That criterion belongs to later stories and is conditional, so it does not block this one. Previous passes had also re-run the same gates without any source change, so I stopped there.

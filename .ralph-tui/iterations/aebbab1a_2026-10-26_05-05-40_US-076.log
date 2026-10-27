@@ -1,0 +1,39 @@
+# Iteration 667 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:05:40.017Z
+- **Ended At**: 2026-10-26T02:06:04.701Z
+- **Duration**: 24s
+- **Input Tokens**: 22
+- **Output Tokens**: 2759
+- **Total Tokens**: 2781
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-076 already has in the tree.
+[94m[Bash][0m Read progress log and locate render_stress code $ grep -n "render_stress\|US-076" -r --include=*.cpp --include=*.hpp --include=*.json --include=*.md -...
+The progress log shows this story has been checked nine times with no source change, and each check ended blocked on a user decision. I'll confirm the tree still matches the last recorded state before deciding whether anything new can be done.
+[94m[Bash][0m Check source and artifact timestamps for changes $ find . -path ./third_party -prune -o -newer artifacts/bench -type f -print 2>/dev/null | grep -v '^....
+US-076 is not complete, and I did not signal COMPLETE. Nothing has changed since the last recorded check, so I re-ran no gates or benchmarks.
+
+**What is stuck (needs your decision):**
+1. **Triangle floor and frame budget fail on the route start.** The `render_stress` run measures 312,068 triangles against a floor of 2,000,000. Frame time is p99 35–47 ms against a 16.7 ms budget. All eight `us076-*` reports (DX12 and Vulkan, indexed/indirect/meshlets, plus the mesh-shader-off runs) exit 1 for this reason. The counts match the contract (20,000 instances, 200 meshes, 100 characters with 6,400 bones, 100,000 particles, 128 lights, 4 shadowed, 1 sun). The gap is in instance placement. Fixing it changes the workload, so it needs `kWorkloadVersion` bumped and `workload_expected.json` regenerated. I did not change the workload to make the run pass.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated permutation tables, so only `native_1080` runs. "Both profiles" is therefore only partly done.
+3. **Not run:** native Linux Vulkan GPU, and the `linux-gcc` gate (local GCC 9.4 cannot build Jolt).
+
+**What is done:** the render_stress driver, `--path` and `--disable-mesh-shaders` flags, per-run counters, PPM screenshots, and the mesh-shader fallback evidence. Disabled features are reported as disabled. The Linux gates passed on the current tree in the last full check: ValidateVendor, linux-dev, linux-debug with 0 warnings, and linux-unit at 30/30. The Windows gates were not re-run in this pass.
+
+**Decisions I need from you:**
+- Approve the workload change to instance placement (then I bump the version, regenerate the expected file, and rerun the eight reports), or accept the failing numbers as the recorded result for this story.
+- Accept `native_1080` only as the profile for this story, or hold it until FSR 2 permutations are vendored.
+
+I did not append a progress entry this time because nothing new was learned. Tell me which option you choose and I'll continue from there.

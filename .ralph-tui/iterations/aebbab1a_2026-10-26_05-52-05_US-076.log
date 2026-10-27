@@ -1,0 +1,42 @@
+# Iteration 801 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:52:05.231Z
+- **Ended At**: 2026-10-26T02:52:19.527Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2327
+- **Total Tokens**: 2349
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Read progress log and benchmark tool layout $ git status --short 2>/dev/null | head
+The log shows US-076 has been re-checked many times and is blocked on decisions only you can make. Before reporting, I'll confirm the current tree still matches that state.
+[94m[Bash][0m Check source mtimes, workload version, and workload check $ timeout 300 ./build/linux-dev/tools/benchmark/engine_workload --check benchmarks/workload_expected.j...
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing in the tree changed in this pass, and the blocker is the same one the log has recorded for many passes.
+
+**Done and verified (from earlier passes, sources unchanged since):**
+- `render_route_v1` is defined in `benchmarks/manifest.json`, and the `render_stress` driver is in `tools/benchmark/src/render_stress.{hpp,cpp}`.
+- `--path indexed|indirect|meshlets` and `--disable-mesh-shaders` work. The forced-off run falls back to indirect-indexed, reports mesh shaders as disabled, and records the fallback.
+- Counters and screenshots are recorded. All eight acceptance reports (DX12 and Vulkan, four paths) were rerun on the current tree and are in `artifacts/bench/us076-*`.
+- `engine_workload --check` matches all 4 scenes. The `render_stress` counts match the contract: 20,000 instances, 200 meshes, 100 characters with 64 bones, 100,000 particles, 128 lights, 4 shadowed, 1 sun.
+- Linux gates passed on the last full run: ValidateVendor, linux-dev configure, linux-debug build, and linux-unit at 30/30.
+
+**Blocked, and it needs your decision:**
+1. **Route-start triangle floor and frame budget fail.** The start frame submits 312,068 triangles against the 2,000,000 floor, and p99 is over 16.7 ms on DX12 indexed. The cause is placement: instances are uniform over 8,192 m, so the route start sees about 330 items. Two fixes exist, and both change a fixed contract:
+   - (a) Keep the contract and report the failing measured result.
+   - (b) Change instance placement. That bumps `kWorkloadVersion`, regenerates `workload_expected.json`, and updates the manifest hash. The contract forbids reducing workloads, so this needs your approval.
+2. **The full_1080 profile is unsupported.** The vendored FSR 2 lacks its generated permutation headers (see `ENGINE_FSR2_AVAILABLE`). Until those exist, only the native_1080 profile runs, so "both profiles" is only partly met.
+3. **Native Linux Vulkan GPU and linux-gcc have not run.** The linux-gcc job cannot build Jolt with the local GCC 9.4. The Windows gates were not rerun in this pass.
+
+I did not add another progress entry, since the last 25 status entries say the same thing. If you tell me which option to take for (1), and whether to pursue FSR 2 permutations for (2), I can make the change and finish the remaining runs.

@@ -1,0 +1,46 @@
+# Iteration 872 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:24:28.336Z
+- **Ended At**: 2026-10-26T11:24:50.866Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 2597
+- **Total Tokens**: 2625
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether any `all_features` work already exists.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features refs $ grep -rl "all_features" --include=* . 2>/dev/null | grep -v third_party | head -20
+The log shows US-079 is partly done across several iterations, and the last entry was a status check. I'll confirm nothing has changed since that check before deciding whether there is any work left to do.
+[94m[Bash][0m Check for source changes since last US-079 run and GCC 11+ availability $ ls /usr/bin | grep -E '^(g\+\+-1[1-4]|clang\+\+-1[4-9])$' | head
+Nothing has changed since the last recorded run, and there is still no GCC 11+ on this host. I'll log this check in the progress file and stop.
+[94m[Bash][0m Append status-check entry to progress log $ acceptance bench (`all_features` has `implementation: none`). - No COMPLETE signal: those items are ...
+US-079 is not complete, so I am not signalling COMPLETE. The parts that exist are verified, but several acceptance criteria are still open.
+
+**Done (verified in earlier iterations, and nothing has changed since):**
+- `tests/src/all_features_tests.cpp`: the `all_features` workload matches `benchmarks/workload_expected.json`. A combined CPU scenario covers Lua gameplay, audio emitters, animation blending, a UI button, a save slot round trip, and a material graph evaluation. Feature markers are checked in order.
+- `tests/src/all_features_editor_tests.cpp`: an editor scenario covers scene, material, animation, and terrain edits with undo/redo, save/open, Play/Stop, and a Build Game package verified from a clean copy.
+- Linux: ValidateVendor, `linux-dev`, `linux-debug`, `linux-unit` (30/30), and the ASan sanitize run pass. The editor suite passes 106/106.
+- Windows: ValidateVendor, `win-dev`, `win-debug`, `win-unit` (29/29), and the DX12 and Vulkan GPU suites pass.
+
+**Still open, not reported as passed:**
+- The automated tour runner, with screenshots and an action log.
+- GI/RT/upscale profiles for `all_features`. FSR 2 cannot link because its permutation headers are missing.
+- Forced indirect and meshlet geometry paths for `all_features`.
+- Relaunch of the published package. Build Game's own verify step is the only relaunch so far.
+- GUI checks.
+- The native Linux Vulkan GPU suite. WSL has no usable Vulkan device.
+- The acceptance benchmark. `all_features` still has `implementation: none` in the manifest.
+- The `linux-gcc*` gate. This host has no GCC 11+ or clang 14+.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. I did not change any code in this turn. Finishing US-079 needs a Windows GPU session for the profile and forced-path runs, a native Linux Vulkan machine, a GCC 11+ toolchain, and a GUI session. I'd suggest the tour runner and the profile runs go next, since they are the largest remaining code work.

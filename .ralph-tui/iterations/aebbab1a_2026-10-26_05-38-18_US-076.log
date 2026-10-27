@@ -1,0 +1,39 @@
+# Iteration 770 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:38:18.161Z
+- **Ended At**: 2026-10-26T02:38:30.104Z
+- **Duration**: 11s
+- **Input Tokens**: 20
+- **Output Tokens**: 1739
+- **Total Tokens**: 1759
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the render benchmark code and the progress log.
+[94m[Bash][0m Inspect progress log and benchmark tool layout $ grep -n "US-076" -A3 tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Check whether benchmark sources changed since last run $ ls -t artifacts/bench 2>/dev/null | head -3
+US-076 is not complete, and I did not make a change this pass. Nothing has changed since the last recorded status check: the sources and workload files have the same timestamps, and `kWorkloadVersion` is still 1.
+
+**What's blocking it**
+
+1. **Route-start triangle floor and frame budget fail.** The acceptance contract (PRD line 875) requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The measured start frame has 312,068. Frame times are p99 35–47 ms against a 16.7 ms budget. The start pose comes from a camera route pinned by SHA-256 in the manifest, and the instance placement comes from a seeded generator whose digests are pinned. Fixing either one changes a fixed contract, so I need your decision:
+   - **Option A:** approve a placement or route-start change. That means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and updating the manifest hash.
+   - **Option B:** accept the failing measured run as the result. The story would then close as measured, with the acceptance miss recorded.
+
+2. **`full_1080` is unsupported.** The FSR 2 shader permutation headers are missing from the vendored tree, so the upscale profile cannot run. Choosing how to vendor them is your call.
+
+3. **Native Linux Vulkan GPU and `linux-gcc` have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What was verified in earlier passes:** the Linux debug build succeeds, `ctest --preset linux-unit` passes 30/30, and `engine_workload --check benchmarks/workload_expected.json` reports all 4 scenes matching. The `us076-*` benchmark reports are in `artifacts/bench/`.
+
+Tell me which option you want for item 1, and whether to vendor FSR 2 for item 2. I'll make the changes and run the gates from there. I have not emitted the completion signal.

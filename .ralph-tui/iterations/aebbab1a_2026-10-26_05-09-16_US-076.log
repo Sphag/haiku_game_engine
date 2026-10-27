@@ -1,0 +1,45 @@
+# Iteration 678 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:09:16.743Z
+- **Ended At**: 2026-10-26T02:09:32.364Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2031
+- **Total Tokens**: 2057
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD's US-076 section, and what already exists for the benchmark tool.
+[94m[Bash][0m Read progress log, PRD story, and benchmark tree $ git status --short | head -30
+The log shows this story has been blocked for several passes on the same user decision. Before I report that, I'll confirm the latest benchmark results still match the log.
+[94m[Bash][0m List US-076 benchmark report directories $ done 2>/dev/null | head -60
+[94m[Bash][0m Summarize status fields of each US-076 report $ done
+US-076 is not complete, so I'm not signalling COMPLETE. The story is blocked on a decision only you can make, and I did not change the workload or rerun the gates.
+
+**What's blocking it**
+
+1. **Triangle floor and frame budget fail on instance placement.** The route start has 312,068 triangles against the required 2,000,000. Frame times are p99 35–47 ms against the 16.7 ms budget. Every US-076 report exits 1 for these reasons. Fixing it means changing how the render_stress instances are placed. That changes the workload, so it needs a `kWorkloadVersion` bump and a regenerated `workload_expected.json`. The PRD forbids reducing the workload or thresholds to get a pass, so I won't make that change without your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so only the native_1080 profile runs. This is the separate FSR 2 vendoring issue already recorded in memory.
+3. **Native Linux Vulkan GPU and the linux-gcc gate have not been run.** The local GCC 9.4 cannot build Jolt, and this WSL environment has no usable Vulkan device.
+
+**What exists**
+
+- Eight reports under `artifacts/bench/us076-*` cover DX12 and Vulkan, each for indexed, indirect, meshlets, and meshlets with mesh shaders forced off. All exit 1 on the two failures above.
+- The mesh-shader fallback path runs, and the disabled-feature runs are present. The `render_stress.cpp` guard that skips `attach_meshlets` on non-meshlet paths was confirmed by mtime.
+- I did not re-verify the Windows and Linux quality gates in this pass, since the source has not changed since the last recorded results.
+
+**Decisions I need from you**
+
+- Approve a placement change to reach the 2M triangle floor, with a workload version bump? Or reject it and accept the story closing as measured-failing?
+- Is the FSR 2 permutations gap a blocker for US-076, or can `full_1080` be recorded as unsupported for this story?
+- Should I run the native Linux Vulkan benchmark on a machine that has a GPU, or leave it as not-run?

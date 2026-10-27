@@ -1,0 +1,42 @@
+# Iteration 513 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:47:24.675Z
+- **Ended At**: 2026-10-25T07:47:40.044Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2335
+- **Total Tokens**: 2357
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-058 in the tree and what the progress log says.
+[94m[Bash][0m Inspect engine/ui tree and progress log $ tail -c 3000 .ralph-tui/progress.md
+The log marks US-058 as Partial on every recent pass. Before deciding anything, I want to see what the Windows gates recorded and whether the tree changed since the last check.
+[94m[Bash][0m Read latest US-058 log entries and check tree changes $ ls engine/runtime/src 2>/dev/null
+US-058 is not complete, so I'm not emitting the COMPLETE signal. No code changed in this pass.
+
+**State of the tree:** `find engine tests cmake -newer .ralph-tui/progress.md` returns nothing, so the gate results in the progress log still describe the current code. I didn't re-run the builds because the last recorded runs are current and a fresh run would give the same answer.
+
+**Recorded as passing (from the progress log):**
+- Linux: `ValidateVendor.cmake`, `linux-dev`, `linux-debug` build (0 warnings), `linux-unit` (22/22), and `linux-asan` plus `linux-sanitize` (22/22 with ASan and UBSan).
+- Windows: vendor validation, `win-dev`, `win-debug` build, and `win-unit` (21/21).
+- Functional coverage: layout, text (including Cyrillic), interaction, and Lua callback tests are in place.
+
+**Still open, and why I can't close them here:**
+1. **`linux-gcc` gate and CI job.** The Jolt physics code needs GCC 11+, and only GCC 9.4 is installed. `sudo` needs a password, so I can't install a newer compiler. The UI sources do compile under GCC 9 with `-Werror`, but that is only a partial check. To close this, install GCC 11+ or run the job in CI.
+2. **Running-application UI check and `set_overlay` composition.** No application host calls `set_overlay` yet; the runtime host belongs to US-060/US-061. Without a window there are no screenshots or action log, so the visual and interaction check in the running app can't be recorded. Composition is also not exercised by any fixture.
+3. **Native Linux Vulkan GPU run.** This is listed as a gate in the story, but the UI never touches the GPU, and WSL has no usable Vulkan device. It can only be recorded as not run on this machine.
+
+**What would settle the story:** a GCC 11+ toolchain for the `linux-gcc` gate, and either US-060/US-061 landing or a fixture that calls `set_overlay` on a real render target. Until then, the story stays Partial.
+
+I didn't add another "still Partial" entry to `.ralph-tui/progress.md`. The last several entries record the same status, and a new one would add no information.

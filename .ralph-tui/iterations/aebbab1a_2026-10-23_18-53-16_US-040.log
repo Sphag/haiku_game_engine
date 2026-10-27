@@ -1,0 +1,187 @@
+# Iteration 18 Log
+
+## Metadata
+
+- **Task ID**: US-040
+- **Task Title**: Native-Profile GI and Reflections
+- **Description**: As a player, I want indirect lighting without heavy RT so that I can use the native profile.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T15:53:16.669Z
+- **Ended At**: 2026-10-23T16:14:18.606Z
+- **Duration**: 21m 1s
+- **Input Tokens**: 410
+- **Output Tokens**: 89449
+- **Total Tokens**: 89859
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo.
+[94m[Bash][0m Inspect repo layout and progress log $ ls -la && wc -l .ralph-tui/progress.md && tail -150 .ralph-tui/progress.md && grep -n "US-0[34][0-9]...
+[94m[Bash][0m Read PRD header and GI-related requirements $ sed -n 1,80p tasks/prd-open-world-engine.md | cut -c1-400 && echo ---- && sed -n 390,404p tasks/prd-...
+[94m[Bash][0m List engine structure and build.md rows $ ls engine engine/render engine/render/src engine/render/include/engine/render engine/render/shaders ...
+[94m[Bash][0m Read US-019 story, native profile, existing IBL/probe code $ grep -n "### US-019" -A6 tasks/prd-open-world-engine.md && sed -n 840,870p tasks/prd-open-world-engi...
+The story is large, and the GPU pieces (shader sampling, SSR pass, Windows gates) won't fit in this pass. I'll build the CPU-side core I can verify: the probe bake, a versioned format, runtime interpolation with fallbacks, a CPU SSR reference, and tests. First I need the existing SH and converter APIs.
+[94m[Bash][0m Read PBR header, converter API, and test/CMake wiring $ sed -n 1,80p engine/render/include/engine/render/pbr.hpp && echo ---- && wc -l tools/asset_converter...
+[94m[Bash][0m Read test CMake wiring and test style $ sed -n 1,30p tests/CMakeLists.txt && sed -n 40,70p tests/CMakeLists.txt && sed -n 1,40p tests/src/po...
+[94m[Bash][0m Find hashing helpers and cooking API shape $ sed -n 1,40p tools/asset_converter/include/asset_converter/mesh_cooking.hpp
+[94m[Bash][0m Read converter CMake, importer API, and SH code $ cat tools/asset_converter/CMakeLists.txt | head -60 && sed -n 1,70p tools/asset_converter/include/as...
+The CPU-side GI core should live in its own small library so the converter can use it without pulling in the RHI. I'll check how libraries and the converter's importer selection are wired.
+[94m[Bash][0m Check top-level CMake, library layout, and converter importers $ cat CMakeLists.txt | head -60 && ls engine/*/CMakeLists.txt && cat engine/core/CMakeLists.txt | head...
+The plan is a new `engine_gi` library (SH, probe volume, bake, sampling, SSR reference) that both the converter and tests link. I need the exact SH normalization convention so the baked probes match `build_environment`.
+[94m[Bash][0m Read SH normalization and converter target wiring $ sed -n 136,186p engine/render/src/pbr.cpp && grep -n "engine_converter" tools/asset_converter/CMakeL...
+I have the convention: `diffuse_sh[i] = band_weight(i) × (4π/N) × Σ L·Y_i`, which I can reproduce. I'll write the new `engine_gi` library, starting with the header for the probe volume.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/probes.hpp[0m "#pragma once
+
+// Baked diffuse irradiance probes (US-040), the native profile's GI. The converter bakes a grid of probes from an analytic sky and a set
+// of axis-aligned occluders. The runtime reads ... (6934 chars)"
+Next, the implementation: SH projection, the sky, one-bounce bake with box occluders, trilinear sampling with fallback, and the versioned binary format.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/probes.cpp[0m "#include "engine/gi/probes.hpp"
+
+#include <glm/gtc/constants.hpp>
+
+#include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <utility>
+
+namespace engine::gi {
+... (21025 chars)"
+Before compiling I'll check the `Result` helper signatures and fix the header comments that no longer match the code (inclusive blocking, and `bake_probes` returning 0 on a mismatch).
+[94m[Bash][0m Check Result success and failure helpers $ grep -n "success\|failure" engine/core/include/engine/core/result.hpp | head -12
+[94m[Bash][0m Fix includes and header comments $ python3 - <<'EOF' import re p='engine/gi/src/probes.cpp' s=open(p).read() s=s.replace("#include <lim...
+The tool reports both files changed on disk, which may just be my own scripted edit. I'll check the current state before building on it.
+[94m[Bash][0m Verify current state of edited GI files $ sed -n 10,16p engine/gi/include/engine/gi/probes.hpp
+Edits are in place. Next, the screen-space reflection reference, which the header already points at as `screen_reflections.hpp`.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/screen_reflections.hpp[0m "#pragma once
+
+// Screen-space reflections (US-040), the native profile's reflections on the CPU. A reflected ray marches through the frame's view-space
+// depth. A hit returns the lit color already on... (2862 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/screen_reflections.cpp[0m "#include "engine/gi/screen_reflections.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+
+namespace engine::gi {
+
+ScreenHit trace_screen_reflection(const ScreenBuffers& buffers, const Ref... (2838 chars)"
+Now the CMake wiring: the new library, the top-level subdirectory, and links for the converter and test targets.
+[94m[Bash][0m Create engine_gi CMake target and register it $ cat > engine/gi/CMakeLists.txt <<'EOF' # Native-profile global illumination (US-040): baked diffuse ...
+The converter gets a `gi_probes` importer. Its source is a JSON scene description, and the payload is the baked, versioned volume. I'll check how the existing importers handle JSON errors and where `builtin()` registers them.
+[94m[Bash][0m Check importer registration and error style $ grep -n "catch\|builtin\|make_texture_importer\|make_model_importer" tools/asset_converter/src/*.cpp...
+[94m[Bash][0m Add gi_probes importer and wire CMake targets $ grep -n "builtin()" -B2 -A3 tests/src/converter_tests.cpp | grep -n "size\|count" | head -3
+The `dims` parsing in the importer is clumsy (it reads counts as floats and checks whole-ness). I'll read them as integers directly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/gi_importer.cpp[0m edit: "    const glm::vec3 dims = read_vec3(grid, "dims",..." → "    const Json& dims = grid.at("dims");
+    if (!d..."
+That comment overstates what nlohmann checks: it does not reject negative or fractional values. I'll validate the counts explicitly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/gi_importer.cpp[0m edit: "    // get<std::uint32_t> rejects negative and fra..." → "    inputs.grid.dims = glm::uvec3(read_count(dims[..."
+[94m[Bash][0m Add checked count reader to GI importer $ }  // Builds the bake inputs from the source document.''',1) s=s.replace('#include <stdexcept>\n','#...
+Edits are present. Before writing the tests I'll check the Catch2 tag convention the other unit tests use.
+[94m[Bash][0m Check test tag style and projection helpers $ grep -n "TEST_CASE" tests/src/postprocess_tests.cpp | head -3 && grep -n "perspective" engine/render...
+The test style is Catch2 with `[unit]` tags and `Catch::Approx`. I'll write the probe tests first, covering the indoor/outdoor fixtures, fallbacks, invalidation, the format, the coverage view, and the converter importer.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/gi_probe_tests.cpp[0m "// Native-profile GI probes (US-040), on the CPU. These cases bake an outdoor and an indoor fixture and check the indirect light they receive,
+// the fallbacks for blocked, unbaked, and off-grid probe... (14523 chars)"
+Two fixes before compiling. The `between` check assumes the neighbouring probe sees an unoccluded sky, but the box next to it occludes some of it. I'll compare against that probe's own value. I'm also removing the unused `near` helper, since `-Werror` would reject it in the test target.
+[94m[Bash][0m Fix blocked-probe test and remove unused helper $ ''' assert old in s s=s.replace(old,new,1) open(p,'w').write(s) EOF echo ok
+Now the screen-space reflection tests: a hit on a wall, the off-screen, behind-eye, and rough-surface misses, and the environment fallback.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/gi_reflection_tests.cpp[0m "// Screen-space reflections (US-040), on the CPU. A wall fills the frame at 10 m, so a reflected ray that runs straight into it hits, a ray that
+// leaves the frame misses, and a rough surface skips t... (5421 chars)"
+The test files are in place. Next I'll configure and build with the Linux preset, which enforces `-Werror` on first-party code.
+[94m[Bash][0m Validate vendor sources and configure Linux preset $ echo "configure=$?") && tail -3 /tmp/gi_configure.log
+[94m[Bash][0m Build Linux debug preset and collect diagnostics $ tail -3 /tmp/gi_build.log
+The build fails on a discarded `[[nodiscard]]` result in `bake_volume`. I'll check that line and fix it.
+[94m[Bash][0m Inspect flagged line $ sed -n 380,385p engine/gi/src/probes.cpp
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/probes.cpp[0m edit: "    GiVolume volume = create_volume(inputs);
+    b..." → "    GiVolume volume = create_volume(inputs);
+    /..."
+[94m[Bash][0m Rebuild Linux debug preset $ tail -2 /tmp/gi_build.log
+[94m[Bash][0m Fix discarded result in test and rebuild $ tail -2 /tmp/gi_build.log
+[94m[Bash][0m Run the GI unit tests and full CPU suite $ ./build/linux-dev/tests/Debug/engine_tests "The sky projection reproduces a uniform sky in the envir...
+The full CPU run passes: 619 passed, 5 skipped. I'll confirm the new cases are included and that the skips are pre-existing, then run the official `linux-unit` ctest preset.
+[94m[Bash][0m Confirm GI cases ran and run linux-unit ctest $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+The unit suite now runs 510 cases, up from 497, so the 13 new ones are included, and all pass. The skips are pre-existing X11 cases. I'll pull the ctest summary line, since the tail cut it off.
+[94m[Bash][0m Get ctest pass summary for linux-unit $ timeout 500 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests pas...
+`linux-unit` passes 22/22. Next I'll start the GCC preset build in the background and read the saved Windows-gate notes while it runs.
+[94m[Bash][0m Start GCC gates in background and read Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-validation-layer...
+The notes describe a batch template from earlier stories. I'll check for running batches, then reuse the most recent batch file with the story name changed.
+[94m[Bash][0m Find latest Windows gate batch and check for running ones $ ps -eo pid,etime,args | grep -i "\.bat" | grep -v grep | head -5
+[94m[Bash][0m Read the most recent gate batch template $ done
+The `us046` batch is a clean template, and no gate batch is running. I'll generate `us040_gate.bat` from it and launch it in the background.
+[94m[Bash][0m Create US-040 Windows gate batch and launch it $ nohup cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us040_gate.bat" > us040_result.txt 2>&1 & ...
+While the Windows batch runs, I'll write the documentation: the `docs/gi-probes.md` page, a `build.md` row, and a progress entry. First I need the table's column format and the existing docs style.
+[94m[Bash][0m Inspect build.md table header and docs style $ grep -n "^## " docs/postprocess.md | head -20
+[94m[Bash][0m Write GI docs and add build.md US-040 row $ tests `gi_probe_tests.cpp`, `gi_reflection_tests.cpp`) | Partial, 2026-10-23: the CPU side only. The...
+Docs and the build row are in. Next I'll check on the GCC build and the Windows batch.
+[94m[Bash][0m Check GCC gate and Windows batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us040
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /tmp/gi_gcc_status tail -2 /tmp/gi_gcc_build.log cat /mnt/c/Users/bucha/AppData/Local/Temp/us040_rc.txt ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us040. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check GCC gate and Windows batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us040
+The Windows batch is running (validate passed). The GCC background job left no status file, so I'll check its configure log.
+[94m[Bash][0m Inspect GCC background job logs $ tail -5 /tmp/gi_gcc_cfg.log 2>&1
+The background subshell died when its tool call ended. I'll rerun the GCC gates as a tracked background command.
+[94m[Bash][0m Configure, build, and test the linux-gcc preset $ grep -c "warning:" /tmp/gi_gcc_build.log
+While both builds run, I'll tidy one header comment so it matches the inclusive blocking rule.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/probes.hpp[0m edit: "(inside an occluder, so no free-space light), and ..." → "(inside an occluder or on its surface, so no free-..."
+[94m[Bash][0m Check Windows batch results so far $ tail -c 600 /mnt/c/Users/bucha/AppData/Local/Temp/us040_3.log 2>/dev/null | tr -d '\0' | tr '\r' '\n...
+[94m[Bash][0m Inspect Windows batch step logs $ cat us040_result.txt | tr -d '\0' | tail -3
+The `rc` file only recorded `validate=0`, so the `>>` echo lines are not reliable here (the notes warned about this). I'll read the exit state from the logs themselves.
+[94m[Bash][0m Summarize Windows gate logs so far $ ls -la us040_done.txt 2>/dev/null
+
+[91m[Error: Exit code 2
+100% tests passed, 0 tests failed out of 21
+build-warnings-check done
+-- Vendor validation passed: 26 dependencies, 8542 files
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'][0m
+Windows so far: `ValidateVendor` passed, the build has no `warning C` or `error C`, and `win-unit` passed 21/21. The two GPU steps are still running. I'll wait for the batch's done file with a bounded monitor rather than polling.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Windows US-040 gate batch completion $ echo "us040 batch done"
+The Windows gate batch is still running its GPU steps, and the GCC gate is still building in the background. I'll report results once both finish.
+[94m[Bash][0m Read Windows GPU logs and GCC job output $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/3d1769a8-d97a-422b-9ac9-46e92890f445/tasks/b590opg...
+Both Windows GPU suites pass. The GCC job's output is still empty, so I'll check whether it is running.
+[94m[Bash][0m Check GCC build process status $ tail -2 /tmp/gi_gcc_build.log 2>/dev/null
+The GCC build is still going, and it's still the same build directory as an earlier launch. I'll let it finish and report the GCC result once it does.
+
+Status so far:
+
+- **Linux clang:** `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings, 0 errors), and `linux-unit` (22/22) all pass. The full CPU suite reports 510 unit cases passing, including the 13 new GI cases.
+- **Windows (us040 batch, RTX 5080):** `ValidateVendor` passed, the build has no `warning C` or `error C`, `win-unit` passed 21/21, `gpu dx12` passed 44 cases (17832 assertions), and `gpu vulkan` passed 45 cases (17844 assertions) with validation layers on and `software=no`. The batch's `_rc.txt` only recorded `validate=0` because the `echo >>` lines did not write, so I'm reading exit state from the logs. The `win-dev` configure step is not separately confirmed from logs, but the build ran against the configured tree.
+- **Linux GCC:** still building.
+
+Not done for US-040, and it stays Partial: the runtime probe binding in `scene.hlsl`, the GPU SSR pass, the coverage view in the renderer, and the `engine_bench` acceptance measurement.
+[94m[Bash][0m Read GCC build and ctest results $ tail -3 /tmp/gi_gcc_ctest.log
+[94m[Bash][0m Get GCC ctest summary and warning count $ grep -a "error" /tmp/gi_gcc_build.log | head -3
+The GCC results are real: the build has zero warnings and `linux-gcc-unit` passes 22/22. The `gcc_done=8` status came from the earlier overlapping launch, which ran the same build directory. I'll record the final results in the progress log and docs.
+[94m[Bash][0m Append progress entry and fix GPU note in docs $ read the step logs instead. --- ''' s=s.rstrip('\n')+'\n'+entry open(p,'w').write(s) EOF tail -3 .ra...
+[94m[Bash][0m Tidy a progress learning line $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() s=s.replace("  - `DXC`-independent CPU...
+US-040 is **Partial**. The CPU side is implemented and verified on Linux clang, Linux GCC, and Windows DX12/Vulkan. The GPU runtime path and the coverage view are not built, so the story is not complete.
+
+**What's implemented** (new `engine/gi/` library, plus a converter importer):
+- **Probe bake:** one-bounce SH irradiance probes from an analytic sky and box occluders, in the same convention as `Environment::diffuse_sh`. A test checks it against `evaluate_diffuse`.
+- **Converter:** a `gi_probes` importer takes a JSON scene and writes the baked, versioned volume as its payload.
+- **Format and invalidation:** a little-endian binary volume with a format version and an input hash. Stale volumes are rejected, and the bake refuses to fill them in.
+- **Sampling:** trilinear interpolation. Blocked and unbaked probes take no weight, and the rest falls back to the environment in proportion to coverage. Off-grid points use the environment alone.
+- **SSR reference:** a CPU screen-space reflection march with IBL fallback for misses, off-screen rays, and rough surfaces.
+- **Debug view:** `coverage_debug_color()` classifies positions (valid, blocked, unbaked, outside). It is the CPU function only, not an overlay in the renderer.
+- **Tests:** 13 new unit cases covering indoor/outdoor fixtures, fallbacks, invalidation, the binary format, the debug view, and the importer.
+
+**Gate results (2026-10-23):**
+- **Linux clang:** `ValidateVendor` passed. `linux-dev` configured. `linux-debug` built with 0 warnings. `linux-unit` 22/22. The full unit suite has 510 cases, all passing.
+- **Linux GCC:** `linux-gcc-debug` built with 0 warnings. `linux-gcc-unit` 22/22.
+- **Windows (RTX 5080, validation layers on, `software=no`):** `ValidateVendor` passed. The build has no `warning C` or `error C`. `win-unit` 21/21. `gpu dx12` 44 cases pass. `gpu vulkan` 45 cases pass.
+
+**Not run or not done:**
+- The Windows `win-dev` configure step is not separately confirmed from logs. The batch's `rc` file only recorded `validate=0`, so I read the build and test logs instead.
+- The native Linux Vulkan GPU suite was not run, since this WSL host has no usable Vulkan device.
+- `linux-asan` and `linux-sanitize` were not run. The change does not touch memory, ECS, jobs, streaming, Lua, or physics, so I judged them out of scope. Please run them if you want them anyway.
+- `engine_bench --suite acceptance` does not exist yet (US-074).
+- No GUI check and no GitHub CI run.
+- Still to build: the probe binding in `scene.hlsl`, a GPU SSR pass, the coverage overlay in the renderer, and an indoor/outdoor scene through the renderer. Until those exist, the native profile still uses IBL alone for diffuse light.
+
+I recorded the result in `docs/gi-probes.md`, a `docs/build.md` US-040 row marked Partial, and a `.ralph-tui/progress.md` entry. I did not create a git commit.

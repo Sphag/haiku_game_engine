@@ -1,0 +1,49 @@
+# Iteration 166 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T07:44:13.692Z
+- **Ended At**: 2026-10-24T07:49:02.201Z
+- **Duration**: 4m 48s
+- **Input Tokens**: 60
+- **Output Tokens**: 4609
+- **Total Tokens**: 4669
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the streaming code.
+[94m[Bash][0m Read progress log and streaming-related code $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -ril "stream" --include=*.hpp --include=*.cp...
+The log shows US-049's CPU streaming and most gates already done, with the benchmark and Vulkan-free items still open. I'll confirm the tree still builds and passes on Linux before deciding whether any work remains.
+[94m[Bash][0m Run Linux gates and inspect streaming tests $ grep -rn "streaming_stress\|engine_bench" tests/CMakeLists.txt CMakeLists.txt 2>/dev/null | head
+[94m[Bash][0m Wait briefly and check background gate output $ ls /tmp/vv.log /tmp/build.log /tmp/ctest.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/6959a8c4-8a18-4413-a115-ac0fbe7ff9a5/tasks/bojvlhk30.output tail -n 5 ls /tmp/vv.log /tmp/build.log /tmp/ctest.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for background Linux gate run to finish $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/6959a8c4-8a18-4413-a115-ac0fbe7ff9a5/tasks/bojvlhk...
+[94m[Bash][0m Check gate progress so far $ grep -ci "warning\|error:" /tmp/build.log 2>/dev/null
+[94m[Bash][0m Check final ctest result and streaming test list $ wc -l engine/world/src/streaming.cpp tests/src/world_streaming_tests.cpp
+[94m[Bash][0m Confirm ctest summary and stress coverage $ ls tools
+[94m[Bash][0m Append re-verification entry to progress log $ linux-unit ctest 22/22 passed. - Not run this pass: Windows gates, linux-gcc, linux-asan/linux-sanit...
+US-049 is still **Partial**, so I am not emitting the COMPLETE signal.
+
+**What is done:** The streaming manager in `engine/world` (`streaming.hpp`/`streaming.cpp`) covers the cell lifecycle (Unloaded → Reading → Decoding → Loaded → Ready → Active, and back down). It has per-update IO, decode, and GPU upload budgets, activation only at safe points, and subscribers that hold cells as `shared_ptr`. Its 8 CPU test cases in `tests/src/world_streaming_tests.cpp` cover ring loading, lifecycle order, a render-consumer draw list, rapid direction changes, teleport, missing cells, budgets, and shutdown with requests in flight.
+
+**Verified this pass (Linux, clang, unchanged tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: passes.
+- `cmake --build --preset linux-debug`: passes, with no warning or error lines.
+- `ctest --preset linux-unit`: 22/22 passed.
+
+**Not run this pass:** the Windows gates, `linux-gcc`, and `linux-asan`/`linux-sanitize`. They passed on this same source in earlier entries and I changed no source. GPU suites were not run because no GPU path changed.
+
+**What keeps it Partial:** The acceptance criteria call for the `streaming_stress` workload (200,000 instances, a 5400 m route at 30 m/s, boundary crossings, a teleport case, and the GPU/host residency budgets), run through `engine_bench --suite acceptance`. There is no `engine_bench` target or source in the tree. That harness is US-074, which is not passing. I did not build it, since it belongs to a separate story. The transient-residency numbers the criteria ask for come from that run. The stats (`peak_transient_bytes`) exist, but nothing has measured them on a real workload.
+
+I appended a re-verification entry to `.ralph-tui/progress.md` recording this status.
+The background command finished with exit 0, which matches what I already verified: ValidateVendor, configure, the linux-debug build, and linux-unit 22/22 all passed. Nothing has changed, so US-049 is still **Partial** and I'm not emitting COMPLETE. The open items are the same: the `streaming_stress` benchmark and residency numbers, which need the `engine_bench` harness (US-074), and the Windows, GCC, and sanitizer gates, which I did not re-run this pass.

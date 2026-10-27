@@ -1,0 +1,42 @@
+# Iteration 1173 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:34:09.480Z
+- **Ended At**: 2026-10-26T21:34:30.079Z
+- **Duration**: 20s
+- **Input Tokens**: 28
+- **Output Tokens**: 2379
+- **Total Tokens**: 2407
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the benchmark tooling, since the acceptance run depends on what already exists.
+[94m[Bash][0m Read progress tail and benchmark sources $ grep -n "acceptance" -r tools/benchmark/src | head -20
+The log shows US-080 blocked across many prior passes. I'll re-check the blockers that matter before deciding whether anything has changed.
+[94m[Bash][0m Re-check blockers for US-080 $ find . -newer .ralph-tui/progress.md -name '*.cpp' -not -path './third_party/*' -not -path './build*...
+Nothing has changed since the last pass. I'll record this pass in the progress log, as the workflow requires.
+[94m[Bash][0m Append status entry to progress log $ samples/ absent. - No build, gate, or bench run: an acceptance batch would exit 3 (incomplete) while...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. Nothing changed in this pass: I re-checked the blockers and made no code or build changes.
+
+What blocks sign-off:
+
+- **No reference GPU reports.** The RTX 5080 is visible only to WSL (`nvidia-smi`). `/dev/dri` is absent, so there is no native Linux Vulkan device here. The Windows/DX12, Windows/Vulkan, and native Linux/Vulkan 3×180 s acceptance reports must come from the reference machine.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` has four `implementation: "none"` entries (lines 88, 108, 122, 132), including `physics_action_sequence_v1` and `streaming_route_v1`. An acceptance run would exit 3 (incomplete) while they remain.
+- **FSR 2 is not vendored.** `third_party/fsr2` has 0 `*_permutations.h` files, so FSR cannot link. Fixing this needs your choice of vendoring route.
+- **Frame budget is open.** Earlier passes recorded p99 over 16.7 ms on `render_stress`. Per the story, changing the contract needs your decision, so I have not changed it.
+
+The Windows and Linux quality gates were last run in an earlier pass (status check 63: Linux gates passed, Windows gates not run). The Linux GCC and ASan presets have not been run.
+
+I appended a status entry to `.ralph-tui/progress.md`. To make progress, I need from you:
+1. Access to the RTX 5080 reference machine, or confirmation that the Windows-side runs go through `cmd.exe` from WSL.
+2. Your decision on the FSR 2 vendoring route.
+3. Your decision on the frame-budget question, or direction to fix the cause first.

@@ -1,0 +1,98 @@
+# Iteration 13 Log
+
+## Metadata
+
+- **Task ID**: US-029
+- **Task Title**: DX12 Resources and Descriptors
+- **Description**: As a rendering developer, I want DX12 resource management so that I can safely transfer data to the GPU.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T00:04:29.620Z
+- **Ended At**: 2026-10-23T00:15:26.304Z
+- **Duration**: 10m 56s
+- **Input Tokens**: 116
+- **Output Tokens**: 13022
+- **Total Tokens**: 13138
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD, and the memory notes on running Windows gates.
+[94m[Bash][0m List repo and read progress log $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && cat .ralph-tui/progress.md ...
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environment.md[0m
+The Docs tools aren't needed for this story. Next I'll read the US-029 section of the PRD, the DX12 docs, and the RHI source tree.
+[94m[Bash][0m Locate US-029 in PRD and list RHI sources $ ls -R engine/rhi | head -80
+[94m[Bash][0m Read PRD intro and constraints sections $ grep -n -i "benchmark\|performance contract\|non-goal\|Technical Consid" tasks/prd-open-world-engine...
+[94m[Bash][0m Read DX12 doc and RHI device header $ cat engine/rhi/include/engine/rhi/device.hpp
+`docs/dx12.md` already documents US-029, and the progress log says the PRD flag and log lagged. So the likely job is to verify the existing code against the criteria and run the gates, not to rewrite it. I'll check the test coverage and the current `passes` flag next.
+[94m[Bash][0m Inspect DX12 GPU tests, PRD flags, and build records $ ls /mnt/d/dev/haiku_game_engine/build
+The GPU tests already cover the US-029 cases: round trips, reuse without growth, and deferred destruction at the fence. The next step is to run the Linux gates, starting with the clang chain.
+[94m[Bash][0m Run Linux clang vendor, configure, build, and unit gates $ tail -4 /tmp/us029_linux_unit.log
+[94m[Bash][0m Run Linux GCC and ASan/UBSan gates $ grep -c "ERROR: AddressSanitizer\|runtime error:" /tmp/us029_asan.log
+Linux clang, GCC, and ASan/UBSan are all green. For the Windows gates I'll reuse the batch pattern from earlier runs, so I'll check whether a previous `.bat` is still in Temp.
+[94m[Bash][0m Find the most recent Windows gate batch file $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+[94m[Bash][0m Write Windows gate batch file with CRLF endings $ echo ok
+
+[91m[Error: Dangerous rm operation detected: '/mnt/d/dev/haiku_game_engine/us029/*'
+
+This command changes directories before the removal, so the relative glob target cannot be statically resolved. This requires explicit approval and cannot be auto-allowed by permission rules.][0m
+The shell blocked the `rm` before running. I'll check what state was left behind, both in Temp and in the repo.
+[94m[Bash][0m Check whether batch file and stray folders exist $ ls -d /mnt/d/dev/haiku_game_engine/us029 2>&1
+
+[91m[Error: Exit code 2
+/mnt/d/dev/haiku_game_engine
+-rwxrwxrwx 1 max max 1106 Oct 22 17:08 /mnt/c/Users/bucha/AppData/Local/Temp/us029_gates.bat
+
+/mnt/c/Users/bucha/AppData/Local/Temp/us029:
+total 20
+drwxrwxrwx 1 max max 4096 Oct 22 17:14 .
+drwxrwxrwx 1 max max 4096 Oct 23 03:11 ..
+-rwxrwxrwx 1 max max 1684 Oct 22 17:14 build.log
+-rwxrwxrwx 1 max max 5008 Oct 22 17:14 configure.log
+-rwxrwxrwx 1 max max  463 Oct 22 17:14 gpu_dx12.log
+-rwxrwxrwx 1 max max  478 Oct 22 17:14 gpu_vulkan.log
+-rwxrwxrwx 1 max max   72 Oct 22 17:14 summary.txt
+-rwxrwxrwx 1 max max 3125 Oct 22 17:14 unit.log
+-rwxrwxrwx 1 max max   57 Oct 22 17:13 validate.log
+ls: cannot access '/mnt/d/dev/haiku_game_engine/us029': No such file or directory][0m
+A `us029` batch and log folder from an earlier attempt already exist in Temp. My command was blocked before it wrote anything, so those files are untouched. I'll use fresh names so the old logs aren't overwritten.
+[94m[Bash][0m Run Windows gates batch via cmd.exe and collect codes $ ls us029_run2
+All seven Windows steps exited 0. Exit codes alone aren't enough here, so I'll read the logs for warnings, the test counts, and the GPU report.
+[94m[Bash][0m Inspect Windows build, unit, and GPU logs $ grep -i "validation\|error\|corrupt" gpu_dx12.log | head -5
+Everything passes on Windows. The GPU run reports the RTX 5080 with validation layers on, and it has 13 test cases and 508 assertions. Next I'll record the result: set the PRD `passes` flag, add the `docs/build.md` row, and log the iteration. First I need to confirm which `passes` line belongs to US-029.
+[94m[Bash][0m Confirm US-029 passes flag and build.md row format $ tail -c 300 docs/build.md | cat -A | tail -3 | cut -c1-200
+US-029 is the `passes` entry at line 943, and the `docs/build.md` US-027 row is line 180. I'll set the flag, add the build-record row, and append the progress entry.
+[94m[Bash][0m Set US-029 passes flag in prd.json and validate JSON $ print([s['passes'] for s in d['userStories'] if s['id']=='US-029'] if 'userStories' in d else 'keys'...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "(no editor or runtime window exists yet, US-060/US..." → "(no editor or runtime window exists yet, US-060/US..."
+Now I'll append the progress entry.
+[94m[Bash][0m Append US-029 entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-23 - US-029 - Verified the DX12 resources and desc...
+US-029 was already implemented, so I verified it against its acceptance criteria and ran the gates. No source changed. All the required gates pass locally, but the GitHub CI jobs have not run.
+
+**Verified in the existing code**
+- Upload and readback, buffer and texture allocation, and the shader-visible descriptor heap are in `engine/rhi/src/dx12/`. Explicit transitions and queue waits are in `dx12_command_list.cpp`. Fence-based deferred destruction is in `engine/rhi/src/object_lifetime.hpp`.
+- `docs/dx12.md` already had the US-029 section. The US-029 GPU cases in `tests/src/rhi_dx12_gpu_tests.cpp` cover queue round trips, reuse without growth in `resource_stats()`, and a destroyed set that stays alive until its fence completes.
+
+**Gate results**
+- **Windows** (`win-dev`, `win-debug`, `win-unit` 21/21, `ValidateVendor`): all exit 0, with no `warning C` lines. The `ninja -n` dry run showed only the DXC stamp steps. The batch ran through `cmd.exe`, with exit codes written to a fresh log directory.
+- **Windows GPU**: `engine_tests --suite gpu --backend dx12` passed on the RTX 5080 with the debug layer on. It had 13 test cases and 508 assertions, and no validation errors.
+- **Linux clang** (`ValidateVendor`, `linux-dev`, `linux-debug` with 0 warnings, `linux-unit` 22/22): all pass.
+- **Linux GCC** (`linux-gcc`, `linux-gcc-debug` with 0 warnings, `linux-gcc-unit` 22/22): all pass.
+- **Linux ASan/UBSan** (`linux-asan`, `linux-sanitize` 22/22): no sanitizer reports. This gate applies because the story covers memory.
+
+**Not run or unsupported**
+- The Linux DX12 GPU suite reports `unsupported`, since DX12 is Windows-only.
+- `engine_bench --suite acceptance` was not run. There is no bench target yet (US-074).
+- The Vulkan GPU suite was not re-run, because it belongs to US-030.
+- GitHub CI has not run, because the work is not pushed.
+
+**Records updated**
+- `tasks/prd.json`: US-029 `passes` set to `true`. The JSON still parses.
+- `docs/build.md`: added a US-029 verification row.
+- `.ralph-tui/progress.md`: appended the US-029 entry.
+
+I did not create a git commit, as the workflow asks.
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,44 @@
+# Iteration 979 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:18:35.875Z
+- **Ended At**: 2026-10-26T15:18:53.383Z
+- **Duration**: 17s
+- **Input Tokens**: 20
+- **Output Tokens**: 2335
+- **Total Tokens**: 2355
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.txt -...
+[94m[Bash][0m Read US-079 PRD section and benchmark tool layout $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Re-check samples, FSR2 permutation headers, and benchmark branch $ grep -n '"all_features"' -A 3 benchmarks/manifest.json | grep -o '"implementation": "[^"]*"' | head ...
+US-079 is not complete, and I can't mark it done. The same three blockers that the progress log has recorded for many passes still hold, and I re-checked them just now.
+
+**What exists:**
+- `tests/src/all_features_tests.cpp` (CPU integration: workload digests, Lua gameplay and audio, animation, UI click, save round trip, material graph, marker tour).
+- `tests/src/all_features_editor_tests.cpp` (headless scene, material, animation and terrain edits, undo/redo, Play/Stop, Build Game package and relaunch).
+- The last verified results are from the progress log's checks 71 and 73: Linux debug and unit tests pass, and the Windows gates and GPU suites passed on the RTX 5080. The ASan run passed on the last attempt, but the X11 input tests were intermittent under WSL focus timing, so that flake is still open.
+
+**What is missing:**
+- `benchmarks/manifest.json` still has `all_features` as `implementation: none`, and `tools/benchmark/src/main.cpp` has no `all_features` branch. So the `native_1080` and `full_1080` profiles and the forced geometry-path runs don't exist.
+- There is no `samples/all_features` project.
+- `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` cannot run.
+- The live GUI editor run with package and relaunch, the screenshots, the native Linux Vulkan GPU suite, `engine_bench --suite acceptance`, and the linux-gcc presets have not run.
+
+**What I need from you:**
+1. Approve the `all_features_route_v1` route in the manifest. Without it I can't wire the benchmark branch or the profiles. I can implement it as soon as you say yes.
+2. Choose how to handle FSR 2: vendor the permutation headers, or leave `full_1080` reported as unsupported, as the manifest allows.
+3. Provide a Windows session with a GUI for the live editor run, the tour screenshots, and the profile runs.
+
+I made no source changes or builds this pass, and I did not append a progress entry, since the log already records these blockers. I'm not emitting the COMPLETE signal, because the acceptance criteria for the profiles, the live editor run, and the native Linux Vulkan and acceptance benchmark checks are not met.

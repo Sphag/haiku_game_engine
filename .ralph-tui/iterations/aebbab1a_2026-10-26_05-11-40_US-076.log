@@ -1,0 +1,45 @@
+# Iteration 687 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:11:40.887Z
+- **Ended At**: 2026-10-26T02:11:57.844Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2050
+- **Total Tokens**: 2072
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect progress log and existing benchmark files $ grep -rn "US-076\|render_stress" --include=*.md --include=*.cpp --include=*.hpp --include=*.json --i...
+The log shows US-076 has been blocked for many passes on the same decision. I'll check whether anything changed since the last status check before deciding.
+[94m[Bash][0m Check source and artifact timestamps and contract counts $ grep -n "2000000\|312" benchmarks/*.json tasks/prd-open-world-engine.md 2>/dev/null | head
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing has changed since the last status check, and the blocker still needs your decision.
+
+**What's blocking it**
+
+- **Triangle floor and frame budget fail on placement.** `render_stress` submits 312,068 triangles at the route start, against the 2,000,000 the manifest requires (`benchmarks/manifest.json:93`). Acceptance frame time is p99 35–47 ms against the 16.7 ms budget. The counts are part of the fixed contract, so I can't meet the criterion by editing the test. Fixing it means changing instance placement, which changes the workload. That needs `kWorkloadVersion` bumped and `benchmarks/workload_expected.json` regenerated, and that is a contract change I shouldn't make on my own.
+- **`full_1080` is unsupported** until the vendored FSR 2 permutation headers exist (see the FSR project memory). Only `native_1080` runs.
+- **Native Linux Vulkan GPU and `linux-gcc` have not been run.**
+
+**State on disk**
+
+- Last source edit is `tools/benchmark/src/render_stress.cpp` at 04:15:43. All eight `artifacts/bench/us076-*` reports postdate it.
+- Each report still exits 1 on the frame budget and triangle floor. The mesh-shader-off fallback runs (`*-meshlets-nomesh`) are among them.
+- I did not rerun the gates or the benchmark, since nothing they would test has changed.
+
+**Decision needed from you**
+
+1. Approve a placement change that raises the submitted triangle count to the floor. I'd then bump `kWorkloadVersion`, regenerate the expected file, and rerun all eight runs and the gates.
+2. Or accept the current measured failure and close US-076 as "measured, criteria failed", noting the placement gap.
+
+Either way, the FSR permutations and the native Linux Vulkan run remain open. I also didn't add a 13th identical "not complete" entry to `.ralph-tui/progress.md`. Say which option you want and I'll carry it out.

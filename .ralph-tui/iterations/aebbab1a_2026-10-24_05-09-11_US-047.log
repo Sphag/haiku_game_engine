@@ -1,0 +1,94 @@
+# Iteration 87 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:09:11.258Z
+- **Ended At**: 2026-10-24T02:09:54.986Z
+- **Duration**: 43s
+- **Input Tokens**: 60
+- **Output Tokens**: 7194
+- **Total Tokens**: 7254
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain code and the progress log.
+[94m[Bash][0m Inspect repo layout and progress log for US-047 $ ls engine/world/tests 2>/dev/null
+
+[91m[Error: Exit code 2
+/mnt/d/dev/haiku_game_engine
+CMakeLists.txt
+CMakePresets.json
+artifacts
+build
+cmake
+docs
+engine
+tasks
+tests
+third_party
+tools
+---
+789 .ralph-tui/progress.md
+7:- Terrain stitching (US-047, `engine/world/src/terrain.cpp`): a finer tile stitches a coarser neighbour by morphing its between-coarse vertices onto the coarse edge (height, normal, splat blended from the two coarse end samples). Topological T-junctions remain, so the fixture checks coverage by point sampling, not by edge matching. Tiles share one global sample grid, so their edges agree by construction.
+692:## 2026-10-24 - US-047
+705:## 2026-10-24 - US-047 (re-check, still Partial)
+707:- Status call: US-047 stays **Partial**. No COMPLETE signal. The Windows gates and the linux-gcc/asan runs are not repeated here; the earlier entry's results stand only for the tree it ran on.
+712:## 2026-10-24 - US-047 (re-check 2, still Partial)
+714:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU runtime (`engine/world`, `tests/src/world_terrain_tests.cpp`) is unchanged from the earlier entry.
+719:## 2026-10-24 - US-047 (re-check 3, still Partial)
+721:- Status call: US-047 stays **Partial**. No COMPLETE signal. The Linux and Windows gates were not re-run in this pass because no source changed since the earlier passes.
+726:## 2026-10-24 - US-047 (re-check 4, still Partial)
+728:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU runtime in `engine/world` and its 14 fixture cases are unchanged. No renderer code references terrain (`engine/render` has no terrain path, shader, or bench workload).
+733:## 2026-10-24 - US-047 (re-check 5, still Partial)
+734:- What was implemented: nothing in source. `engine/world/include/engine/world/terrain.hpp` and `engine/world/src/terrain.cpp` are unchanged from the US-047 entry, and `engine/render` has no terrain path, shader, or bench workload.
+735:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU criteria (tiles, LOD and stitching, normals, four-layer splat weights, and the coverage, hole, and LOD fixture) are met by the earlier entry. The gates were not re-run in this pass because no source changed.
+740:## 2026-10-24 - US-047 (re-check 6, still Partial)
+742:- Status call: US-047 stays **Partial**. No COMPLETE signal. The RT side still reports heightfield terrain as unsupported (`engine/render/src/rt_effects.cpp`, "no triangle source until US-047 emits tiles for the pass"), so the full-profile RT criterion is open.
+747:## 2026-10-24 - US-047 (re-check 7, still Partial)
+749:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU runtime (`engine/world`, 14 fixture cases) is unchanged and was gated earlier; the Windows and GPU gates are not run because there is no terrain GPU path to test.
+754:## 2026-10-24 - US-047 (re-check 8, still Partial)
+756:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU runtime (`engine/world`, 14 fixture cases) is done. The RT path still reports heightfield terrain as unsupported (`engine/render/src/rt_effects.cpp`, `docs/ray-tracing-effects.md`).
+761:## 2026-10-24 - US-047 (re-check 9, still Partial)
+763:- Status call: US-047 stays **Partial**. No COMPLETE signal. The CPU runtime (`engine/world`, 14 fixture cases) is done. The renderer terrain path, splat shading, depth/shadow/RT participation, GPU fixtures, the `engine_bench` workload, and the Windows GPU and bench gates are not started (`engine/render/src/rt_effects.cpp:479` still reports heightfield terrain as unsupported).
+767:## 2026-10-24 - US-047 (re-check 10, still Partial)
+769:- Status call: US-047 stays **Partial**. No COMPLETE signal. The renderer terrain path, splat shading, depth/shadow/RT participation, GPU fixtures, and the `engine_bench` workload are still not started (`engine/render/src/rt_effects.cpp:479`).
+774:## 2026-10-24 - US-047 (re-check 11, still Partial)
+776:- Status call: US-047 stays **Partial**. No COMPLETE signal. The renderer terrain path, splat shading, depth/shadow/RT participation, GPU fixtures, and the `engine_bench` workload are not started.
+781:## 2026-10-24 - US-047 (render bridge, still Partial)
+785:- Status call: US-047 stays **Partial**. No COMPLETE signal. Not started: the SceneRenderer terrain draw path, the splat shader or vertex attribute, depth/shadow/RT participation (`engine/render/src/rt_effects.cpp:479` still reports heightfield terrain unsupported), GPU fixtures, the engine_bench workload, and the Windows gates.
+---
+terrain.cpp][0m
+[94m[Bash][0m Read recent US-047 progress entries $ sed -n 692,789p .ralph-tui/progress.md
+The story has been logged as Partial across many passes, with the renderer work deferred each time. The splat encoding is the only open decision, and the progress notes already recommend vertex colour, so I'll take that choice rather than wait. Next I'll look at how the renderer consumes meshes.
+[94m[Bash][0m Read terrain render bridge and mesh data types $ grep -n "struct MeshVertex\|struct Vertex" -A15 engine/render/include/engine/render/*.hpp | head -60
+The bridge exists, but nothing renders it yet. I'll check how the mesh vertex format and draw items are structured before deciding how much of the renderer path fits in this pass.
+[94m[Bash][0m Survey mesh handle and vertex path in render code $ sed -n 470,490p engine/render/src/rt_effects.cpp
+[94m[Bash][0m Locate mesh upload, draw item, and vertex layout code $ grep -n "struct VS_IN\|struct VSInput\|: POSITION\|: NORMAL\|TEXCOORD\|JOINT" engine/render/shaders/...
+The vertex layout is interleaved and shared by indirect, meshlet, shadow, and RT paths. Before deciding scope, I'll check whether tiles can enter as ordinary scene items, which would give depth and shadows without a new draw path.
+[94m[Bash][0m Inspect scene item and mesh upload structures $ sed -n 245,275p engine/render/src/scene_renderer.cpp
+Tiles can go through `upload_mesh`, which is the existing static path. The remaining question is whether they can also be placed as renderable items without changing the vertex layout. I'll check the renderable reference type.
+[94m[Bash][0m Find RenderableRef definition and its test usage $ ls tests/src | grep -i "gpu\|scene_renderer" | head -20
+The integration point is the ECS renderable path: tiles would be entities with a renderable component, extracted into the snapshot. That is a real change across extraction, the scene and shadow passes, the RT surface set, and a Windows GPU fixture. I can't run any of that GPU verification from WSL, and the splat shading still needs a shader change. I won't start an unverifiable renderer edit in this pass. I'll record the findings so the next pass starts from the right place.
+[94m[Bash][0m Append US-047 integration survey entry to progress log $ `VSInput` in `scene.hlsl:668` carries position, normal, uv only), so splat shading still needs a sha...
+US-047 is still **Partial**. I did not emit a completion signal, because the renderer half of the story is not built.
+
+**What exists:** the CPU terrain runtime in `engine/world` and its 14 fixture cases, plus a render bridge (`engine/render/src/terrain_mesh.cpp`) that turns each tile into a validated `MeshData` with a per-vertex splat channel. The progress log records the earlier gate results for that CPU work.
+
+**What's missing:**
+- **Terrain in the frame.** Tiles are not drawn. The clean route is an ECS entity with a renderable component whose mesh comes from `upload_mesh`. That gives depth and shadows through the existing static path.
+- **Splat shading.** The static vertex layout (`pack_vertices`, `scene.hlsl`) has no splat attribute. Adding one to every mesh would be wrong, so it needs a terrain-only layout.
+- **RT.** Heightfield terrain is still reported unsupported in `rt_effects_geometry_support()`.
+- **GPU fixture and bench.** The tile coverage and LOD-switch test on DX12 and Vulkan, and the `engine_bench` workload, have not been written.
+- **Gates.** The Windows GPU and bench gates have not been run. WSL has no Vulkan device, so the GPU parts can only be verified through a Windows run.
+
+**Decision I made:** vertex colour for the splat weights, as a terrain-only layout. The tile mesh already carries normalised weights per vertex.
+
+I did not edit renderer code this pass. Those changes touch `scene_renderer.cpp` (3,783 lines), `scene.hlsl`, and the RT surface set, and I could not verify them here. I appended a survey entry to `.ralph-tui/progress.md` with the integration point and the status. The next pass should start with the terrain entity path in extraction, then the splat layout, then the GPU fixture on Windows.

@@ -1,0 +1,44 @@
+# Iteration 348 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T20:28:21.416Z
+- **Ended At**: 2026-10-24T20:31:35.948Z
+- **Duration**: 3m 14s
+- **Input Tokens**: 36
+- **Output Tokens**: 3422
+- **Total Tokens**: 3458
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current repo state and whether US-053 is already in place.
+[94m[Bash][0m Inspect repo layout, progress log, and physics dir $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-053" .ralph-tui/progress.md | head -20 && ls ...
+The log says US-053 is Partial, with the linux-gcc gate and the acceptance benchmark still open. I'll check the earlier entries for the terrain wiring status.
+[94m[Bash][0m Read recent progress entries and check compilers $ ls /usr/bin | grep -E "^(g\+\+|gcc)-"
+The code is in place and the log records Partial status. Before I write anything, I'll confirm the current tree still builds and passes the Linux unit gate, since the log's last full pass predates some edits.
+[94m[Bash][0m Run vendor check, Linux debug build, and unit ctest $ tail -n 4 /tmp/ct.log
+The Linux gates pass on the current tree. I'll append this pass to the progress log.
+[94m[Bash][0m Append Linux rerun entry to progress log $ a caller loads `terrain_tile_cell` directly). No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/progr...
+US-053 is not complete, so I'm not signalling COMPLETE. The colliders, queries, filters, triggers, collider replacement, rebase queries, and streamed collision cells are in the tree. Several acceptance items are still open.
+
+**Verified this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --build --preset linux-debug`: pass
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: pass (unit 1, integration 21)
+
+**Still open:**
+- **`linux-gcc` gate:** only GCC/G++ 9 is installed. Jolt needs GCC 11+, and `sudo` needs a password, so this can't run here. It needs the CI job or a newer GCC.
+- **Acceptance benchmark:** there is no `engine_bench` target yet. That belongs to US-074.
+- **Terrain streaming:** `terrain_tile_cell` builds the heightfield, but the world streamer doesn't load terrain tiles. A caller has to load them directly. The acceptance criterion on streamed terrain cells is only partly met.
+- **Windows gates:** not rerun this pass. The last full Windows run passed 21 of 21 on an earlier tree. `engine_tests_cli_help` has failed intermittently in recent Windows runs, and it passes when run alone.
+- **Sanitizer gate:** `linux-asan` was not rerun this pass.
+
+I appended a progress entry recording this pass and the open items. I made no source changes.

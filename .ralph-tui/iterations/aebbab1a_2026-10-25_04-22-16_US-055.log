@@ -1,0 +1,36 @@
+# Iteration 428 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T01:22:16.871Z
+- **Ended At**: 2026-10-25T01:22:29.332Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 2126
+- **Total Tokens**: 2144
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress notes and script module state $ tail -n 80 .ralph-tui/progress.md && ls engine/script 2>/dev/null && ls engine/script/* | head -50 &...
+[94m[Bash][0m Read first US-055 entry and check available compilers $ echo done
+US-055 is not complete, and I'm not emitting the COMPLETE signal. The Lua API was finished and verified on Linux and Windows in an earlier pass. The one unmet gate is the `linux-gcc` job, which this host cannot run.
+
+**Current state**
+- The Lua API is in `engine/script/` (`script_bindings.cpp`, `script_engine.cpp`, `event_bus.cpp`), with 15 unit cases in `tests/src/script_lua_tests.cpp`. The entries cover entities, transforms, input, assets, physics queries, and events, plus destroyed-entity errors and the stack-balance, type-error, and Lua-exception tests.
+- The first US-055 entry in `.ralph-tui/progress.md` records these as passing: Linux `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, and `linux-asan`/`linux-sanitize` (22 of 22, no sanitizer report). It also records Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`, all exit 0 under MSVC `/W4 /WX`.
+- The Linux gates were re-run in the later passes. Nothing under `engine/`, `tests/`, or `cmake/` has changed since the first entry.
+
+**What is still open**
+- **`linux-gcc` gate:** `cmake --preset linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11 or newer, because Jolt requires C++20 and `__builtin_bit_cast`. `/usr/bin` has only GCC 9.4 and clang 10, and there is no container runtime, so this cannot run here. It needs the CI job or a machine with GCC 11+.
+- **Not run:** `engine_bench` (no benchmark harness yet, per the first entry's US-074 note) and GPU suites (the story has no GPU work).
+
+**Recommendation**
+I did not run another gate pass or add another no-op progress entry. The progress log already holds about twelve identical "status re-check" entries, and repeating the same check adds nothing. The useful next step is a GCC 11+ environment, either the CI job or a local install, to run the `linux-gcc` presets. If that passes, US-055 can be marked complete.

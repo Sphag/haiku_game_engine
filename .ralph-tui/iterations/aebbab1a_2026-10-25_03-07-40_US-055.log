@@ -1,0 +1,44 @@
+# Iteration 399 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:07:40.195Z
+- **Ended At**: 2026-10-25T00:12:48.020Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 32
+- **Output Tokens**: 2954
+- **Total Tokens**: 2986
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the Lua bindings and the progress log.
+[94m[Bash][0m Inspect repo layout, script module, and progress log $ ls && ls engine/script 2>/dev/null && find engine/script -type f | head -100 && tail -80 .ralph-tui/...
+The log shows US-055 implemented and every local gate passing, with only `linux-gcc` open. I'll confirm that against the tree now rather than trust the log.
+[94m[Bash][0m Re-run Linux gates and probe toolchain $ clang++ --version | head -1
+[94m[Bash][0m Check for files changed after last log entry and script test coverage $ grep -i "gcc-11\|gcc11\|linux-gcc" CMakePresets.json | head -5
+[94m[Bash][0m Append this status pass to the progress log $ no `g++-11`+ or `clang++-14`+ on PATH, so `linux-gcc*` cannot build Jolt here. - Status call: US-055...
+US-055 is still **Partial**, so I am not emitting the completion signal. Nothing in the tree changed in this pass.
+
+**Re-verified on Linux this pass (all exit 0):**
+- `cmake -P cmake/ValidateVendor.cmake`
+- `cmake --preset linux-dev`
+- `cmake --build --preset linux-debug`
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` (62.5 s)
+
+The earlier log entries report the other gates as passing: `linux-asan` and `linux-sanitize` (22 of 22, no sanitizer reports), and the Windows gates (`ValidateVendor`, `win-dev`, `win-debug` build, `win-unit`). I did not rerun those this pass.
+
+**Still open:**
+- **`linux-gcc` gate.** The host has only g++ 9.4 and clang++ 10. Jolt needs GCC 11+, so `cmake --preset linux-gcc`, its build, and its unit tests cannot run here. Installing a newer compiler needs root, which I don't have, and I did not try to install one. This needs either someone with root to install GCC 11+ or the CI job to run it.
+- **Performance criterion.** `engine_bench --suite acceptance` has no harness yet (US-074), so it does not apply to this story yet.
+
+**Scope gaps, as recorded in the earlier progress entry:** Lua scripts have no instruction or time limit, so a `while true do end` blocks the thread. There is no component table beyond `transform`, no physics body creation from Lua, and no lifecycle callbacks or reload (US-056).
+
+I appended this status pass to `.ralph-tui/progress.md`. Once the `linux-gcc` job passes, the story can be marked complete.

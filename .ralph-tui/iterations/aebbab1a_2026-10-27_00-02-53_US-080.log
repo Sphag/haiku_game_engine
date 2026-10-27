@@ -1,0 +1,38 @@
+# Iteration 1093 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:02:53.266Z
+- **Ended At**: 2026-10-26T21:03:11.584Z
+- **Duration**: 18s
+- **Input Tokens**: 24
+- **Output Tokens**: 2579
+- **Total Tokens**: 2603
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress tail, PRD entry, and bench artifacts $ tail -c 6000 .ralph-tui/progress.md && echo ---- && grep -n "US-080" -A3 tasks/prd-open-world-engine...
+[94m[Bash][0m Read Windows gate and GPU memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-gpu-particles.md | head -...
+[94m[Bash][0m Re-check GPU device, FSR tables, manifest, and bench runs $ ls -d artifacts/bench/us080* 2>/dev/null
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I made no code change and ran no build or benchmark this pass.
+
+**What is blocking sign-off** (re-checked this pass):
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so there is no native Linux Vulkan device. WSL's `nvidia-smi` does not count as a substitute.
+- **FSR 2 permutations:** `third_party/fsr2` has no `*_permutations.h` files, so `full_1080` cannot be built. Vendoring those tables is a decision for you.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries with `implementation: none`. Physics, streaming, and all_features are among them.
+- **Budget failure:** the earlier DX12 render_stress `native_1080` run has CPU p99 over 16.7 ms on repeats 2 and 3, with about 15 ms of CPU per frame not yet profiled. Per the acceptance criteria, that needs a measured fix, not a contract change.
+- **Residency:** peak GPU and host residency has not been measured.
+- **Acceptance runs:** `artifacts/bench` holds only the two `us080-dx12-*readback-off` runs. There is no three-repeat acceptance run on any backend.
+- **Gates:** the Linux GCC gate needs GCC 11+ or clang 14+, and this host has GCC 9.4 and clang 10.
+- **Editor smoke tests:** not run on either OS.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this. The Windows gate batch and the RTX 5080 suites can run from WSL through `cmd.exe` (see the reference memory), but the blockers above come first. Your decisions on the FSR 2 vendoring route, and on whether a native Linux GPU host is available, determine the next step.

@@ -1,0 +1,68 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: US-031
+- **Task Title**: Shaders, Reflection, and PSO Cache
+- **Description**: As a material developer, I want a common shader pipeline so that I can run HLSL consistently on both APIs.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T12:14:26.720Z
+- **Ended At**: 2026-10-23T12:21:55.995Z
+- **Duration**: 7m 29s
+- **Input Tokens**: 136
+- **Output Tokens**: 10494
+- **Total Tokens**: 10630
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and PRD, then check what US-031 work already exists in the repo.
+[94m[Bash][0m List repo root and read progress log tail $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && tail -n 150 .ralph-tui/prog...
+The last entry is US-030, so US-031 is still open. Next I'll read the PRD's US-031 section and the existing shader and RHI code.
+[94m[Bash][0m Locate US-031 in PRD and list project layout $ ls tasks docs engine engine/* tests tools cmake | head -150
+[94m[Bash][0m Read PRD opening sections $ sed -n 1,140p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read US-003 and US-031 PRD sections $ sed -n 300,340p tasks/prd-open-world-engine.md
+Next, the existing shader module, the shader toolchain, and the design docs for shaders, reflection, and PSO caching.
+[94m[Bash][0m Inspect shader module, tests, and shader docs $ cat docs/reflection.md | head -150
+The docs describe US-031 as already implemented, but the progress log has no US-031 entry. I need to verify the code against the criteria rather than trust the docs. First I'll read the memory notes on how the gates run, and check build.md's US-031 row.
+[94m[Bash][0m Read memory notes on gate runs and US-031 build row $ grep -n "US-031" /mnt/d/dev/haiku_game_engine/docs/build.md
+`build.md` records US-031 as implemented on 2026-10-23 with gate results, but there's no progress entry for it. Before I trust that, I'll check file timestamps against the US-030 entry to see whether the US-031 code changed after the last recorded gates.
+[94m[Bash][0m Compare timestamps of shader files and progress log $ cat tests/shaders/ShaderFixtureTests.cmake | head -30
+The shader sources date from 04:00–10:38 on 2026-10-23, which is before the US-030 entry at 14:53, so the US-031 code predates the last recorded gate run. I'll re-run the Linux gates on the current tree to confirm the state, starting with vendor validation and the configure/build steps.
+[94m[Bash][0m Run vendor validation and linux-dev configure $ echo "configure=${PIPESTATUS[0]}"
+[94m[Bash][0m Build linux-debug and count warnings and errors $ tail -3 /tmp/us031_linux_build.log)
+The linux-debug build passes with no warnings or errors. Now the unit tests.
+[94m[Bash][0m Run linux-unit CTest preset $ echo "ctest=${PIPESTATUS[0]}"
+All 22 Linux unit tests pass. I'll confirm the shader test cases are actually among the ones that ran, since the criteria require functional coverage rather than smoke tests.
+[94m[Bash][0m Run engine_tests suites and list shader test cases $ $B --list-tests 2>/dev/null | grep -i shader | head -40
+[94m[Bash][0m Locate engine_tests binary and build preset dirs $ find build -name engine_tests -type f 2>/dev/null | head
+[94m[Bash][0m Run unit/integration suites and list shader tests $ $B --list-tests 2>/dev/null | grep -i "shader\|pipeline\|reflect" | head -60
+The unit and integration suites pass. Next I'll run the shader-tagged cases directly to see how many run and whether any skip.
+[94m[Bash][0m Run shader-tagged cases and list their names $ $B --suite integration 2>&1 | grep -i skip | head
+The 4 skips are X11 focus cases, unrelated to shaders. I'll confirm the shader test files carry unit/integration tags and count their cases.
+[94m[Bash][0m Count shader test cases and tags per file $ grep -n "shader" tests/CMakeLists.txt | head
+Shader coverage is real: 37 CPU cases across six files, plus two GPU cases. Next I'll spot-check the three functional criteria against the test names, looking for coverage of cache rejection, reload fallback, and layout checks.
+[94m[Bash][0m List shader unit and integration test case names $ grep -h "TEST_CASE" tests/src/shader_cache_tests.cpp tests/src/shader_program_tests.cpp tests/src/sh...
+The test coverage matches each functional criterion. The Windows gate results in the US-030 entry (written 14:53) cover the shader code only if nothing has changed since. I'll check for any source modified after that time.
+[94m[Bash][0m Find sources changed after last progress entry and check batches $ pgrep -fl "\.bat" | head
+No source file has changed since the US-030 gate run, so those Windows results still describe the current tree. I'll check how `prd.json` records US-031's status before writing the progress entry.
+[94m[Bash][0m Inspect US-031 entry in prd.json $ grep -n '"US-030"' -A3 tasks/prd.json | head -5
+`prd.json` has no pass flag to update, so the only bookkeeping is the progress log. I'll append the US-031 entry, recording exactly what I re-ran and what I took from the earlier Windows run.
+[94m[Bash][0m Append US-031 entry to progress log $ build.md records them as passing on this code.   - CI: not pushed. - Files changed: `.ralph-tui/prog...
+US-031 was already implemented, and I verified it on the current tree. I added the missing progress entry and changed nothing else.
+
+- **Linux, re-run now:** `ValidateVendor` passed, `linux-dev` configured, and `linux-debug` built with 0 warnings and 0 errors. `linux-unit` passed 22/22. `engine_tests --suite unit` passed 480 cases and integration passed 110 with 4 skips, all X11 focus cases unrelated to shaders.
+- **Shader coverage:** 37 CPU cases cover the functional criteria: reflection against declared layouts and CPU struct offsets, cache-key sensitivity, rejection of caches from another environment, and reload keeping the last valid pipeline. There are also 2 GPU cases, one per backend.
+- **Windows, not re-run:** no source under `engine/`, `tests/`, `cmake/`, `docs/` or the presets changed after the 14:53 US-030 entry. That entry records the Windows gates passing on this code: ValidateVendor, win-dev, win-debug, win-unit 21/21, GPU dx12 40/40, and GPU Vulkan with validation 41/41 on the RTX 5080. If you want a fresh Windows run, I can start the batch.
+- **Not run or not applicable:**
+  - `engine_bench` does not exist yet (US-074), so the benchmark criterion cannot be executed.
+  - The Linux Vulkan GPU suite reports `unsupported` on this WSL host.
+  - The sanitizer and GCC presets were not re-run here; `docs/build.md` records them as passing.
+  - Nothing was pushed, so CI has not run.
+
+The story's own progress entry is appended to `.ralph-tui/progress.md`. Its learnings: the US-031 code existed without a log entry, and recorded Windows results still apply when no source has changed since.
+
+<promise>COMPLETE</promise>

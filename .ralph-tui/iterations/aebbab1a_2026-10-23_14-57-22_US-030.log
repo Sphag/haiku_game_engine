@@ -1,0 +1,49 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: US-030
+- **Task Title**: Vulkan Resources and Descriptors
+- **Description**: As a rendering developer, I want the same resource model in Vulkan so that the backends have parity.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T11:57:22.223Z
+- **Ended At**: 2026-10-23T12:02:02.182Z
+- **Duration**: 4m 39s
+- **Input Tokens**: 30
+- **Output Tokens**: 3130
+- **Total Tokens**: 3160
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m List repo root and read progress file head $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && head -c 6000 .ralph-tui/pro...
+[94m[Bash][0m Read the end of the progress file $ tail -c 9000 .ralph-tui/progress.md
+The progress log already has a US-030 entry from a previous iteration. I'll check that the claimed state still holds on this tree before signalling completion.
+[94m[Bash][0m Run Linux vendor validation, configure, build, unit tests $ (cmake --preset linux-dev && cmake --build --preset linux-debug && ctest --preset linux-unit --outpu...
+Linux gates pass on the current tree. Next I'll confirm the files the log names contain the described fix, and check whether the test suite has the functional coverage the criteria require.
+[94m[Bash][0m Confirm swapchain fix and test coverage files exist $ grep -rl "US-030\|resource" tests --include=*.cpp | head
+US-030 is not signed off. The code and Linux gates pass, but the native Linux Vulkan GPU report can't be produced on this host, so I'm not emitting the completion signal.
+
+**Stuck:** `engine_tests --suite gpu --backend vulkan` on native Linux. This WSL host has no Vulkan 1.2 timeline-semaphore device, so that suite can only report not-run. The criterion requires a passing native Linux report, which needs a real Linux GPU host.
+
+**What I verified in this session (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`, `cmake --build --preset linux-debug`: succeeded.
+- `ctest --preset linux-unit --no-tests=error`: 22/22 passed, covering unit and integration labels.
+- The swapchain fix described in the log is present in `engine/rhi/src/vulkan/vulkan_swapchain.cpp`: the `present()` first-use transition and the `StateMismatch` failure path.
+
+**Taken from the earlier iteration's log, not re-run here:**
+- Windows gates: ValidateVendor, win-dev, win-debug, win-unit (21/21), and GPU suites for dx12 (40/40) and vulkan with validation layers (41/41) on RTX 5080.
+- Linux asan/sanitize, linux-gcc, and linux-gcc-unit.
+
+I did not re-run the Windows gates or the sanitizer and GCC presets, so treat those results as the previous iteration's report.
+
+**Not done:**
+- Native Linux Vulkan GPU report (blocked, above).
+- Performance: `engine_bench` does not exist yet, so the benchmark criterion can't run.
+- CI: not run, and no push was made.
+
+I did not add a second progress entry, since the existing 2026-10-23 US-030 entry already covers this work. To close the story, run `engine_tests --suite gpu --backend vulkan` on a native Linux GPU host and record the result in `.ralph-tui/progress.md`.

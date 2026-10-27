@@ -1,0 +1,48 @@
+# Iteration 523 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:49:37.223Z
+- **Ended At**: 2026-10-25T08:55:19.112Z
+- **Duration**: 5m 41s
+- **Input Tokens**: 52
+- **Output Tokens**: 4602
+- **Total Tokens**: 4654
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-059 and the progress log.
+[94m[Bash][0m Inspect repo layout, save module, and progress log $ grep -n "US-059" -r --include=*.md --include=*.txt --include=*.cmake --include=*.json . | head -30
+The log shows US-059 as Partial from many prior passes. The open blocker is the `linux-gcc` gate, which needs GCC 11+. I'll read the PRD entry and check whether a newer GCC is available now.
+[94m[Bash][0m Read US-059 PRD entry and look for newer GCC toolchains $ grep -n '"linux-gcc' -A6 CMakePresets.json | head -40
+The GCC blocker from earlier passes still applies. I'll check for any GCC 11+ install under `/usr/lib` and confirm the tree is unchanged since the last gate run.
+[94m[Bash][0m Check GCC versions, tree changes, and rebuild with unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+The build exited 0, but `grep` counted 9 lines matching `warning:|error:`. I need to see what they are before reporting a clean build, and get the ctest percentage line.
+[94m[Bash][0m Show matching build lines and ctest pass summary $ echo ctest-exit=${PIPESTATUS[0]}
+The second build was a no-op, so it could not show whether the 9 lines came from real compiler output. I'll touch one save source (content unchanged) to force a recompile and check for warnings directly.
+[94m[Bash][0m Force recompile of save sources and count warnings $ grep -E 'warning|error' /tmp/us059_build.log | head -5
+Recompiling the save sources produced zero warnings. I'll log this pass in the progress file, since the workflow asks for an entry each time.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-059 (re-check, still Partial) - What was i...
+US-059 is not complete, so I'm not emitting the completion signal. The save module and its tests were already in place. This pass only re-verified them, and nothing was changed in code.
+
+**Verified this pass (Linux):**
+- The source tree is unchanged since the last gate run (no files newer than the progress log).
+- `cmake --build --preset linux-debug` exits 0. I touched the save sources to force a recompile, and that produced 0 warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22 and exits 0.
+
+**Still open:**
+- **`linux-gcc` gate and CI job.** The machine has only GCC 9.4 and clang 10, and Jolt needs GCC 11+. I found no newer GCC under `/usr/bin`, `/usr/lib/gcc`, or `/usr/local/bin`, and sudo needs a password, so I could not install one.
+- **`engine_bench --suite acceptance`.** The benchmark harness does not exist yet (US-074), so this cannot run.
+- **Runtime save/load through a host.** No application host exists yet (US-060), so a real play-session save and load has not been exercised. Only the library paths are tested.
+
+The earlier Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` at 21 of 21) passed on this tree. I did not re-run them here.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. Its results match the earlier entries. The story can close once a GCC 11+ toolchain is available for the `linux-gcc` gate, or once the user accepts that gate as not run.

@@ -1,0 +1,40 @@
+# Iteration 813 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:55:22.537Z
+- **Ended At**: 2026-10-26T02:55:40.116Z
+- **Duration**: 17s
+- **Input Tokens**: 18
+- **Output Tokens**: 2112
+- **Total Tokens**: 2130
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress notes $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-076" -A3 .ralph-tui/progress.md | head -40 &&...
+[94m[Bash][0m Check latest US-076 notes and file mtimes $ grep -n "kWorkloadVersion" tools/benchmark/src/*.cpp tools/benchmark/src/*.hpp engine/*/include/*/*....
+US-076 is not complete, and I have not signaled COMPLETE. The remaining blocker is a decision only you can make, and nothing on disk has changed since the last status check.
+
+**Blocking decision:** the indexed path at the route start submits about 312,068 triangles against the 2,000,000 floor in the PRD contract. The measured frame budget also fails: p99 is 35–47 ms against 16.7 ms. The instances are seeded uniformly over 8192 m, so the start pose sees roughly 330 items. Two ways forward:
+
+- **(a) Keep the contract.** Accept the failing measured run as the US-076 result. The acceptance criteria for the triangle floor and frame budget then stay unmet, and I'd record that plainly.
+- **(b) Change the placement.** This is a workload change: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and update the manifest hash. The PRD (US-080 at lines 868–871) says a missed budget is fixed in the implementation first, and that workload reductions need separate user agreement. So (b) needs your sign-off, and an implementation fix (LOD or culling) may be the better first step.
+
+**Other open items, unchanged:**
+- The `full_1080` profile is unsupported until the FSR 2 permutation tables are vendored. Only `native_1080` has run.
+- Native Linux Vulkan GPU runs and the `linux-gcc` job were not run. WSL has no Vulkan device, and GCC 9.4 cannot build Jolt.
+
+**Verified on the current tree (from earlier runs, sources unchanged since):**
+- Windows: ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` (29/29), `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases), and the `win-release` `engine_bench` build all pass.
+- Linux: ValidateVendor, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` (30/30) pass. `engine_workload --check` matches 4 scenes.
+- Forced mesh-shader-off fallback: the reports show `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and 338–340 indirect visible items on both DX12 and Vulkan. These runs exit 1 on the frame budget and triangle floor, which is the measured result.
+
+Reply with (a) or (b) and I'll act on it. If (b), I'll also look at whether an LOD or culling change could close the gap before changing placement.

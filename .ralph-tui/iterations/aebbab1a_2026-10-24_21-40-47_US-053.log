@@ -1,0 +1,43 @@
+# Iteration 309 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T18:40:47.664Z
+- **Ended At**: 2026-10-24T18:45:48.144Z
+- **Duration**: 5m 0s
+- **Input Tokens**: 30
+- **Output Tokens**: 2472
+- **Total Tokens**: 2502
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and whether US-053 is already implemented.
+[94m[Bash][0m Inspect repo state and progress log $ tail -80 .ralph-tui/progress.md 2>/dev/null
+The progress log says US-053 is implemented but still Partial: the `linux-gcc` gate is blocked, the acceptance benchmark has no target yet, and one Windows CLI test is flaky. I'll re-run the Linux gates to confirm the tree still matches that record.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ grep -rl "engine_bench" --include=CMakeLists.txt . | grep -v third_party | head
+Linux gates pass again. I'll append this pass to the progress log, keeping the Partial status.
+[94m[Bash][0m Append US-053 verification entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0. - Not run: Windows gates (t...
+US-053 is not complete, so I have not emitted the completion signal. The Linux gates I could run pass on the current tree, but several acceptance criteria are still open.
+
+**Verified this pass (Linux, on the existing tree; no source changed):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --preset linux-dev`: pass
+- `cmake --build --preset linux-debug`: pass
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: pass
+
+**Still open:**
+- **`linux-gcc` gate:** the local compiler is GCC 9.4, and Jolt needs GCC 11+. This needs a newer compiler or the CI job.
+- **Acceptance benchmark:** no `engine_bench` target exists in the tree (US-074), so `engine_bench --suite acceptance` cannot run.
+- **Windows gates:** not re-run this pass. The previous Windows run had an intermittent failure in `engine_tests_cli_help` (empty captured stdout, exit 0). It passes when run alone, so it looks like a capture problem in the help path. It is not fixed.
+- **Sanitizer run:** the ASan/UBSan ctest was not repeated this pass. The previous run was clean.
+- **Terrain streaming:** `terrain_tile_cell` builds the heightfield from a US-047 tile, but the world streamer covers scene cells only. A caller must load tile cells directly.
+
+I appended a US-053 entry to `.ralph-tui/progress.md` recording this pass and keeping the status at Partial.

@@ -1,0 +1,42 @@
+# Iteration 1222 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:59:02.703Z
+- **Ended At**: 2026-10-26T21:59:17.378Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1995
+- **Total Tokens**: 2017
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress tail and benchmark artifacts $ ls tools/benchmark/src 2>/dev/null
+[94m[Bash][0m Re-check hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ blockers as in status check 95. No COMPLETE signal. --- EOF tail -3 .ralph-tui/progress.md
+US-080 is not complete, so I am not signalling COMPLETE. Nothing in the environment has changed since the previous status checks, and I did not run any builds or benchmarks this turn.
+
+**What is blocking sign-off (re-verified just now):**
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only under WSL (driver 617.42), and WSL does not count as a native Linux report.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` has four entries with `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run would exit 3 (incomplete) while they stand.
+- **FSR 2 cannot build.** The vendored FSR 2 has 0 `*_permutations.h` generated headers, so the FSR backends stay `Unsupported`. This needs a vendoring decision from you.
+- **No acceptance suite has been run.** `artifacts/bench` has only the earlier us076/us077/us078 and us080 partial runs, with no three-repeat acceptance set.
+- **Known budget miss.** The render_stress meshlets CPU p99 is 42.4 ms against a 16.7 ms budget. The contract says to fix the measured cause, and I have not profiled it.
+
+**What I did:** I appended a status entry to `.ralph-tui/progress.md`, recording the same facts with no COMPLETE signal.
+
+**What I need from you before this can close:**
+1. A native Linux host with a Vulkan-capable RTX 5080 (or confirmation that one is available).
+2. A decision on FSR 2: vendor the generated permutation headers, or leave FSR out of the acceptance build.
+3. Sources or a go-ahead to implement the four `none` workloads.
+4. A profile or a go-ahead for the render_stress CPU hotspot on the RTX 5080.
+
+Further unattended status checks will not change these results, so I'd suggest not scheduling another loop until those are settled.

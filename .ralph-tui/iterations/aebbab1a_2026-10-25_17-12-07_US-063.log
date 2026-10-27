@@ -1,0 +1,244 @@
+# Iteration 616 Log
+
+## Metadata
+
+- **Task ID**: US-063
+- **Task Title**: Viewport and Gizmos
+- **Description**: As a scene author, I want to edit transforms in the viewport so that I can place objects visually.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T14:12:07.379Z
+- **Ended At**: 2026-10-25T14:51:19.087Z
+- **Duration**: 39m 11s
+- **Input Tokens**: 476
+- **Output Tokens**: 129397
+- **Total Tokens**: 129873
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the editor code.
+[94m[Bash][0m Read progress log and list editor sources $ tail -c 6000 .ralph-tui/progress.md && echo ---- && ls engine/editor engine/editor/src 2>/dev/null &...
+The log ends at US-062, so US-063 hasn't been started. Next I'll look at how the editor currently draws and what the scene and render layers expose for a viewport.
+[94m[Bash][0m Inspect editor headers, viewport and camera references $ git status 2>&1 | head -3
+The viewport is a placeholder, and nothing renders the scene into it. Before designing, I need the transform API, the existing editor test layout, and the viewport panel.
+[94m[Bash][0m Read transform, scene API, viewport panel, and test layout $ grep -n "editor" tests/CMakeLists.txt
+The gizmo has to write local transforms, so I need the parent and world-matrix API, and whether the platform reports DPI scale.
+[94m[Bash][0m Read scene API, platform DPI, and scene test style $ grep -n "set_transform\|set_field" engine/editor/src/scene_editor.cpp | head
+The design depends on three details: how ImGui DPI scale reaches the editor, the tag convention for editor tests, and whether `set_transform` already logs failures. I'll check those before writing code.
+[94m[Bash][0m Check ImGui DPI and input wiring, test tags, and set_transform logging $ sed -n 1,40p tests/src/editor_fixture.hpp | grep -n "namespace\|inline\|struct"
+ImGui's framebuffer scale is hard-coded to 1.0, so DPI can't come from ImGui as-is. I'll check how the input adapter sizes the display and where the window's DPI scale is available.
+[94m[Bash][0m Inspect display size and DPI handling in editor input and renderer $ grep -n "dpi" engine/platform/include/engine/platform/window.hpp | head
+The ImGui display is already in framebuffer pixels, and the style is scaled by DPI, so pixel math needs the DPI scale passed explicitly. I'll check how `EditorUi` is constructed and how tests create a console before writing the new code.
+[94m[Bash][0m Read EditorUi declaration, main wiring, and Console constructor $ grep -n "Console(" engine/editor/include/engine/editor/console.hpp
+I have enough to design this. The plan:
+
+- **Pure model** (`viewport.hpp/.cpp`, no ImGui): an orbit/fly editor camera, picking, and a translate/rotate/scale gizmo with local/world modes and snapping. Gizmo drags write through `SceneEditor::set_transform`.
+- **DPI**: ImGui units are framebuffer pixels, so the viewport takes the window's DPI scale and sizes the pick radius and gizmo by it.
+- **UI**: the viewport panel draws a grid, entity markers, and the gizmo with `ImDrawList`, and reads ImGui input into `ViewportInput`.
+
+I'll start with the header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/viewport.hpp[0m "#pragma once
+
+// The scene viewport's model (US-063): a free editor camera, entity picking, and the translate, rotate, and scale gizmos with
+// local or world axes and snapping. It has no ImGui or gra... (8598 chars)"
+The header needs a few changes before the implementation. The `Drag` state has to be a complete type in the header, `set_mode` and `set_space` should be inline, and the notice path needs to be explicit. I'll make those edits first.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/viewport.hpp[0m edit: "    [[nodiscard]] GizmoMode mode() const noexcept ..." → "    [[nodiscard]] GizmoMode mode() const noexcept ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/viewport.hpp[0m edit: "    // Runs one frame. Camera input applies unless..." → "    // Runs one frame. Camera input applies unless..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/viewport.hpp[0m edit: "    // Screen size of an axis handle, a ring, or t..." → "    // The radius, in pixels at the given DPI scal..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/viewport.hpp[0m edit: "#include <glm/glm.hpp>
+
+#include <array>" → "#include <glm/glm.hpp>
+#include <glm/gtc/quaternio..."
+Next I'll add a world-matrix accessor to `SceneEditor` (the scene's version is non-const) and check how `Guid` reports nil.
+[94m[Bash][0m Check Guid nil API and decompose_exact location $ grep -n "decompose_exact" engine/scene/src/*.cpp | head -2
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/scene_editor.hpp[0m edit: "    [[nodiscard]] const scene::Scene& scene() cons..." → "    [[nodiscard]] const scene::Scene& scene() cons..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/scene_editor.hpp[0m edit: "#include "engine/scene/transform.hpp"
+
+#include <c..." → "#include "engine/scene/transform.hpp"
+
+#include <g..."
+[94m[Bash][0m Find insertion point in scene_editor.cpp $ grep -n "^void SceneEditor::select\|^bool SceneEditor::is_instance_interior" engine/editor/src/scene...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/scene_editor.cpp[0m edit: "bool SceneEditor::is_instance_interior(const core:..." → "std::optional<glm::dmat4> SceneEditor::world_matri..."
+Now the implementation: camera, projection and ray helpers, picking, and the drag math.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/viewport.cpp[0m "#include "engine/editor/viewport.hpp"
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace engine::editor {
+n... (22015 chars)"
+I left a stray placeholder function and need a few standard headers. I'll fix both, then wire the new file into the build and the editor model.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/viewport.cpp[0m edit: "void EditorViewport::update_placeholder() {}
+
+doub..." → "double"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/viewport.cpp[0m edit: "#include <algorithm>
+#include <cmath>
+#include <ut..." → "#include <algorithm>
+#include <array>
+#include <cm..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/CMakeLists.txt[0m edit: "  src/scene_editor.cpp
+  src/imgui_input.cpp" → "  src/scene_editor.cpp
+  src/viewport.cpp
+  src/im..."
+Now the editor model gets the viewport, the DPI scale, and a per-frame entry point that logs notices to the console.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/editor_model.hpp[0m edit: "    [[nodiscard]] Console& console() noexcept {
+  ..." → "    // The scene viewport: the editor camera, the ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/editor_model.hpp[0m edit: "    SceneEditor scene_;
+    WorkspaceSettings work..." → "    SceneEditor scene_;
+    EditorViewport viewpor..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/include/engine/editor/editor_model.hpp[0m edit: "#include "engine/editor/scene_editor.hpp"
+#include..." → "#include "engine/editor/scene_editor.hpp"
+#include..."
+[94m[Bash][0m Find EditorModel note implementation $ grep -n "^void EditorModel::note\|^void EditorModel::reset_layout" -A6 engine/editor/src/editor_mode...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/editor/src/editor_model.cpp[0m edit: "void EditorModel::note(core::LogLevel level, std::..." → "void EditorModel::update_viewport(const ViewportIn..."
+Next is the UI. The panel reads ImGui input into `ViewportInput`, runs one model frame, then draws the grid, markers, and gizmo with the window draw list.
+[94m[Bash][0m Check includes and namespaces in editor_ui.cpp $ grep -n "^namespace\|^}  // namespace" engine/editor/src/editor_ui.cpp
+[94m[Bash][0m Replace viewport placeholder with scene drawing and input $ } }  ''' s=s[:old_start]+new+s[old_end:] s=s.replace('#include <algorithm>\n#include <cstring>','#in...
+A few fixes before compiling: the scene helper should be `static`, the highlight lambda has a redundant branch, and a drag should keep its handle highlighted. I'll apply those and add the capture flags to the UI class.
+[94m[Bash][0m Apply UI and viewport fixes and add capture flags $ // a middle-button press began over the viewport and is still held ''',1) s=s.replace('''// The scen...
+The viewport.cpp notice is my own Python edit, so that's expected. Next I'll wire the DPI scale from the window into the model in `main.cpp`, including on a DPI change.
+[94m[Bash][0m Locate model construction and DPI event handling in main $ grep -n "viewport.cpp\|set_mode" engine/editor/src/viewport.cpp | head -3
+[94m[Bash][0m Read event loop and WindowDpiChanged definition $ grep -n "WindowDpiChanged" -A4 engine/platform/include/engine/platform/window.hpp | head -8
+[94m[Bash][0m Wire DPI scale into the editor model $ ''',1) open(p,'w').write(s) EOF sed -n 240,256p tools/game_editor/src/main.cpp
+The UI, model, and wiring are in place. Now the CPU tests for the viewport behaviour: camera and projection, picking, DPI, each drag mode and space, snapping, parenting, and selection after removal and reparenting.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/editor_viewport_tests.cpp[0m "// The scene viewport (US-063): the editor camera, projection and picking, the gizmo handles, drags in each mode and space,
+// snapping, DPI scaling, a resized surface, and the selection after removal... (13255 chars)"
+A few fixes to the test file before building. In the child test, `add` sets the local transform, so the child needs local (2,0,0) to start at world (7,0,0). The pick test has a meaningless line, and `glm::half_pi` isn't included.
+[94m[Bash][0m Fix test file issues and register the new test source $ grep -n "linux-debug\|binaryDir" CMakePresets.json | head -5
+Now I'll build the Linux debug preset, which compiles the new sources with the first-party warnings-as-errors policy.
+[94m[Bash][0m Build linux-debug preset and show errors $ echo "exit=${PIPESTATUS[0]}"
+The build exits 0 with no errors. I'll run the editor suite to see the new tests execute.
+[94m[Bash][0m Locate the engine_tests binary $ find build/linux-debug -name engine_tests -type f | head -2
+[94m[Bash][0m Find build output directory and engine_tests binary $ find / -name engine_tests -type f 2>/dev/null | grep -v proc | head -3
+The filesystem-wide `find` is slow and off-target. I'll stop it and check the preset directly, since the build directory doesn't exist and the earlier grep could have hidden a failure.
+[94m[Bash][0m List CMake presets to confirm build directory setup $ sed -n 1,25p CMakePresets.json | grep -n "binaryDir\|cacheVariables"
+
+[91m[Error: Exit code 144][0m
+My `pkill` pattern matched the shell itself, which caused the exit 144. I'll rerun the preset listing without it.
+[94m[Bash][0m List CMake presets and repository top level $ ls /mnt/d/dev/haiku_game_engine | head -40
+[94m[Bash][0m Configure linux-dev preset and report result $ tail -3 /tmp/us063_configure.log
+[94m[Bash][0m Start linux-debug build in background and check progress $ tail -3 /tmp/us063_build.log
+The build finished with exit 0. I'll confirm the new files were actually compiled, not skipped, and look for any warnings.
+[94m[Bash][0m Check build log for compiled viewport files and diagnostics $ grep -n "linux-debug" -A6 CMakePresets.json | grep -i "configure\|name" | head
+The log only has the tail of an earlier full build, so I'll check the object and test binary timestamps against the new sources.
+[94m[Bash][0m Verify compiled objects are newer than the sources $ find build/linux-dev -name engine_tests -type f | head -1
+Both objects are newer than their sources, so the code compiled cleanly. Now I'll run the new tests and the whole editor suite.
+[94m[Bash][0m Run the editor test suite $ cd /mnt/d/dev/haiku_game_engine/build/linux-dev/tests/Debug && timeout 300 ./engine_tests --suite ed...
+The full editor suite passes: 56 cases, including the 14 new viewport cases. Next are the Linux unit gate and the vendor check.
+[94m[Bash][0m Run Linux unit ctest and vendor validation $ tail -2 /tmp/us063_vendor.log
+The Linux gates pass: ctest 30 of 30 and vendor validation. Next are the Windows gates. I'll read the memory note on how they're run from WSL.
+[94m[Bash][0m Read Windows gate run notes and locate prior gate script $ find artifacts -name "us062_gate*" 2>/dev/null | head
+The notes describe the batch method. I'll look for the previous gate batch in the Windows Temp folder to reuse as a template, and check no batch is already running.
+[94m[Bash][0m Find previous Windows gate batch template and check for running batches $ cat -v "$f" 2>/dev/null | head -60
+The previous `us062_gate.bat` is a usable template. I'll write a US-063 version with the same steps, check for CRLF, and launch it in the background since the build is long.
+[94m[Bash][0m Create and launch the US-063 Windows gate batch $ echo launched
+While the Windows batch runs, I'll update `docs/editor.md`. That's outside the build, so it won't disturb the compile. First I'll find the section on the viewport placeholder.
+[94m[Bash][0m Outline docs/editor.md and find viewport mentions $ wc -l docs/editor.md && grep -n "^#\|Viewport\|viewport\|US-063" docs/editor.md | head -40
+[94m[Bash][0m Read the known limits and tests sections of editor docs $ sed -n 66,84p docs/editor.md
+[94m[Bash][0m Document scene viewport behaviour and limits in editor docs $ each frame of a drag is a scene write. ''' s=s.replace(old,new,1) old2='''- `engine_tests --suite ed...
+Docs are updated. I'll check how far the Windows batch has got.
+[94m[Bash][0m Check progress of the Windows gate batch $ cat /tmp/us063_win_stdout.txt | tail -3
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us063_rc.txt ls -la /mnt/c/Users/bucha/AppData/Local/Temp/ grep us063 cat /tmp/us063_win_stdout.txt tail -3. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Windows gate result files so far $ tail -3 /tmp/us063_win_stdout.txt
+Validation passed and configure is running. I'll wait on the batch's done file in the background, so I'm notified when it finishes.
+[94m[Bash][0m Wait for Windows gate batch to finish, then print exit codes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us063_rc.txt
+While the batch runs, I'll record the progress entry and the reusable patterns. First I need the top of the progress file, where the Codebase Patterns section lives.
+[94m[Bash][0m Locate Codebase Patterns section in progress log $ sed -n 1,6p .ralph-tui/progress.md | cut -c1-160
+[94m[Bash][0m Append US-063 progress entry and codebase patterns $ prefab interiors cannot be picked. - Learnings:   - Gotcha: a `scene::` qualifier still resolves to ...
+The progress entry is written, with the Windows result to fill in once the batch reports. Meanwhile I'll check whether the Windows desktop is unlocked, since that decides whether a GUI check is possible.
+[94m[Bash][0m Check whether the Windows session is locked $ echo "checked"
+The desktop is still locked (`LogonUI` and `LockApp` are running), so a GUI capture isn't possible from here. I'll wait for the Windows batch to finish.
+[94m[Bash][0m Acknowledge pending background gate batch $ echo waiting
+[94m[Bash][0m Wait for Windows gate done file and print results $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us063_rc.txt
+I've now started a second waiter on the same done file, which the notes warn against. I'll stop the duplicate and keep the first one.
+[94m[TaskStop][0m
+[94m[ScheduleWakeup][0m
+That wakeup was a mistake; I don't need a loop here, since the background waiter will notify me. I'll cancel it.
+[94m[ScheduleWakeup][0m
+The Windows gate batch is still running, and I'll pick up the results when its background waiter reports. The Linux side is done.
+
+**US-063 status: the code and Linux gates are done; the Windows gates are still running.**
+
+What's in place:
+- **Free editor camera**: orbit (RMB), pan (MMB), zoom (wheel), fly (RMB + WASD/QE), and frame selection (F). A gizmo drag freezes the camera, and the camera never touches the game camera.
+- **Picking**: a press on an entity's marker selects it; a press on empty space clears the selection. Picking tests marker positions, not mesh bounds.
+- **Gizmos**: Move, Rotate, and Scale, in Local or World space. Scale always acts on the entity's own axes. Drags compute the new local transform from the press each frame and write through `SceneEditor::set_transform`.
+- **Snapping**: off by default. Translate, rotate, and scale each snap to their own step.
+- **DPI**: the window's DPI scale sizes the pick radius and gizmo length, and updates on `WindowDpiChanged`.
+- **Selection**: removing the selected entity ends a drag and clears the gizmo. A reparent keeps the entity selected and moves its gizmo.
+- **Tests**: 14 new CPU cases in `tests/src/editor_viewport_tests.cpp`. The editor suite passes, 56 cases and 570 assertions.
+
+Linux gates, all passing:
+- `cmake -P cmake/ValidateVendor.cmake`
+- `cmake --preset linux-dev`
+- `cmake --build --preset linux-debug`
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`, 30 of 30
+
+Windows gates: `us063_gate.bat` is running. Validation passed, and configure and build are in progress. The remaining steps are the win-debug build, `ctest --preset win-unit`, the editor suite on DX12, and the GPU suite on DX12.
+
+Not verified or not run:
+- **Running window**: the Windows session is still locked (`LogonUI` and `LockApp` are running), so there are no screenshots or action log.
+- **Native Linux Vulkan** editor and GPU suites: no Vulkan adapter here.
+- **`linux-gcc`**: needs GCC 11+, and only GCC 9.4 is installed.
+- **ASan**: not run. The change doesn't touch memory, ECS, jobs, streaming, Lua, or physics code.
+- **Benchmark**: not run. It's an editor-only change.
+
+Limits to know about:
+- The viewport draws markers and a ground grid, not the rendered meshes. The scene render target isn't shown inside the panel yet.
+- Rotation with a non-uniformly scaled, rotated parent is approximate.
+- A drag through a parent with a sheared or zero-scale transform is refused with a console note.
+- There's no undo for drags.
+
+Files changed: `engine/editor/` (new `viewport.hpp/.cpp`, plus `editor_model`, `editor_ui`, `scene_editor`, and CMake), `tools/game_editor/src/main.cpp`, `tests/`, `docs/editor.md`, and `.ralph-tui/progress.md`. I haven't committed anything.
+[94m[Bash][0m Read Windows gate result codes and log tails $ tail -3 /mnt/c/Users/bucha/AppData/Local/Temp/us063_gpu.log
+The Windows build failed (`build=2`), so the unit, editor, and GPU results ran against a stale binary and don't count. I'll find the compile error.
+[94m[Bash][0m Find compile errors in Windows build log $ grep -n "error\|FAILED" /mnt/c/Users/bucha/AppData/Local/Temp/us063_build.log | head -30
+[94m[Bash][0m Show full MSVC diagnostic for viewport.cpp $ sed -n 20,40p /mnt/c/Users/bucha/AppData/Local/Temp/us063_build.log | cut -c1-300
+MSVC's `/W4 /WX` turns the `size_t`-to-`int` conversions in glm indexing into errors. Gcc and Clang didn't flag them. I'll look at those lines and make the conversions explicit.
+[94m[Bash][0m Show lines flagged by MSVC in viewport.cpp $ sed -n 453,460p engine/editor/src/viewport.cpp
+[94m[Bash][0m Make glm index conversions explicit in viewport.cpp $ ''') open(p,'w').write(s) EOF grep -n "\[i\]\|\[index\]\|\[axis\]" engine/editor/src/viewport.cpp
+The remaining `[i]` indexing is on `std::array`, which takes `size_t`, so it's fine. I'll rebuild on Linux first, then rerun the Windows batch with the result files cleared.
+[94m[Bash][0m Rebuild Linux and rerun editor suite and unit ctest $ cd /mnt/d/dev/haiku_game_engine && timeout 300 ctest --preset linux-unit --output-on-failure --no-te...
+[94m[Bash][0m Confirm unit ctest result and relaunch Windows gate batch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us063_gate.bat" > /tmp/us063_win_stdout2.txt 2>&...
+[94m[Bash][0m Wait for relaunched Windows gate batch and print results $ grep -c "error C" /mnt/c/Users/bucha/AppData/Local/Temp/us063_build.log
+The Windows gate batch is rerunning after the MSVC fix. The Linux side is green again: the editor suite passes 56 of 56 cases, and unit ctest passes 30 of 30. I'll report the Windows result when the batch finishes.
+[94m[Bash][0m Read Windows gate results and build log errors $ tail -2 $T/us063_build.log
+Every step returned 0 on this run. I'll confirm the test logs show real results before reporting.
+[94m[Bash][0m Confirm Windows test logs report passing results $ tail -2 $T/us063_gpu.log
+[94m[Bash][0m Confirm Windows unit ctest pass count $ grep "tests passed" $T/us063_unit.log
+[94m[Bash][0m Record Windows gate results in progress log $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() old='- Windows: see the `us063_gate.ba...
+US-063 passes every gate I could run on this machine. The Windows run first failed on the build: MSVC treats the `size_t`-to-glm index conversions in `viewport.cpp` as errors. I fixed those, rebuilt, and reran the full Windows batch, and every step returned 0.
+
+**Windows gates (MSVC, RTX 5080):**
+- `cmake -P cmake/ValidateVendor.cmake`: 0
+- `cmake --preset win-dev`: 0
+- `cmake --build --preset win-debug`: 0
+- `ctest --preset win-unit`: 0, 29 of 29
+- `engine_tests --suite editor --backend dx12`: 0, 57 cases, 588 assertions
+- `engine_tests --suite gpu --backend dx12`: 0, 72 cases, 43923 assertions
+
+The Windows unit run has 29 tests and Linux has 30. I haven't checked why; it's likely a platform-specific test, but I haven't confirmed that.
+
+**Linux gates:**
+- Vendor validation: 0
+- `cmake --preset linux-dev`: 0
+- `cmake --build --preset linux-debug`: 0
+- `ctest --preset linux-unit`: 0, 30 of 30
+- `engine_tests --suite editor`: 0, 56 cases, 570 assertions (14 new viewport cases)
+
+**Not run or not verified:**
+- **Running window**: the Windows desktop is still locked, so there are no screenshots or action log for the viewport.
+- **Native Linux Vulkan** editor and GPU suites: no Vulkan adapter here.
+- **`linux-gcc`**: needs GCC 11+, and only GCC 9.4 is installed.
+- **ASan**: not run. The change doesn't touch memory, ECS, jobs, streaming, Lua, or physics code.
+- **Benchmark**: not run. It's an editor-only change.
+
+Nothing is committed. The changes are in `engine/editor/`, `tools/game_editor/src/main.cpp`, `tests/`, `docs/editor.md`, and `.ralph-tui/progress.md`.

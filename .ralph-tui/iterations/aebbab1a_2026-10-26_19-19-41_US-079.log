@@ -1,0 +1,50 @@
+# Iteration 1039 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:19:41.895Z
+- **Ended At**: 2026-10-26T16:27:36.946Z
+- **Duration**: 7m 55s
+- **Input Tokens**: 36
+- **Output Tokens**: 3249
+- **Total Tokens**: 3285
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of `all_features` and its prerequisites.
+[94m[Bash][0m Read progress log and search for all_features $ grep -ril "all_features" --exclude-dir=.git . | head -30
+The log shows 115 prior status-check passes that each stopped on the same user decisions. Before I add another, I'll re-run the Linux gates that can run here so the report rests on fresh results.
+[94m[Bash][0m Run Linux gates and check all_features manifest $ grep -n "all_features" benchmarks/manifest.json | head
+The Linux configure, vendor check, and build pass. The `tail` cut off ctest's pass/fail line, so I'll re-run ctest to get the actual result.
+[94m[Bash][0m Re-run linux-unit ctest and capture summary $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|Failed|\...
+The story isn't complete, so I'm not emitting the completion signal. I'll record this pass in the progress log so the next run doesn't repeat the same check.
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I'm not emitting the completion signal. The Linux gates that can run here pass, but the `all_features` deliverables are still missing and need decisions or hardware I don't have.
+
+**Passing this pass (Linux, fresh run):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug`: passed.
+- `ctest --preset linux-unit --no-tests=error`: 30/30 passed.
+
+**Still missing:**
+- `samples/all_features` does not exist. The runtime component catalog is empty in this build, so a scene with components would be refused. This needs a decision on the catalog.
+- `benchmarks/manifest.json` still has `all_features` at `implementation: none`. Its route, `all_features_route_v1`, is still a proposal, and no `all_features` runner exists in `tools/benchmark/src`.
+- The `full_1080` profile is unsupported because FSR 2 permutation headers are not vendored (`third_party/fsr2` has none).
+- The tour, the GI/RT/upscale profiles, the forced geometry paths, and the editor scenario with package/relaunch need a Windows GPU and GUI session.
+- Not run this pass: the Windows gates, the Linux/GCC and sanitizer presets, the GPU suites, and `engine_bench --suite acceptance`.
+
+**What I need from you:**
+1. Approve `all_features_route_v1`. It fixes the benchmark contract, so I didn't approve it myself.
+2. Either vendor the FSR 2 permutation headers or confirm that `full_1080` stays unsupported.
+3. Decide how to handle the runtime component catalog for the sample scene.
+4. Give me a Windows GPU and GUI session for the tour and the live editor run.
+
+I appended this pass to `.ralph-tui/progress.md` as status check 116.

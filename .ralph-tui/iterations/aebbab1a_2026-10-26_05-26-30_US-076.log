@@ -1,0 +1,46 @@
+# Iteration 740 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:26:30.471Z
+- **Ended At**: 2026-10-26T02:26:49.107Z
+- **Duration**: 18s
+- **Input Tokens**: 22
+- **Output Tokens**: 2445
+- **Total Tokens**: 2467
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 already has code in the tree.
+[94m[Bash][0m Read progress log and find existing render_stress code $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --...
+The progress log shows US-076 blocked across many status-only passes. Before deciding whether it is really stuck, I'll check the triangle-floor failure against the code and the contract.
+[94m[Bash][0m Check contract triangle floor and placement code $ wc -l tools/benchmark/src/workload.cpp tools/benchmark/src/render_stress.cpp
+US-076 is not complete, and I have not changed anything in this pass. The story is blocked on a decision only you can make.
+
+**What's blocking it**
+
+- **Triangle floor and frame budget fail.** The contract requires at least 2,000,000 submitted triangles on the indexed start frame. The instance placement in `tools/benchmark/src/workload.cpp` (`place_instances`) yields 312,068 triangles in view at the route start. The p99 frame time is 35–47 ms against a 16.7 ms budget. The last eight `us076-*` runs all exit 1 on these two checks.
+- **Fixing placement changes the workload.** Any placement change alters the seeded digests, so `kWorkloadVersion` (currently 1) must be bumped and `benchmarks/workload_expected.json` regenerated. The progress log reserves that for your approval, and I agree: it changes the pinned benchmark contract and every previously recorded result.
+- **Not verified here:**
+  - `full_1080` is unsupported until the FSR 2 permutation headers exist (see the existing FSR memory).
+  - The native Linux Vulkan GPU run and the `linux-gcc` gate have not been run.
+
+**What I did**
+
+I checked the code and the contract against the progress log's blocker, then stopped. The last 16 log entries are status-only passes with no source change or rerun, so I did not add another one. The recorded results still describe the current tree.
+
+**Decisions needed from you**
+
+1. Approve a placement change that bumps `kWorkloadVersion` and regenerates `workload_expected.json` so the start frame reaches 2M triangles. Or tell me the floor should be measured as-is and the story closed with the failing numbers recorded.
+2. Decide whether `full_1080` should stay marked unsupported until the FSR 2 permutations are vendored.
+3. Confirm whether a native Linux Vulkan run is needed for this story, or can be recorded as not run.
+
+Once you answer, I can make the placement change, rerun the eight benchmark configurations and the Windows gates, and then signal completion.

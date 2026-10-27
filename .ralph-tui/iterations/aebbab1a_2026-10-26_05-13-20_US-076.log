@@ -1,0 +1,43 @@
+# Iteration 693 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:13:20.715Z
+- **Ended At**: 2026-10-26T02:13:38.400Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2146
+- **Total Tokens**: 2168
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Inspect progress log and existing benchmark code $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -rn "render_stress\|US-076" --include=*.cpp -...
+The progress log shows US-076 is blocked on a decision only you can make. I'll confirm the tree hasn't changed since the last recorded run before reporting.
+[94m[Bash][0m Check source and artifact timestamps for US-076 $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp && ls -la --time-style=+%H:%M artifacts/bench/...
+US-076 is not complete, so I'm not signaling COMPLETE. Nothing has changed since the last recorded run: `render_stress.cpp` was last edited at 04:15:43, and all eight `artifacts/bench/us076-*` reports postdate it. I didn't rerun anything, because the code and results are the same as before.
+
+**What's done**
+- The `render_stress` driver exists with `--path` (indexed, indirect, meshlets) and `--disable-mesh-shaders`.
+- The forced mesh-shader-off run now falls back to indirect-indexed on both DX12 and Vulkan. Mesh shaders are reported as disabled, not enabled.
+- Screenshots and per-run counters are recorded for all eight runs.
+- Last recorded gates on this tree: Windows validate, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` on dx12 (72 cases) and vulkan (73 cases), and win-release `engine_bench` all pass. Linux ValidateVendor, linux-dev, linux-debug build, and linux-unit (30/30) pass.
+
+**What's blocking it**
+1. **Performance contract fails on placement.** Every indexed run measures 312,068 triangles at the route start against a 2,000,000 floor. p99 frame time is 35–47 ms against a 16.7 ms budget. Instances are spread uniformly over 8192 m, so the route start sees only about 330 items. The contract forbids reducing the workload, so the failure stays unless placement changes.
+2. **Both profiles not run.** `full_1080` is unsupported because the FSR 2 shader permutation headers are missing (see `project-fsr2-permutations-missing`).
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and the linux-gcc gate (GCC 9 cannot build Jolt).
+
+**Decision needed from you**
+- **(a)** Keep the contract as-is and close US-076 with these failures recorded as the measured result.
+- **(b)** Change instance placement so the route start sees a realistic item count. This is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and rerun the eight acceptance runs (about 10 minutes each).
+
+My recommendation is (b). The uniform placement looks like a scene-generation choice rather than a deliberate target, and it makes the route-start measurement meaningless. Tell me which option you want and I'll carry it through, including the gate reruns.

@@ -1,0 +1,47 @@
+# Iteration 282 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T16:45:20.807Z
+- **Ended At**: 2026-10-24T17:06:11.550Z
+- **Duration**: 20m 50s
+- **Input Tokens**: 52
+- **Output Tokens**: 3827
+- **Total Tokens**: 3879
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since the memory notes say much of US-052 may already be in place.
+[94m[Bash][0m Inspect physics module, progress log, and memory note $ ls engine/physics/ && tail -n 80 .ralph-tui/progress.md && ls tests 2>/dev/null | head -50 && cat /h...
+The log shows US-052 has been re-checked many times as "Partial", with the source unchanged. Before deciding whether anything is left to do, I'll check whether the blocker (a GCC 11+ compiler) has changed and whether the tree still builds.
+[94m[Bash][0m Check compilers and rerun Linux clang gates $ grep -ciE 'warning:|error:' /tmp/build.log) && (ctest --preset linux-unit --output-on-failure --no-t...
+[94m[Bash][0m Read interim output of background gate run $ ls /usr/bin | grep -E '^(g\+\+|gcc|clang\+\+)'
+The gate run is still going in the background. I'll wait for it to finish rather than guess the result.
+[94m[Bash][0m Wait for background gate run to finish $ tail -n 3 /tmp/build.log 2>/dev/null
+The background chain exited early because `grep -c` returned 0 matches, which stopped the `&&` chain before `ctest` ran. The build itself passed with zero warnings or errors. I'll run the unit tests on their own.
+[94m[Bash][0m Run Linux unit and integration CTest suite $ tail -n 6 /tmp/ctest.log
+[94m[Bash][0m Wait for CTest run and show its summary $ tail -n 8 /tmp/ctest.log
+Linux clang gates pass on the current tree. I'll record this pass in the progress log and not signal completion, because the GCC gate and the benchmark are still open.
+[94m[Bash][0m Append this verification pass to progress log $ the earlier entries record them on this source. - Status call: US-052 stays **Partial**. Open: the `...
+US-052 is still **Partial**, so I am not emitting the completion signal. The adapter code is in place, and the Linux clang gates pass on the current tree. Two acceptance items remain open.
+
+**Verified this pass (Linux, clang 10, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, zero warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 passed (1 unit, 21 integration)
+
+**Still open:**
+- **`linux-gcc` gate.** The machine has only GCC 9.4, and Jolt needs GCC 11+ for `__builtin_bit_cast`. Installing `g++-11` or running the CI GCC job would close it.
+- **Acceptance benchmark.** `engine_bench --suite acceptance` has no target in the tree; that belongs to US-074.
+- **Windows gates.** Not re-run in this pass. The earlier progress entries record them passing on this source.
+
+I didn't change any source. I appended a dated entry to `.ralph-tui/progress.md` recording these results. The earlier log had many identical "no-change recheck" entries, and this one adds nothing new beyond the test run.

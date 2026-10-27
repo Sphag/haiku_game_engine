@@ -1,0 +1,47 @@
+# Iteration 1289 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:01:11.749Z
+- **Ended At**: 2026-10-27T00:01:38.476Z
+- **Duration**: 26s
+- **Input Tokens**: 36
+- **Output Tokens**: 3450
+- **Total Tokens**: 3486
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and the PRD constraints for this story.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The log shows US-081 was already worked on in several status passes, with the same open blockers each time. I'll check what has changed since the last recorded gate run before deciding whether any work remains.
+[94m[Bash][0m Find files changed since last recorded gate and read acceptance doc $ sed -n '1,200p' docs/acceptance.md | head -150
+The acceptance map and open items are current. Before I decide anything, I'll check that the README covers the sections the story names, since that is the one deliverable I can verify from files alone.
+[94m[Bash][0m Check README sections and story status in prd.json $ print([ (s.get('id'),s.get('passes')) for s in d.get('userStories',d.get('stories',[])) if s.get('id...
+The README already has the sections the story names, and the docs for architecture, schemas, capability matrix, benchmarks, and vendor notices exist. The remaining open items need hardware or user decisions that I can't supply from here. I'll record this pass in the progress log, as the workflow asks, and not signal completion.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` shows only `docs/acceptance.md`, `tasks/...
+US-081 is not complete, so I am not signalling COMPLETE. The documentation deliverables are in place, but the story's own text says final acceptance stays incomplete when hardware or a user decision is missing, and that is still the case.
+
+**What I checked this pass (no code or build changes):**
+- Nothing in source, tests, or CMake has changed since the last recorded gate run. The only changes are docs and bookkeeping, so I did not re-run the gates.
+- The README has the sections the story names: OS/SDK requirements, offline CMake setup, editor workflow, Lua API, asset pipeline, and native packaging.
+- The architecture, schema, capability-matrix, benchmark, and vendor docs exist under `docs/`.
+- `tasks/prd.json` still has US-081 as not passing.
+
+**Still open (from `docs/acceptance.md`):**
+1. **Native Linux Vulkan GPU report.** This WSL2 machine has no Vulkan device (`/dev/dri` is absent), so the run cannot happen here.
+2. **Full acceptance benchmark.** The acceptance scenes do not yet produce GPU timestamps, so `engine_bench --suite acceptance` reports `incomplete`.
+3. **FSR 2.** The vendored tree lacks its generated shader permutations. Choosing how to vendor them is your decision.
+4. **linux-gcc.** The local GCC 9.4 cannot build Jolt; the gate needs GCC 11 or newer.
+5. **Visual editor smoke test.** Windows has launch-only evidence. Linux has none, because the WSL run has no Vulkan device.
+6. **Package from a real game.** The editor suite covers a sample-project package on both OSes, but no package has been built from a real game.
+7. **License.** The repository still has no LICENSE file. Choosing one is your decision.
+
+I appended a short status entry to `.ralph-tui/progress.md`. It records this pass and the open items, and it does not claim sign-off.

@@ -1,0 +1,40 @@
+# Iteration 868 Log
+
+## Metadata
+
+- **Task ID**: US-078
+- **Task Title**: Streaming Benchmark
+- **Description**: As a world developer, I want a streaming workload so that I can identify stalls and leaks.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-26T10:32:15.930Z
+- **Ended At**: 2026-10-26T10:32:29.661Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 2100
+- **Total Tokens**: 2122
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Read progress log and benchmark sources $ grep -n "streaming" -i tools/benchmark/src/*.cpp tools/benchmark/src/*.hpp 2>/dev/null | head -50
+The progress log says the work is mostly done and only the Linux/GCC gate and a Release-build soak remain open. I'll check whether the host toolchain has changed since then.
+[94m[Bash][0m Check host compilers and recent file changes $ cd /mnt/d/dev/haiku_game_engine && find engine tools tests benchmarks docs cmake -newer .ralph-tui/p...
+US-078 is not complete, and I have not signaled `<promise>COMPLETE</promise>`. The implementation and most gates were already done in earlier runs. Nothing has changed since, and two acceptance items still can't be met on this host.
+
+**Status against the acceptance criteria**
+
+- **Implemented:** the `streaming_stress` CPU benchmark (`tools/benchmark/src/streaming_stress.cpp`). It builds the 200 000-descriptor world, drives the 5400 m `streaming_route_v1` route across cell boundaries, and runs a separate teleport case. It records loads, unloads, IO/decode/upload bytes, residency and memory peaks with frame timings.
+- **30-minute soak:** passed on a Debug build, recorded in `.ralph-tui/progress.md`. Results: 0 failed, 0 missing window cells, 0 stale, 0 dangling references, 0 corrupt loads, residency identical across traversals.
+- **Windows gates:** recorded as passing in an earlier run. ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` (29/29), and the DX12 and Vulkan GPU suites all passed.
+- **Linux gates:** `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` (30/30), and `linux-asan` plus `linux-sanitize` (30/30) all pass.
+- **Still open, linux-gcc:** the `linux-gcc*` presets need GCC 11 or newer. The host has only g++-9.4.0 and clang 10. I checked this again and nothing has been installed. I can't verify that job here.
+- **Still open, Release soak:** the 30-minute soak numbers come from a Debug build. The criterion calls for measurement in Release.
+- **Still open, acceptance bench:** the streaming scene is kept out of `engine_bench --suite acceptance`. Its GPU profiles report as missing because the GPU streaming path is not implemented. Whether that meets the performance criterion depends on the PRD's contract, which I did not re-read.
+
+I checked for file changes after the last recorded run: nothing under `engine`, `tools`, `tests`, `benchmarks`, `docs`, or `cmake` is newer than the progress log. So the earlier results still describe this tree. I did not re-run the Windows or Linux gates in this pass.
+
+To finish, the linux-gcc job needs a GCC 11+ host, for example a CI runner or installing g++-11 with root. A Release soak needs a Release build run for the full 1800 s. Once both are done, the story can be closed.

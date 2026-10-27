@@ -1,0 +1,180 @@
+# Iteration 16 Log
+
+## Metadata
+
+- **Task ID**: US-032
+- **Task Title**: Render Graph
+- **Description**: As a rendering developer, I want to describe pass dependencies so that I can automate resource synchronization.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T01:48:09.715Z
+- **Ended At**: 2026-10-23T02:18:53.256Z
+- **Duration**: 30m 43s
+- **Input Tokens**: 420
+- **Output Tokens**: 122747
+- **Total Tokens**: 123167
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD sections this story depends on.
+[94m[Bash][0m List repo and read progress log $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md
+[94m[Bash][0m Locate PRD story references $ wc -l tasks/prd-open-world-engine.md && grep -n "US-03[0-9]\|US-02[0-9]" tasks/prd-open-world-engine...
+[94m[Bash][0m Read PRD header and requirements $ sed -n 1,235p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read RHI and render graph PRD sections $ sed -n 284,340p tasks/prd-open-world-engine.md && grep -n "^## \|^### US-00[0-9]\|^### US-01" tasks/...
+The Docs MCP tools are not relevant to this story. Next I'll check the progress log's recent entries and what already exists in the engine.
+[94m[Bash][0m Read recent progress log entries $ tail -120 .ralph-tui/progress.md
+[94m[Bash][0m Survey engine sources, tests, CMake setup $ find engine tests cmake -type f | grep -v build | head -300 && cat CMakeLists.txt && cat CMakePreset...
+The render graph is a new module, so I need the RHI surface it will sit on, plus the test and CMake layout. I'll read those next.
+[94m[Bash][0m Read RHI command list and types headers $ cat engine/rhi/include/engine/rhi/command_list.hpp engine/rhi/include/engine/rhi/types.hpp | head -4...
+[94m[Bash][0m Read RHI and test CMake files $ cat engine/rhi/CMakeLists.txt engine/shader/CMakeLists.txt && sed -n 1,80p tests/CMakeLists.txt && c...
+The RHI has timestamp queries and explicit transitions, which covers the barrier and timing parts. Next I'll read the device API, the GPU test pattern, and the saved notes on running Windows gates.
+[94m[Bash][0m Read RHI device and handle headers $ cat engine/rhi/include/engine/rhi/handle.hpp | head -60
+[94m[Bash][0m Read memory notes, GPU options, and contract tests $ sed -n 1,60p tests/src/rhi_contract_tests.cpp
+I have the device contract. Now I need the GPU suite wiring and the rest of the test CMake, so the new tests land in the right suite.
+[94m[Bash][0m Inspect test CMake and suite wiring $ grep -n "TEST_CASE\|gpu" tests/src/shader_gpu_tests.cpp | head -30
+The test wiring is clear. Before designing the module I need the PRD's rules on the render graph, timings, and Non-Goals, plus two RHI details: how Vulkan sets texture sharing mode and whether clear-only render passes are used in the existing GPU tests.
+[94m[Bash][0m Grep PRD for render graph constraints $ sed -n 732,800p tasks/prd-open-world-engine.md
+[94m[Bash][0m Check PRD grep, Vulkan sharing mode, docs layout $ grep -n "US-03[01]\|US-027" docs/build.md | head
+The PRD puts the render graph in `engine/render/`, and Vulkan textures use exclusive sharing, so the graph should run all passes on the graphics queue. I'll check the test tag conventions, the CPU device factory, and the build.md row format before writing code.
+[94m[Bash][0m Check test tags, device factory, build doc format $ grep -n "^| US-03\|^## \|^| Story" docs/build.md | head
+Two constraints shape the design. The graph needs a CPU-only compile path that runs everywhere, and its GPU tests must reuse the existing device and readback pattern. I'll read the existing clear-and-readback test and the clock API.
+[94m[Bash][0m Read Vulkan clear/readback GPU test and clock API $ grep -n "create_device\|skip\|Unsupported\|allow_software\|debug_layers" tests/src/rhi_vulkan_gpu_te...
+The GPU test helpers are file-local, so I need their exact definitions to mirror them. I'll pull just those and the clock's time type.
+[94m[Bash][0m Read GPU test helper definitions and clock header $ grep -n "require_no_debug_errors\|near_channel\|debug_vulkan()" -A8 tests/src/rhi_vulkan_gpu_tests.c...
+Last things to confirm before writing: the RHI error type and how `Seconds` converts to a plain number.
+[94m[Bash][0m Read RHI error types, units, and target config helper $ grep -n "engine_configure_first_party" -A12 cmake/EngineTargets.cmake | head -30
+I'll check how `core::Result` builds success values, since the executor returns `RhiStatus`.
+[94m[Bash][0m Check Result helper functions $ grep -n "rhi::ok\|return {}\|core::Unit{}\|success(" engine/rhi/src/validation_device.cpp | head -3
+I have enough to design this. The plan:
+
+- **New module** `engine/render/` (`engine_render`), the PRD's path for the render graph. It sits on the RHI contract and is backend-agnostic.
+- **Compile (CPU only):** each resource has one writer, and readers depend on it. The graph orders passes with a stable topological sort and reports cycles, read-before-write, multiple writers, and incompatible access/queue/usage, all naming the passes. It derives per-resource state barriers and aliases transients with disjoint lifetimes onto one allocation.
+- **Execute:** one graphics-queue command list. Passes run in order with timestamps and CPU timers, then one submit and wait. Compute passes run on the graphics queue, since Vulkan textures use exclusive sharing and async compute would need ownership transfer, which is out of scope here.
+- **Export:** JSON for the graph and timings.
+- **Tests:** CPU compile tests and Validation-device execution run on Linux and Windows as `[unit]`. Real clear, copy, and readback lifetime tests run as `[gpu][dx12]` and `[gpu][vulkan]`.
+
+I'll write the public header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/render_graph.hpp[0m "#pragma once
+
+// Render graph (US-032). A frame is described as passes that name the resources they read and write. compile() checks the
+// description, orders the passes, computes the state transitio... (11600 chars)"
+Next is the compile step: validation, topological ordering, cycle reporting, lifetimes, slot aliasing, and barriers.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/render_graph.cpp[0m "// Render graph compilation (US-032): validation, ordering, lifetimes, transient slot assignment, and barriers. Nothing here touches a
+// device, so every rule is testable on any operating system.
+
+#i... (23121 chars)"
+The cycle walker uses the 32-bit sentinel as a `size_t` marker, which is fragile. I'll give it a proper `size_t` sentinel.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/render_graph.cpp[0m edit: "    std::vector<std::uint32_t> walk;
+    std::vect..." → "    constexpr std::size_t kUnvisited = static_cast..."
+Next is the execution side: `PassContext`, resource ownership with cleanup, one submission, and timestamp readback.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/render_graph_execute.cpp[0m "// Render graph execution (US-032): transient allocation, recording, one submission, and timestamp readback.
+
+#include "engine/render/render_graph.hpp"
+
+#include "engine/core/clock.hpp"
+#include "engi... (12673 chars)"
+I left some errors in that file: a nonsense `pool` line, a call to a `pool_for` helper that doesn't exist, and a dead loop. I'll fix them, then check the `Seconds` namespace.
+[94m[Bash][0m Fix pool accessor and dead code in execute file $ echo done
+That change is my own scripted edit, so I'm keeping it. Next is the JSON export.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/render_graph_export.cpp[0m "// JSON export of a compiled render graph (US-032). The output is for diagnostics and tests; it is not a save format.
+
+#include "engine/render/render_graph.hpp"
+
+#include <cstdio>
+#include <string>
+
+n... (5903 chars)"
+Now the CMake wiring: a new `engine_render` library, the root `add_subdirectory`, and the test sources.
+[94m[Bash][0m Wire engine_render into CMake and test sources $ cat > engine/render/CMakeLists.txt <<'EOF' # Render graph (US-032): pass declarations, compilation i...
+The library and CMake are wired. Next are the tests. The readback graph is shared by the CPU-device and real-GPU suites, so I'll put its builder in a small fixture header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_graph_fixture.hpp[0m "#pragma once
+
+// Shared fixture for the render graph tests (US-032). The readback chain clears a target, copies it to a staging buffer, and downloads
+// the staging buffer into a CPU-readable buffer. ... (3793 chars)"
+The fixture calls `CommandList` methods, so it needs the full header, not just the forward declaration. I'll add the include, then write the CPU-side tests.
+[94m[Bash][0m Add command_list include and view take() helper $ sed -i 's|#include "engine/render/render_graph.hpp"\n#include "engine/rhi/types.hpp"|X|' tests/src/r...
+Now the CPU-side suite: ordering, the four rejection rules with pass names, barriers, aliasing, export, and execution on the reference device.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_graph_tests.cpp[0m "// Render graph compilation and execution on the CPU reference device (US-032). Compilation needs no device, so these run on every
+// operating system. Execution uses the Validation backend, which enf... (16968 chars)"
+I spotted three mistakes in that file before compiling. The "no barrier" test calls a helper that doesn't exist. The failing-pass test relies on a barrier that makes the render-pass call succeed, so it would never fail. And `fake_buffer` is unused, which `-Werror` would reject. I'll fix those, and also rotate the reported cycle to start at its earliest-declared pass so the message reads naturally.
+[94m[Bash][0m Fix broken tests and rotate cycle start $ echo ok
+Next is the real-GPU suite. It runs the same graph on DX12 and Vulkan with debug layers on, checks the readback, the reuse counts, and the resource baseline, and checks timings.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_graph_gpu_tests.cpp[0m "// Render graph lifetimes on real GPUs (US-032). The readback chain runs on DX12 and on Vulkan with the debug layers on. Each run checks the
+// reference clear color, the transient allocation count, t... (4418 chars)"
+The GPU suite is written. I'll drop the unused `<cstdio>` include, then configure and build the Linux debug tree in the background, since linking on `/mnt/d` is slow.
+[94m[Bash][0m Start Linux validate, configure, and build in background $ echo "build=$?" >> /tmp/rg_build.log) > /dev/null 2>&1 & echo started
+While that builds, I'll look at how `tasks/prd.json` tracks the story and where the build doc expects its rows, so the bookkeeping matches earlier stories.
+[94m[Bash][0m Check prd.json story entry and build doc layout $ sed -n 187,200p docs/build.md | cut -c1-200
+Now the design doc, in the same style as the other per-story docs.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/render-graph.md[0m "# Render graph (US-032)
+
+`engine/render/` (library `engine_render`) describes a frame as passes that name the resources they read and write. The graph checks the
+description, orders the passes, derive... (5936 chars)"
+[94m[Bash][0m Check Linux validate, configure, and build progress $ tail -5 /tmp/rg_build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/rg_validate.log tail -3 tail -3 /tmp/rg_configure.log tail -5 /tmp/rg_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux validate, configure, and build progress $ tail -5 /tmp/rg_build.log 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+[94m[Bash][0m List build log files and running processes $ ps aux | grep -c "cmake\|ninja"
+The validation step is still running. I'll have a background command wait for the build to finish and report back, rather than polling.
+[94m[Bash][0m Wait for Linux debug build and report result $ tail -2 /tmp/rg_build.log
+[94m[Bash][0m Check early build progress $ tail -3 /tmp/rg_build.log 2>/dev/null
+
+[91m[Error: Exit code 1][0m
+Nothing has finished yet. I'll load the Monitor tool so I can wait on the build's completion marker rather than poll.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Watch Linux debug build for completion and errors $ tail -n 2 /tmp/rg_validate.log
+[94m[Monitor][0m Watch Linux debug build for completion and errors $ tail -n 2 /tmp/rg_validate.log
+The Linux debug build is running in the background. I'll wait for its completion notice before reading the results.
+The Linux debug build passed with no errors or warnings. Next I'll run the new render graph tests with the CPU suite.
+[94m[Bash][0m Run unit tests and render graph cases on Linux $ timeout 300 ./tests/Debug/engine_tests "Passes run in data order*,A cycle*,A transient*,An imported*...
+[94m[Bash][0m Run unit suite and sample render graph cases $ timeout 300 ./tests/Debug/engine_tests --suite unit "A cycle is rejected*" 2>&1 | tail -n 3
+The CPU unit suite passes: 414 test cases, including the 15 render graph cases, up from 399. Next I'll run the Linux unit preset through CTest, then the GCC and sanitizer builds.
+[94m[Bash][0m Run Linux unit CTest preset $ cd /mnt/d/dev/haiku_game_engine && timeout 590 ctest --preset linux-unit --output-on-failure --no-te...
+The Linux unit preset passes 22 of 22. Next I'll start the GCC and ASan/UBSan builds in the background.
+[94m[Bash][0m Start GCC and ASan builds and tests in background $ echo "ctest=$?" >> /tmp/rg_asan_ctest.log) > /dev/null 2>&1 & echo started
+While those run, I'll prepare the Windows gate batch file, following the saved notes on how to run it from WSL.
+[94m[Bash][0m Write Windows gate batch file into Temp $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" 2>&1 ...
+The Windows batch is in place. I'll start it in the background. Its build directory is separate from the Linux trees, so it can run alongside the Linux builds.
+[94m[Bash][0m Launch Windows gate batch via cmd.exe $ echo "exit=$?" >> /tmp/rggate/stdout.txt) & echo started
+Both runs are going. I'll wait on one monitor that covers the Linux sanitizer finish and the Windows gate's last step.
+[94m[Monitor][0m Wait for GCC/ASan and Windows gate completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/rg_rc.txt
+[94m[Monitor][0m Wait for GCC/ASan and Windows gate completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/rg_rc.txt
+Both monitors are armed. I'll wait for the results before writing the progress entry.
+Three results need follow-up: the Windows build returned exit 2 even though the later steps ran, the ASan integration run failed, and the GCC and Linux runs passed. I'll read the Windows build log and the ASan failure details first.
+[94m[Bash][0m Inspect Windows build errors and ASan failures $ grep -n -E "FAILED|Failed|runtime error|ERROR: AddressSanitizer|SUMMARY" /tmp/rg_asan_ctest.log | he...
+The Windows failure is my code: MSVC's `/W4 /WX` flags the `return` after `FAIL` in `error_of` as unreachable (C4702). The ASan integration failure is at `platform_x11_input_tests.cpp:437`, which matches the known X11 flake from the progress log. I'll confirm that is the only failing case, then fix the helper.
+[94m[Bash][0m Confirm ASan failure scope and fix unreachable-code warning $ }''' assert old in s s=s.replace(old,new,1) open(p,'w').write(s) EOF echo fixed
+The ASan run had one failure out of 113 cases, the X11 input flake the progress log describes, so I'll rerun it after the rebuild. Now I'll rebuild all three Linux trees with the fixed helper, and rerun the Windows gate in the background.
+[94m[Bash][0m Rebuild Linux trees and rerun Windows gate $ echo "exit=$?" >> /tmp/rggate/stdout2.txt) & echo started
+[94m[Monitor][0m Wait for rebuilds and Windows gate to finish $ grep -E "warning C|error C" /mnt/c/Users/bucha/AppData/Local/Temp/rg_3.log | head -3
+The rebuilds and the Windows gate are running. I'll wait for the combined result.
+Every gate now passes. I'll pull the real-GPU test counts from the Windows logs and check that the new GPU cases actually ran.
+[94m[Bash][0m Read Windows GPU and unit test summaries $ grep -c "warning C" $T/rg_3.log
+Windows results: `--suite gpu --backend dx12` passes 15 cases, which is one more than before, and `--suite gpu --backend vulkan` passes 16. The unit preset is 21 of 21, and the vendor, configure, and build steps all pass with zero MSVC warnings. Next I'll record the story in the build table, the PRD tracking file, and the progress log.
+[94m[Bash][0m Add US-032 build row and set passes flag $ tail -c 300 tasks/prd.json | tail -n 3
+Now the progress log: one reusable pattern at the top, and the story entry at the bottom.
+[94m[Bash][0m Append US-032 progress entry and codebase pattern $ `--suite gpu --backend vulkan` 16 cases, 1119 assertions, pass. - **Learnings:**   - The first Windo...
+US-032 (render graph) is implemented and every gate that can run here passes. The Windows and Linux quality gates, the GCC job, the ASan/UBSan sanitize run, and the real-GPU suites on the RTX 5080 all pass. The only Linux test failure is the known X11 input flake, and it did not recur on the rerun.
+
+**What was built** (new library `engine_render` in `engine/render/`, the path the PRD assigns):
+- **Declaration:** passes list their resource accesses (`ColorWrite`, `ShaderRead`, `CopySource`, …) and a kind (graphics or compute). The access selects the state, so passes never name states directly.
+- **Compile:** `RenderGraph::compile()` orders passes with a stable topological sort and derives per-resource barriers. It rejects cycles, read-before-write, multiple writers, duplicate names, and incompatible access/kind/usage. Each error names the affected passes. Transients with the same layout and disjoint lifetimes share one allocation.
+- **Execute:** `execute()` records one graphics command list with GPU timestamps and CPU timers, submits once, waits, and releases transients. A failing pass is named in the error, and nothing leaks.
+- **Export:** `export_json()` writes passes, barriers, edges, lifetimes, and timings.
+
+**Results:**
+- **Linux:** `linux-unit` 22/22 (the CPU suite is 414 cases, 15 of them new). GCC unit 22/22. `linux-asan` builds with zero warnings, and `linux-sanitize` 22/22 on the rerun. The first ASan run had one failure, the known X11 input case at `platform_x11_input_tests.cpp:437`.
+- **Windows:** `ValidateVendor`, `win-dev`, and `win-debug` pass with zero `warning C` lines. `win-unit` is 21/21. On the RTX 5080 with debug layers on, `--suite gpu --backend dx12` passes 15 cases and `--suite gpu --backend vulkan` passes 16. The new GPU case runs the same clear → copy → download chain on both backends, with a reused allocation, repeated three times with stable live counts.
+- **Not run:** GitHub CI (not pushed), the Linux native GPU suites (no usable Vulkan device on this host), `engine_bench --suite acceptance` (no bench target exists yet), and any GUI check (no editor yet).
+
+**Choices I made that you may want to redirect:**
+- **Compute passes run on the graphics queue.** Vulkan textures use exclusive sharing, so overlapping queues would need ownership transfers that the RHI does not record. Async compute is left for a later story.
+- **`execute()` is synchronous.** It waits on the frame. Frame pipelining belongs to the runtime loop in US-033 onward.
+- **Each resource has at most one writer per frame.** This keeps ordering derived from data, and it is what makes cycles detectable.
+
+**Bookkeeping:** I added the US-032 row to `docs/build.md`, wrote `docs/render-graph.md`, set `passes: true` for US-032 in `tasks/prd.json`, and appended the progress entry with one codebase pattern. The pattern is that MSVC `/W4 /WX` flags a `return` after `FAIL(...)` as unreachable (C4702), which only the Windows gate caught. I did not create a git commit.

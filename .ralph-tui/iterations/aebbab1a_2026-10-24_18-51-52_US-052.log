@@ -1,0 +1,41 @@
+# Iteration 262 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T15:51:52.934Z
+- **Ended At**: 2026-10-24T15:52:09.289Z
+- **Duration**: 16s
+- **Input Tokens**: 28
+- **Output Tokens**: 2206
+- **Total Tokens**: 2234
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since memory notes say US-052 may already be partly done.
+[94m[Bash][0m Inspect physics directory and progress log $ ls engine/physics && tail -n 80 .ralph-tui/progress.md && grep -n "US-052" .ralph-tui/progress.md | ...
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The memory notes show the adapter is implemented and every gate this machine can run already passes. The open item is the GCC 11+ gate. I'll run one cheap check of the compilers in case the environment changed.
+[94m[Bash][0m List available C++ compilers $ g++ --version 2>/dev/null | head -1
+[94m[Bash][0m Append compiler recheck entry to progress log $ no `/opt` compiler. `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` stay blocked (Jolt needs GCC 11...
+US-052 is still **Partial**, so I'm not emitting the completion signal. The adapter is implemented, but two required items can't be closed on this machine.
+
+**Blocked: the Linux GCC gate.** Jolt needs GCC 11+ (`__builtin_bit_cast`). This machine only has GCC 9.4 (`g++-9`) and clang++-10. The `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` presets therefore can't be run here. Installing `g++-11` needs a sudo password, and I can't supply one. Closing this needs a GCC 11+ environment or the CI GCC 11 job.
+
+**Not run: `engine_bench --suite acceptance`.** No `engine_bench` target exists in the tree yet. That is US-074, so the criterion's precondition (the harness must exist) isn't met.
+
+**Already verified, according to the memory notes and progress log:**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21) pass.
+- Linux clang: `ValidateVendor`, `linux-dev`, `linux-debug` (no warnings), and `linux-unit` (22/22) pass.
+- Sanitizers: `linux-asan` build and `linux-sanitize` ctest (22/22) pass.
+
+I didn't re-run the Windows or Linux gates in this pass, so those results come from the earlier runs recorded in memory. I checked the compilers again, and nothing has changed since the earlier checks.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this recheck. I made no source changes.

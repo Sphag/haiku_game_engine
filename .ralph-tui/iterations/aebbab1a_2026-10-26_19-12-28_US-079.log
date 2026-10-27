@@ -1,0 +1,45 @@
+# Iteration 1028 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:12:28.683Z
+- **Ended At**: 2026-10-26T16:12:45.906Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2098
+- **Total Tokens**: 2120
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | grep...
+The log shows the last ~8 passes each re-verified the same blockers and changed nothing. I'll confirm the blockers still hold, then decide whether anything is worth doing this pass.
+[94m[Bash][0m Check manifest route, samples dir, FSR2 headers, and latest iteration log $ tail -n 5 .ralph-tui/iterations/aebbab1a_2026-10-26_15-21-38_US-079.log
+US-079 is not complete, and I'm not emitting the COMPLETE signal. I re-checked the blockers and made no source changes this pass.
+
+**What's still missing**
+- **`all_features` scene.** There is no `samples/all_features` project and no all_features runner in `tools/benchmark/src`. `benchmarks/manifest.json` still has `implementation: none` for it. The route it would run, `all_features_route_v1`, is marked as a proposal (line 152). The benchmark contract depends on that route, so I did not build a runner against an unapproved definition.
+- **FSR 2 `full_1080` profile.** `third_party/fsr2` has no `*_permutations.h` headers, so `ENGINE_FSR2_AVAILABLE` stays off and `full_1080` can't run. The manifest reports it unsupported until the vendoring route is decided.
+- **Tour, profiles, forced geometry paths, and editor scenario.** These depend on the scene above, and the editor run with package/relaunch needs a Windows GUI session.
+- **Gates I could not run here.** Windows gates, native Linux Vulkan GPU, `linux-gcc*`, sanitizer presets, and `engine_bench --suite acceptance` need hosts this WSL machine doesn't have. The local GCC is 9.4, and there is no `/dev/dri`.
+
+**What I did check**
+- The blockers still hold on the current tree.
+- The Linux gate results from the last full run stand (`ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`). I did not re-run them this pass.
+- The Windows gate results from the earlier pass also stand, but I have not re-run them on this tree.
+- The `all_features` integration and editor tests are in `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp`. The benchmark side is what's absent.
+
+**Needed from you**
+1. Approve or amend `all_features_route_v1`. It fixes the benchmark contract, so the runner should wait for it.
+2. Choose the FSR 2 route: vendor the permutation headers, or keep `full_1080` unsupported as the manifest allows.
+3. Provide a Windows GPU and GUI session for the tour, profiles, and live editor run with package/relaunch.
+
+I also did not add another identical status entry to `.ralph-tui/progress.md`. Eight recent passes did the same re-check and wrote the same notes, so I'd rather the next step be one of the three decisions above.

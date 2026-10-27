@@ -1,0 +1,34 @@
+# Iteration 698 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:14:52.077Z
+- **Ended At**: 2026-10-26T02:15:05.820Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 1786
+- **Total Tokens**: 1804
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and benchmark sources $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m Check source and artifact timestamps for US-076 $ ls -la --time-style=+%H:%M artifacts/bench/ | grep us076 | head -3
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing has changed since the last status check, and I did not rerun any gates or benchmarks.
+
+**What's blocked, and why I stopped here:**
+
+1. **The `render_stress` contract fails on placement.** The route start has 312,068 triangles against a 2,000,000 floor, and p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing placement changes the seeded workload. That means bumping `kWorkloadVersion` and regenerating `benchmarks/workload_expected.json`. The PRD says changing the benchmark contract needs a separate user decision, so I haven't made that change.
+2. **`full_1080` is unsupported.** The vendored FSR 2 permutation headers are missing, so only `native_1080` runs. That is a vendoring decision for you.
+3. **Native Linux Vulkan GPU and linux-gcc have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. Those reports need a native Linux machine or a newer compiler.
+
+**What exists:** eight `artifacts/bench/us076-*` reports cover DX12 and Vulkan across indexed, indirect, meshlets, and meshlets with mesh shaders forced off. All eight exit 1 on the frame budget and triangle floor. The newest report is newer than the last source edit (`render_stress.cpp`, 04:15:43).
+
+**Decision needed from you:** should I change the placement and bump the workload version, or should this story close as measured with the failing numbers recorded?

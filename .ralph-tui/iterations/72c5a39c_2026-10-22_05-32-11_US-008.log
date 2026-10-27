@@ -1,0 +1,142 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: US-008
+- **Task Title**: In-House Linux Windowing
+- **Description**: As a Linux user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T02:32:11.634Z
+- **Ended At**: 2026-10-22T02:56:34.503Z
+- **Duration**: 24m 22s
+- **Input Tokens**: 352
+- **Output Tokens**: 29989
+- **Total Tokens**: 30341
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and the progress log to see where the project stands.
+[94m[Bash][0m Show repo root, progress log, and PRD size $ ls -la && cat .ralph-tui/progress.md | head -300 && wc -l .ralph-tui/progress.md tasks/prd-open-worl...
+The progress log shows US-008 was already implemented and re-verified in earlier iterations. I'll confirm the code is actually in the tree and re-run the Linux gates rather than trust the log.
+[94m[Bash][0m Verify X11 sources exist and list presets and tools $ which cmake ctest clang++ g++ ninja 2>&1
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -5 /tmp/us008_ctest.log
+The Claude Docs tools are not relevant to this story, so I'll leave them alone. I'll check on the background configure and build.
+[94m[Bash][0m Wait for background Linux build and show results $ tail -5 /tmp/us008_ctest.log 2>/dev/null
+[94m[Bash][0m Confirm build and unit test exit codes and pass counts $ grep -E "tests passed|tests failed" /tmp/us008_ctest2.log
+Linux validate, build, and unit ctest all pass. Next I'll check the X11 integration suite, the missing-display path, and whether any windowing source changed after the last Windows verification.
+[94m[Bash][0m Run integration suite with X11 and missing-display checks $ ls -l --time-style=+%F_%T engine/platform/src/x11/* engine/platform/src/win32/* engine/platform/incl...
+The X11 suite passes on XWayland (28 pass, 1 WM-dependent skip this run), and the missing-display path passes with the rest of the CPU tests intact. The Windows sources were last changed before the most recent Windows verification, so I'll re-run the Windows gates to confirm they still hold, using the `.bat` approach the log describes.
+[94m[Bash][0m Inspect Windows cache and temp scripts $ ls /mnt/c/Windows/Temp | grep -i "gate\|us008" | head
+[94m[Bash][0m Run Windows quality gates through a batch file $ cat /tmp/us008_win_stdout.log | tr -d '\r' | grep -E "validate=|configure=|build=|ctest=|exit="
+All four Windows steps exit 0. I'll check the logs for real test counts and first-party warnings, not just exit codes.
+[94m[Bash][0m Check Windows logs for test counts and warnings $ tr -d '\r' < us008_w_dev.log | grep -ci "error"
+Windows is clean: 10/10 unit tests pass with zero C-warnings and zero errors. The Linux/GCC gate is also required, so I'll run it in the background while I check the performance and docs constraints.
+[94m[Bash][0m Start Linux GCC gates and scan PRD constraints $ echo "ctest=$?" >> /tmp/us008_gcc_status) > /dev/null 2>&1 & grep -n -i "benchmark\|engine_bench\|pe...
+Windowing isn't a performance-affecting change and the benchmark harness (US-074) doesn't exist yet, so I'll record benchmarks as not applicable. Next I'll confirm the X11 tests cover the framebuffer and focus semantics, then wait for the GCC gate.
+[94m[Bash][0m List X11 test cases and poll GCC gate progress $ tail -1 /tmp/us008_gcc_cfg.log
+[94m[Bash][0m Wait for GCC ctest and report results $ grep -E "tests passed|tests failed" /tmp/us008_gcc_ctest.log
+The GCC unit run has one failure. I'll find out which test and why before going further.
+[94m[Bash][0m Show failing GCC ctest entry and its output $ grep -n -B3 -A25 "The following tests FAILED" /tmp/us008_gcc_ctest.log | head -40
+[94m[Bash][0m Read the failing integration test output $ sed -n 1,72p /tmp/us008_gcc_ctest.log | grep -v "^$" | head -80
+The failing test is `Unmapping and mapping a window report minimize and restore`, which expects a `WindowRestored` event after a remap. I'll read the test and the backend's map/unmap handling to decide whether this is a real bug or a window-manager timing issue.
+[94m[Bash][0m Read the failing test and backend map/unmap logic $ grep -n "MapNotify\|UnmapNotify\|WindowRestored\|WindowMinimized\|map_state\|XMapWindow\|XUnmapWindo...
+[94m[Bash][0m Read backend unmap/map event handling code $ sed -n 160,200p engine/platform/src/x11/platform_x11.cpp
+The backend reacts correctly to an unmap and a map, so the question is whether the remap produces a `MapNotify` at all. The test's own comments say the window manager decides whether the window comes back, so I'll rerun this one case several times on the GCC binary to see whether it is deterministic or a timing flake.
+[94m[Bash][0m Repeat the failing X11 case five times on GCC binary $ done
+[94m[Bash][0m Show output of the single-case run $ cat /tmp/us008_rep_1.log | head -30
+The binary takes only `--suite`, so I'll run the whole integration suite five times and count how often this case fails.
+[94m[Bash][0m Run GCC integration suite five times and count failures $ done
+The failure is intermittent: 0 of 5 here, 1 of 1 in the ctest run. The test skips the case when the window manager won't show a window, but it hard-fails when the window manager won't remap after a restore. I'll look at the helpers to see whether I can tell a window-manager refusal apart from a missed event.
+[94m[Bash][0m Find test helper definitions and timeouts $ grep -n "wait_viewable\|bool wait_for\|int wait_viewable\|kIsViewable\|timeout\|seconds\|millisecond...
+[94m[Bash][0m Read wait_viewable helper implementation $ sed -n 200,226p tests/src/platform_x11_tests.cpp
+The helper only reads map state and does not consume events, so I can separate the two cases cleanly. If the restore event never arrives and the server reports the window as not viewable, the window manager declined the remap and the case should skip with a reason, as the other WM-dependent cases do. If the server shows the window and no event arrived, that stays a hard failure. I'll make that change.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    x11::load_api(nullptr)->XMapRaised(display, xi..." → "    x11::load_api(nullptr)->XMapRaised(display, xi..."
+I'll rebuild both Linux presets, run the unit and integration suites, and check whether the X11 test file is compiled on Windows, since that decides whether the Windows gates need a re-run.
+[94m[Bash][0m Rebuild GCC debug and rerun GCC ctest $ grep -E "tests passed|tests failed" /tmp/us008_gcc_ctest2.log
+GCC now passes 10/10 with zero warnings. The X11 test file is Linux-only, so the Windows results still stand. Next I'll rebuild the Clang preset and repeat the integration suite on both compilers to check the fix holds.
+[94m[Bash][0m Rebuild Clang, rerun unit tests, and repeat integration on both compilers $ done
+[94m[Bash][0m Check progress of background verification run $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/bf836e6f-12be-4c73-bf88-dcb913fe96c5/tasks/bv2k90m...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/bf836e6f-12be-4c73-bf88-dcb913fe96c5/tasks/bv2k90m8g.output tail -20. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Poll for completion of the repeated integration runs $ ls /tmp/us008_fix_* 2>/dev/null | wc -l
+The fix did not hold: GCC run 5 has one failure. I'll look at every run's results and the failing assertion.
+[94m[Bash][0m Summarize repeated runs and show the failing assertion $ tail -1 us008_clang_build2.log
+The next run fails in a different case: `A resize updates the framebuffer`. The pattern points at window-manager timing again, but I'll read the test before concluding that.
+[94m[Bash][0m Read the resize test and resizable hint handling $ grep -n "resizable\|WM_NORMAL_HINTS" engine/platform/src/x11/platform_x11.cpp | head
+[94m[Bash][0m Show the second failed assertion and check earlier logs $ done
+The resize failure is also intermittent, and the logs don't show what the server reported when it failed. I'll add the server-reported size and the last observed resize to the failure output, then loop until a failure reveals whether the backend or the window manager is at fault.
+[94m[Bash][0m Check server_size helper and WindowDesc defaults $ grep -n "INFO(" tests/src/platform_x11_tests.cpp | head -3
+[94m[Bash][0m Read FramebufferSize field names $ grep -n -A4 "struct FramebufferSize" engine/platform/include/engine/platform/window.hpp
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    const FramebufferSize expected{900, 500};
+    ..." → "    const FramebufferSize expected{900, 500};
+    ..."
+I'll rebuild GCC and run the integration suite in a background loop that stops at the first failure, so the diagnostic is captured without blocking.
+[94m[Bash][0m Rebuild GCC and start background failure-hunting loop $ echo started
+[94m[Bash][0m Poll failure-hunting loop status $ cat /tmp/us008_loop_status
+[94m[Bash][0m Show diagnostic output from the captured failure $ grep -B2 -A8 "FAILED:" /tmp/us008_loop_1.log | head -60
+This time the failure is at line 287 in a different test, a server-size versus backend-size mismatch. The failures keep clustering around size consistency, so I'll read that test to see whether it compares the backend's cache against a server value that could legitimately be ahead of it.
+[94m[Bash][0m Read the two-window size test around line 287 $ sed -n 262,300p tests/src/platform_x11_tests.cpp
+The root cause is ordering. The test compares the backend's cached size with the server's geometry before it pumps any events, so it can read the state from before the window manager's first configure. The later `wait_for` pumps events but runs after the comparison. I'll move the wait for both `WindowResized` events ahead of the size checks so both sides are compared after the windows have settled.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    // The server knows both windows, and its size..." → "    // Both windows report their first size before..."
+I'll rebuild GCC and run the loop again to see whether the resize and restore cases still fail and, if so, what the server reports.
+[94m[Bash][0m Rebuild GCC and run failure-hunting loop again $ cat /tmp/us008_loop_status 2>/dev/null
+[94m[Bash][0m Wait for failure-hunting loop to finish $ cat /tmp/us008_loop_status 2>/dev/null
+[94m[Bash][0m Show the failure captured in run 11 $ grep -A3 "server reports" /tmp/us008_loop_11.log | head
+The server reports 1280x720 after the request for 900x500, so the window manager did not apply the resize. That is a window-manager refusal, not a backend miss, which matches how the other window-manager-dependent cases are classified. I'll apply the same rule here: skip only when the server did not reach the requested size, and keep the hard failure when the server did reach it but the backend never reported it.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    const bool grown = wait_for(*platform, log, [&..." → "    const bool grown = wait_for(*platform, log, [&..."
+GCC 9 under C++20 doesn't synthesize `!=` from `==`, as the progress log warns, so I'll write the comparison explicitly to be safe.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    if (!grown && reported != expected) {" → "    if (!grown && !(reported == expected)) {"
+Next I'll rebuild both Linux presets and run the integration loop on each compiler in the background, stopping on the first failure.
+[94m[Bash][0m Start full rebuild and repeated test loop in background $ echo started
+[94m[Bash][0m Poll full verification loop status $ cat /tmp/us008_full_status 2>/dev/null
+[94m[Bash][0m Continue polling full verification loop $ cat /tmp/us008_full_status 2>/dev/null | tail -20
+GCC passes 12 of 12 runs with the fix. The Clang loop is still running, so I'll wait for it.
+[94m[Bash][0m Wait for Clang integration loop to finish $ grep "linux-dev\|DONE\|ctest" /tmp/us008_full_status | tail -20
+[94m[Bash][0m Confirm Clang loop completion and summarize skip reasons $ cd /tmp && grep -h "SKIPPED" -A3 us008_f_linux-gcc_*.log | grep -v "^--$" | grep -v SKIPPED | sort |...
+Both compilers now pass 12 of 12 integration runs with zero failures. Every skip carries a window-manager reason. I'll check whether `docs/windowing.md` describes the skip behaviour, so the docs match the test change.
+[94m[Bash][0m Check windowing docs for test skip notes $ grep -n -i "skip\|window manager\|integration" docs/windowing.md | head -20
+[94m[Bash][0m Read the test notes section of windowing docs $ sed -n 90,104p docs/windowing.md
+The docs describe the skip rule only for minimize and focus. I'll extend that paragraph to cover the resize and restore cases and state the rule that separates a window-manager refusal from a backend failure.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/windowing.md[0m edit: "  reachable. Minimize and focus that depend on the..." → "  reachable. Minimize, resize, restore, and focus ..."
+Last step before the log: confirm the final test edits compiled warning-free on both compilers and that the unit ctest runs in the final state.
+[94m[Bash][0m Confirm final builds are warning-free and unit ctest passes $ grep -E "tests passed|tests failed" us008_f_clang_ctest.log us008_f_gcc_ctest.log
+Everything is green on the final state. I'll record the iteration in the progress log.
+[94m[Bash][0m Append US-008 iteration entry to progress log $ it has no test-name filter. --- EOF tail -3 .ralph-tui/progress.md
+I'll also add the reusable X11 test rule to the Codebase Patterns section at the top of the log.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "- In a gate `.bat`, never put `cmd & echo x=%ERROR..." → "- In a gate `.bat`, never put `cmd & echo x=%ERROR..."
+US-008 is complete on both platforms, with one caveat: native X11 was not run, because this machine only has XWayland under WSLg.
+
+The X11 backend was already in the tree from an earlier pass. What I changed this iteration was three X11 integration tests that failed intermittently depending on window-manager timing. The backend code is unchanged.
+
+- **Two-window size test:** it compared sizes before the event loop had caught up. It now waits for both windows' first resize event before comparing.
+- **Restore test:** if the window manager doesn't show the window again, the test skips with that reason. It fails only if the server shows the window and the backend never reports the restore.
+- **Resize test:** if the server doesn't reach the requested size, the test skips and reports the server's size. It fails only if the server reached the size and the backend stayed silent.
+- **Docs and log:** `docs/windowing.md` states this skip rule, and `.ralph-tui/progress.md` has the US-008 entry and a new codebase pattern.
+
+Verification, with exit codes checked:
+
+| Gate | Result |
+|---|---|
+| `ValidateVendor` (Linux and Windows) | pass |
+| `linux-dev` configure and `linux-debug` build (Clang) | pass, 0 warnings |
+| `linux-unit` ctest | 10/10 |
+| `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit` | pass, 0 warnings, 10/10 |
+| `win-dev`, `win-debug` build, `win-unit` | pass, 0 `warning C`, 10/10 |
+| X11 integration, Clang and GCC | 12/12 runs each, 0 failures |
+| Missing display (`DISPLAY=unix:4321`) | 21 pass, 8 skip, 0 fail |
+
+The GCC gate failed on the first run of this pass, which is what led to the test fixes. Before the fixes, the suite failed about 1 run in 6 to 1 in 10. The Windows gates were not re-run after the test change, because the edited file is Linux-only and no Windows-compiled code changed since the last passing Windows run.
+
+Not run, and reported as such:
+- **Native X11 session:** only XWayland under WSLg was available.
+- **Linux ASan/UBSan:** the story's list of required sanitizer areas doesn't include windowing.
+- **GUI and screenshots:** no editor or application UI exists yet.
+- **Benchmarks:** windowing is not performance-affecting, and the harness (US-074) doesn't exist.
+- **Vulkan surface creation:** the RHI doesn't exist yet (US-027/028).
+- **GitHub CI:** not pushed.
+
+Per the workflow, I did not create a git commit. The X11 suite still skips several cases per run, because this window manager doesn't honour minimize, focus, resize, or restore requests. The skips are labelled with their reasons.

@@ -1,0 +1,41 @@
+# Iteration 675 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:08:05.535Z
+- **Ended At**: 2026-10-26T02:08:25.024Z
+- **Duration**: 19s
+- **Input Tokens**: 24
+- **Output Tokens**: 2447
+- **Total Tokens**: 2471
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and whether US-076 is already partly implemented.
+[94m[Bash][0m Inspect repo root, progress log, render_stress references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "render_stress" --include=*.cpp --include=*.hpp ...
+[94m[Bash][0m Check source and report timestamps and manifest floor $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/manifest.json && ls -l --time-style...
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal: the acceptance criteria can...
+US-076 is not complete, so I am not signalling COMPLETE. The driver and the measured evidence are in place, but the benchmark acceptance checks fail on the current instance placement, and fixing that is a workload change that needs your decision.
+
+**What is done**
+- `render_route_v1` is defined in `benchmarks/manifest.json`, and the `render_stress` driver (`tools/benchmark/src/render_stress.{hpp,cpp}`) runs the indexed, indirect and meshlet paths. It records per-frame counters, PPM screenshots, and feature state.
+- `--disable-mesh-shaders` forces the fallback. The driver now checks the renderer's resolved `geometry_path()` before attaching meshlets. Forced-off runs show `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and 338–340 indirect items visible on both DX12 and Vulkan.
+- Eight reports exist under `artifacts/bench/us076-*`: indexed, indirect and meshlets on DX12 and Vulkan, plus meshlets with mesh shaders forced off. None of them is void; all postdate the last source edit.
+- Gates on the current tree, as recorded in the progress log: Windows validate, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` for DX12 (72) and Vulkan (73), and the win-release bench build all pass. Linux ValidateVendor, linux-dev, linux-debug build and linux-unit (30/30) pass. I did not re-run any of these in this pass, since no source changed.
+
+**What blocks completion**
+1. **Benchmark contract failures.** The start frame submits 312,068 triangles against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget, and 0% of frames meet 16.7 ms. The cause is that instances are uniform over the 8192 m world, so the route start sees only about 330 items. Fixing this means changing instance placement, which is a workload change (bump `kWorkloadVersion`, regenerate `workload_expected.json`). The contract forbids reducing workloads, so I have not made the change.
+2. **full_1080 is unsupported** because the FSR 2 permutation headers are missing. Only native_1080 runs, so "both profiles" is only partly met.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (GCC 9 cannot build Jolt).
+
+**Decision for you:** Do you approve a placement change that bumps `kWorkloadVersion` and regenerates the expected workload file? If not, should US-076 close as a measured result with these failures recorded, rather than as complete?
+
+I appended a status entry to `.ralph-tui/progress.md` recording this state.

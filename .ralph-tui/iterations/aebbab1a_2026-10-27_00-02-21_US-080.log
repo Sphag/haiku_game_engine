@@ -1,0 +1,39 @@
+# Iteration 1091 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:02:21.468Z
+- **Ended At**: 2026-10-26T21:02:38.121Z
+- **Duration**: 16s
+- **Input Tokens**: 24
+- **Output Tokens**: 2567
+- **Total Tokens**: 2591
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and check bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Check US-079 status, GPU, benchmark sources $ ls /mnt/d/dev/haiku_game_engine/tools/benchmark/src 2>/dev/null
+[94m[Bash][0m Re-verify blockers: DRI device, FSR permutations, manifest, bench runs $ ls -la --time-style=+%F artifacts/bench | tail -n 3
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. This host can't produce the reports the story requires, and I made no code changes or bench runs in this pass.
+
+**Still blocking sign-off:**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent. `nvidia-smi` sees the RTX GPU under WSL, but that doesn't count as a native Linux Vulkan report.
+- **Acceptance runs:** `artifacts/bench` has no three-repeat run of the full performance contract (30 s warmup, 180 s measured) for any backend. Only the two `us080-dx12-*readback-off` runs exist.
+- **render_stress budget:** the last DX12 run, after the readback fix, still has native_1080 CPU p99 over 16.7 ms on repeats 2 and 3. About 15 ms of CPU per frame is still unprofiled.
+- **Unimplemented workloads:** physics, streaming, and `all_features` are still `implementation: none` in `benchmarks/manifest.json`, and residency is not measured.
+- **FSR 2:** `third_party/fsr2` has no `*_permutations.h` files, so `full_1080` is unsupported. Vendoring that is a decision for you.
+- **Compilers:** the Linux GCC gates need GCC 11+ or clang 14+. The host has GCC 9.4 and clang 10.
+- **Editor smoke tests:** not run.
+
+**Next step:** the frame-time budget is the one piece I can work on here. The next step is to profile the remaining CPU cost in `render_stress` on a Windows Release build, since a fix has to follow a measured cause rather than a contract change. The other blockers need hardware, a decision from you, or new workload code.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these facts.

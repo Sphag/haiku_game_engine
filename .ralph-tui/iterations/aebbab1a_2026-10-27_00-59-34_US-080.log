@@ -1,0 +1,43 @@
+# Iteration 1224 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:59:34.194Z
+- **Ended At**: 2026-10-26T21:59:49.587Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2276
+- **Total Tokens**: 2298
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the tree.
+[94m[Bash][0m Read progress log and check GPU/artifacts state $ ls /dev/dri 2>&1 | head -2
+[94m[Bash][0m Verify manifest gaps, FSR tables, and acceptance runs $ ls artifacts/bench | grep -i acceptance | head -3
+[94m[Bash][0m Append status entry to progress log $ blockers as in status check 95. No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/progress.md
+US-080 is not complete, and I'm not signalling COMPLETE. The acceptance criteria need physical GPU runs and a few implementation pieces that don't exist yet, so I stopped rather than run another build I already know can't finish.
+
+**Blockers, re-checked this session:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent in this WSL environment. The RTX 5080 is visible to `nvidia-smi` only, and that does not satisfy the native Linux/Vulkan report.
+- **Unimplemented workloads.** `benchmarks/manifest.json` still has 4 entries with `implementation: "none"`. `engine_bench --suite acceptance` would exit 3 (incomplete) until they exist.
+- **FSR 2 cannot build.** There are 0 `*_permutations.h` files under `third_party`, so `ENGINE_FSR2_AVAILABLE` stays off. This needs a vendoring decision from you.
+- **No acceptance run exists.** `artifacts/bench` has only two `us080` readback-off runs, and no three-repeat acceptance set.
+- **Open performance issue.** The us076 meshlets CPU frame p99 is 42.4 ms against a 16.7 ms budget. This needs a Release profile on the RTX 5080 from Windows, and the budget can't be relaxed without your decision.
+
+**Not done:** the Windows and Linux quality gates, the DX12 and Vulkan GPU suites, the editor smoke tests, and the three-repeat acceptance reports. I did not run them, because the acceptance suite can't reach a pass while the blockers above stand.
+
+**What's needed from you:**
+1. A native Linux host with a Vulkan device (`/dev/dri`), or confirmation that the Linux/Vulkan report can wait.
+2. A decision on FSR 2 vendoring (the generated permutation tables are missing).
+3. The source for the four unimplemented workloads.
+4. A Windows Release profile of the render_stress CPU hotspot, or a decision on the frame budget if it stays over.
+
+I appended a status entry to `.ralph-tui/progress.md`. Earlier entries in that log repeat the same blocked status many times, and I don't think another unattended pass would change anything until you decide these items.

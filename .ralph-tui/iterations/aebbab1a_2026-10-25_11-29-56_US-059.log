@@ -1,0 +1,58 @@
+# Iteration 516 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:29:56.062Z
+- **Ended At**: 2026-10-25T08:35:06.352Z
+- **Duration**: 5m 10s
+- **Input Tokens**: 60
+- **Output Tokens**: 3891
+- **Total Tokens**: 3951
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-059 already exists in the tree, then read the progress log.
+[94m[Bash][0m Inspect repo layout, save module, and progress log $ tail -c 4000 .ralph-tui/progress.md 2>/dev/null
+The progress log says US-059 was left Partial. The open items are the Linux/GCC gate (needs GCC 11+), the benchmark, and a runtime path. I'll check what toolchains exist now and whether the tree still matches the log.
+[94m[Bash][0m Check available compilers and US-059 progress entries $ ls engine/save/src
+Only GCC 9 is installed, so the `linux-gcc` gate is still blocked here. I'll re-run the Linux gates on the current tree to confirm the state before deciding anything else.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ grep -c -E "warning:|error:" /tmp/us059_build.log) && (ctest --preset linux-unit --output-on-failure...
+
+[91m[Error: Exit code 1
+-- Vendor validation passed: 26 dependencies, 8542 files
+validate=0
+dev=0
+build=0
+0][0m
+The build passed with zero warnings. The non-zero exit came from `grep -c` returning 1 on zero matches, which stopped the chain before ctest. I'll run the unit tests on their own.
+[94m[Bash][0m Run Linux unit test suite via ctest $ echo "ctest=${PIPESTATUS[0]}"
+Linux unit tests pass. I'll check whether the benchmark harness exists now, since the acceptance item depends on it.
+[94m[Bash][0m Check whether engine_bench target exists $ ls tools | head -30
+No `engine_bench` target exists, so the benchmark item cannot run. The last thing to check is whether a newer GCC can be installed without a prompt.
+[94m[Bash][0m Check for sudo and any alternate GCC toolchain $ echo done
+GCC 11+ cannot be installed here (no sudo, no alternate toolchain), so the Linux/GCC gate stays blocked. I'll record this verification run in the progress log so the next iteration doesn't repeat it.
+[94m[Bash][0m Append re-verification note to progress log $ no sudo for install). `engine_bench` target does not exist (no harness yet), so the benchmark item i...
+US-059 is still **Partial**, so I'm not emitting the COMPLETE signal. The implementation is in the tree and the gates I could run pass. Two acceptance items are blocked by things outside this story.
+
+**Re-verified on the current tree (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: passes.
+- `cmake --build --preset linux-debug`: passes with zero warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: passes.
+
+The Windows gates were run in the previous pass against this same tree, and I did not re-run them here.
+
+**Still open:**
+- **Linux/GCC gate:** `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11+ because Jolt requires it. Only GCC 9 is installed, and I can't install a newer one without sudo.
+- **Benchmark:** there is no `engine_bench` target in the tree, so the acceptance-suite run cannot happen yet.
+- **Runtime save/load path:** no application host (US-060) exists, so a save and load through a running game has not been exercised. Only the library paths are tested.
+
+I appended a short re-verification entry to `.ralph-tui/progress.md`. Finishing the story needs a machine with GCC 11+ for the `linux-gcc` gate, plus US-074 and US-060 for the benchmark and runtime path.

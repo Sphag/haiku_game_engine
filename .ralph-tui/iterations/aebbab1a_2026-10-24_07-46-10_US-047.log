@@ -1,0 +1,51 @@
+# Iteration 124 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:46:10.861Z
+- **Ended At**: 2026-10-24T04:47:16.924Z
+- **Duration**: 1m 6s
+- **Input Tokens**: 72
+- **Output Tokens**: 11652
+- **Total Tokens**: 11724
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain work and the progress log.
+[94m[Bash][0m Check repo status and progress log for US-047 $ grep -n "US-047" .ralph-tui/progress.md | head -20
+[94m[Bash][0m List world module files and terrain references $ grep -rn "terrain" --include=*.cpp --include=*.hpp --include=*.txt -il engine | head -50
+The log shows US-047 stalled for many passes on one open item: the GPU traced-shadow fixture reports `darkened 0`, and the CPU reference passes. I'll read the Windows-run notes and the failing fixture to see whether this pass can move it.
+[94m[Bash][0m Read Windows gate memory notes and RT fixture $ cd /mnt/d/dev/haiku_game_engine && sed -n 400,520p tests/src/render_terrain_gpu_tests.cpp
+The fixture uses `low_sun(false)`, so the sun casts no shadow map and the traced term is the only shadow. I'll check how the traced shadow is gated and dispatched, since that decides whether `darkened 0` is a GPU fault or a gating condition.
+[94m[Bash][0m Find RT shadow gating in render sources $ grep -n "ray_traced\|RtShadow\|rt_shadow\|traced_shadow" engine/render/src/scene_renderer.cpp | head...
+[94m[Bash][0m Read prepare_ray_traced in scene_renderer.cpp $ sed -n 1580,1740p engine/render/src/scene_renderer.cpp
+The traced path looks consistent when I read it. Next I'll check the instance record and the shadow trace in the shader, since the CPU reference uses the same geometry and sun.
+[94m[Bash][0m Read TLAS instance builder and RT shadow shader $ grep -n "Shadow\|shadow\|InstanceID\|InstanceIndex\|RAY_FLAG\|TraceRay\|RayQuery\|TMin\|tmin\|Origin...
+[94m[Bash][0m Read RT trace and shadow entry in shader $ sed -n 205,262p engine/render/shaders/rt_effects.hlsl
+The shader's shadow path looks right. The remaining shared suspects are the lit-pass read of the traced target and the terrain draw's per-draw constants, so I'll check those.
+[94m[Bash][0m Inspect traced read in lit shader and test sun setup $ grep -n "low_sun\|top_down_camera" -A12 tests/src/render_terrain_gpu_tests.cpp | head -60
+The lit-pass read looks right on its face. One cheap check is what `pixel` the lit pass passes to `LoadTraced`, since a wrong coordinate on the terrain path would read the wrong texel.
+[94m[Bash][0m Check pixel coordinate used by traced reads $ grep -n "VSTerrain\b\|float4 pixel\|PSMain\|^float4 Shade\|^float4 pixel\|ShadeFragment(" engine/ren...
+I've checked the remaining shared paths and found nothing. I'll record this pass in the progress log so the next pass doesn't repeat these checks.
+[94m[Bash][0m Append re-check entry to progress log $ the renderer does not expose that texture to tests, so the diagnostic needs a new accessor first. - ...
+US-047 is still **Partial**, and I'm not signaling COMPLETE. This pass changed no source. I re-read the traced-shadow path and found no fault.
+
+**What's blocking completion**
+
+1. **GPU traced-shadow test fails on DX12 and Vulkan.** `TEST_CASE` "terrain casts a traced shadow" reports `darkened 0` with no validation-layer messages. The CPU reference test on the same geometry and sun passes, so the fault is on the GPU side after the traced scene is built. I checked the shadow trace, the sun direction, the instance transform, the lit pass's read coordinate, and the sun setup. None of them explains the result. Locating it needs a readback of the `RtShadow` target for the hill frame. The renderer doesn't expose that texture to tests yet, so the diagnostic needs a small accessor first.
+2. **`engine_bench --suite acceptance` does not exist.** No target or source in the tree names it; it belongs to US-074, which is not a prerequisite of this story.
+3. **No native Linux Vulkan device on this host.** The Linux GPU suite is not-run here, not passed.
+
+**What is verified**
+
+Last recorded Windows batch (us047d, before the traced case): `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` all passed. DX12 passed 66/66 and Vulkan 67/67 for the terrain fixtures other than the traced-shadow case. Linux gates passed on the current tree, with `linux-unit` at 22/22 and `ValidateVendor` at exit 0.
+
+I appended a re-check entry to `.ralph-tui/progress.md` with the ruled-out causes and the next step. The next step is the readback accessor followed by one Windows run of the us047 batch. I didn't take that step in this pass because it adds renderer surface area and needs a new build-and-run cycle.

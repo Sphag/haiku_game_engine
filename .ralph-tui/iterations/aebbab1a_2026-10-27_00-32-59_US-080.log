@@ -1,0 +1,41 @@
+# Iteration 1169 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:32:59.672Z
+- **Ended At**: 2026-10-26T21:33:15.826Z
+- **Duration**: 16s
+- **Input Tokens**: 20
+- **Output Tokens**: 1861
+- **Total Tokens**: 1881
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and check bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Re-check hardware and workload blockers $ ls samples 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ samples/ absent. - No build, gate, or bench run: the acceptance batch needs the RTX 5080 Windows and...
+US-080 is not complete, so I am not signalling COMPLETE. I re-checked the blockers on this host and nothing has changed since the earlier status checks in the progress log.
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent. The RTX 5080 is visible only to WSL `nvidia-smi`, so no native Linux/Vulkan report can be produced here.
+- **No Windows reference runs:** the DX12 and Vulkan acceptance batches need the RTX 5080 Windows machine. A 3×180 s batch would also exit 3 (incomplete) while the workloads below are unimplemented.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries with `implementation: none`, including `physics_action_sequence_v1` and `streaming_route_v1`.
+- **FSR 2 vendoring:** `third_party/fsr2` has 0 `*_permutations.h` files, so FSR cannot build. Choosing a vendoring route is a user decision.
+- **No acceptance run exists:** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+- **Frame budget:** the progress log records `render_stress` p99 above 16.7 ms. Fixing it needs profiling plus a Windows run, and changing the contract needs a separate user decision.
+
+The last full set of gates I have a record of is the Linux set from the earlier status check 63. It passed: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` (30/30). I did not run the Windows gates, the Linux GCC or ASan presets, or any GPU or benchmark run in this pass.
+
+I appended a status entry to `.ralph-tui/progress.md` with no code changes.
+
+To move forward, the user needs to:
+1. Pick the FSR 2 vendoring route.
+2. Decide whether the frame-budget contract stays as written.
+3. Provide the RTX 5080 reference machine for the Windows and native Linux runs, or confirm where those reports will come from.

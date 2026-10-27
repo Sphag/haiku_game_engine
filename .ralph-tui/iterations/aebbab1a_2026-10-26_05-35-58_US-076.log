@@ -1,0 +1,39 @@
+# Iteration 761 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:35:58.630Z
+- **Ended At**: 2026-10-26T02:36:09.746Z
+- **Duration**: 11s
+- **Input Tokens**: 22
+- **Output Tokens**: 1900
+- **Total Tokens**: 1922
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD entry $ grep -n "US-076" -A3 tasks/prd-open-world-engine.md | head -60
+The progress log shows this story has been blocked for 23 passes on the same user decision. I'll check whether anything has changed since the last pass before deciding what to do.
+[94m[Bash][0m Check file mtimes, latest bench artifact, and triangle contract $ grep -n "2000000\|2,000,000" tasks/prd-open-world-engine.md | head -5
+US-076 is still not complete, and nothing has changed since the last pass. I made no source, workload, or gate changes, and I did not rerun the benchmark or the gates.
+
+The story is blocked on three decisions only you can make:
+
+1. **Triangle floor and frame budget fail on instance placement.** The route-start frame submits 312,068 triangles on the indexed path, against the contract's minimum of 2,000,000. Frame times are p99 35–47 ms against a 16.7 ms budget. Fixing this means changing the seeded placement, which bumps `kWorkloadVersion` (currently 1), regenerates `benchmarks/workload_expected.json`, and updates the manifest's pinned camera-route hash. The contract is fixed, so I did not make that change without your approval.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so the profile can't run until you pick a vendoring route.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 can't build Jolt.
+
+Linux checks from the last pass still hold: `linux-debug` builds, `linux-unit` passes 30/30, and `engine_workload --check` reports all four scenes matching. I did not rerun them in this pass.
+
+To move forward, tell me:
+- Whether to approve a placement change that bumps the workload version, or accept the failing measured run as the result.
+- Whether a failing run should close the story as measured. Under the current criteria it cannot pass.
+- Which FSR 2 vendoring route to take, or whether to drop `full_1080` from this story.

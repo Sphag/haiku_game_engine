@@ -1,0 +1,46 @@
+# Iteration 1200 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:53:11.770Z
+- **Ended At**: 2026-10-26T21:53:27.663Z
+- **Duration**: 15s
+- **Input Tokens**: 30
+- **Output Tokens**: 2414
+- **Total Tokens**: 2444
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress log tail and benchmark dirs $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls benchmarks tools/benchmark 2>/dev/null && ls a...
+[94m[Bash][0m Find US-079/080 notes and PRD perf contract $ grep -n -i "performance contract" tasks/prd-open-world-engine.md | head
+The log shows this story has been blocked across many iterations. I'll re-verify the two blockers that matter most before deciding whether anything new can be done.
+[94m[Bash][0m Re-check Linux GPU device, manifest stubs, FSR tables $ git status >/dev/null 2>&1 || echo "not a git repo"
+Nothing has changed since the last check: no `/dev/dri`, four workloads still stubbed, no FSR 2 tables, no acceptance run. I'll record this check in the progress log and stop, since finishing needs hardware and decisions only you can provide.
+[94m[Bash][0m Append status check entry to progress log $ residency accessor not implemented. - Stop: US-080 is not signed off. No COMPLETE signal. --- EOF ta...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I re-checked the blockers and made no code changes.
+
+**Blocked on this host:**
+- **Native Linux Vulkan:** `/dev/dri` is absent, so no native Linux/Vulkan GPU report can be produced. WSL does not count.
+- **Workloads:** `benchmarks/manifest.json` still has four `implementation: "none"` entries, so the acceptance suite cannot be run as specified. A run now would exit 3 (incomplete).
+- **FSR 2:** zero `*_permutations.h` files under `third_party`, so the `full_1080` profile cannot be built. Vendoring that tree is your decision.
+
+**Open performance problem (fixable without a contract change):**
+- The last `render_stress` meshlets run on DX12 (`artifacts/bench/us076-dx12-meshlets`, native 1080) had CPU frame p99 of 42.4 ms against a 16.7 ms budget. GPU p99 was 11.5 ms, so the miss is on the CPU side.
+- The cause is not yet identified. Reading `extract_frame` did not explain it; the remaining suspect is `SceneRenderer::render`. The next step is a Release profile on the RTX 5080 via cmd.exe with timed sections around extract, render, and fence waits.
+- Residency is also unmeasured. There is no RHI memory query yet, so the 12 GiB / 16 GiB check cannot be reported.
+
+**Needed from you:**
+1. A native Linux host with the RTX 5080 and `/dev/dri`, or confirmation that native Linux Vulkan will be reported as not-run.
+2. A decision on the FSR 2 route (vendor the generated permutation tables, or drop `full_1080`).
+3. A go-ahead to implement the four missing workloads.
+
+I appended a status entry to `.ralph-tui/progress.md`. The earlier entries repeat the same blockers, so this is not new progress.

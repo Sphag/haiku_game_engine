@@ -1,0 +1,44 @@
+# Iteration 676 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:08:26.066Z
+- **Ended At**: 2026-10-26T02:08:47.458Z
+- **Duration**: 21s
+- **Input Tokens**: 22
+- **Output Tokens**: 2897
+- **Total Tokens**: 2919
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log and the current state of the render stress benchmark.
+[94m[Bash][0m Read progress log and locate render_stress code $ grep -n "US-076\|render_stress" -r --include=*.cpp --include=*.hpp --include=*.json --include=*.md -...
+The log shows this story has been stalled for many passes on the same blocker. I'll read the latest measured-results section before deciding whether anything is actionable.
+[94m[Bash][0m Read US-076 measured-results progress entries $ ls artifacts/bench/ | tail -20
+US-076 is not complete, and I have not signalled COMPLETE. The remaining work depends on a decision only you can make, so I stopped without rerunning the benchmarks.
+
+**What is done and verified (per the progress log, on the current tree):**
+- `render_stress` counts match the contract: 20,000 instances, 200 meshes, 100 characters (6,400 bones), 100,000 particles, 128 lights, 4 shadowed, 1 sun. `engine_workload --check` passes.
+- Indexed, indirect, and meshlet paths ran on DX12 and Vulkan, plus a meshlet run with mesh shaders forced off. The forced-off runs fall back to indirect-indexed draws (`meshlet_path: fell back`, 338–340 visible items, 0 meshlet visible). Disabled features are reported as disabled.
+- Screenshots and submitted/visible counters are under `artifacts/bench/us076-*`.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` (29/29), `engine_tests --suite gpu` for dx12 (72 cases) and vulkan (73 cases), and the Release `engine_bench` build all pass with zero warnings.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build (zero warnings), and `linux-unit` (30/30) pass.
+
+**What blocks completion:**
+1. **The acceptance contract fails on the measured results.** Instances are spread uniformly over the 8,192 m world, so the route start submits 312,068 triangles against the 2,000,000 floor. Frame time is p99 35–47 ms against the 16.7 ms budget, and 0% of frames meet 16.7 ms. The benchmark exits 1 on every indexed run.
+2. **full_1080 is unsupported** because the vendored FSR 2 permutation headers are missing. Only native_1080 runs.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (GCC 9.4 cannot build Jolt).
+
+**Decision needed from you:** how to handle the triangle floor and frame budget.
+- **(a)** Keep the contract as written and record these failures as the measured result. The story then closes as measured-failed, not complete.
+- **(b)** Change instance placement so the route start sees the floor. The counts stay the same, but the positions change, so this means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and rerunning the eight reports (about 10 minutes each).
+
+My recommendation is (b), since it keeps the counts and only moves where instances sit, so the route actually measures what the story describes. It changes a workload definition, though, so I need your approval first. I also did not write a new progress entry this pass because nothing changed.

@@ -1,0 +1,45 @@
+# Iteration 153 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:02:38.757Z
+- **Ended At**: 2026-10-24T06:03:16.431Z
+- **Duration**: 37s
+- **Input Tokens**: 44
+- **Output Tokens**: 4134
+- **Total Tokens**: 4178
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the terrain work.
+[94m[Bash][0m Locate repo and find US-047 progress entries $ wc -l .ralph-tui/progress.md
+The log has a long run of "still Partial" re-checks. I'll read the most recent entries to see where the work actually stands.
+[94m[Bash][0m Read key US-047 progress entries $ sed -n 1150,1211p .ralph-tui/progress.md
+The last ~60 entries are re-checks that changed nothing. Before deciding anything, I need to confirm whether splat shading landed later, and whether the two named blockers are still true on this host.
+[94m[Bash][0m Check splat shading status and bench/Vulkan blockers $ grep -n -A3 '"US-074"' tasks/prd.json | head -8
+Splat shading and the traced terrain shadow have landed since the earlier entries. I'll read the latest entries to get the current status.
+[94m[Bash][0m Read latest US-047 status entries $ sed -n 1107,1150p .ralph-tui/progress.md
+The story has no outstanding code work. Two acceptance items remain and neither can be done on this host. I'll record that once in the progress log instead of adding another re-check.
+[94m[Bash][0m Append consolidated US-047 status entry to progress log $ the next useful work is a native Linux Vulkan host, or US-074 landing. - Learnings: a log of repeate...
+US-047 is still Partial, so I'm not emitting the COMPLETE signal. The terrain runtime is implemented, but two acceptance items can't be closed on this machine.
+
+**Done, per the earlier log entries (I didn't re-run the gates in this pass):**
+- CPU terrain runtime in `engine/world`: tiles, LOD selection, stitching by morphing, normals, four-layer splat weights, and the 14-case fixture for coverage, holes, and LOD.
+- Renderer integration: terrain uses a terrain-only stride with splat weights, the `scene.hlsl` tint, and DX12 and Vulkan GPU fixtures for coverage, LOD seam, depth, splat, and traced shadow.
+- Gates recorded as passing on the current tree: ValidateVendor, win-dev, win-debug, win-unit, the DX12 and Vulkan GPU suites on Windows, linux-dev, linux-debug, linux-unit, linux-gcc, and linux-asan.
+
+**Still open, and not doable on this host:**
+1. `engine_tests --suite gpu --backend vulkan` on native Linux. There is no `/dev/dri` and no `vulkaninfo`, and WSL is not a substitute.
+2. `engine_bench --suite acceptance` with a terrain workload. `engine_bench` has no CMake target or source. US-074 (Benchmark Harness) is not passing in `tasks/prd.json`. The criterion applies "once the benchmark harness and relevant workloads exist", so it may not be applicable yet, but I couldn't confirm that from the PRD.
+
+The progress log had about 60 "still Partial" re-check entries that changed nothing. I appended one consolidated status entry to `.ralph-tui/progress.md` instead of another re-check. I didn't create a commit.
+
+Next useful step: run the Linux Vulkan GPU suite on a native Linux host, or land US-074.

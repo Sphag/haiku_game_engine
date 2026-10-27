@@ -1,0 +1,52 @@
+# Iteration 829 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T05:56:37.669Z
+- **Ended At**: 2026-10-26T06:04:46.546Z
+- **Duration**: 8m 8s
+- **Input Tokens**: 54
+- **Output Tokens**: 4861
+- **Total Tokens**: 4915
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout and benchmark tooling $ grep -n "US-077\|physics_stress\|US-075\|US-076" .ralph-tui/progress.md | head -50
+The progress log says the physics scene isn't built yet, but `physics_stress.cpp` already exists. I'll check its state, the manifest, and the latest progress entries.
+[94m[Bash][0m Read existing physics stress source and progress tail $ tail -80 .ralph-tui/progress.md
+[94m[Bash][0m Read rest of physics stress source $ sed -n 30,405p tools/benchmark/src/physics_stress.cpp
+[94m[Bash][0m Read progress tail and locate physics stress header $ git status 2>&1 | head -3
+Most of US-077 is already built and verified on Windows and Linux. The open items are the Linux/GCC job and `physics_visual`. I'll check whether a GCC 11+ compiler now exists here and what the PRD requires for `physics_stress`.
+[94m[Bash][0m Check available compilers and PRD physics_stress mentions $ grep -n "physics_stress\|physics_visual" tasks/prd-open-world-engine.md | head -20
+No GCC 11+ is installed, so the `linux-gcc` job can't run here, and the PRD's `physics_stress` text doesn't require a visual profile. I'll re-run the local Linux gates on the current tree to confirm the state before reporting.
+[94m[Bash][0m Re-run Linux validate, configure, build, and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Get ctest pass summary and locate test binary $ find build -name engine_tests -type f 2>/dev/null | head -2
+Linux gates pass on the current tree. I'll append this pass to the progress log.
+[94m[Bash][0m Append status entry to progress log $ the PRD's `physics_stress` row and acceptance criteria do not require it). - Still open: the Linux/G...
+US-077 is implemented and verified locally, but I am not signalling COMPLETE because the Linux/GCC CI gate can't run in this environment.
+
+**What's in place**
+- **Scene:** `physics_stress` (`tools/benchmark/src/physics_stress.cpp`, header in `tools/benchmark/include/engine/benchmark/`) builds 2000 dynamic bodies, 200 static colliders plus a ground box, 100 constraints (fixed, hinge, distance by index), and 20 characters. It runs 60 Hz simulated frames with a fixed action sequence: velocity kicks every 30 frames, character walks and jumps, 1000 raycasts/s and 100 shape casts/s.
+- **Reports:** counters for active and sleeping bodies, simulation steps, queries, catch-up events, and contact/activation events.
+- **Detection:** the run fails on lost timesteps, character or physics step errors, NaN transforms, and objects leaving the reference bounds.
+
+**Verification**
+- **Linux (this pass, current tree):** `ValidateVendor` passes (26 dependencies, 8542 files), `linux-dev` configures, `linux-debug` builds with 0 warnings, and `linux-unit` passes 30/30.
+- **Windows (earlier pass, batch us077, not re-run now):** `ValidateVendor`, `win-dev`, `win-debug` (0 MSVC warnings), and `win-unit` (29/29) pass. `engine_tests --suite gpu` passes on DX12 and Vulkan. The Release physics headless run completed 3 of 3 repeats with 0 lost timesteps, 0 NaN transforms, and 0 out-of-bounds samples.
+- **Linux ASan (earlier pass):** `linux-asan` builds and `linux-sanitize` passes 30/30.
+
+**Still open**
+- **`linux-gcc` gate:** the machine has only GCC/G++ 9 and clang 10, and Jolt needs GCC 11+. The `linux-gcc` CI job has to verify this.
+- **`physics_visual` profile:** the manifest lists it, and it reports Missing because no visual physics path exists. The PRD's `physics_stress` row and the acceptance criteria don't require it, so I left it as is.
+- **Acceptance run:** `engine_bench --suite acceptance` exits 3 because the render, streaming, and all-features scenes are still unmeasured. That is expected until their stories land.
+
+I appended a status entry to `.ralph-tui/progress.md`. No source changed in this pass.

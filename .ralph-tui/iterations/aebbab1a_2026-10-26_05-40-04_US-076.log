@@ -1,0 +1,46 @@
+# Iteration 777 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:40:04.492Z
+- **Ended At**: 2026-10-26T02:40:19.788Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2420
+- **Total Tokens**: 2442
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, benchmark tool, and progress log $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -120
+The progress log shows this story has been blocked for many iterations on a single user decision. I'll check whether anything changed since the last entry before deciding what to do.
+[94m[Bash][0m Check source mtimes and the contract's triangle floor $ grep -n "2,000,000\|2000000" tasks/prd-open-world-engine.md | head -5
+US-076 is not complete, and I have not changed anything in this pass. The blocker is a decision only you can make.
+
+**What's blocking it**
+
+- **Triangle floor fails.** The PRD requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The scene submits 312,068 at the route start. Frame time also fails the budget (p99 35–47 ms against 16.7 ms).
+- **Why I didn't fix it.** The start pose comes from the camera route, which is pinned by SHA-256 in the manifest. The instance placement comes from the seeded generator, whose digests are pinned in `workload_expected.json`. Changing either changes the fixed benchmark contract. PRD line 722 says that needs a separate user decision.
+- **Other open items.** `full_1080` is unsupported until the FSR 2 shader permutations exist (the vendoring route is your call). Native Linux Vulkan GPU runs and the linux-gcc gate have not been run. This machine has no usable Vulkan device, and its GCC 9 cannot build Jolt.
+
+**Current state**
+
+- Source, workload, and manifest files are unchanged since the last recorded pass. `kWorkloadVersion` is still 1.
+- Linux debug build and `linux-unit` were re-verified in an earlier pass (30/30). I did not rerun them now.
+- I did not append another "still blocked" entry to `.ralph-tui/progress.md`. The log already has 26 of them, and this pass would only repeat them.
+
+**Decision needed (pick one)**
+
+1. **Approve a workload change.** Adjust the route start or instance placement so the start frame submits at least 2,000,000 triangles. Then bump `kWorkloadVersion`, regenerate `workload_expected.json`, and update the manifest hash. I can do this next.
+2. **Accept the measured failure.** Record the failing 312,068-triangle run as the result. The story would then close as measured but not passing, and US-080 would have to carry the fix.
+3. **Approve FSR 2 vendoring.** This unblocks `full_1080`, and it is a separate decision from option 1 or 2.
+
+Tell me which option you want. Option 1 is the only one that lets this story reach a passing state.

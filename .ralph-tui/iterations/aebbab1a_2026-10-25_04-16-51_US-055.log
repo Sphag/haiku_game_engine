@@ -1,0 +1,42 @@
+# Iteration 424 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T01:16:51.148Z
+- **Ended At**: 2026-10-25T01:17:15.097Z
+- **Duration**: 23s
+- **Input Tokens**: 36
+- **Output Tokens**: 2936
+- **Total Tokens**: 2972
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether any US-055 work already exists in the tree, and reading the progress log.
+[94m[Bash][0m Inspect repo layout and script module state $ tail -n 80 .ralph-tui/progress.md 2>/dev/null | head -c 6000
+The story already has Lua bindings and tests from earlier passes, and the log marks it Partial. I'll check which gates are still open before running anything.
+[94m[Bash][0m Find US-055 progress entries and Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md 2>...
+Previous passes already passed the Linux and Windows gates on this tree. The only open item is `linux-gcc`, and the log says the host lacks GCC 11+. I'll confirm that once more with a wider search before deciding.
+[94m[Bash][0m Search host for GCC 11+ or newer clang $ find / -xdev -path /proc -prune -o -name 'clang++-1[4-9]' -print 2>/dev/null | head -3
+The host still has only GCC 9.4 and clang 10, so `linux-gcc` cannot run here. I'll log this pass in the progress file, following the workflow, and leave the story open.
+[94m[Bash][0m Append re-check entry to progress log $ no GCC 11+, no clang 14+, no container runtime.\n- Status call: US-055 stays **Partial**. Open: the ...
+US-055 is not complete, so I'm not signalling COMPLETE. The Lua API was already implemented in earlier passes, and nothing in this pass changed the code.
+
+**Blocked:** the `linux-gcc` gate (`cmake --preset linux-gcc`, `linux-gcc-debug` build, `linux-gcc-unit` ctest) cannot run on this host. Jolt needs GCC 11+, and `/usr/bin` only has GCC 9.4 and clang 10. I also found no newer clang or container runtime. This gate needs a GCC 11+ machine or the CI job.
+
+**Passing per the progress log from the first US-055 entry:**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, `linux-unit` ctest, and `linux-asan` / `linux-sanitize` (22 of 22, no sanitizer reports).
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit`.
+
+**Not covered by any run:**
+- `engine_bench --suite acceptance`: the bench target does not exist yet (US-074).
+- GUI checks and GitHub CI.
+
+I appended a re-check entry to `.ralph-tui/progress.md` recording that the host toolchain is unchanged and the story stays Partial.

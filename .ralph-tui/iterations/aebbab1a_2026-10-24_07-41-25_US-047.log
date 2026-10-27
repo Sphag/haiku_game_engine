@@ -1,0 +1,47 @@
+# Iteration 119 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:41:25.118Z
+- **Ended At**: 2026-10-24T04:42:14.146Z
+- **Duration**: 49s
+- **Input Tokens**: 56
+- **Output Tokens**: 6542
+- **Total Tokens**: 6598
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the terrain code, since the codebase notes say parts of US-047 already exist.
+[94m[Bash][0m Read progress log, repo state, and terrain memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+The story is still Partial. The open blocker is that the GPU ray-traced terrain shadow doesn't darken the hill, and the last pass ended waiting on a Windows readback. I'll look at how terrain enters the RT path before deciding whether it can be diagnosed from code.
+[94m[Bash][0m Read Windows gate notes and find terrain RT paths $ grep -rn "blas\|Blas\|BLAS" engine/render/src/*.cpp | grep -i "terrain\|build_\|ensure" | head -40
+[94m[Bash][0m Find ray tracing code paths in scene renderer $ grep -n "ray\|Ray\|rt_\|traced\|Traced" engine/render/src/scene_renderer.cpp | head -120
+[94m[Bash][0m Read RT scene prep and terrain mesh upload $ sed -n 2120,2150p engine/render/src/scene_renderer.cpp
+The BLAS build and instance records look consistent with the static path. Next I'll read the GPU fixture's RT case and the RT pass's shadow write, to see whether the bug is in the test or the pass.
+[94m[Bash][0m Inspect RT terrain GPU test and RT shadow shader $ grep -n "shadow\|Shadow" engine/render/shaders/rt_effects.hlsl | head -40
+[94m[Bash][0m Read shadow ray test and fixture render setup $ sed -n 436,460p tests/src/render_terrain_gpu_tests.cpp
+The shadow ray is any-hit with an opaque BLAS, and the CPU reference agrees with the GPU geometry. One thing the CPU reference would not catch is triangle winding, if the trace culls back faces. I'll check the trace flags and the terrain index winding.
+[94m[Bash][0m Check ray trace flags, culling, and terrain winding $ grep -n "indices\|push_back" engine/world/src/terrain.cpp | head -30
+Nothing in the RT path explains the missing shadow from code. There's no back-face culling, the flags match the static path, and the index winding doesn't matter for an any-hit shadow ray. That leaves the GPU readback the last pass asked for, which I can't run from WSL in this pass. I'll record what I ruled out in the progress log so the next pass doesn't repeat it.
+[94m[Bash][0m Append this pass's findings to the progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-047 (RT terrain shadow code review, still ...
+US-047 is not complete, so I am not signalling COMPLETE. This pass changed no source code.
+
+**What's blocking it**
+- **Traced terrain shadow:** the GPU ray-traced shadow still doesn't darken the hill on DX12 or Vulkan (the batch us047f result from the last pass). The CPU reference casts that shadow from the same geometry, so the fault is in the GPU runtime. I checked the terrain path against the static one and found nothing that explains it: the BLAS is built per tile with the 48-byte stride and position at offset 0, and the trace uses no back-face culling, so index winding can't hide the shadow. Settling it needs a Windows readback of `RtShadow` for the hill frame, which I can't run from WSL.
+- **Benchmark:** `engine_bench --suite acceptance` does not exist in the tree (it belongs to US-074).
+- **Native Linux Vulkan GPU run:** there is no usable Vulkan device on this host.
+
+**What's done (from earlier passes, per the progress log)**
+- The CPU terrain runtime: tiles, LOD by distance, stitching by vertex morph, normals, four-layer splat, and the height query.
+- Terrain drawing and splat shading on the GPU, with the stride and pipelines described in the codebase patterns.
+- The Windows gates (ValidateVendor, win-dev, win-debug, win-unit, and the DX12 and Vulkan GPU suites) and the Linux gates, as recorded in the log.
+
+I appended this pass's findings to `.ralph-tui/progress.md`. The next step is the Windows readback described above.

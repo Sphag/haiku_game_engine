@@ -1,0 +1,41 @@
+# Iteration 149 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:01:14.279Z
+- **Ended At**: 2026-10-24T06:01:34.151Z
+- **Duration**: 19s
+- **Input Tokens**: 26
+- **Output Tokens**: 2861
+- **Total Tokens**: 2887
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state against the progress log and the terrain memory note, since the memory says part of this story is already done.
+[94m[Bash][0m Inspect repo root, progress log tail, and terrain memory $ ls -la && tail -c 6000 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-d-dev-haiku-gam...
+The progress log shows this story has been re-checked many times and stays Partial, blocked on two things: a native Linux Vulkan device and `engine_bench`. I'll confirm whether either blocker has changed on this host.
+[94m[Bash][0m Check Linux Vulkan device, bench target, and PRD status $ grep -n "US-047" -A3 tasks/prd.json | grep -i passes
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` (US-074 not in the tree). --- EOF tail -3 .ralph-tui/progress....
+US-047 is not complete, so I'm not emitting the COMPLETE signal. The source work was already done in earlier passes. Two items still block closing it, and neither can be finished on this host.
+
+**What's already in place** (from the progress log and the terrain memory, not re-run this pass):
+- The CPU runtime in `engine/world`: tiles, distance-based LOD, stitching by vertex morph, normals, four-layer splat weights, and height queries.
+- The render path: a 48-byte terrain stride with the four-layer splat, drawn through `VSTerrain`/`VSTerrainShadow`.
+- The shadow-map shape check and the ray-traced terrain shadow fixture pass on DX12 and Vulkan on the RTX 5080.
+- The Windows gates and the Linux debug, unit, GCC, and gcc-unit gates passed on the current tree in the last recorded runs.
+
+**What's still open:**
+1. **`engine_tests --suite gpu --backend vulkan` on native Linux.** `/dev/dri` is absent and `vulkaninfo` is not installed, so this host has no Vulkan device. This needs a native Linux machine with a GPU. It is not a WSL failure.
+2. **`engine_bench --suite acceptance`.** The bench harness is US-074, which is still not passing in `tasks/prd.json`. No `engine_bench` target or source exists in the tree, so the terrain workload cannot run yet.
+
+I did not re-run the gates this pass. The tree has not changed since the last Linux gate run, which the log records as passing. I appended a short re-check entry to `.ralph-tui/progress.md`.
+
+The log now has about sixty consecutive "still Partial" entries, and re-checking on this host will not change the status. The next useful step is either a native Linux Vulkan host or building US-074, after which this story can close.

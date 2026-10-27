@@ -1,0 +1,40 @@
+# Iteration 807 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:53:50.905Z
+- **Ended At**: 2026-10-26T02:54:04.147Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 1721
+- **Total Tokens**: 1739
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log, benchmark tool, and git status $ tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src 2>/dev/null && git sta...
+[94m[Bash][0m Check benchmark file mtimes and PRD budget clause $ sed -n 715,730p tasks/prd-open-world-engine.md
+US-076 is not complete, and I'm not emitting the completion signal. Nothing in the tree has changed since the last several passes: the benchmark sources and workload files have the same mtimes, and `kWorkloadVersion` is still 1.
+
+**What's blocked, and why I can't resolve it alone:**
+
+1. **Frame budget and route-start placement.** On the indexed path, the `render_stress` route start has a triangle floor of 312,068 out of the 2,000,000 the contract needs. The measured frame time is p99 35–47 ms against the 16.7 ms budget. Fixing this means either:
+   - changing the placement, which is a workload contract change (bump `kWorkloadVersion`, regenerate `workload_expected.json`, update the manifest hash), or
+   - fixing the implementation (LOD or culling) so the scene meets the contract as written.
+
+   PRD US-080 says a missed budget is fixed in the implementation first, and that changing the contract needs a separate user decision. I can't tell from the existing reports which of the two causes this is, so I haven't changed the contract.
+
+2. **`full_1080` profile.** It stays unsupported until the FSR 2 permutation tables exist. That is the vendoring gap noted in the project memory.
+
+3. **Native Linux Vulkan GPU and `linux-gcc`.** Neither has been run here. The local GCC 9.4 can't build Jolt, and WSL has no usable Vulkan device.
+
+**What I'd need from you:** a decision on item 1. Either approve a contract change (and I'll bump the version, regenerate the expected file, and re-run the gates), or direct me to profile the indexed path and fix the LOD/culling cause. Item 2 needs the FSR 2 vendoring route, and item 3 needs a native Linux GPU run.
+
+I haven't added another status entry to `.ralph-tui/progress.md`, since the last one already records this same state.

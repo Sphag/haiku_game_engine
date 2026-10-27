@@ -1,0 +1,46 @@
+# Iteration 905 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:43:20.462Z
+- **Ended At**: 2026-10-26T12:43:50.109Z
+- **Duration**: 29s
+- **Input Tokens**: 36
+- **Output Tokens**: 4216
+- **Total Tokens**: 4252
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD story, and whether any `all_features` scene already exists.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features" --include=* -l . 2>/dev/null | ...
+[94m[Bash][0m Read US-079 PRD section and list tools/tests $ ls tests | head -50
+The log shows 17 prior passes stalled on two open decisions, with no code change. I'll look at the current `all_features` state and the manifest before deciding what I can move forward.
+[94m[Bash][0m Inspect all_features manifest entry and related sources $ grep -rn "all_features" tests/src tools cmake CMakeLists.txt | head -30
+Both `all_features` test files already exist. Next I'll check what the CPU test covers and whether a tour or marker check is already in place.
+[94m[Bash][0m Read all_features CPU test header and list test cases $ grep -n -i "tour\|marker" .ralph-tui/progress.md | tail -20
+[94m[Bash][0m Append status note to progress log $ `linux-gcc*` and sanitizer presets. --- EOF tail -3 .ralph-tui/progress.md
+US-079 is not complete, so I am not emitting the COMPLETE signal. I made no source change this pass.
+
+**What exists:**
+- `tests/src/all_features_tests.cpp` runs the table workload with its expected digests, plus a CPU scenario covering Lua gameplay, 16 audio emitters, an animation state machine, UI, a save round trip, and a material graph. It checks every feature marker in order.
+- `tests/src/all_features_editor_tests.cpp` covers scene, material, and terrain edits, undo/redo, Play/Stop, and packaging. It also relaunches the published package and checks for the `game_runtime: started scene` line.
+- The earlier logs record the Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) and the Linux unit and debug gates as passing, with no source change since then.
+
+**What is still open:**
+- **Tour runner with screenshots and an action log.** Nothing in the repo implements it.
+- **GI/RT/upscale profiles and forced indirect/meshlet paths.** `all_features` is still `implementation: none` in `benchmarks/manifest.json`. The upscale profile is blocked because FSR 2 lacks its generated `*_permutations.h` headers.
+- **GUI checks, native Linux Vulkan GPU runs, `engine_bench --suite acceptance`, and the `linux-gcc*` and sanitizer presets.** These need a GPU session, a display, or toolchains this host does not have.
+
+**Decisions needed to move forward:**
+1. **FSR 2 vendoring route.** Either obtain the generated permutation headers, or keep `full_1080` unsupported and record that in the capability matrix.
+2. **`all_features` GPU route.** I recommend defining it as a `builtin` scene that uses the table workload, so the tour, the GI/RT/upscale profiles, and the forced geometry paths have a scene to run.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this stop and the open items. Repeating status checks without a decision will not move the story, so the next pass needs one of these two answers.

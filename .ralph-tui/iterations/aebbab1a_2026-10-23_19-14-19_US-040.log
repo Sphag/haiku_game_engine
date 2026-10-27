@@ -1,0 +1,463 @@
+# Iteration 19 Log
+
+## Metadata
+
+- **Task ID**: US-040
+- **Task Title**: Native-Profile GI and Reflections
+- **Description**: As a player, I want indirect lighting without heavy RT so that I can use the native profile.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T16:14:19.655Z
+- **Ended At**: 2026-10-23T17:03:08.701Z
+- **Duration**: 48m 49s
+- **Input Tokens**: 806
+- **Output Tokens**: 194260
+- **Total Tokens**: 195066
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m Inspect repo root, progress log, and PRD size $ tail -150 .ralph-tui/progress.md
+The log shows US-040 as Partial from an earlier pass: the CPU side exists, but runtime probe binding, the GPU SSR pass, the coverage overlay, and the indoor/outdoor fixtures are still open. I'll read the PRD section and the existing GI code next.
+[94m[Bash][0m Find US-040 PRD constraints and existing GI files $ wc -l engine/gi/*/* engine/gi/* 2>/dev/null
+
+[91m[Error: Exit code 1
+8:The complete first version includes PBR, a meshlet/mesh shader pipeline, a GPU indirect pipeline, ray tracing, GI, volumetrics, temporal upscaling, animation, terrain, particles, world streaming, an asset converter, scene/material/animation/terrain editors, audio, game UI, saves, and standalone game distribution.
+328:- [ ] Compile HLSL into the required target; reflection validates bindings and CPU/GPU layouts.
+396:### US-040: Native-Profile GI and Reflections
+400:- [ ] The converter prepares diffuse irradiance probes; the runtime interpolates them and uses IBL/SSR for reflections.
+401:- [ ] Provide fallbacks for empty/incomplete probes and off-screen SSR; version GI data and invalidate it when sources change.
+402:- [ ] Indoor/outdoor fixtures demonstrate indirect lighting; a debug view shows probe coverage.
+421:**Description:** As a player, I want RT shadows and reflections so that I can see dynamic geometry outside screen space.
+424:- [ ] Provide ray-traced directional shadows and single-bounce reflections with a roughness cutoff and limited distance.
+426:- [ ] Reference scenes verify off-screen reflections, a moving occluder, and the difference between RT on/off.
+428:### US-044: Dynamic RT GI
+430:**Depends on:** US-040, US-043.
+432:- [ ] In-house probe-grid GI uses ray tracing, temporal accumulation, and a probe-update budget.
+577:- [ ] The inspector is generated from reflection, adds/removes components, and validates field input.
+713:- [ ] An automated tour verifies feature markers and outputs; profiles test their corresponding GI/RT/upscale modes, and forced runs test alternative geometry paths.
+741:- FR-08: The full profile supports RT shadows/reflections, dynamic GI, denoising, volumetric fog, and temporal upscaling simultaneously.
+742:- FR-09: The native profile uses native resolution, TAA, raster shadows, baked probe GI/IBL, and SSR without heavy RT.
+788:engine/scene/           reflection, hierarchy, formats, prefabs
+856:| GI | Baked diffuse probes + IBL | Dynamic ray-traced diffuse probes + IBL |
+857:| Reflections | SSR + environment fallback | Half-internal-resolution RT, 1 ray/pixel, 1 bounce, max distance 100 m + environment fallback |
+859:| Dynamic GI budget | Not applicable | Grid 32×8×32, spacing 4 m, 64 rays/probe, update 1/16 of the grid per frame |
+865:Compatible full-profile effects run simultaneously. Profiles and forced runs cover mutually exclusive GI/AA/geometry path implementations. Profile parameters reside in versioned manifests; automatically disabling effects when the frame-time budget is exceeded is prohibited. On hardware without RT, the full profile reports unsupported instead of relabeling a raster fallback as `full`.
+---
+# Native-profile GI probes and screen-space reflections (US-040)
+
+The native profile (`native_1080`) gets indirect diffuse light from baked probes, not from ray tracing, and reflections from SSR with IBL as
+the fallback. Two layers implement the story so far. `engine/gi/` is the CPU side: the bake, the volume format, the sampling, and the SSR
+reference. `tools/asset_converter/src/gi_importer.cpp` is the converter importer that runs the bake and writes the payload. The GPU side
+(sampling the probes in `scene.hlsl`, an SSR compute pass, and a probe-coverage view in the scene renderer) is not built yet; see
+[Scope and what is not done](#scope-and-what-is-not-done).
+
+## Source and payload
+
+The `gi_probes` importer takes a JSON scene description. Every key except `grid` and `occluders` is optional.
+
+```json
+{
+  "grid": {"origin": [1, 1, 1], "spacing": 2, "dims": [4, 1, 4]},
+  "sky": {"zenith": [0.35, 0.55, 0.95], "horizon": [0.75, 0.8, 0.85], "ground": [0.12, 0.1, 0.08],
+          "sun_direction": [0, 1, 0], "sun_radiance": [0, 0, 0]},
+  "occluders": [{"min": [0, 0, 0], "max": [1, 1, 1], "albedo": [0.6, 0.6, 0.6], "emitted": [0, 0, 0]}],
+  "samples": 256,
+  "max_ray_distance": 1000
+}
+```
+
+The importer's settings take no keys, so `"{}"` is the only valid settings text. The payload is the serialized volume. Its cache key is the
+source bytes plus the importer version (`kGiImporterVersion`), so the converter rebakes when the source or the bake math changes.
+
+## Bake
+
+Each probe casts `samples` directions on a Fibonacci sphere with +Y as the pole. A direction that finds nothing within
+`max_ray_distance` takes the sky radiance. A direction that hits an occluder takes that occluder's `emitted` color plus its `albedo` times the
+sky irradiance at the hit face, but only when a ray along the face normal reaches the sky. That is one bounce. Multiple bounces, sky
+visibility from the probe's own point (as opposed to the hit face), and occluders other than axis-aligned boxes are not modelled.
+
+The result is projected onto nine SH coefficients in the same convention as `Environment::diffuse_sh` (irradiance divided by pi). A test
+checks that a uniform sky through `build_environment()` and through the probe projection agree, so the two diffuse paths cannot drift.
+
+A probe inside an occluder or on its surface is `Blocked`. Other probes are `Valid` once baked, and `Unbaked` before that. `bake_probes()`
+takes a budget, so a bake can be spread over several calls.
+
+## Format and invalidation
+
+The volume is little-endian binary: the magic `OWGI`, the format version (`kFormatVersion`, 1), the hash of the bake inputs, the grid, and
+one state byte plus nine RGB floats per probe. `deserialize()` rejects another version, a probe count that does not match the grid, an
+unknown state, non-finite values, and trailing bytes, each with a message.
+
+`hash_inputs()` is FNV-1a over every bake input and the format version. `is_current()` compares the stored hash with the current inputs.
+`bake_probes()` refuses to bake into a volume that is not current, so stale probes are never mixed with new math.
+
+## Runtime sampling and fallbacks
+
+`sample_irradiance()` does trilinear interpolation of the eight probes around a point. Blocked and unbaked probes take no weight, and the
+remaining weight is renormalized. `coverage` is the share of the trilinear weight that landed on valid probes. The result is
+`coverage * probe_irradiance + (1 - coverage) * environment_irradiance`, where the environment term is the IBL diffuse for the same normal.
+Three cases follow from that:
+
+- No volume, a point outside the grid, or no valid probe around the point: coverage 0, and the result is the environment alone.
+- Some valid probes: the result blends the probes with the environment in proportion to coverage.
+- All valid: coverage 1, and the result is the probes alone.
+
+## Screen-space reflections
+
+`engine/gi/include/engine/gi/screen_reflections.hpp` is the CPU reference of the SSR march. The ray marches a fixed number of uniform steps
+through the frame's view-space depth. A sample hits when it lies within `thickness` behind the visible surface. A hit returns the lit color
+already on screen, with confidence that fades to zero at the screen edges. A miss, which covers leaving the screen, going behind the eye,
+running out of steps, and a surface rougher than `roughness_cutoff`, returns the environment (IBL specular) through `reflection_radiance()`.
+Off-screen geometry is never visible to this pass, so a miss means the environment, not black.
+
+Uniform marching misses surfaces thinner than one step, so the step length must stay below `thickness`. The defaults (64 steps over 100 m)
+do not meet that rule, and the full-profile GPU pass has to pick its own step count and thickness.
+
+## Fixtures and tests
+
+`tests/src/gi_probe_tests.cpp` bakes two fixtures. The outdoor fixture is open sky over a probe grid. The indoor fixture is an 8 x 3 x 8 m
+room with floor, walls, roof, and a 2 m window in the north wall. The tests check that:
+
+- indoor probes receive less light than outdoor probes, and probes near the window receive more than the far corner;
+- a blocked probe takes no weight, and a neighbour's value is scaled by coverage;
+- unbaked and off-grid lookups fall back to the environment, and a budgeted bake resumes;
+- stale inputs are detected and never filled in;
+- the binary format round-trips, and corrupt, truncated, and foreign-version data is rejected;
+- the debug view colors valid, blocked, unbaked, and off-grid positions;
+- the importer bakes the same bytes twice and rejects bad sources.
+
+`tests/src/gi_reflection_tests.cpp` checks a hit on a visible wall, the off-screen, behind-the-eye, and rough misses that return the
+environment exactly, and the rejection of mismatched buffers.
+
+## Debug view
+
+`coverage_debug_color()` classifies a position by its nearest probe: green for valid, red for blocked, yellow for unbaked, and dark gray
+outside the grid. It is the golden source for a probe-coverage overlay in the scene renderer, which is not built yet.
+
+## Scope and what is not done
+
+Done (CPU, Linux): the bake, the format and invalidation, sampling with fallbacks, the SSR reference, the converter importer, the coverage
+classifier, and the tests above.
+
+Not done, so US-040 stays **Partial**:
+
+- The runtime does not read the volume at render time. `scene.hlsl` has no probe binding, and the native profile does not use the probes
+  for its ambient term. The IBL path remains the only diffuse source.
+- No GPU SSR pass exists. The reference is CPU-only, and no DX12 or Vulkan GPU test compares a shader against it.
+- The coverage view is not drawn in the scene renderer, and no indoor/outdoor scene runs through the renderer.
+- The native Linux Vulkan GPU suite was not run (no usable Vulkan device on this WSL host). The Windows GPU suites pass with no GI pass, so they cover only the existing renderer.
+- The `engine_bench` acceptance measurement (US-074) does not exist yet.
+---
+engine/gi/CMakeLists.txt
+
+engine/gi:
+CMakeLists.txt
+include
+src
+
+engine/gi/include:
+engine
+
+engine/gi/src:
+probes.cpp
+screen_reflections.cpp
+      0 engine/gi/include/engine
+    519 engine/gi/src/probes.cpp
+     63 engine/gi/src/screen_reflections.cpp
+     10 engine/gi/CMakeLists.txt
+      0 engine/gi/include
+      0 engine/gi/src
+    592 total][0m
+[94m[Bash][0m Read US-040 PRD constraints and render module layout $ wc -l engine/render/src/scene_renderer.cpp engine/render/shaders/scene.hlsl engine/render/include/en...
+The remaining GPU work is runtime probe binding, a GPU SSR pass, the coverage overlay, and the indoor/outdoor fixtures. Before choosing a design I'll read the Windows-gate memory notes and how the renderer currently handles ambient/IBL.
+[94m[Bash][0m Read gate memory notes and IBL usage in scene shader $ grep -n "ibl\|IBL\|diffuse_sh\|ambient\|Environment\|env_" engine/render/shaders/scene.hlsl | head -...
+The GPU side is the bulk of the remaining work. I'll look at the scene renderer's descriptor layout and how the environment is bound, since the probe volume has to plug into the same path.
+[94m[Bash][0m Read scene shader header and renderer header declarations $ grep -n "Environment\|environment\|SceneRendererDesc\|struct \|debug\|Debug\|enum class" engine/rend...
+The environment is bound as set 2 with nine SH coefficients. Next I'll find where the shader computes the ambient term, and how the renderer's lighting layout and `set_environment` are built.
+[94m[Bash][0m Locate ambient and environment usage in shader and renderer $ grep -n "set_environment\|environment_buffer_\|environment_set_\|environment_layout_\|LightingView\|...
+[94m[Bash][0m Read shader IBL, lighting, and PSMain sections $ sed -n 880,1043p engine/render/shaders/scene.hlsl
+The shader is clear now. The SSR pass needs per-pixel roughness and specular weight, and the scene target set doesn't carry them. Next I'll check how the color targets and pipelines are created, and how the environment layout is declared.
+[94m[Bash][0m Inspect render target, pipeline format, and environment layout code $ sed -n 520,560p engine/render/src/scene_renderer.cpp
+The plan is taking shape, but the post pass decides where SSR can live. I'll read the post processor's header, its TAA layout, and the resolve shader before committing.
+[94m[Bash][0m Read post processor header, layouts, and shader registers $ grep -n "register(\|^\[numthreads\|^void\|^float\|^struct\|cbuffer\|RWTexture" engine/render/shaders...
+The post pass uses one layout per pass, so SSR is cleanest as its own compute pass that writes a correction target. Before designing the GPU side, I'll read the CPU GI API it has to match.
+[94m[Bash][0m Read GI probe and SSR public headers $ cat engine/gi/include/engine/gi/screen_reflections.hpp
+The CPU SSR reference is specified to match a GPU pass step for step, so the GPU pass has to follow it closely. Next I'll look at how the existing post GPU tests drive the renderer, so the new fixtures follow the same pattern.
+[94m[Bash][0m Read the post GPU test harness pattern $ wc -l tests/src/render_postprocess_gpu_tests.cpp && sed -n 1,140p tests/src/render_postprocess_gpu_t...
+The harness is clear. Now the scene-renderer case at the end of this file and the shared golden-scene fixture, which the indoor/outdoor fixtures would extend.
+[94m[Bash][0m Read scene-renderer GPU case and scene fixture header $ cat tests/src/render_scene_fixture.hpp | head -120
+I now have the harness pattern. Before writing code I need four facts: the CPU SSR march (so the GPU matches it), the camera-relative convention the shader uses, the material defaults, and the shader/CMake registration lists.
+[94m[Bash][0m Read CPU SSR march, shader transform, and camera slot writer $ sed -n 120,160p engine/render/src/scene_renderer.cpp
+The CPU march works in camera-relative space with `-z` as depth, and the frame's view-projection maps that space to clip. The GPU pass can use `clip.w` as the same depth. Next I'll check the scene graph's compute-dispatch and render structure, the material defaults, and the shader build lists.
+[94m[Bash][0m Check render build, shader registration, and material defaults $ grep -n "roughness\|metallic" engine/render/include/engine/render/material.hpp | head
+Materials go through a table with a default roughness of 0.5, so a mirror test needs its own material. Last, I'll look at how the render graph dispatches compute and sets the lighting view, since the SSR pass follows the same pattern.
+[94m[Bash][0m Locate compute dispatch, view mode, and frame offsets $ grep -n "dispatch\|LightingView\|lighting_view\|set_view\|add_material\|RhiStatus SceneRenderer::\|R...
+[94m[Bash][0m Read culling dispatch, post handoff, and render entry $ grep -n "lighting_view\|view_mode\|LightingView\|kHeaderView" engine/render/src/scene_renderer.cpp e...
+The render graph and the cull pass give me the compute-pass pattern. Before writing code I need the renderer's public setters (how the lighting view is chosen, and where the environment is imported into the graph).
+[94m[Bash][0m Read renderer desc and setter API, and env graph import $ sed -n 2028,2040p engine/render/src/scene_renderer.cpp
+Environment textures are imported in permanent `ShaderRead` state, so the SSR pass can read them the same way. I have enough to write the design. I'll read the remaining write paths I'll copy: `set_environment`'s upload, `build`'s environment setup, and `resize`.
+[94m[Bash][0m Read environment upload, build tail, resize, and target usage code $ sed -n 1195,1200p engine/render/src/scene_renderer.cpp
+I have the full picture. Here's the design I'm committing to:
+
+- **Probes:** the GI volume goes into a new buffer at set 2 `t7`. The shader blends the valid probes trilinearly and falls back to the environment diffuse where coverage is missing. A probe-coverage debug view is added.
+- **SSR:** the opaque pass also writes two surface targets (normal + roughness, Fresnel base + occlusion). A copy of the lit color is made, and a new compute pass `CSReflections` adds the reflection correction into the color. It mirrors the CPU march and uses the same environment specular, so misses keep the IBL result.
+
+I'll start with the scene shader: the probe fetch, the coverage view, and the extra outputs.
+[94m[Bash][0m Read view constants and cascade color helper $ sed -n 84,100p engine/render/shaders/scene.hlsl && grep -n "LinearOutput()" engine/render/shaders/sc...
+[94m[Bash][0m Add probe grid fetch and coverage constants to scene shader $ } """) open(p,'w').write(s) print("ok") EOF
+Next: the fragment shader's outputs (normal/roughness and base/occlusion), the probe-driven diffuse term, and the coverage view.
+[94m[Bash][0m Wire probe diffuse, surface outputs, and coverage view into shader $ """) open(p,'w').write(s) print('ok') EOF grep -n "PSBlend\|float4 surface\|velocity_unused" engine/...
+The scene shader is done. The reflection pass needs the environment sampling helpers (`EquirectUv`, `SampleBrdfLut`), so I'll pull their exact source to mirror them.
+[94m[Bash][0m Read environment helpers to mirror in reflection shader $ grep -n "^float3 SrgbToLinear\|^float3 LinearToSrgb" engine/render/shaders/scene.hlsl
+I have every helper I need. Next I'll write the reflection compute shader. It mirrors `trace_screen_reflection` and `reflection_radiance`, and uses the same environment specular and BRDF lookup as the scene pixel shader.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/reflections.hlsl[0m "// Screen-space reflections (US-040): the compute pass that adds traced specular to the lit scene. It runs after the opaque pass, on a copy of
+// the lit color, and writes the corrected color. The mar... (9149 chars)"
+Two clean-ups before moving on: `EquirectDirection` is an identity wrapper I don't need, and the header comment should say which depth the trace compares against.
+[94m[Bash][0m Remove identity helper from reflection shader $ ") open(p,'w').write(s) print(s.count("EquirectDirection")) EOF
+The reflection shader is in place (the change notice was my own edit). Now the C++ side. I need the remaining call sites: where opaque color targets and pipeline formats are built, the scene pass registration, how the camera reaches `render`, and the byte-packing helpers.
+[94m[Bash][0m Locate opaque targets, pass registration, camera plumbing, helpers $ grep -n "camera()" engine/render/include/engine/render/frame_snapshot.hpp
+[94m[Bash][0m Read pipeline formats, draw targets, env upload, camera plumbing $ sed -n 2600,2660p $F | grep -n "destroy_into\|release\|first" | head -80
+I now have the full set of touch points. I'll update the public header first: the new desc flag and shader entry, the GI setters, the coverage view, and private members for the new targets, buffers, and pipeline.
+[94m[Bash][0m Locate includes and member declarations in renderer header $ sed -n 300,330p $H | head -5
+The header is clear. Making the public and private edits to `scene_renderer.hpp`:
+[94m[Bash][0m Add GI, reflection, and target declarations to renderer header $ \|PipelineHandle cull" engine/render/include/engine/render/scene_renderer.hpp
+The script stopped before writing anything, so the file is untouched. One anchor didn't match. I'll check the exact text around the desc struct's end.
+[94m[Bash][0m Inspect exact bytes at the desc struct end $ file engine/render/include/engine/render/scene_renderer.hpp
+[94m[Bash][0m Apply renderer header edits for GI and reflections $ ''') open(p,'w').write(s) print('ok') EOF
+The header compiles against the new members. Next is the `.cpp`. I need the frame-offset constants and the environment constants it defines.
+[94m[Bash][0m Find frame offset and environment constant definitions $ grep -n "post_source_usage()" -A3 $F | head -6
+[94m[Bash][0m Read constants block at top of renderer source $ grep -n "kFrame" engine/render/include/engine/render/*.hpp | head -3
+[94m[Bash][0m Read frame offset constants in renderer header $ sed -n 70,92p engine/render/include/engine/render/scene_renderer.hpp
+The frame layout has room at byte 240 for the camera position. One design change came out of the render-graph notes: the graph allows only one writer per resource per pass, so the reflection pass can't write back into the scene color. I'll output to a separate `reflected_` target that the post pass reads instead. Before writing the `.cpp` I'll confirm a few API names: texture usage flags, the post pass's import states, and the upload defaults.
+[94m[Bash][0m Confirm RHI usage flags, import states, and upload defaults $ grep -n "enum class ResourceState" -A12 engine/rhi/include/engine/rhi/types.hpp | tr -s ' ' | head -...
+[94m[Bash][0m Check post import states and compute pipeline creation pattern $ sed -n 670,690p engine/render/src/scene_renderer.cpp
+The post pass imports the scene color as `Common` in and out, with `ShaderResource` usage, so a `reflected_` target can take the same import. I'll update the header member to match this design, then write the `.cpp` edits.
+[94m[Bash][0m Rename copy target to reflected output in renderer header $ ''',0) if False else None open(p,'w').write(s) p2='engine/render/include/engine/render/scene_rendere...
+I have the last API details. Now the `.cpp` patch. It touches about fifteen sites, and each anchor is checked for a unique match before any file is written, so a mismatch leaves everything unchanged.
+[94m[Bash][0m Confirm anchors for the scene renderer patch $ " $F
+Most anchors are confirmed. The remaining ones are `scene_color_format`'s definition site and the scene-graph `compile` call (which appears in several functions). I'll resolve those inside the patch script and assert that each one matches exactly once.
+[94m[Bash][0m Locate scene_color_format definition and namespace blocks $ grep -n "^RhiStatus SceneRenderer::build_targets" $F
+[94m[Bash][0m Find scene_color_format declaration in headers $ sed -n 436,440p engine/render/src/scene_renderer.cpp
+`scene_color_format` is a member, so the pack and format helpers go in the anonymous namespace and take the color format as an argument. Writing the full `.cpp` patch now.
+[94m[Bash][0m Write the scene renderer patch script, first part $ ''',1), ('''}  // namespace  RhiStatus SceneRenderer::build_targets''', None, 0), ]) PYEOF echo writ...
+That script is only half-written: its last entry is wrong, and the helpers never get inserted. I'll replace it with one complete script that applies every edit with its anchor and expected match count.
+[94m[Bash][0m Apply the scene renderer patch with anchor checks $ the probe grid adds it to camera-relative points (US-040) ''',1), ]) PYEOF python3 /tmp/patch_scene_...
+The first patch applied cleanly. Two loose ends: `gpu_buffer_usage()` doesn't exist, so I'll inline the usage, and the `render()` edits are still to do: the GI and surface imports, the reflection pass, the parameter upload, and the post handoff.
+[94m[Bash][0m Apply render-graph patch for GI imports and reflection pass $ ''',1), ]) PYEOF python3 /tmp/patch_render.py
+
+[91m[Error: Exit code 1
+engine/render/src/scene_renderer.cpp: expected 3 match(es), found 2: 'gpu_buffer_usage()'][0m
+The patch stopped before writing: I miscounted the `gpu_buffer_usage()` call sites (two, not three). Nothing was written, so I'll correct the count and rerun.
+[94m[Bash][0m Fix match count and apply render-graph patch $ sed -i "s/('gpu_buffer_usage()', 'BufferUsage::ShaderResource | BufferUsage::CopyDestination', 3),/(...
+The render-graph patch applied. Next I'll align the reflection shader's names with the design: the lit color it reads is the scene color, not a copy, and its output is the reflected target.
+[94m[Bash][0m Rename reflection shader resources and check CMake link $ sed -n 150,200p tests/CMakeLists.txt | grep -n "scene_cull\|add_dependencies\|gi_\|postprocess_tests...
+The reflection shader is consistent now. Next is CMake: `engine_render` must link `engine_gi`, and the tests need the new shader entry and a new GPU test source. I'll view those sections of the test CMake file first.
+[94m[Bash][0m Read test CMake shader block and subdirectory order $ grep -n "gi_\|render_postprocess_gpu_tests\|render_scene_gpu_tests" tests/CMakeLists.txt
+The shader and test wiring is clear. Before applying CMake, I'll check whether the existing CPU reflection tests depend on the default step count, since the defaults need to move to 256 steps so each step stays under the 0.5 m thickness.
+[94m[Bash][0m Check existing SSR tests for default step dependence $ grep -rn "max_steps" engine tools tests --include=*.hpp --include=*.cpp | grep -v "scene_renderer\|m...
+The CPU tests set their own step count, so changing the default is safe. I'll apply that change along with the CMake wiring: `engine_render` links `engine_gi`, and the tests get the new shader entry and a `render_gi_gpu_tests.cpp` source, which I'll write next.
+[94m[Bash][0m Wire CMake for GI link, reflection shader, and new GPU test $ 256 steps of 0.39 m cover 100 m under the thickness"), ]) print("ok") EOF sed -n 60,72p tests/CMakeL...
+The reflection and GI wiring is in place. The remaining unknowns are the test-side API: material parameters, the test post settings, the box-mesh helper, and the camera struct. I'll read those before writing the GPU test.
+[94m[Bash][0m Read material, mesh, camera, and test settings APIs $ grep -n "struct Transform" -A8 engine/scene/include/engine/scene/*.hpp | grep -n "scale\|position\|r...
+I have everything the GPU test needs. The plan for `render_gi_gpu_tests.cpp`:
+
+- **Indoor/outdoor GI:** a slab floor and a roofed room, lit by a uniform sky. The bake uses the same occluders. The test checks that the room floor is darker with probes than without, that it's darker than the open floor, and that the probe-coverage view is green inside the grid and red outside.
+- **SSR:** a mirror slab reflecting a red wall. The test checks that the reflection changes the mirror pixel and that the environment fallback is untouched elsewhere.
+- **API:** bad volumes are rejected, and screen reflections without the post pass fail at create.
+
+TAA is off in these settings, so frames don't blend into each other.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_gi_gpu_tests.cpp[0m "// Native-profile GI and reflections on real GPUs (US-040). The scene renderer lights a room and an open floor from baked probes, and a mirror
+// reflects a wall through the screen-space reflection pa... (18131 chars)"
+The test file is written, but I left some junk in it: a bogus `tests_unused_placeholder_t` using-declaration, a no-op `renderables.size()` call, and a leftover `room` variable. I'll remove those and add `<cstdlib>` for the integer `std::abs`.
+[94m[Bash][0m Remove leftover junk from GPU test file $ open(p,'w').write(s) print("ok") EOF grep -n "room_boxes()\|for (Box& box : boxes)" tests/src/render...
+The file changed on disk only from my cleanup. The `material = 0` loop is a no-op, so I'll remove it, then start the Linux debug build to catch compile errors early.
+[94m[Bash][0m Build the Linux debug preset and capture errors $ grep -c "error" /tmp/build_linux_debug.log
+[94m[Bash][0m Wait briefly then check Linux build output for errors $ grep -n "error\|warning" /tmp/build_linux_debug.log | head -30
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -3 /tmp/build_linux_debug.log grep -n "error\|warning" /tmp/build_linux_debug.log head -30. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux build progress and any errors so far $ grep -n "error\|warning" /tmp/build_linux_debug.log | head -30
+The build failed in the shader compile: my new out parameter `base` collides with the existing local `base` inside `ShadeFragment`. I'll rename the out parameter and the pixel-shader locals so the names are unambiguous.
+[94m[Bash][0m Rename shader outputs and rebuild the Linux debug preset $ tail -2 /tmp/build_linux_debug.log
+The shaders compile now. The remaining error is in my test: a call to `extract_frame` doesn't match its signature. I'll check the real signature and the full diagnostic.
+[94m[Bash][0m Read extract_frame error details and signature $ sed -n 240,244p tests/src/render_gi_gpu_tests.cpp
+`extract_frame` needs a mutable graph, so the helper has to take the scene by non-const reference. The call sites all hold non-const scenes, so only the signature changes.
+[94m[Bash][0m Fix render_scene signature and rebuild Linux debug $ tail -2 /tmp/build_linux_debug.log | cut -c1-200
+The Linux debug build passes with warnings as errors. Next I'll run the Linux unit suite, which is a required gate, plus the GPU suite to confirm it reports unsupported here rather than failing.
+[94m[Bash][0m Run Linux unit test suite via ctest preset $ tail -3 /tmp/ctest_linux_unit.log
+Linux unit: 22 of 22 pass. The Windows gates are next, since they hold the real GPU evidence for this story. Before launching anything I'll check for a running gate batch, per the overlap memory, and reuse the previous story's batch as a template.
+[94m[Bash][0m Check for running gate batches and find the prior template $ ls -t /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "us0\|gate" | head -12
+[94m[Bash][0m Read previous US-040 gate batch template and its result $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040_result.txt 2>/dev/null | tr -d '\0' | tr '\r' '\n' |...
+The previous batch is a usable template. I'll create `us040b_gate.bat` with the same steps and CRLF endings, launch it in the background, and wait on its done file instead of polling.
+[94m[Bash][0m Create and launch the Windows gate batch for this story $ ps -eo pid,etime,args | grep "us040b_gate" | grep -v grep | head -3
+The batch is running. I'll wait for its done file with a bounded until-loop, not by polling.
+[94m[Monitor][0m Wait for the US-040 Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040b_rc.txt 2>/dev/null | tr -d "\0" | tr "\r" "\n"'
+While the batch runs, I'll bring the docs up to date. First the build-matrix row for US-040 and the current `gi-probes.md` status section.
+[94m[Bash][0m Find US-040 row in build matrix and doc section headings $ grep -n "^## \|^# " docs/gi-probes.md
+I'll hold the doc edits until the Windows results are in, since they may change the scope statement. Meanwhile I'll check the batch's first steps.
+[94m[Bash][0m Check batch progress files $ tr -d '\0' < us040b_rc.txt 2>/dev/null | tr '\r' '\n' | grep . | head
+[94m[Monitor][0m Wait for the US-040 Windows gate batch to finish $ tr -d "\0" < /mnt/c/Users/bucha/AppData/Local/Temp/us040b_rc.txt 2>/dev/null | tr "\r" "\n" | grep ....
+The monitor is armed. While the Windows batch runs, I'll start the Linux/GCC gate in the background, since it uses separate build directories.
+[94m[Bash][0m Start Linux GCC configure, build, and unit tests in background $ echo "unit=$?" >> /tmp/gcc_unit.log) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for the Linux GCC gate chain to finish $ grep -c "warning:" /tmp/gcc_build.log 2>/dev/null'
+Both gates are running in the background. I'll wait for their completion events rather than polling.
+[94m[Monitor][0m Wait for the Windows gate batch result line $ echo DONE'
+[94m[ScheduleWakeup][0m
+The Windows gate and the GCC chain are long-running, so I'm pausing here. Current state, for when I'm re-invoked:
+
+- **Done:** the probe grid is bound to the scene pass and interpolated in the shader with environment fallback. The probe-coverage debug view is in. The SSR compute pass (`reflections.hlsl`) is wired through a `reflected_` target that the post pass reads. The GPU test file is written. Linux debug build is clean, and Linux clang unit tests pass 22/22.
+- **Running:** the Windows gate batch `us040b` (ValidateVendor, win-dev, win-debug, win-unit, gpu dx12, gpu vulkan), and the Linux GCC chain.
+- **Pending:** the Windows results (new GPU tests may need fixes), the Linux GCC results, the asan/sanitize decision, and the doc updates (`gi-probes.md`, the `build.md` US-040 row, and the progress log).
+The Windows build and unit gates pass, but both GPU suites exit 1. I'll read the DX12 and Vulkan logs to find which cases failed.
+[94m[Bash][0m Inspect DX12 GPU suite failure log $ cd /mnt/c/Users/bucha/AppData/Local/Temp && tr -d '\0' < us040b_5.log | tr -d '\r' | grep -n "FAILED...
+[94m[Bash][0m Show failing assertions in DX12 and Vulkan logs $ tr -d '\0' < us040b_6.log | tr -d '\r' | grep -n "FAILED\|CHECK\|REQUIRE\|with expansion\|validation...
+Two separate problems:
+
+1. **Binding error (SSR, both backends):** the depth-values target is created without `ShaderResource` usage, so the reflection set can't bind it. Only the reflection-enabled case needs it.
+2. **GI assertion:** my check that the open floor stays near its environment value was a guess, not a requirement. The open floor's probes sit under the slab and see half the sky, so it darkens by about 33 levels. The real invariant is that the room darkens more than the open floor, so I'll assert that instead.
+
+I'll check how the depth-values target is created and imported.
+[94m[Bash][0m Locate depth values texture creation and import $ grep -n "scene depth values\|scene depth\"\|\"scene depth values\"" engine/render/src/scene_renderer...
+[94m[Bash][0m Give depth values a shader-read usage when reflections are on $ ')) EOF grep -n "const TextureUsage target_usage" engine/render/src/scene_renderer.cpp
+The script aborted before writing: `target_usage` is declared in two functions, so I need both. Nothing was written. Rerunning with the matching count.
+[94m[Bash][0m Apply depth usage fix and correct the GI invariant in tests $ print("test ok") EOF
+Both fixes are in. I'll relaunch the same Windows batch, first clearing the old done file, which the batch doesn't delete itself.
+[94m[Bash][0m Relaunch Windows gate batch after fixes $ cat /tmp/gcc_configure.log | tail -1
+The "RUNNING" line is probably a false positive from `pgrep` matching its own command text; the previous batch had already written its done file. The GCC build passed, and its unit run is still going. I'll wait on the new batch's done file.
+[94m[Monitor][0m Wait for relaunched Windows gate batch to finish $ grep -h "test cases\|assertions" /mnt/c/Users/bucha/AppData/Local/Temp/us040b_5.log /mnt/c/Users/buc...
+[94m[Monitor][0m Wait for Linux GCC unit tests to finish $ grep "tests passed\|tests failed" /tmp/gcc_unit.log'
+[94m[ScheduleWakeup][0m
+The Windows gate batch is rerunning with the two fixes, and the Linux GCC unit run is still going. I'll resume when the batch's done file or the GCC result arrives.
+
+Where things stand:
+- **Windows:** ValidateVendor, `win-dev`, `win-debug`, and `win-unit` passed on the first run. Both GPU suites failed on two issues, both now addressed. The depth-values target had no shader-read usage for the reflection pass. A GI assertion of mine was a wrong expectation about the open floor, so I replaced it with "the room darkens more than the open floor."
+- **Linux:** clang debug build and clang unit tests (22/22) pass. The GCC debug build passes; its unit run is pending.
+- **Still open:** the rerun results, the `gi-probes.md` and `build.md` US-040 updates, the progress log, and a decision on the ASan/sanitizer gate (not required for this change, since it touches no memory, ECS, jobs, streaming, Lua, or physics code).
+Linux GCC unit tests pass 22 of 22. The Windows rerun is still in progress, so I'll wait for its done file.
+[94m[Monitor][0m Wait for the rerun Windows batch to complete $ grep -h "test cases\|assertions" /mnt/c/Users/bucha/AppData/Local/Temp/us040b_5.log /mnt/c/Users/buc...
+[94m[ScheduleWakeup][0m
+The Linux GCC chain is complete: configure, build with zero warnings, and 22 of 22 unit tests. Waiting on the Windows rerun.
+[94m[Monitor][0m Wait for the rerun Windows batch to complete $ grep -h "test cases\|assertions" /mnt/c/Users/bucha/AppData/Local/Temp/us040b_5.log /mnt/c/Users/buc...
+[94m[ScheduleWakeup][0m
+The Windows rerun is still running. The Linux GCC gate is complete and green: configure, build with zero warnings, and 22 of 22 unit tests. I'm waiting for the Windows GPU results before updating the docs.
+[94m[Bash][0m Show the remaining failing assertion in both GPU logs $ tr -d '\0' < us040b_6.log | tr -d '\r' | grep -n "FAILED" -A6 | head -20
+The SSR result is correct: the mirror pixel goes from white `226,226,226` (environment) to red `226,38,38` (traced wall). The remaining failure is a validation error from the parameter upload: the buffer isn't in the state the upload assumes. I'll check the upload helper's default states.
+[94m[Bash][0m Inspect upload helper state transitions $ grep -n "rhi::ResourceState before" -B2 -A2 engine/render/include/engine/render/scene_renderer.hpp
+The helper defaults the buffer's prior state to `Common`, but the reflection parameter buffer is left in `ShaderRead` by the previous frame's graph. I'll pass `ShaderRead` as the prior state for that upload.
+[94m[Bash][0m Fix parameter upload state and relaunch Windows batch $ echo relaunched
+[94m[Monitor][0m Wait for Windows batch after upload-state fix $ grep -h "test cases\|assertions" /mnt/c/Users/bucha/AppData/Local/Temp/us040b_5.log /mnt/c/Users/buc...
+[94m[ScheduleWakeup][0m
+The Windows batch is rerunning after the upload-state fix. The last run showed the SSR path working on the GPU: the mirror pixel went from environment white to reflected red. The only failure left was that validation error, which I've addressed. I'll update the docs once the batch reports.
+[94m[Bash][0m Show remaining failure details in both logs $ tr -d '\0' < us040b_6.log | tr -d '\r' | grep -n "FAILED" -B3 -A6 | head -30
+The same validation error persists, and I can see why: the parameter buffer starts in `Common` on the first frame, and only later frames leave it in `ShaderRead`. My previous fix assumed `ShaderRead` every time. I'll track whether the buffer has been through a graph yet.
+[94m[Bash][0m Track first-frame state of reflection parameter buffer $ // a graph has read reflection_params_, so it is in ShaderRead\n") open(h,'w').write(t) print('ok') ...
+The logic holds: the upload leaves the buffer in `ShaderRead` every time, so the graph's import state is correct from the first frame. Relaunching the batch.
+[94m[Bash][0m Relaunch Windows gate batch after first-frame state fix $ echo relaunched
+[94m[Monitor][0m Wait for Windows batch after first-frame state fix $ grep -h "test cases\|assertions" /mnt/c/Users/bucha/AppData/Local/Temp/us040b_5.log /mnt/c/Users/buc...
+[94m[ScheduleWakeup][0m
+The Windows batch is rerunning with the first-frame upload-state fix. Every Windows gate before the GPU steps has passed on each run so far. I'll read the results once the batch reports.
+All Windows gates pass: ValidateVendor, configure, build, `win-unit`, and both GPU suites (DX12 47 cases, Vulkan 48 cases, validation layers on, no software adapter).
+
+The Linux runs predate my last few source edits, so I'll rebuild and retest the clang debug preset before updating the docs.
+[94m[Bash][0m Rebuild Linux clang debug preset after latest edits $ grep -n " error" /tmp/build_linux_debug.log | head -3
+[94m[Bash][0m Run Linux clang unit tests after rebuild $ grep "tests passed" /tmp/ctest_linux_unit.log
+The clang debug build is clean with zero warnings, and the unit suite passes 22 of 22. I'll rerun the GCC debug and unit gate in the background while I update the docs.
+[94m[Bash][0m Start GCC rebuild and view GI doc sections to update $ sed -n 60,70p docs/gi-probes.md
+I'll update `gi-probes.md` to describe the GPU side as built, fix the step-count note, and replace the out-of-date scope list with what's verified and what isn't.
+[94m[Bash][0m Rewrite GI doc sections to reflect GPU work and remaining gaps $ print('ok') EOF
+Next, the `build.md` US-040 row, which still says Partial with GPU work missing.
+[94m[Bash][0m Update US-040 build matrix row with verified gate status $ print('ok') EOF
+Last, the progress log: a reusable pattern at the top of the Codebase Patterns list, and the US-040 entry appended at the end.
+[94m[Bash][0m Add US-040 progress entry and reusable codebase pattern $ print('ok') EOF
+[94m[Bash][0m Check GCC rebuild and unit result $ cat /tmp/gcc_unit.log 2>/dev/null | grep "tests passed\|^unit="
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -1 /tmp/gcc_build.log cat /tmp/gcc_unit.log grep "tests passed\|^unit=". To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for Linux GCC rebuild and unit tests $ grep "tests passed" /tmp/gcc_unit.log'
+[94m[ScheduleWakeup][0m
+The GCC unit run passes 22 of 22 with no warnings. The `build=` line didn't show up in that output, so I'll confirm the build exit code directly.
+[94m[Bash][0m Confirm GCC build exit status and error count $ grep -c "error" /tmp/gcc_build.log
+That result was stale. `gcc_unit.log` still held the previous run's `unit=0`, so the monitor fired before the rebuild had finished. The build is still in progress. I'll wait on the build's own exit line.
+[94m[Monitor][0m Wait for GCC rebuild exit line, then its unit run $ grep "tests passed" /tmp/gcc_unit.log'
+[94m[ScheduleWakeup][0m
+The GCC rebuild is still running. Its earlier unit result was stale, so I'm waiting for the build's own exit line before recording a result. Everything else for US-040 is done and verified, and the final report will follow once that run finishes.
+The GCC rebuild finished with exit 0 and no warnings. The unit run is next.
+[94m[Monitor][0m Wait for GCC unit run result $ grep "tests passed" /tmp/gcc_unit.log'
+[94m[ScheduleWakeup][0m
+Waiting on the GCC unit run after the successful rebuild. Once it reports, I'll record the result in the progress log and give the final report.
+[94m[Bash][0m Record final GCC result in progress log $ see the result line below)." assert s.count(old)==1 s=s.replace(old,"  - Linux gcc: `linux-gcc-debug...
+US-040 is **Partial**, not complete. The GPU path is in place and passes every gate I could run. Three things are still open, and the story's bench and runtime-payload requirements aren't met yet.
+
+**Gate results (final source)**
+
+| Gate | Result |
+|---|---|
+| Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | pass |
+| Windows `engine_tests --suite gpu --backend dx12` | pass, 47 cases, validation on |
+| Windows `engine_tests --suite gpu --backend vulkan` | pass, 48 cases, validation on |
+| Linux clang `ValidateVendor`, `linux-debug`, `linux-unit` | pass, 0 warnings, 22/22 |
+| Linux gcc `linux-gcc-debug`, `linux-gcc-unit` | pass, 0 warnings, 22/22 |
+| `linux-asan` / `linux-sanitize` | not run; no memory, ECS, jobs, streaming, Lua, or physics code changed |
+| Native Linux Vulkan GPU suite | not run; no usable Vulkan device on this WSL host |
+| `engine_bench --suite acceptance` | not run; the bench target is US-074 and doesn't exist yet |
+| GUI check, GitHub CI | not run |
+
+**What's in place**
+
+- **Probe GI:** the baked volume is bound to the scene pass. The pixel shader blends valid probes trilinearly, and the environment fills the gaps. With no volume set, output matches the previous path.
+- **Coverage view:** `ProbeCoverage` shows green where probes cover a point and red outside the grid.
+- **Screen-space reflections:** a compute pass traces the reflection against the lit scene, and misses fall back to the environment. The GPU test shows a mirror pixel going from environment white `226,226,226` to reflected red `226,38,38`.
+- **Fixtures:** a room with a doorway and an open floor. The room darkens more than the open floor, and the coverage view is correct on both backends.
+
+**Choices I made that you may want to change**
+
+- The reflection result goes into a new `reflected` target that the post pass reads, rather than writing the scene color in place. The render graph allows one writer per resource.
+- Screen reflections require the post pass. `create` rejects the combination.
+- The SSR default is now 256 steps over 100 m, so each step is under the 0.5 m thickness. The old 64-step default missed thin surfaces.
+- GI volume invalidation is the caller's job: bake again and call `set_gi_volume` with the new volume. The renderer doesn't check sources.
+
+**Still open**
+
+- The converter payload is not loaded at runtime. The bake runs in the test.
+- Alpha-blended surfaces get no reflections.
+- Mirror images of off-screen geometry fall back to the environment.
+- No performance numbers are recorded, pending US-074.
+
+Docs updated: `docs/gi-probes.md`, the `docs/build.md` US-040 row, and `.ralph-tui/progress.md`, including a reusable pattern on single-writer targets and buffer prior states.
+Nothing new to report. That notification is the same GCC unit result I already recorded: 22 of 22 pass, and the progress log is updated. The final report above still holds.
+[94m[Bash][0m Read GCC unit log and confirm progress entry line $ grep -n "Linux gcc" /mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md | tail -2
+The GCC unit result is in the log and already recorded in the US-040 progress entry (line 278). Final report:
+
+**US-040 is Partial.** The GPU path is in place and passes every gate I could run. Three requirements are still open: the converter payload is not loaded at runtime, alpha-blended surfaces get no reflections, and there are no performance numbers, since the bench target is US-074.
+
+**Gate results (final source)**
+
+| Gate | Result |
+|---|---|
+| Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | pass |
+| Windows `gpu dx12` | pass, 47 cases, validation on |
+| Windows `gpu vulkan` | pass, 48 cases, validation on |
+| Linux clang `ValidateVendor`, `linux-debug`, `linux-unit` | pass, 0 warnings, 22/22 |
+| Linux gcc `linux-gcc-debug`, `linux-gcc-unit` | pass, 0 warnings, 22/22 |
+| `linux-asan` / `linux-sanitize` | not run; no memory, ECS, jobs, streaming, Lua, or physics code changed |
+| Native Linux Vulkan GPU suite | not run; no usable Vulkan device on this host |
+| `engine_bench --suite acceptance` | not run; US-074 |
+| GUI check, GitHub CI | not run |
+
+**What's in place**
+
+- **Probe GI:** the baked volume is bound to the scene pass. The shader blends valid probes trilinearly and falls back to the environment elsewhere. With no volume set, output matches the previous path.
+- **Coverage view:** `ProbeCoverage` shows green inside the probe grid and red outside.
+- **Screen-space reflections:** a compute pass traces against the lit scene, and misses keep the environment. On the GPU, a mirror pixel moves from environment white `226,226,226` to reflected red `226,38,38`.
+- **Fixtures:** a roofed room with a doorway, next to an open floor. The room darkens more than the open floor, and the coverage view is correct on both backends.
+
+**Choices to review**
+
+- The reflection result goes into a new `reflected` target that the post pass reads. The render graph allows one writer per resource, so the scene color can't be written twice.
+- Screen reflections require the post pass; `create` rejects the combination.
+- The SSR default is 256 steps over 100 m, so each step stays under the 0.5 m thickness. The old 64-step default missed thin surfaces.
+- Invalidating GI on a source change is the caller's job: bake again and call `set_gi_volume`. The renderer doesn't check sources.
+
+**Docs:** `docs/gi-probes.md`, the `docs/build.md` US-040 row, and `.ralph-tui/progress.md` are updated. The progress log also has a reusable pattern on single-writer targets and buffer prior states.

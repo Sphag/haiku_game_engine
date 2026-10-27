@@ -1,0 +1,47 @@
+# Iteration 634 Log
+
+## Metadata
+
+- **Task ID**: US-071
+- **Task Title**: Terrain Sculpting and Painting
+- **Description**: As a world author, I want to edit terrain with brushes so that I can create landscapes in the editor.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T20:28:56.003Z
+- **Ended At**: 2026-10-25T20:29:51.677Z
+- **Duration**: 55s
+- **Input Tokens**: 52
+- **Output Tokens**: 4477
+- **Total Tokens**: 4529
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log before deciding what US-071 still needs.
+[94m[Bash][0m Locate repo and check progress log for US-071 $ grep -n "US-071\|US-047\|US-053\|US-064\|US-066" .ralph-tui/progress.md | tail -30
+[94m[Bash][0m Read the existing US-071 progress entry and log header $ sed -n 1,20p .ralph-tui/progress.md | cut -c1-300
+The log already has a US-071 entry from a previous pass. Before accepting it as complete, I'll check the code and the PRD's US-071 section.
+[94m[Bash][0m Check US-071 files and PRD section and dirty-tile consumers $ grep -rn "take_dirty_tiles\|dirty_tiles" engine --include=*.cpp --include=*.hpp | grep -v terrain_ed...
+The headless core and its tests exist. I'll read the public API to judge what's covered, then rerun the Linux build and the terrain tests to confirm the recorded results still hold.
+[94m[Bash][0m Read terrain edit header and terrain LOD hooks $ grep -n "lod\|LOD\|raytrac\|RT" engine/world/include/engine/world/terrain.hpp | head -20
+The core is in place: brushes, one-command strokes, dirty-tile revisions, the file format, and the physics refresh. Two acceptance points are not met, though: no editor UI exists, and nothing consumes the dirty-tile set to rebuild LOD or RT geometry. Before reporting, I'll confirm the Linux build and terrain tests still pass.
+[94m[Bash][0m Rebuild Linux debug preset and locate test binary $ find . -name engine_tests -type f 2>/dev/null | head -3
+[94m[Bash][0m Run terrain tests and unit suite on the Linux build $ echo "editor-refs: $?"
+The Linux unit suite passes with 967 of 967 cases, including the terrain edit tests. I'll record this pass in the progress log with an honest status.
+[94m[Bash][0m Append verification status note to progress log $ the Windows and Linux gates recorded above were not rerun here. --- EOF tail -3 .ralph-tui/progress....
+US-071 is not complete, so I'm not signalling COMPLETE. The headless core is in place and builds, but two acceptance points are open.
+
+**What exists (verified):**
+- `engine/world/src/terrain_edit.cpp` (`TerrainDocument`) has raise, lower, smooth, flatten, and four-layer paint brushes, each with radius, strength, and falloff.
+- A stroke is one undo command, and the file save and reopen round-trip is in place.
+- `take_dirty_tiles()` and per-tile `tile_revision()` report which tiles changed.
+- `refresh_terrain_collider` in `engine/physics` updates a tile's heightfield in place.
+- `cmake --build --preset linux-debug` succeeds, and `engine_tests --suite unit` passes 967 of 967, including the terrain edit cases.
+
+**What is open:**
+- **Editor UI:** nothing under `engine/editor` references `TerrainDocument`, so the brushes can only be driven from code. The story asks for this to work "in the editor".
+- **LOD/RT invalidation:** the dirty-tile set is produced, but no consumer rebuilds LOD meshes or RT geometry from it yet.
+
+The earlier entry's Windows gate results were not rerun in this pass. I appended a "Partial" verification note to `.ralph-tui/progress.md` and made no source changes. The next step is an editor brush panel plus a consumer that rebuilds LOD and RT geometry from the dirty tiles, then a gate rerun.

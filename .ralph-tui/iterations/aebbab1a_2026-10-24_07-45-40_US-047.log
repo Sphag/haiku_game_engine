@@ -1,0 +1,38 @@
+# Iteration 123 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:45:40.407Z
+- **Ended At**: 2026-10-24T04:46:09.818Z
+- **Duration**: 29s
+- **Input Tokens**: 32
+- **Output Tokens**: 5105
+- **Total Tokens**: 5137
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code, since the codebase notes suggest parts of US-047 already exist.
+[94m[Bash][0m Read progress log and terrain sources $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-047" .ralph-tui/progress.md | head -5...
+The log shows US-047 stuck at Partial for many passes, with the open item being the GPU ray-traced terrain shadow (`darkened 0` on DX12 and Vulkan). I'll check the failing fixture and the traced-scene setup once for a concrete cause before deciding anything.
+[94m[Bash][0m Find RT terrain fixture and traced-scene filters $ grep -n "traced\|Traced\|render_hill\|darkened" tests/src/render_terrain_gpu_tests.cpp | head -60 &&...
+[94m[Bash][0m Read traced-scene build and RT fixture setup $ sed -n 1595,1660p engine/render/src/scene_renderer.cpp && echo ---- && sed -n 436,462p tests/src/ren...
+The traced path looks correct on reading: the instance count matches the tile count, and the transform, mask, and BLAS build all follow the static-mesh path that passes. The remaining fault needs a GPU readback of `RtShadow` on Windows, which this WSL session can't give me. I'll record this pass in the progress log and not edit the shared RT path on a guess.
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: the fault sits in the GPU runtime aft...
+US-047 is not complete, so I'm not emitting the COMPLETE signal. I made no source changes this pass and appended a re-check entry to `.ralph-tui/progress.md`.
+
+**What's still open:**
+1. **Ray-traced terrain shadow doesn't darken on the GPU.** `run_terrain_traced_shadow` fails on both DX12 and Vulkan with `darkened 0`, with no validation-layer errors. The CPU reference passes the same tile geometry. I re-read the traced-scene build (`scene_renderer.cpp:1598-1650`) and the fixture (`render_terrain_gpu_tests.cpp:438`), and found nothing wrong. The fault is after the traced scene is built, so it needs a Windows readback of `RtShadow` on the hill frame. I can't do that from WSL.
+2. **`engine_bench --suite acceptance` doesn't exist** in the tree. It's tracked as US-074, which is not a prerequisite here, so the terrain workload and the performance gate can't run.
+3. **No native Linux Vulkan device** on this host, so the Linux GPU suite is not run.
+
+**What's done and verified:** the CPU runtime (tiles, LOD and stitching, normals, four-layer splat, and the coverage/hole/LOD fixture), the terrain renderer path with splat shading, and the static-path GPU fixtures. The earlier Windows batch passed `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`, with DX12 66/66 and Vulkan 67/67 (only the traced-shadow case failing). The Linux gates passed on the last runs (`linux-debug`, `linux-unit` 22/22, `linux-gcc-unit`, and ASan/sanitize earlier).
+
+**Next step:** run the Windows batch with an `RtShadow` readback (or a count of primary-ray misses and shadow hits) for the hill frame. That will show whether the GPU writes zeros where the CPU shadows. Then the RT criterion can close, and the bench and native Linux Vulkan items remain.

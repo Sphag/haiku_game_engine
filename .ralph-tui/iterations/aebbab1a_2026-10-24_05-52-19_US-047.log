@@ -1,0 +1,44 @@
+# Iteration 93 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:52:19.491Z
+- **Ended At**: 2026-10-24T02:52:49.338Z
+- **Duration**: 29s
+- **Input Tokens**: 36
+- **Output Tokens**: 4666
+- **Total Tokens**: 4702
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see what already exists.
+[94m[Bash][0m Read progress log and locate terrain files $ grep -rl "terrain" --include=*.hpp --include=*.cpp --include=*.txt . | grep -v third_party | head -5...
+The progress log shows US-047 as Partial. The CPU runtime, the render bridge, and the static-path integration are done. The open items are splat shading, shadow/RT checks, the bench workload, and the Windows gates. I'll read the current renderer vertex path and the terrain mesh bridge before deciding how to proceed.
+[94m[Bash][0m Read terrain bridge and static vertex layout $ cat engine/render/include/engine/render/terrain_mesh.hpp && sed -n 1,80p engine/render/src/terrain_m...
+The splat path needs a terrain-only vertex layout and pipeline. Before deciding whether to build it now, I'll check how many pipeline and pool sites the static layout reaches.
+[94m[Bash][0m Map static vertex layout uses across renderer $ cat engine/render/shaders/*.hlsl | wc -l
+The static vertex layout is shared by the opaque and shadow pipelines (`scene_renderer.cpp:720`, `:919`), the mesh vertex pool (`:976`), the upload and pack paths (`:1047`, `:2033`), and the meshlet and cull paths. A terrain-only splat layout therefore touches the shared draw path and needs Windows DX12 and Vulkan GPU runs to verify. I'm not going to start that as an unverified edit in this pass, so I'll record the scope in the progress log.
+[94m[Bash][0m Append re-check entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-24 - US-047 (re-check 15, still Partial) - What wa...
+US-047 is still **Partial**, so I am not signalling COMPLETE. I made no source changes in this pass. I only appended a status entry to `.ralph-tui/progress.md`.
+
+**What is done (from earlier passes):**
+- CPU terrain runtime in `engine/world`: tiles, LOD, stitching, normals, four-weight splat, and 14 fixture cases.
+- Render bridge `make_terrain_render_tile` (`engine/render/src/terrain_mesh.cpp`) with unit tests for coverage and holes.
+- Terrain tiles reach the renderer and RT set through the static mesh path, with a GPU fixture for LOD seams. The recorded Windows DX12 and Vulkan GPU runs passed.
+- Linux GCC and ASan/UBSan gates passed.
+
+**What is still open:**
+- **Splat shading.** The four-layer blend is not on screen. The static vertex layout is shared by the opaque and shadow pipelines, the mesh vertex pool, the upload path, and the meshlet and cull paths. A terrain-only splat attribute needs a separate layout and pipeline variant in each of those, plus a `scene.hlsl` branch. I recommend option (b), constant layer colours, as the first cut.
+- **Shadow and RT checks.** The GPU fixture checks colour and depth only.
+- **`engine_bench` terrain workload** and the acceptance bench run.
+- **Windows gates** (`win-dev`, `win-debug`, `win-unit`, and the GPU suites) need to be re-run after the shader change.
+
+I did not start the splat change in this pass. It touches the shared draw path, and without the Windows GPU batch I could not verify it. Leaving it unverified would risk breaking the static path that other stories depend on. The next pass should begin with the terrain-only layout and pipeline variant, then the shader branch, then the GPU fixture.

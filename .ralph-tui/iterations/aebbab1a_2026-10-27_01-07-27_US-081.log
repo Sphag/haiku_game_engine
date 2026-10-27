@@ -1,0 +1,54 @@
+# Iteration 1229 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:07:27.612Z
+- **Ended At**: 2026-10-26T22:13:41.276Z
+- **Duration**: 6m 13s
+- **Input Tokens**: 42
+- **Output Tokens**: 3957
+- **Total Tokens**: 3999
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and what docs already exist.
+[94m[Bash][0m Inspect repo root, docs, and progress log $ tail -n 80 .ralph-tui/progress.md
+The previous US-081 pass already wrote the docs and ran part of the gates. Next I'll check what `docs/acceptance.md` records as open, and confirm the README's links resolve.
+[94m[Bash][0m Check acceptance doc open items and README links $ ls artifacts/bench 2>/dev/null | tail -5
+The remaining gates need native Linux GPU hardware, a Windows GPU run, or a clean-copy build, so they stay open. I'll re-run the Linux gates that are feasible here to confirm the tree still passes after the last docs pass.
+[94m[Bash][0m Re-run Linux vendor, configure, build, and unit gates $ tail -3 /tmp/us081_ctest.txt
+[94m[Bash][0m Read unit test totals and acceptance record $ grep -n -i "linux-unit\|30/30" docs/acceptance.md | head -5
+The re-run matches the recorded result, so I'll log this pass in the progress file.
+[94m[Bash][0m Append US-081 re-verification entry to progress log $ `ctest --preset linux-unit` passed 30 of 30. - No source or doc changes this pass. The docs written ...
+US-081 is not complete, so I am not emitting the COMPLETE signal. The documentation is in place. Final acceptance is blocked by work that needs hardware or runs this machine doesn't have.
+
+**Done in this pass**
+- Re-ran the Linux gates that can run here, on the current tree:
+  - `cmake -P cmake/ValidateVendor.cmake`: passed.
+  - `cmake --preset linux-dev`: passed.
+  - `cmake --build --preset linux-debug`: passed.
+  - `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30 of 30 passed.
+- Checked that every `docs/` link in the README points at an existing file.
+- Appended a re-verification entry to `.ralph-tui/progress.md`. No source or doc files changed.
+
+**Already in place from an earlier pass**
+- `README.md`, plus `docs/architecture.md`, `docs/schemas.md`, `docs/vendor.md`, `docs/capability-matrix.md`, and `docs/acceptance.md`.
+- The Windows gates `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` were recorded as passing in that earlier pass. I did not re-run them in this pass.
+
+**Still open (recorded as not run in `docs/acceptance.md`)**
+- `linux-gcc`: the local GCC 9.4 cannot build Jolt.
+- `linux-asan` / `linux-sanitize`, and the `win-release` and `linux-release` builds.
+- GPU suites: DX12 and Vulkan on Windows, and Vulkan on native Linux. This machine has no native Linux Vulkan device (`/dev/dri` is absent).
+- Editor suite and visual smoke tests on both operating systems.
+- Offline clean-copy build and clean-directory package smoke tests.
+- Full acceptance benchmark. The manifest still has four `implementation: "none"` entries, so an acceptance run would exit as incomplete.
+
+Final acceptance needs the RTX 5080 reports and native Linux Vulkan hardware. The open decisions are the native Linux Vulkan host, the FSR 2 vendoring route (the `*_permutations.h` files are missing), the four workload sources, and whether to profile the `render_stress` CPU hotspot or accept a frame-budget change. Those are yours to decide.

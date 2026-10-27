@@ -1,0 +1,65 @@
+# Iteration 945 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:09:40.594Z
+- **Ended At**: 2026-10-26T14:10:02.783Z
+- **Duration**: 22s
+- **Input Tokens**: 36
+- **Output Tokens**: 3313
+- **Total Tokens**: 3349
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the `all_features` scene already exists.
+[94m[Bash][0m Check progress log and search for all_features $ ls
+The progress log shows 48 prior passes with no source change, each stopping on the same blockers. Before deciding whether to repeat that, I'll check the manifest entry and the latest iteration log.
+[94m[Bash][0m Inspect manifest entry, latest log, and sample tree $ ls tools/benchmark/src
+The last log says `tests/src/all_features_tests.cpp` exists, but my earlier grep didn't show it, so I'll check directly.
+[94m[Bash][0m Check for all_features test sources $ git status 2>&1 | head -2
+US-079 is not complete, and I'm not emitting the COMPLETE signal. I checked the tree and made no source changes.
+
+**What exists:** `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are registered in `tests/CMakeLists.txt`. The `all_features` workload has an entry in `benchmarks/manifest.json`, but its `implementation` is still `none`.
+
+**What is still missing (not reported as passed):**
+- **Scene project:** there is no `samples/all_features/` directory, and no `tools/benchmark` GPU scene for it.
+- **Tour runner:** no automated tour that checks feature markers and outputs, with screenshots and an action log.
+- **Profiles:** the GI, RT, and upscale profiles are not run. `full_1080` needs FSR 2 permutation headers, and `third_party/fsr2` still has none.
+- **Forced geometry paths:** not run.
+- **Editor scenario:** scene, material, animation, and terrain edits, undo/redo, Play/Stop, and package/relaunch on this project are not done.
+- **Benchmark acceptance:** `engine_bench --suite acceptance` is blocked on the scene above.
+- **Gates:** I did not re-run any gate in this pass. The Windows gates, the GPU suites, `linux-gcc*`, and the ASan preset are not verified here.
+
+**Decisions I need from you before this can move:**
+1. The FSR 2 vendoring route for `full_1080`. Without the permutation headers, that profile stays unsupported.
+2. Approval of `all_features_route_v1` as written in `benchmarks/manifest.json`, which is the camera route the scene is built around.
+
+Once those are settled, the remaining work is a multi-session effort that needs a Windows host with the RTX 5080, a native Linux Vulkan device, and a GCC 11+ toolchain.
+
+I'm appending a short status entry to `.ralph-tui/progress.md` so the next pass starts from these same blockers.
+[94m[Bash][0m Append status entry to progress log $ (2) approval of `all_features_route_v1`. - Remaining work needs a Windows RTX 5080 host, native Linu...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. This pass changed no source code and ran no builds or tests.
+
+**Existing:** `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are registered in `tests/CMakeLists.txt`. The `all_features` entry in `benchmarks/manifest.json` is still `implementation: none`.
+
+**Not done, and not reported as passed:**
+- **Scene project:** `samples/all_features/` does not exist, and there is no GPU scene for it in `tools/benchmark`.
+- **Tour runner:** no automated tour with feature-marker checks, screenshots, or an action log.
+- **Profiles and forced paths:** the GI, RT, and upscale profiles and the forced geometry paths are not run. `full_1080` needs FSR 2 permutation headers, and `third_party/fsr2` has none.
+- **Editor scenario:** no scene, material, animation, or terrain edits, undo/redo, Play/Stop, or package/relaunch on this project.
+- **Benchmark acceptance:** `engine_bench --suite acceptance` is blocked on the scene.
+- **Gates:** no Windows gate, GPU suite, `linux-gcc*`, or ASan preset has been run in this pass.
+
+**Decisions I need from you:**
+1. The FSR 2 vendoring route for `full_1080`.
+2. Approval of `all_features_route_v1` as written in `benchmarks/manifest.json`.
+
+The rest needs a Windows host with the RTX 5080, a native Linux Vulkan device, and GCC 11+. I appended a short status entry to `.ralph-tui/progress.md` so the next pass starts from these blockers.

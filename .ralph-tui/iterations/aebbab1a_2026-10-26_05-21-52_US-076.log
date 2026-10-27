@@ -1,0 +1,47 @@
+# Iteration 724 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:21:52.140Z
+- **Ended At**: 2026-10-26T02:22:16.964Z
+- **Duration**: 24s
+- **Input Tokens**: 26
+- **Output Tokens**: 3161
+- **Total Tokens**: 3187
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and locate render_stress references $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls tools/benchmark/src && echo ---- && grep -rn "...
+The log shows US-076 has been blocked on the same user decision for many passes. I'll confirm nothing changed since the last recorded results before deciding whether to rerun anything.
+[94m[Bash][0m Check source and artifact timestamps for US-076 $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/manifest.json benchmarks/workload_e...
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. --- EOF tail -n 3 .ralph-tui/progress.md
+US-076 is not complete, and I have not emitted the COMPLETE signal. The acceptance criteria cannot pass on the current instance placement, and fixing that is a workload change that needs your decision.
+
+**What is blocked on you:**
+- **Triangle floor and frame budget fail on every indexed/indirect/meshlet run.** The route start submits 312,068 triangles against the contract's 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. The cause is placement: instances are uniform over the 8192 m world, so the 60° view at the route start sees about 330 items.
+  - Option (a): keep the contract and record these as the measured result. The story then closes as "measured, failing", not passed.
+  - Option (b): change placement. That bumps `kWorkloadVersion` (currently 1) and regenerates `benchmarks/workload_expected.json`. I have not done this because the contract says not to reduce workloads, and a placement change alters the benchmark content.
+- **full_1080 is unsupported.** FSR 2 is missing its generated shader permutations, so only native_1080 runs. "Both profiles" is only partly met.
+
+**What is done and verified:**
+- `render_route_v1` is defined in the manifest. The `render_stress` driver builds the counts from the generated workload.
+- The indexed, indirect, and meshlet paths ran on DX12 and Vulkan, with screenshots and submitted/visible counters under `artifacts/bench/us076-*`.
+- The forced mesh-shader-off run falls back to indirect-indexed. The report says `mesh_shaders: disabled: forced off` and `meshlet_path: fell back`, and the features are not reported as enabled.
+- Gates on the current tree: Windows validate, `win-dev`, `win-debug` build with 0 warnings, `win-unit` (29/29), `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases). Linux validate, `linux-dev`, `linux-debug` build with 0 warnings, `linux-unit` (30/30).
+
+**Not run:**
+- Native Linux Vulkan GPU: WSL has no Vulkan device.
+- `linux-gcc` and `linux-asan`: GCC 9.4 cannot build Jolt, and the ASan run was not done for this story.
+
+I appended a status entry to `.ralph-tui/progress.md`. No source or benchmark changes were made in this pass, and the existing benchmark results still describe the current tree.
+
+Tell me which option to take for placement, and whether full_1080 should stay unsupported until FSR 2 is vendored. With option (b) I would bump the workload version, regenerate the expected file, and rerun the eight acceptance reports.

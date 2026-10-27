@@ -1,0 +1,286 @@
+# Iteration 1227 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:00:20.717Z
+- **Ended At**: 2026-10-26T22:07:11.382Z
+- **Duration**: 6m 50s
+- **Input Tokens**: 474
+- **Output Tokens**: 64487
+- **Total Tokens**: 64961
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log, then see which parts of US-081 I can actually verify from WSL.
+[94m[Bash][0m Inspect repo root, progress log, and tasks $ git status 2>&1 | head -5
+[94m[Bash][0m List docs, benchmarks, fixtures, and markdown files $ find . -maxdepth 2 -name "*.md" -not -path "./third_party/*" | head -50
+The root has no README, so US-081 starts with writing one. Next I'll read the PRD's constraints, the existing build and distribution docs, and the vendor manifest, so the new docs agree with them.
+[94m[Bash][0m Read PRD entry and build documentation $ cat docs/build.md | head -150
+[94m[Bash][0m Read distribution and benchmark docs, vendor list $ ls tools/vendor tools/ci tools/game_editor 2>/dev/null
+The existing docs are thorough. Next I'll read the PRD's constraints and the full US-081 entry, and check the vendor manifest and README references.
+[94m[Bash][0m Read US-081 entry and PRD section headings $ grep -n "^#" tasks/prd-open-world-engine.md | head -80
+[94m[Bash][0m Inspect build dirs, artifacts, workflows, vendor manifest $ head -c 1500 third_party/manifest.json
+Before writing anything, I'll start the Linux gates in the background since they're the slow part. I'll also read the saved notes on running the Windows gates from WSL.
+[94m[Bash][0m Start Linux gates in background and read memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The Linux gates are running. Next I'll gather the facts the README needs: the Lua API surface, the targets, and the schema documents. I'll also check the Windows batch template.
+[94m[Bash][0m Find Lua docs, targets, presets, and test sources $ ls tests tests/src | head -80
+[94m[Bash][0m Check Windows temp dir, VS install, validate result $ cat /tmp/us081_validate.log 2>/dev/null | tail -3
+I have the targets and presets. Now I need the actual Lua API surface and the suite names, so the README doesn't invent anything.
+[94m[Bash][0m List Lua bindings, test suites, and scene format doc $ sed -n 1,40p docs/scene-format.md
+[94m[Bash][0m Find Lua module names and test suite tags $ tail -3 /tmp/us081_configure.log 2>/dev/null
+
+[91m[Error: Exit code 1
+"add", entity_
+"alive", entity_
+"blending", animation_
+"create", entity_
+"dependencies", assets_
+"destroy", entity_
+"down", input_
+"emit", events_
+"exists", assets_
+"find", assets_
+tests/src/cli_options.hpp:9:enum class Suite {
+tests/src/cli_options.hpp-10-    All,          // every CPU test; GPU tests are excluded so CPU gates never open a GPU
+tests/src/cli_options.hpp-11-    Unit,
+tests/src/cli_options.hpp-12-    Integration,
+tests/src/cli_options.hpp-13-    Gpu,          // GPU tests (tagged gpu); needs --backend
+tests/src/cli_options.hpp-14-    Editor,       // editor shell tests (tagged editor); --backend adds that backend's GPU editor tests
+tests/src/cli_options.hpp-15-};
+tests/src/cli_options.hpp-16-
+tests/src/cli_options.hpp-17-struct CliOptions {
+tests/src/cli_options.hpp-18-    bool show_help = false;
+tests/src/cli_options.hpp-19-    Suite suite = Suite::All;
+tests/src/cli_options.hpp-20-    std::string backend;  // dx12 or vulkan; required for the gpu suite, empty otherwise
+tests/src/cli_options.hpp-21-};
+tests/src/cli_options.cpp-99-            return "~[gpu]";
+tests/src/cli_options.cpp-101-            return "[unit]";
+tests/src/cli_options.cpp-103-            return "[integration]";
+tests/src/cli_options.cpp-105-            return "[gpu][" + std::string(backend) + "]";
+tests/src/cli_options.cpp-109-                return "[editor]~[gpu]";
+tests/src/cli_options.cpp-111-            return "[editor]~[gpu],[editor][gpu][" + std::string(backend) + "]";
+tests/src/cli_options.cpp-113-    return "~[gpu]";
+tests/src/cli_options.cpp-117-    return "Usage: engine_tests [--suite <unit|integration|gpu|editor|all>] [--backend <dx12|vulkan>] [--help]\n"
+tests/src/cli_options.cpp-118-           "\n"
+tests/src/cli_options.cpp-119-           "Runs the CPU test suites, or the GPU suite on one backend. CPU tests are selected by their unit or integration tag.\n"
+tests/src/cli_options.cpp-120-           "GPU tests are tagged gpu and are never part of the CPU suites.\n"
+tests/src/cli_options.cpp-121-           "\n"
+tests/src/cli_options_tests.cpp:92:    CHECK(engine::tests::suite_tag_expression(Suite::All, "") == "~[gpu]");
+tests/src/cli_options_tests.cpp:93:    CHECK(engine::tests::suite_tag_expression(Suite::Unit, "") == "[unit]");
+tests/src/cli_options_tests.cpp:94:    CHECK(engine::tests::suite_tag_expression(Suite::Integration, "") == "[integration]");
+tests/src/cli_options_tests.cpp:95:    CHECK(engine::tests::suite_tag_expression(Suite::Gpu, "dx12") == "[gpu][dx12]");
+tests/src/cli_options_tests.cpp-98-TEST_CASE("CLI selects the editor suite, with an optional backend", "[unit]") {
+tests/src/cli_options_tests.cpp-99-    const auto cpu = parse({"--suite", "editor"});
+tests/src/cli_options_tests.cpp:102:    CHECK(engine::tests::suite_tag_expression(Suite::Editor, "") == "[editor]~[gpu]");
+tests/src/cli_options_tests.cpp-104-    const auto gpu = parse({"--suite=editor", "--backend=vulkan"});][0m
+[94m[Bash][0m Find Lua module table names in bindings $ tail -3 /tmp/us081_configure.log 2>/dev/null
+
+[91m[Error: Exit code 1
+764:constexpr luaL_Reg kEntityFunctions[] = {
+774:constexpr luaL_Reg kTransformFunctions[] = {
+780:constexpr luaL_Reg kInputFunctions[] = {
+788:constexpr luaL_Reg kAssetFunctions[] = {
+797:constexpr luaL_Reg kPhysicsFunctions[] = {
+896:constexpr luaL_Reg kAnimationFunctions[] = {
+908:constexpr luaL_Reg kEventFunctions[] = {
+915:constexpr luaL_Reg kAudioFunctions[] = {
+931:void open_module(lua_State* state, ScriptEngine& engine, const char* name, const luaL_Reg* functions) {][0m
+[94m[Bash][0m List Lua module open calls and gate progress $ tail -3 /tmp/us081_configure.log 2>/dev/null
+
+[91m[Error: Exit code 1
+931:void open_module(lua_State* state, ScriptEngine& engine, const char* name, const luaL_Reg* functions) {
+955:    open_module(state, engine, "entity", kEntityFunctions);
+956:    open_module(state, engine, "transform", kTransformFunctions);
+957:    open_module(state, engine, "input", kInputFunctions);
+958:    open_module(state, engine, "assets", kAssetFunctions);
+959:    open_module(state, engine, "physics", kPhysicsFunctions);
+960:    open_module(state, engine, "events", kEventFunctions);
+961:    open_module(state, engine, "audio", kAudioFunctions);
+962:    open_module(state, engine, "animation", kAnimationFunctions);][0m
+[94m[Bash][0m Check status of background gate logs $ tail -3 /tmp/us081_configure.log 2>&1
+
+[91m[Error: Exit code 1
+-rw-r--r-- 1 max max 0 Oct 27 01:00 /tmp/us081_validate.log
+tail: cannot open '/tmp/us081_configure.log' for reading: No such file or directory][0m
+The validation step is still running. While it finishes, I'll check the converter and packer CLI commands so the README's pipeline section is accurate.
+[94m[Bash][0m Read CLI usage strings for tools $ grep -n '"Usage\|Usage:' -A6 tools/asset_converter/src/*.cpp tools/asset_packer/src/main.cpp tools/b...
+I have enough for the README's CLI and pipeline sections. For the schema document I need the real component catalog and the vendor manifest's dependency list, so I'll read those next.
+[94m[Bash][0m Find component catalog and vendor dependency list $ cat /tmp/us081_validate.log | tail -3
+[94m[Bash][0m Locate component registration and type IDs $ grep -rhoE 'type_id *= *"[a-z_.]+"|"engine\.[a-z_]+\.[A-Za-z]+"' engine --include=*.cpp | sort -u | ...
+[94m[Bash][0m Find component catalog implementation $ grep -rhn "\"Transform\"\|\"Camera\"\|\"MeshRenderer\"\|\"Light\"" engine --include=*.cpp | head -5
+[94m[Bash][0m Read component registration in reflection code $ grep -rn "reflect\|Catalog" tests/src/scene_*.cpp 2>/dev/null | head -3
+[94m[Bash][0m Read test component catalog example and runtime catalog $ grep -n "catalog" engine/runtime/src/game_main.cpp | head -5
+[94m[Bash][0m Read scene format header comment and gate progress $ ls -la /tmp/us081_*
+The validation log is still empty after several minutes. I'll check whether the process is alive before assuming it's stuck.
+[94m[Bash][0m Check whether gate processes are still running $ ps -eo pid,etime,args | grep -E "cmake|ctest|ninja|clang" | grep -v grep | head
+The validation is still running, so I'll write the documentation while it finishes. The README comes first. It reports status as-is: final acceptance is incomplete, and the docs say so.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/README.md[0m "# Haiku Game Engine
+
+A C++20 engine for open-world games, with an in-house Windows and Linux platform layer, a
+DirectX 12 and Vulkan renderer, a Jolt-based physics world, Lua scripting, an asset conve... (11139 chars)"
+The README is written. Before moving on, I'll correct three claims I can't back up: the Play-mode wording, the Windows OS version, and the packaging note.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/README.md[0m edit: "4. Use Play to run the scene in a separate session..." → "4. Use Play to run the scene in a separate session..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/README.md[0m edit: "| Windows 11 x64 (reference RTX 5080) | MSVC | See..." → "| Windows x64 host (reference RTX 5080) | MSVC | S..."
+Next are the Windows gates. The memory notes describe a batch-file method for running them from WSL. I'll check the VS install path and confirm no earlier batch is still running before I launch one.
+[94m[Bash][0m Locate vcvars64 and check for running batches $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "gate\|us08" | head
+Both VS installs exist. Memory says the Windows batches use VS 18 Community, so I'll follow that. The batch runs the four Windows gates in order and writes one result file per step. Nothing else is running, so it's safe to start.
+[94m[Bash][0m Write and copy the Windows gate batch to Windows Temp $ echo ok
+[94m[Bash][0m Launch the Windows gate batch in background $ cd /tmp && nohup cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us081_win_gates.bat" > /tmp/us0...
+The Windows batch is running in the background. Meanwhile I'll gather the module dependency graph from the CMake files, so the architecture document reflects the actual link rules instead of guesses.
+[94m[Bash][0m Map module link dependencies from CMake files $ grep -n "target_link_libraries" -A6 engine/runtime/CMakeLists.txt | head -20
+The link graph confirms the layering. Next I'll list the remaining test files and the PRD story titles, which the acceptance map needs.
+[94m[Bash][0m List remaining test sources and gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us081_*rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+platform_win32_tests.cpp platform_window_tests.cpp platform_x11_input_tests.cpp platform_x11_tests.cpp postprocess_tests.cpp render_denoise_gpu_tests.cpp render_denoise_tests.cpp render_dynamic_gi_gpu_tests.cpp render_dynamic_gi_tests.cpp render_gi_gpu_tests.cpp render_graph_fixture.hpp render_graph_gpu_tests.cpp render_graph_tests.cpp render_indirect_gpu_tests.cpp render_material_fixture.hpp render_material_gpu_tests.cpp render_material_tests.cpp render_meshlet_fixture.hpp render_meshlet_gpu_tests.cpp render_meshlet_tests.cpp render_particles_gpu_tests.cpp render_particles_tests.cpp render_postprocess_gpu_tests.cpp render_rt_fixture.hpp render_rt_gpu_tests.cpp render_rt_scene_gpu_tests.cpp render_rt_tests.cpp render_scene_fixture.hpp render_scene_gpu_tests.cpp render_scene_tests.cpp render_skin_gpu_tests.cpp render_skin_tests.cpp render_terrain_gpu_tests.cpp render_terrain_tests.cpp render_upscaler_tests.cpp render_volumetric_gpu_tests.cpp render_volumetric_tests.cpp rhi_contract_tests.cpp rhi_dx12_gpu_tests.cpp rhi_upscaler_tests.cpp rhi_vulkan_gpu_tests.cpp rhi_vulkan_mapping_tests.cpp runtime_options_tests.cpp save_tests.cpp scene_format_tests.cpp scene_graph_tests.cpp scene_reflection_tests.cpp scene_tests.cpp scene_transform_tests.cpp script_animation_tests.cpp script_audio_tests.cpp script_lifecycle_tests.cpp script_lua_tests.cpp script_ui_tests.cpp shader_cache_tests.cpp shader_compiler_tests.cpp shader_diagnostics_tests.cpp shader_gpu_tests.cpp shader_program_tests.cpp shader_reflection_tests.cpp status_tests.cpp ui_interaction_tests.cpp ui_layout_tests.cpp ui_text_tests.cpp world_origin_tests.cpp world_partition_tests.cpp world_streaming_tests.cpp world_terrain_edit_tests.cpp world_terrain_tests.cpp 
+81][0m
+[94m[Bash][0m Check gate status and list story titles $ ' | head -c 6000
+The validation log is still empty after about 10 minutes, so I'll check whether it's still working or stuck. I'll also get the full test-file list, which the acceptance map depends on.
+[94m[Bash][0m List physics, bench, editor test files and process state $ ps -eo pid,etime,pcpu,args | grep -E "ValidateVendor|validate|cmake" | grep -v grep | cut -c1-150
+Validation has finished and configure has started. The log still reads as empty, which doesn't fit the exit-code line the wrapper should have appended, so I'll look at that before trusting the result.
+[94m[Bash][0m Recheck validate log contents and configure output $ cat /tmp/us081_configure.log 2>/dev/null | tail -5
+Vendor validation passed: 26 dependencies and 8542 files. The configure log is still empty. The schema document needs exact field kinds, sidecar keys, and save/pack header details, so I'll check those in the sources.
+[94m[Bash][0m Read field kinds, sidecar, pack, and save key names $ head -30 docs/asset-registry.md | tail -22
+I have what I need for the schemas. Next I'll write the schema document from these exact keys and kinds.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/schemas.md[0m "# Schemas
+
+Every file the engine reads or writes is versioned, and every reader refuses what it does not know. Unknown keys,
+a different format name, and a different version are errors, so a file is n... (6051 chars)"
+The schema document has a couple of claims to check: the rotation order and the identity default for missing transform values. I'll verify those in the source, and confirm how `NOTICES.txt` is generated for the vendor document.
+[94m[Bash][0m Verify transform order and NOTICES generation $ cat /tmp/us081_gate/stdout.txt | head -5
+Rotation order is confirmed as w, x, y, z. The Windows batch is running in its VS 18 developer prompt. Next is the vendor document, built from the manifest's pinned entries.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/vendor.md[0m "# Vendor manifest and notices
+
+Every third-party source the build uses is vendored under `third_party/`, pinned in `third_party/manifest.json`, and
+checked by `cmake/ValidateVendor.cmake`. Configure a... (4743 chars)"
+I wrote a few validator behaviours and license claims from memory, not from the code. I'll check the validator script and correct any claim it doesn't support.
+[94m[Bash][0m Read the vendor validator's checks $ grep -n "message\|sha256\|stray\|pycache\|unlisted\|revision\|version" cmake/ValidateVendor.cmake | ...
+The validator checks the manifest schema, the HTTPS URL, 40-character revisions, each listed file's SHA-256, patch hashes, and unlisted files. It does not check for Python caches or for the revision field matching the version text. I'll correct those claims and the unsupported licensing wording.
+[94m[Bash][0m Correct vendor doc claims to match the validator $ its `LICENSE` text is kept beside it.\n":"", } for a,b in rep.items():     assert a in s, a[:50]    ...
+Next is the architecture document, grounded in the link graph I checked earlier.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/architecture.md[0m "# Architecture
+
+The engine is a set of static libraries under `engine/`, one directory per module, linked by CMake targets named
+`engine_<module>`. Tools (`tools/`) and the tests (`tests/`) link them.... (7231 chars)"
+A few architecture bullets go beyond what I checked: the optional-backend rule, the jobs wording, and the physics timestep sentence. I'll tighten those to what the code and notes support.
+[94m[Bash][0m Tighten architecture claims and check gate progress $ tail -3 /tmp/us081_gate/stdout.txt
+The Windows steps are moving: the validate, configure, and build result files exist. I'll read their codes and check that the Linux configure has finished.
+[94m[Bash][0m Read Windows gate result codes and Linux progress $ cat /tmp/us081_build.log 2>/dev/null | tail -2
+The Windows build reports exit 0, but its log tail shows the build still at step 33 of 171. That doesn't add up, so I'll check the full log before counting it. The Linux configure is also still running.
+[94m[Bash][0m Inspect Windows build log and Linux configure process $ ps -eo pid,etime,args | grep -E "cmake|ninja|ctest" | grep -v grep | cut -c1-120
+The Windows build log is only 10 lines and stops mid-build, which doesn't match an exit code of 0. I'll check whether the batch is still running on the Windows side and whether the build finished.
+[94m[Bash][0m Check Windows processes and gate file timestamps $ ls -la --time-style=full-iso /mnt/c/Users/bucha/AppData/Local/Temp/us081_* | cut -c40-
+The Windows batch is now in its ctest step, with `engine_tests.exe` running. The build's exit code was written at 02:51, when the build finished, so I'll check whether a short log means the build had nothing to do. I'll wait for ctest before deciding.
+[94m[Bash][0m Wait for Windows ctest and check Linux configure $ tail -2 /tmp/us081_configure.log
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cd /mnt/c/Users/bucha/AppData/Local/Temp tail -c 600 us081_unit.log tr -d '\r' echo cat us081_unit_rc.txt tail -2 /tmp/us081_configure.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Windows ctest output and Linux configure $ tail -2 /tmp/us081_configure.log
+Windows `engine_tests_unit` passed. The suite has 29 tests, and it's still running. Meanwhile I'll pull the benchmark manifest's status entries, since the capability matrix and acceptance map must say exactly which acceptance scenes are missing.
+[94m[Bash][0m Summarize benchmark manifest scenes and implementation status $ grep -n '"implementation"' -B4 benchmarks/manifest.json | grep -E '"(id|name|scene|suite)"|implement...
+[94m[Bash][0m List benchmark scenes with implementation status $ python3 -c " import json m=json.load(open('benchmarks/manifest.json')) for s in m['scenes']: print(s...
+[94m[Bash][0m List benchmark scene keys and implementation status $ python3 -c " import json m=json.load(open('benchmarks/manifest.json')) sc=m['scenes'] for k,s in sc....
+The benchmark state is clear: the acceptance scenes are declared, but the full acceptance run has never been produced. Now I'll write the capability matrix. It describes what each platform and backend supports, and its verification column points to the acceptance document rather than claiming results.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/capability-matrix.md[0m "# Capability matrix
+
+What the engine supports on each platform and backend, and what has been verified there. The verification column
+names what was run; a blank or "not run" means there is no report.... (6909 chars)"
+The capability matrix is written. Next I'll check the gate results from both sides.
+[94m[Bash][0m Check Windows ctest and Linux configure progress $ tail -c 300 /tmp/us081_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+_tests_cli_help_short ......................   Passed    0.02 sec
+      Start  5: engine_tests_cli_unknown_argument
+ 5/29 Test  #5: engine_tests_cli_unknown_argument ................   Passed    0.02 sec
+      Start  6: engine_tests_cli_missing_suite_value
+ 6/29 Test  #6: engine_tests_cli_missing_suite_value .............   Passed    0.03 sec
+      Start  7: engine_tests_cli_invalid_suite
+ 7/29 Test  #7: engine_tests_cli_invalid_suite ...................   Passed    0.02 sec
+      Start  8: engine_tests_cli_gpu_needs_backend
+ 8/29 Test  #8: engine_tests_cli_gpu_needs_backend ...............   Passed    0.02 sec
+      Start  9: engine_tests_cli_invalid_backend
+ 9/29 Test  #9: engine_tests_cli_invalid_backend .................   Passed    0.02 sec
+      Start 10: engine_tests_cli_suite_unit
+
+-- Enabled importer formats: OBJ FBX GLTF
+-- Disabled importer formats: AMF 3DS AC ASE ASSBIN B3D BVH COLLADA DXF CSM HMP IRRMESH IQM IRR LWO LWS M3D MD2 MD3 MD5 MDC MDL NFF NDO OFF OGRE OPENGEX PLY MS3D COB BLEND IFC XGL Q3D Q3BSP RAW SIB SMD STL TERRAGEN 3D USD X X3D 3MF MMD
+-- Configuring done (105.0s)][0m
+The Windows ctest run is at test 10 of 29, and the Linux configure has finished. The Linux build has started. Before I accept the Windows build as passing, I'll read its whole log.
+[94m[Bash][0m Read full Windows build log $ cd /mnt/c/Users/bucha/AppData/Local/Temp && cat us081_build.log | tr -d '\r' | cut -c1-220
+The build log stops at step 33 of 171, but the exit code was written as 0. That looks like the stale-binary hazard my notes warn about: ctest may be running an old `engine_tests.exe`. I'll check for a live build process before trusting any result from this batch.
+[94m[Bash][0m List Windows build and test processes $ cmd.exe /c tasklist 2>/dev/null | grep -iE "ninja|cl.exe|link.exe|cmake|dxc|ctest|engine_" | head -2...
+No ninja or compiler process is alive, so the build step did end. Its exit code is still unexplained, and ctest may be using a binary from before this build. I'll let the batch finish, then rerun the build by itself with the full log kept, rather than accept this result as-is.
+[94m[Bash][0m Wait for Windows batch to finish and read ctest result $ tail -15 /mnt/c/Users/bucha/AppData/Local/Temp/us081_unit.log | tr -d '\r'
+While the Windows batch finishes, I'll write the acceptance map. It covers every story from US-001 through US-080 and links each one to its test files and artifacts. The gate results go in afterwards.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m "# Acceptance checklist
+
+This page maps each PRD story to the tests and artifacts that cover it, then lists the release gates and the items that
+are still open. Source of the story list: `tasks/prd-ope... (13340 chars)"
+The Windows batch has finished. I'll read its ctest result, and fix one link I wrote incorrectly in the acceptance map.
+[94m[Bash][0m Read Windows ctest result and fix a doc link $ cd /mnt/d/dev/haiku_game_engine && sed -i 's/| `audio_mixer_tests`, `audio_device_tests`, `audio_dec...
+Windows ctest exited 0, but its build log was incomplete, so these test results may come from a stale binary. I'll rerun the Windows build alone with a clean log, then ctest, and count the result only if the build completes. First I'll confirm the earlier batch has exited.
+[94m[Bash][0m Confirm no batch is running and write rebuild batch $ cd /mnt/c/Users/bucha/AppData/Local/Temp && rm -f us081_*.txt us081_build.log us081_unit.log && cat ...
+[94m[Bash][0m Launch Windows rebuild batch and check Linux build progress $ tail -3 /tmp/us081_unit.log 2>/dev/null | head -3
+The Linux build exited 0, and the ctest log is already running. But the Linux build log has only three steps, which looks suspiciously short, so I'll read it in full before trusting it.
+[94m[Bash][0m Read full Linux build log $ ls /mnt/d/dev/haiku_game_engine/build/
+The Linux build only reran the DXC external step. The rest of the tree was already up to date from the earlier build in `build/linux-dev`, and this story changes no source, so the result stands. I'll wait for Linux ctest to finish in the background.
+[94m[Bash][0m Wait for Linux unit tests to finish and show results $ tail -12 /tmp/us081_unit.log
+While Linux ctest runs, I'll wait for the Windows rebuild, which runs in its own batch and writes its own result files.
+[94m[Bash][0m Wait for Windows rebuild and ctest, then show codes $ tail -4 us081_unit.log | tr -d '\r'
+Both gates are running in the background. I'll wait for the Linux ctest notification first.
+[94m[Bash][0m Wait for Linux unit test completion $ tail -12 /tmp/us081_unit.log
+Linux unit tests pass: 30 of 30, with exit 0. Next, the Windows rebuild and its ctest.
+[94m[Bash][0m Wait for Windows rebuild and ctest, then show results $ tail -5 us081_unit.log | tr -d '\r'
+The Windows rebuild exited 0 and ctest exited 0. The rebuild found only the DXC step to do, which is consistent with an up-to-date tree. I'll confirm the ctest pass line, then record the results in the acceptance document.
+[94m[Bash][0m Confirm pass counts on both platforms $ echo ok
+Both ctest runs pass: Windows 29 of 29 and Linux 30 of 30. Before updating the gate table, I'll check the remaining logs: the Windows vendor validation, which I didn't keep the result file for, and the Linux configure exit.
+[94m[Bash][0m Confirm Windows validate and both configure results $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us081_cfg.log | tail -2
+All four gates have results, and the Windows vendor validation passed. I'll fill those results into the gate table with the exact outcomes.
+[94m[Bash][0m Fill gate results into acceptance document $ print('ok') EOF grep -n "PASS\|Passed" docs/acceptance.md | head -12
+The gate table now reflects the actual runs. I'll record the work in the progress log, as the workflow requires, including the Windows batch hazard I hit.
+[94m[Bash][0m Append US-081 entry to progress log $ the docs describe the tree as it is. - **Learnings:**   - A warm `win-debug` build can print an inco...
+The learning I just wrote overstates what I know. I didn't establish why the first Windows build log was cut short, so I'll correct that line to say the cause is unknown.
+[94m[Bash][0m Correct progress learnings to state what is known $ print('ok') EOF
+US-081 is not complete. I wrote the documentation package and ran the four Windows and four Linux gates that the environment allows. The release gates that need GPUs, a clean-copy build, and the full benchmark are still open, so I did not emit the completion signal.
+
+**Gates run (all exit 0):**
+
+| Gate | Result |
+|---|---|
+| Linux `ValidateVendor` | Passed: 26 dependencies, 8542 files |
+| Linux `linux-dev` configure | Passed |
+| Linux `linux-debug` build | Passed. The tree was already built, so only the DXC external step ran. |
+| Linux `linux-unit` | 30 of 30 passed |
+| Windows `ValidateVendor` | Passed: 26 dependencies, 8542 files |
+| Windows `win-dev` configure | Passed |
+| Windows `win-debug` build | Passed. Rerun on its own, with the log checked. |
+| Windows `win-unit` | 29 of 29 passed |
+
+The first Windows batch reported a build exit code of 0, but its log stopped at step 33 of 171, and ctest ran after it. I reran the build alone, and that run's log was complete, so I counted only the rerun. I did not determine why the first log was cut short.
+
+**Documentation added (no source code changed):**
+- `README.md`: OS and SDK requirements, offline CMake setup, editor workflow, Lua API, asset pipeline, native packaging, benchmarks, tests, and the licensing status.
+- `docs/architecture.md`: layers and link rules, taken from the CMake graph.
+- `docs/schemas.md`: scene, prefab, component, sidecar, pack, save, package, and manifest formats, checked against the parsers.
+- `docs/vendor.md`: the vendor manifest, licenses, notices, and the FSR 2 gap.
+- `docs/capability-matrix.md`: what each platform and backend supports, with the tests that cover each capability.
+- `docs/acceptance.md`: a story-to-test map for US-001 through US-080, the gate results, and the open items.
+
+Benchmark reproduction already exists in `docs/benchmarks.md`, so I linked to it rather than duplicating it.
+
+**Not run, so final acceptance stays incomplete:**
+- Linux `linux-gcc` (the local GCC 9.4 cannot build Jolt), and `linux-asan` / `linux-sanitize`.
+- `win-release` and `linux-release` builds.
+- GPU suites: DX12 and Vulkan on Windows, and Vulkan on native Linux. The WSL machine has no Vulkan device.
+- The editor suite and visual smoke tests on both operating systems.
+- The offline clean-copy build and the standalone package smoke tests from clean directories.
+- The full acceptance benchmark. The four acceptance scenes are declared, but the render, streaming, all-features, and physics scenes do not yet produce GPU timings, so an acceptance run would report `incomplete`.
+
+Two choices I made: I documented the tree as it is rather than the PRD's intended state, and I did not add a license file, because that is the owner's decision. Both are recorded in the docs. I also appended a US-081 entry to `.ralph-tui/progress.md`.

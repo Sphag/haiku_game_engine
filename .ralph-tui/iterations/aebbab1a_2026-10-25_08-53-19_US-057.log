@@ -1,0 +1,158 @@
+# Iteration 483 Log
+
+## Metadata
+
+- **Task ID**: US-057
+- **Task Title**: Audio
+- **Description**: As a game creator, I want audio so that I can add sound to the game world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T05:53:19.547Z
+- **Ended At**: 2026-10-25T05:58:25.325Z
+- **Duration**: 5m 5s
+- **Input Tokens**: 30
+- **Output Tokens**: 2524
+- **Total Tokens**: 2554
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-057 and where the progress log stands.
+[94m[Bash][0m Inspect repo layout, progress log, and audio dir $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-057" .ralph-tui/progress.md | head -20 && ls ...
+
+[91m[Error: Exit code 2
+CMakeLists.txt
+CMakePresets.json
+artifacts
+build
+cmake
+docs
+engine
+tasks
+tests
+third_party
+tools
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-057 (re-verification, still Partial)
+- What was implemented: no source change. No file under `engine/`, `tests/`, `cmake/`, or the root CMake files is newer than the previous entry.
+- Gates (this pass, Linux): `cmake -P cmake/ValidateVendor.cmake` exit 0 (26 dependencies, 8542 files); `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0, 0 `warning:`/`error:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 passed.
+- Toolchain: `/usr/bin` has only g++-9 and clang++-10, so `linux-gcc-debug` and `linux-gcc-unit` cannot run here.
+- Benchmark: no `engine_bench` target exists in the tree, so `engine_bench --suite acceptance` is not run.
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-057 (re-verification, still Partial)
+- What was implemented: no source change. No file under `engine/`, `tests/`, `cmake/`, or the root CMake files is newer than the previous entry.
+- Gates (this pass, Linux): `cmake --build --preset linux-debug` exit 0, no `warning:`/`error:` lines. `ctest --preset linux-unit --output-on-failure --no-tests=error` failed once (`engine_tests_integration`, no captured output), then passed 22 of 22 on a rerun (exit 0). The failing run was not reproduced; the first run's output was not saved, so its cause is unknown. Treat it as an unexplained intermittent failure, probably in the device-path audio integration test (WSLg sink).
+- Toolchain: only g++-9 and clang++-10 are installed, so `linux-gcc-debug` and `linux-gcc-unit` cannot run here. No `engine_bench` CMake target exists in the tree.
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), `engine_bench --suite acceptance` (needs the harness, US-074), and the one unexplained integration failure above. No COMPLETE signal.
+- Learnings:
+  - A `ctest` failure with no captured output means the run's log was lost. Redirect the full output to a file on every gate run, so a flake can be diagnosed.
+---
+
+## 2026-10-25 - US-057 (re-verification, still Partial)
+- What was implemented: no source change. Rebuilt `linux-debug` (exit 0, 0 `warning:`/`error:` lines).
+- Gates (Linux): `ctest --preset linux-unit --output-on-failure --no-tests=error` ran three times, each 100%, 22 of 22 passed. The intermittent `engine_tests_integration` failure from the previous pass did not reproduce; full logs were saved per run this time.
+- Toolchain: `/usr/bin` still has only g++-9 and clang++-10, so `linux-gcc-debug` and `linux-gcc-unit` cannot run here.
+- Benchmark: no `engine_bench` target exists in the tree, so `engine_bench --suite acceptance` is not run.
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-057 (Linux gate re-run incl. sanitizers, still Partial)
+- What was implemented: no source change. Feature surface unchanged (see the 2026-10-25 US-057 entry above).
+- Gates (Linux, this pass): `cmake -P cmake/ValidateVendor.cmake` exit 0; `cmake --preset linux-dev` exit 0; `cmake --build --preset linux-debug` exit 0, 0 `warning:`/`error:`; `ctest --preset linux-unit --output-on-failure --no-tests=error` 22 of 22 passed.
+- Sanitizers (this pass): `cmake --preset linux-asan` exit 0; `cmake --build --preset linux-asan` exit 0; `ctest --preset linux-sanitize --output-on-failure --no-tests=error` 22 of 22 passed, no ASan/UBSan reports.
+- Not rerun this pass: Windows gates (last recorded result stands).
+- Toolchain: only g++-9 and clang++-10 installed, so `linux-gcc-debug` and `linux-gcc-unit` cannot run here.
+- Benchmark: no `engine_bench` target exists (harness is US-074), so `engine_bench --suite acceptance` is not run.
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench` (no harness). No COMPLETE signal.
+- Learnings:
+  - Re-verification passes that change no source add log noise. Only log a pass when a gate result changes or a new gate is run.
+---
+
+## 2026-10-25 - US-057 (status re-check, still Partial)
+- What was implemented: no source change. No file under `engine/`, `tests/`, or `cmake/` is newer than the previous entry.
+- Gates (Linux, this pass): `cmake --build --preset linux-debug` exit 0, 0 `warning:`/`error:` lines; `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 passed (log at /tmp/us057/unit.log).
+- Toolchain: only g++-9 and clang++-10 installed, so `lin
+
+... [1697 characters truncated] ...
+
+urce changed since). linux-gcc gate still blocked (only g++-9 installed).
+- Benchmark: no `engine_bench` target exists (harness is US-074), so `engine_bench --suite acceptance` is not run.
+- Status call: US-057 stays **Partial**. Open: `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness). No COMPLETE signal.
+- Learnings:
+  - A warm Windows build log is short and reports no warnings for unchanged files. Confirm the build step ran on the current tree before reading a zero warning count as a clean build.
+---
+
+## 2026-10-25 - US-057 (status check, still Partial)
+- What was implemented: no source change. Re-read the latest entries; the feature surface is unchanged.
+- Gates: not rerun in this pass. The last recorded Linux and Windows passes stand.
+- Toolchain: only g++-9 (9.4.0) is installed, so the `linux-gcc` gate still cannot run here.
+- Benchmark: no `engine_bench` target exists (harness is US-074).
+- Status call: US-057 stays **Partial**. Open: `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness). No COMPLETE signal.
+---
+
+## 2026-10-25 - US-057 (status check, still Partial)
+- What was implemented: no source change. Rebuilt `linux-debug`: exit 0, 0 `warning:`/`error:` lines. `ctest --preset linux-unit --no-tests=error`: 100%, 22 of 22 passed.
+- Toolchain: only g++-9 and clang++-10 are installed, so `linux-gcc-debug` and `linux-gcc-unit` cannot run here.
+- Benchmark: no `engine_bench` target exists (harness is US-074), so `engine_bench --suite acceptance` is not run.
+- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance`. No COMPLETE signal.
+---
+8:- Cell-scoped audio (US-057, `engine/audio/src/cell_audio.cpp`): `CellAudioSubscriber` releases a cell's voices on `on_unloaded`. Its owner is `cell_owner(coord)`, bit 63 set and nonzero, so it never matches a script owner. An emitter tags its voices with it.
+9:- Audio (US-057, `engine/audio/`): the mixer (`mixer.cpp`) is offline and has no ECS or device access. `AudioEngine` serialises calls with one mutex, and the device thread takes it in `render()`. Voices carry an `OwnerId`; `stop_owner` releases them, and `ScriptEngine`'s destructor stops its own voices.
+2983:## 2026-10-25 - US-057
+2991:- Status call: US-057 is **Partial** against the strict gate list. Every Linux and Windows gate in the story passes. Open: the `linux-gcc` gate and its CI job (needs GCC 11+), and the `engine_bench` run (no harness). No COMPLETE signal is given on those grounds; the functional acceptance criteria are met.
+2999:## 2026-10-25 - US-057 (re-verification)
+3008:## 2026-10-25 - US-057 (status re-check, status Partial)
+3009:- What was implemented: no source change. No file under `engine/`, `tests/`, or `cmake/` is newer than the previous US-057 entry, so the recorded Linux and Windows results still apply. Gates were not rerun in this pass.
+3012:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and its CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal.
+3015:## 2026-10-25 - US-057 (status re-check, still Partial)
+3019:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and its CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal is given.
+3022:## 2026-10-25 - US-057 (status re-check, still Partial)
+3027:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), `engine_bench --suite acceptance` (needs the harness, US-074), and world-unload release of voices. No COMPLETE signal.
+3030:## 2026-10-25 - US-057 (cell unload releases voices)
+3035:- Status call: US-057 functional criteria and all Linux (clang/debug/unit/sanitize) and Windows gates pass. Remaining open items are the GCC gates and the benchmark, both blocked by the environment and missing harness, so the story stays Partial on those grounds.
+3041:## 2026-10-25 - US-057 (re-verification, still Partial)
+3044:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and its CI job (host has only GCC 9.4; Jolt needs GCC 11+), and `engine_bench --suite acceptance` (no harness, US-074). No COMPLETE signal.
+3047:## 2026-10-25 - US-057 (re-verification, still Partial)
+3051:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (host has only GCC 9.4; Jolt needs GCC 11+), and `engine_bench --suite acceptance` (no harness, US-074). No COMPLETE signal.
+3054:## 2026-10-25 - US-057 (re-verification, still Partial)
+3059:- Status call: US-057 stays **Partial**. Open: the `linux-gcc` gate and CI job (needs GCC 11+), and `engine_bench --suite acceptance` (needs the harness, US-074). No COMPLETE signal.
+engine/audio:
+CMakeLists.txt
+include
+src
+
+engine/audio/src:
+audio_clip.cpp
+audio_engine.cpp
+cell_audio.cpp
+mixer.cpp
+music_stream.cpp
+native
+wav_format.hpp][0m
+The progress log shows US-057 was re-verified many times and kept at Partial. The open items are the `linux-gcc` gate, which needs GCC 11+ and only GCC 9.4 is installed, and `engine_bench`, which has no harness yet. I'll run the Linux gates once more on the current tree to confirm nothing has regressed.
+[94m[Bash][0m Run Linux validate, configure, build, and unit gates $ ls /usr/bin | grep -E "^g\+\+-"
+The build reported zero warnings, but `grep -c` returning 0 stopped the chain before ctest ran. I'll run ctest on its own.
+[94m[Bash][0m Run Linux unit test suite via ctest $ tail -n 4 /tmp/us057/unit.log
+US-057 is still not complete, so I'm not signalling COMPLETE. Everything that can run in this environment passes, and the open items are blocked by the environment and by a missing harness.
+
+**Verified on the current tree (Linux, this run):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, zero `warning:`/`error:` lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1 test, integration 21 tests)
+
+The earlier progress entries also record passing Linux clang sanitizer runs (`linux-asan`, `linux-sanitize`) and passing Windows gates. I did not rerun those in this pass.
+
+**Still open:**
+- **`linux-gcc` gate and CI job:** only g++-9 (9.4.0) is installed. Jolt needs GCC 11+, so `cmake --preset linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` cannot run here. The story requires these to pass, so this blocks completion.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists in the tree. The benchmark harness belongs to US-074, which is a later story. The story only requires the benchmark run once the harness exists, so this is a dependency on future work, not a failure of US-057.
+
+I did not append a new progress entry. The log already has many identical "still Partial" entries, and nothing in the source changed. If you want this pass recorded anyway, I can add a short one.
+
+To finish US-057, a GCC 11+ toolchain needs to be installed here or run in CI so the `linux-gcc` gate can execute.

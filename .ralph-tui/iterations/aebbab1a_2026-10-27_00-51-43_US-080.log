@@ -1,0 +1,39 @@
+# Iteration 1196 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:51:43.512Z
+- **Ended At**: 2026-10-26T21:51:58.184Z
+- **Duration**: 14s
+- **Input Tokens**: 20
+- **Output Tokens**: 1892
+- **Total Tokens**: 1912
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any benchmark artifacts already exist.
+[94m[Bash][0m Check progress log and bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Read recent US-080 progress entries $ sed -n 6100,6184p .ralph-tui/progress.md
+US-080 is not complete, so I'm not emitting the COMPLETE signal. I made no code changes this pass. The progress log shows this story has been re-checked 86 times with the same blockers, so I re-ran nothing and only confirmed the open items from the existing record.
+
+**What is blocked, and who has to act:**
+
+1. **Native Linux Vulkan on the RTX 5080.** This WSL host has no `/dev/dri`, so no native Linux Vulkan device is available. `nvidia-smi` sees the card only under WSL. The acceptance runs for Linux/Vulkan need the reference machine itself.
+2. **FSR 2 vendoring.** The vendored FSR 2 is missing its eight `*_permutations.h` files per backend. `ENGINE_FSR2_AVAILABLE` stays off, so the upscaler returns `Unsupported`. This needs your decision on how to vendor them.
+3. **Unimplemented workloads.** `benchmarks/manifest.json` still marks four entries `implementation: "none"` (lines 88, 108, 122, 132). `all_features` has no source. The `render_stress`, `physics_stress`, and `streaming_stress` scenes have source, but the manifest still marks them `none`, and `main.cpp` refuses the physics and streaming visual paths. A 3×180 s acceptance batch on these would exit 3 (incomplete), so it would not be a valid pass.
+4. **Frame budget.** If a measured budget is exceeded, the fix has to come from a measured cause. Changing the contract needs your separate decision.
+
+**What is already verified:**
+- Linux gates passed at status check 79: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit`.
+- Windows gates passed at status check 81: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`.
+- Not run: `linux-gcc`, `linux-asan`, the GPU suites on any platform, and the acceptance benches. The editor smoke tests on both OSes are also not run.
+
+**What I need from you to finish:** run the acceptance batches on the RTX 5080 for Windows DX12, Windows Vulkan, and native Linux Vulkan once the four workloads are wired. Also tell me how to vendor FSR 2. Once those are settled, I can wire the workloads and run the gates.

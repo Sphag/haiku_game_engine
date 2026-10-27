@@ -1,0 +1,50 @@
+# Iteration 934 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:33:06.832Z
+- **Ended At**: 2026-10-26T13:39:23.087Z
+- **Duration**: 6m 16s
+- **Input Tokens**: 44
+- **Output Tokens**: 4058
+- **Total Tokens**: 4102
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any of the `all_features` scene already exists.
+[94m[Bash][0m Read progress log and search for all_features $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -ril "all_features" --exclude-dir=.git . | h...
+The progress log shows 39 prior passes that stopped without the scene being built. I'll look at the PRD scope and the existing `all_features` tests before choosing an increment I can finish and verify.
+[94m[Bash][0m Inspect PRD, tests, manifest, and benchmark tools $ ls artifacts | head
+The PRD scope is large. Before deciding what to build, I'll check what the existing CPU tests already cover and how the benchmark CLI wires scenes.
+[94m[Bash][0m Read CPU scenario tests and benchmark scene wiring $ grep -n "scene" tools/benchmark/src/main.cpp tools/benchmark/src/cli.cpp | head -40
+The CPU scenario tests already exist. The remaining acceptance items need a GUI, a Windows GPU session, a GCC 11+ toolchain, or a sanitizer build, none of which this environment provides. I'll re-run the Linux gates once to confirm the current state rather than trust the log.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ echo "ctest=${PIPESTATUS[0]}")
+The Linux gates pass. I'll record this pass in the progress log, then stop, since the rest needs work this environment can't do.
+[94m[Bash][0m Append status entry to progress log $ approval of `all_features_route_v1`, recorded in check 37). No COMPLETE signal. --- EOF echo done
+US-079 is not complete, so I did not signal COMPLETE. The Linux gates pass again, but most of the acceptance criteria are still open.
+
+**Verified in this pass (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake` passes (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`, `cmake --build --preset linux-debug`, and `ctest --preset linux-unit --output-on-failure --no-tests=error` all exit 0. The unit run has 29 integration tests and 1 unit test.
+- The existing CPU scenario tests (`tests/src/all_features_tests.cpp`, `all_features_editor_tests.cpp`) are wired in and build.
+
+**Still open, not reported as passed:**
+- **Scene project:** `samples/all_features/` does not exist, and `all_features` is still `implementation: none` in `benchmarks/manifest.json`, so the benchmark has no runner for it.
+- **Tour and profiles:** no tour runner or screenshots, and no GI/RT/upscale profiles or forced geometry paths.
+- **Blocked by FSR 2:** `third_party/fsr2` has no `*_permutations.h`, so `full_1080` cannot be built. It is recorded as unsupported in the manifest.
+- **Editor scenario:** the edit/undo/Play/package-relaunch scenario has only the CPU test, not a run on a live app.
+- **Environment-blocked:** Windows gates, a native Linux Vulkan GPU run, GUI checks, `engine_bench --suite acceptance`, the `linux-gcc*` presets (no GCC 11+ here), and the ASan preset.
+
+**Decisions needed from you:**
+1. **FSR 2 route:** vendor the generated permutation headers, or keep `full_1080` unsupported?
+2. **Route definition:** approve `all_features_route_v1` as written in the manifest (the `streaming_route_v1` waypoints at 30 m/s), or give a different route?
+
+I logged this pass as status check 40 in `.ralph-tui/progress.md`. The next pass that can make progress is the `samples/all_features/` project and its benchmark wiring, once those two decisions are made.

@@ -1,0 +1,43 @@
+# Iteration 178 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T10:30:20.841Z
+- **Ended At**: 2026-10-24T10:35:27.151Z
+- **Duration**: 5m 6s
+- **Input Tokens**: 44
+- **Output Tokens**: 3764
+- **Total Tokens**: 3808
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for the physics adapter and what the progress log says about US-052.
+[94m[Bash][0m Inspect repo layout, physics dir, progress and memory $ ls && ls engine/physics && tail -n 80 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-...
+The progress log shows US-052 as Partial, with the `linux-gcc` gate blocked by a local GCC 9.4. I'll check whether a GCC 11+ compiler exists anywhere on this machine before accepting that block.
+[94m[Bash][0m Look for GCC 11+ compilers and presets $ grep -n "linux-gcc" CMakePresets.json | head -5
+Only GCC 9 is installed. I'll check for a user-level package manager that could supply GCC 11 without sudo.
+[94m[Bash][0m Check for user-level package managers and sudo $ sudo -n true 2>&1 | head -1
+No GCC 11+ is reachable without sudo, so the `linux-gcc` gate stays blocked. Since no physics file is newer than the last progress entry, the tree matches what was last verified. I'll re-run the Linux gates on it and confirm the test coverage for pause, catch-up, and closure.
+[94m[Bash][0m Run Linux gates and list physics test cases $ tail -3 /tmp/ctest.log)
+Linux gates pass on the current tree. I'll record this verification pass in the progress log, as the workflow asks.
+[94m[Bash][0m Append US-052 re-verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is not complete, so I have not emitted the completion signal. The physics adapter and its tests are in place, but the `linux-gcc` gate is blocked on this machine.
+
+**Blocked:** the `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` gates. Only GCC 9 is installed. Jolt needs GCC 11+ (`__builtin_bit_cast`). There is no GCC 11+ here, no conda, micromamba, or pixi, and `sudo` needs a password. Closing this needs a GCC 11+ environment, such as the CI GCC 11 job.
+
+**Passing on this tree:**
+- Linux (clang): `ValidateVendor`, `linux-dev` configure, `linux-debug` build with 0 warning or error lines, and `linux-unit` ctest all exit 0.
+- Earlier passes on the same source, recorded in the progress log: Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21); and `linux-asan` plus `linux-sanitize`. I did not re-run the Windows gates in this pass, since no physics file has changed since they were recorded.
+- The 13 physics unit tests cover the fixed 60 Hz step, interpolation, body motion types, stable entity handles, per-scene worlds, pause, the catch-up limit, callback queues, body limits, world closure, and origin rebases. None depend on the renderer.
+
+**Not run:** `engine_bench --suite acceptance`. There is no benchmark harness yet (US-074).
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. The status stays Partial, with the `linux-gcc` gate and the benchmark run open.

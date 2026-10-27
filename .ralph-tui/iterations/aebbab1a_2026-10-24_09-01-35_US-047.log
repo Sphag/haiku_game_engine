@@ -1,0 +1,43 @@
+# Iteration 150 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:01:35.198Z
+- **Ended At**: 2026-10-24T06:02:00.958Z
+- **Duration**: 25s
+- **Input Tokens**: 36
+- **Output Tokens**: 3250
+- **Total Tokens**: 3286
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see how much of US-047 already exists.
+[94m[Bash][0m Read progress log tail and terrain sources $ tail -c 6000 .ralph-tui/progress.md && echo ---- && grep -n "US-047" .ralph-tui/progress.md | head -...
+The progress log already records this story as Partial, blocked on two items. I'll re-verify those blockers on this host before deciding anything.
+[94m[Bash][0m Check GPU device, bench harness, and RT terrain status $ grep -n "unsupported\|US-047" engine/render/src/rt_effects.cpp | head -5
+The RT grep came back empty, which contradicts the log. I'll check that directly.
+[94m[Bash][0m Check RT terrain support and bench story status $ grep -n "US-074" -A6 tasks/prd.json | head -12
+The blockers are unchanged, and one older log claim is out of date. I'll record this pass accurately in the progress log.
+[94m[Bash][0m Append re-check entry to progress log $ (2) `engine_bench --suite acceptance` with a terrain workload (depends on US-074, not in the tree). ...
+US-047 is still Partial, so I'm not signalling COMPLETE. Nothing in the source changed this pass. The remaining work is blocked on things this host doesn't have.
+
+**What's in place (from the log and the source):**
+- The CPU terrain runtime in `engine/world` covers tiles, LOD and stitching, normals, four-layer splat weights, and a coverage/hole/LOD fixture. The log says 14 fixture cases.
+- The renderer has a terrain path. The static path has a GPU fixture that passed on DX12 and Vulkan in an earlier run.
+- RT now treats heightfield terrain as supported. Tiles are traced as static opaque meshes, and the splat weights are not traced. `engine/render/src/rt_effects.cpp:479` says so. Earlier log entries that call RT terrain unsupported are out of date.
+
+**What blocks completion:**
+1. **`engine_tests --suite gpu --backend vulkan` on native Linux.** `/dev/dri` is absent and `vulkaninfo` isn't installed, so there is no Linux Vulkan device here. WSL doesn't count for this gate.
+2. **`engine_bench --suite acceptance` with a terrain workload.** No `engine_bench` source or CMake target exists. The harness is US-074, which is not passing in `tasks/prd.json`. The criterion is conditional on the harness existing, so it can't be closed from this story.
+
+**What I checked this pass:** the blockers above are unchanged. I did not re-run the gates, because no source changed since the last recorded gate runs. The last Linux run (re-check 55) passed: ValidateVendor, linux-dev, linux-debug with 0 warnings, and linux-unit at 22/22. The Windows gates and the Vulkan GPU suite on Windows are not re-run here.
+
+I appended a re-check entry to `.ralph-tui/progress.md` that records these facts and corrects the stale RT note. The next real step is a native Linux host with a Vulkan device, plus the US-074 bench harness, before this story can close.

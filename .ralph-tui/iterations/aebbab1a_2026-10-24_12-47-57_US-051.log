@@ -1,0 +1,39 @@
+# Iteration 174 Log
+
+## Metadata
+
+- **Task ID**: US-051
+- **Task Title**: GPU Particles
+- **Description**: As an effects author, I want a particle system so that I can add dynamic effects to the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T09:47:57.552Z
+- **Ended At**: 2026-10-24T09:48:12.333Z
+- **Duration**: 14s
+- **Input Tokens**: 20
+- **Output Tokens**: 1939
+- **Total Tokens**: 1959
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the particle code to see how much of US-051 is already in place.
+[94m[Bash][0m Read progress log and locate particle sources/tests $ tail -n 80 .ralph-tui/progress.md && ls engine/render/src | grep -i particle && wc -l engine/render/...
+[94m[Bash][0m Check particle test cases and bench/Vulkan availability $ command -v vulkaninfo || echo "no vulkaninfo"
+US-051 is not complete, so I'm not emitting the COMPLETE signal. The code and most gates are in place, but two required criteria are still open and I can't close them from this WSL environment.
+
+**What's already in the tree (from the progress log and a check of the test files):**
+- `ParticleSystem` in `engine/render/src/particles.cpp` with GPU emit/simulate, lifetime, velocity, gravity, colour and size curves, textured billboards, alpha and additive blending, depth testing, indirect draw, and budgets with counted overflow.
+- Pause, reset, and deletion behaviour, plus `PipelineDesc::additive_blend` in both RHI backends.
+- CPU `[unit]` tests in `tests/src/render_particles_tests.cpp`, and GPU DX12 and Vulkan `[gpu]` tests in `tests/src/render_particles_gpu_tests.cpp`.
+- Passing results recorded in the log: Windows DX12 GPU suite 71/71, Windows Vulkan GPU suite 72/72 (with the 1.4.363 layer), Linux clang and GCC unit suites, Linux ASan/UBSan (22/22), and the Windows ValidateVendor, win-dev, win-debug, and win-unit gates.
+
+**What's still open:**
+- **Native Linux Vulkan GPU report** (`engine_tests --suite gpu --backend vulkan`). WSL has no Vulkan device and `vulkaninfo` is not installed, so this can only run on a native Linux machine with a GPU.
+- **`engine_bench --suite acceptance`**. No `engine_bench` target exists in any CMakeLists.txt; the harness is US-074, which is not in the tree. The criterion is conditional on the harness existing, so it's recorded as not-run rather than failed.
+
+I didn't re-run the build or test gates in this pass. The most recent log entry already re-verified the Linux gates on this tree, and repeating them wouldn't change either open item.
+
+To finish US-051, run the native Linux Vulkan GPU suite on a machine with a Vulkan device. The benchmark run has to wait for US-074.

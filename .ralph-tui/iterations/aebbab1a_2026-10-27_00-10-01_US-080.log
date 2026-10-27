@@ -1,0 +1,38 @@
+# Iteration 1118 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:10:01.304Z
+- **Ended At**: 2026-10-26T21:10:12.951Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1503
+- **Total Tokens**: 1521
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress tail and bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Recheck hardware, FSR permutations, and acceptance runs $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+US-080 is not complete, and I have not signaled COMPLETE. The blockers are the same as in the last 28 status checks in `.ralph-tui/progress.md`, and I re-verified them just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` does not exist. WSL sees the RTX 5080 through `nvidia-smi` only, so the native Linux/Vulkan acceptance report cannot be produced here.
+- **No Windows RTX 5080 acceptance reports.** `artifacts/bench` has no `acceptance` run. The Windows DX12 and Vulkan reports need the reference computer, through the cmd.exe and `.bat` route in memory.
+- **FSR 2 is unbuilt.** `third_party/fsr2` has no `*_permutations.h` files, so `ENGINE_FSR2_AVAILABLE` stays off. Getting it working needs your decision on the vendoring route.
+- **Four workloads are not implemented.** `benchmarks/manifest.json` has four `implementation: none` entries for physics, streaming, and all_features.
+
+I made no code changes and ran no builds or benchmarks. Running the performance contract on this host would produce reports that do not meet the acceptance criteria, and changing the contract or workloads to get a pass needs your decision.
+
+To move forward, I need one of these from you:
+1. Access to the RTX 5080 reference computer, or a run of `engine_bench --suite acceptance` there with the outputs placed in `artifacts/bench`.
+2. A decision on the FSR 2 permutations route: vendor the generated tables, or accept FSR as unavailable for this story.
+3. A go-ahead to implement the four missing workloads (physics, streaming, all_features).
+
+I did not append another identical status entry to `.ralph-tui/progress.md`, since it would add nothing new.

@@ -1,0 +1,40 @@
+# Iteration 824 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T04:48:31.596Z
+- **Ended At**: 2026-10-26T04:48:44.658Z
+- **Duration**: 13s
+- **Input Tokens**: 12
+- **Output Tokens**: 1720
+- **Total Tokens**: 1732
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and benchmark tool layout $ tail -c 6000 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "US-076" -A...
+US-076 is not complete, and I have not signaled COMPLETE. I made no code changes or gate runs this turn. The state below comes from the last entries in `.ralph-tui/progress.md`, which I did not re-verify.
+
+**What is done**
+- The `render_stress` scene, the indexed, indirect, and meshlet paths, and the screenshot and counter output are in place.
+- Start-frame triangles are now 3,202,690 against the 2,000,000 floor. This came from denser fixture meshes, which bumped `kWorkloadVersion` to 2 and regenerated `benchmarks/workload_expected.json`.
+- Forced mesh-shader-off runs report the fallback correctly: "disabled", with indirect draws used.
+- The Windows batch and the Linux vendor, configure, build, and unit checks passed.
+
+**What blocks it**
+1. **Frame budget.** Start-frame p99 is 35–47 ms against the 16.7 ms budget, so every `render_stress` acceptance run exits 1. Fixing it is US-080 territory. A contract change would need your agreement.
+2. **Residency not measured.** The RHI has no memory query, so every run says so. Implementing it is possible without your input: DX12 `QueryVideoMemoryInfo`, Vulkan `VK_EXT_memory_budget`, and the host working set. It would not make the runs pass while item 1 stands.
+3. **`full_1080` unsupported.** It needs the FSR 2 shader permutation tables, which are missing from the vendored tree. Vendoring them is your call.
+4. **Native Linux Vulkan GPU and linux-gcc not run.** WSL has no Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Decisions I need from you**
+- For item 1: fix the cost in the implementation (LOD or culling), or change the contract?
+- Should I implement the residency accessor (item 2) now? It is a contained RHI change, but it needs a Windows gate run to verify.
+- For item 3: how do you want FSR 2 vendored?

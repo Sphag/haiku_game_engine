@@ -1,0 +1,40 @@
+# Iteration 661 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:04:01.448Z
+- **Ended At**: 2026-10-26T02:04:15.021Z
+- **Duration**: 13s
+- **Input Tokens**: 18
+- **Output Tokens**: 2002
+- **Total Tokens**: 2020
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m $ grep -n -i "triangle\|placement\|floor" tools/benchmark/src/workload.cpp | head -40
+US-076 is not complete, so I am not signalling COMPLETE. Nothing changed in this pass: no source edits, no gate or benchmark reruns. The last eight status checks in `.ralph-tui/progress.md` reached the same blockers, and the tree has not changed since.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail.** The `render_stress` route start has 312,068 submitted triangles against the contract's 2,000,000 minimum in the indexed reference path. Frame p99 is 35–47 ms against a 16.7 ms budget. All eight `artifacts/bench/us076-*` reports exit 1 on these two checks. Fixing the count means changing instance placement, which is a workload change: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and rerun. The contract forbids reducing the workload, so I need your approval before I change placement.
+2. **`full_1080` profile is unsupported.** The vendored FSR 2 is missing its generated `*_permutations.h` tables, so only `native_1080` runs. Acceptance needs either the tables from a proper vendoring route or your decision on how to handle that profile.
+
+**Not runnable here:**
+- Native Linux Vulkan GPU run: WSL has no usable Vulkan device.
+- `linux-gcc` gate: the local GCC 9.4 cannot build Jolt.
+
+**Done and verified in earlier passes:**
+- The mesh-shader fallback is implemented. `--disable-mesh-shaders` reports the fallback path, and disabled features are not reported as enabled.
+- The driver, `--path`, per-run counters, screenshots, and the eight DX12/Vulkan reports exist for indexed, indirect, and meshlet paths.
+- The Linux gates pass: ValidateVendor, linux-dev, linux-debug build with 0 warnings, and linux-unit at 30/30.
+- The Windows gates were not rerun in the latest passes.
+
+**What I need from you:** approve or reject the placement change in item 1, and say how you want `full_1080` handled in item 2. With those answers I can make the change, rerun the affected benchmarks, and finish the remaining gates.

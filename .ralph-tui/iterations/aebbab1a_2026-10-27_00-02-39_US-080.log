@@ -1,0 +1,44 @@
+# Iteration 1092 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:02:39.164Z
+- **Ended At**: 2026-10-26T21:02:52.225Z
+- **Duration**: 13s
+- **Input Tokens**: 28
+- **Output Tokens**: 2262
+- **Total Tokens**: 2290
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness and gates.
+[94m[Bash][0m Check progress log and benchmark artifacts $ ls tools/benchmark/src 2>/dev/null
+The log shows this story has been blocked across many passes. I'll re-check the three blockers it names before deciding anything.
+[94m[Bash][0m Re-check GPU device, FSR tables, and manifest status $ find artifacts/bench -maxdepth 1 -name '*acceptance*'
+The blockers are unchanged. I'll record this pass in the progress log, as the workflow requires, and leave the story open.
+[94m[Bash][0m Append status entry to progress log $ visual editor smoke tests not run. - Stop: US-080 cannot be signed off on this host. No COMPLETE sig...
+US-080 is not complete, so I am not emitting the COMPLETE signal. This WSL host cannot produce the acceptance evidence the story requires, and I made no code changes or bench runs this pass.
+
+**Still blocked (re-checked this pass):**
+- **No native Linux Vulkan GPU.** `/dev/dri` is absent. `nvidia-smi` sees the RTX card under WSL, but that does not satisfy the native Linux/Vulkan requirement.
+- **`full_1080` cannot run.** `third_party/fsr2` has 0 of the generated `*_permutations.h` files. Vendoring them is a user decision.
+- **Workloads are missing.** `benchmarks/manifest.json` still has 4 entries with `implementation: none`. Physics, streaming, and `all_features` are unimplemented.
+- **No acceptance run exists.** `artifacts/bench` holds only the two `us080-dx12-*readback-off` runs. There is no three-repeat acceptance report for any backend.
+- **A budget is still exceeded.** The last recorded `render_stress` native_1080 CPU p99 is over 16.7 ms on repeats 2 and 3. About 15 ms of CPU per frame is still unprofiled.
+- **Other gates are open.** Residency is not measured, `linux-gcc*` needs GCC 11+ or clang 14+ (the host has g++ 9.4 and clang 10), and the visual editor smoke tests have not run.
+
+**What would unblock it:**
+1. A decision on FSR 2 vendoring, or a user-approved route that drops `full_1080` from the acceptance set.
+2. Access to a native Linux machine with the RTX 5080 for Vulkan runs, and to the Windows machine for DX12 and Vulkan runs.
+3. Implementation of the three missing workloads.
+4. Profiling and fixing the native_1080 CPU cost. Changing the budget itself needs a separate user decision.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these findings.

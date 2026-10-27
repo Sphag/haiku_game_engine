@@ -1,0 +1,41 @@
+# Iteration 866 Log
+
+## Metadata
+
+- **Task ID**: US-078
+- **Task Title**: Streaming Benchmark
+- **Description**: As a world developer, I want a streaming workload so that I can identify stalls and leaks.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T10:25:48.579Z
+- **Ended At**: 2026-10-26T10:31:57.741Z
+- **Duration**: 6m 9s
+- **Input Tokens**: 38
+- **Output Tokens**: 2818
+- **Total Tokens**: 2856
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark tools and the progress log.
+[94m[Bash][0m Inspect repo state, progress log, and streaming references $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -rn "strea...
+The log shows the streaming work and both Windows and Linux gates already run, with only the linux-gcc gate open. I'll check whether the tree changed after that last entry before deciding whether to re-run anything.
+[94m[Bash][0m Check file times and available newer compilers $ echo done
+Nothing in the tree is newer than the streaming files, and no GCC 11+ or clang 14+ is installed, so the linux-gcc gate still cannot run here. I'll re-run the Linux gates that the host can run.
+[94m[Bash][0m Run Linux validate, configure, build, and unit tests $ tail -n 3 /tmp/ctest.log
+[94m[Bash][0m Confirm ctest totals and streaming test presence $ grep -i "streaming" /tmp/ctest.log | head -3
+[94m[Bash][0m Append status entry to progress log $ no GCC 11+ or clang 14+ is installed. Not reported as passed. - Also open: a Release-build soak. The...
+I did not emit the COMPLETE signal for US-078. The streaming work is in place and the gates the host can run pass, but the Linux/GCC CI job cannot run here.
+
+**Passing on this tree (re-verified this pass):**
+- Linux: `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset linux-dev`, and `cmake --build --preset linux-debug` all exit 0 with zero warnings. `ctest --preset linux-unit` passes 30/30.
+- Windows: the previous log entry records `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` as passing (29/29). The DX12 GPU suite passes 72/72 and the Vulkan GPU suite passes 73/73.
+- Streaming: the 30-minute soak in the previous session passed with 0 failed, missing, stale, dangling, or corrupt cells across 10 traversals. Residency was stable, and the teleport settled in 42 ms. No file has changed since those runs.
+
+**Still open:**
+- **Linux/GCC gate:** the host has only g++-9 and clang++-10. Installing GCC 11+ needs root, which is not available. This blocks the `linux-gcc*` criterion.
+- **Release soak numbers:** the soak ran on a Debug build, so the Release-build measurements the performance contract asks for are still missing.
+
+I appended a status entry to `.ralph-tui/progress.md`. Finishing US-078 needs a GCC 11+ host or the CI job, plus a Release soak run.

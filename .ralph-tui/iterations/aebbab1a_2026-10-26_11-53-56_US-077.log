@@ -1,0 +1,41 @@
+# Iteration 861 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T08:53:56.956Z
+- **Ended At**: 2026-10-26T08:58:24.981Z
+- **Duration**: 4m 28s
+- **Input Tokens**: 36
+- **Output Tokens**: 2880
+- **Total Tokens**: 2916
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state first: the codebase patterns already describe a US-077 benchmark, so it may be partly or fully done.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src tools/benchmark 2>/dev/null && wc ...
+The log shows US-077 is implemented and the Linux gates pass. The one open item is the `linux-gcc` job, which this host cannot run. The `linux-asan`/`linux-sanitize` criterion was not re-run in the last pass, so I'll check whether it can run here.
+[94m[Bash][0m Check ASan preset and existing build dirs $ find tools/benchmark/src/physics_stress.cpp tests/src/bench_physics_tests.cpp -newer tasks/prd-open-...
+[94m[Bash][0m Build the linux-asan preset $ tail -n 5 /tmp/us077_asan_build.log
+[94m[Bash][0m Run linux-sanitize ctest suite $ tail -n 25 /tmp/us077_sanitize.log
+The sanitizer gate passes now. I'll record this run in the progress log, as the workflow requires.
+[94m[Bash][0m Append status entry to progress log $ Jolt needs GCC 11+ and the install needs root. Not reported as passed. - No COMPLETE signal: the lin...
+US-077 is not complete, so I'm not emitting the COMPLETE signal. The one blocker is the Linux/GCC CI job, which this host cannot run.
+
+**Blocked:** the `linux-gcc*` criterion. Only g++-9 and clang++-10 are installed. Jolt needs GCC 11+, and installing it needs root, which isn't available here. I have not reported this gate as passed.
+
+**Verified this pass:**
+- `cmake --build --preset linux-asan` exits 0.
+- `ctest --preset linux-sanitize --output-on-failure --no-tests=error` passes 30/30 (unit 1, integration 29). This closes the sanitizer criterion, which the previous status pass had not re-run.
+- The earlier notes record the Linux gates (`ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`) and the Windows gates as passing. I did not re-run them in this pass, and no file under the story's paths has changed since those runs.
+
+**Source:** `tools/benchmark/src/physics_stress.cpp` and `tests/src/bench_physics_tests.cpp` cover the acceptance criteria according to the progress log, which I did not re-read in full.
+
+I appended this run to `.ralph-tui/progress.md`. To close US-077, run the `linux-gcc` preset (`cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, `ctest --preset linux-gcc-unit`) on a host with GCC 11+.

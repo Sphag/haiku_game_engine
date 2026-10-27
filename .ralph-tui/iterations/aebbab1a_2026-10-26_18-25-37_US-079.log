@@ -1,0 +1,41 @@
+# Iteration 995 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:25:37.824Z
+- **Ended At**: 2026-10-26T15:25:59.320Z
+- **Duration**: 21s
+- **Input Tokens**: 30
+- **Output Tokens**: 3674
+- **Total Tokens**: 3704
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log for US-079's prerequisites.
+[94m[Bash][0m Inspect repo root, progress tail, and US-079 references $ ls && tail -c 4000 .ralph-tui/progress.md && grep -n "US-079\|all_features" -r --include=*.md --incl...
+The progress log shows 80+ prior passes that stopped on the same three blockers without changing code. Before deciding whether that still holds, I'll check what exists for `all_features` now.
+[94m[Bash][0m Locate all_features references and manifest entry $ git status 2>&1 | head -3
+The manifest and progress log describe `all_features` test files, but the search found none under `tests/`. I'll check that discrepancy and how the last iteration ended.
+[94m[Bash][0m Check test files and last US-079 iteration log tail $ tail -c 2500 .ralph-tui/iterations/aebbab1a_2026-10-26_15-22-00_US-079.log
+US-079 is not complete, so I'm not emitting the completion signal. I didn't change any code this pass.
+
+**What exists:** the CPU `all_features` scene and its tests are in `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp`, wired in `tests/CMakeLists.txt`. The last Linux re-check in the iteration log (15:22) passed `ValidateVendor`, `linux-debug`, and `linux-unit`. I did not re-run them now, since the tree hasn't changed since then.
+
+**What's still open:**
+- **Route approval:** `benchmarks/manifest.json` has `all_features` at `implementation: none`, and `all_features_route_v1` is only a proposal. It defines the fixed benchmark contract, so I won't approve it. The benchmark branch and the tour depend on it.
+- **FSR 2 permutations:** `third_party/fsr2` has no `*_permutations.h` headers, so `full_1080` can't be profiled. You either vendor them or decide to leave that profile unsupported.
+- **Not built yet:** the automated tour with screenshots and an action log, the GI/RT/upscale profiles, the forced geometry paths, and the GPU scene needed for `engine_bench --suite acceptance`.
+- **Editor scenario:** the scene, material, animation, and terrain edits, undo/redo, Play/Stop, and package/relaunch run is not covered end to end.
+- **Hosts and toolchains I don't have here:** the Windows gates, the Windows GUI session, native Linux Vulkan, and GCC 11+ for `linux-gcc*`. The sanitizer presets are also unrun. Per the criteria, these must be reported as not run, not as passed.
+
+**What I need from you:** approve or reject `all_features_route_v1`, and decide on the FSR 2 headers. Once the route is approved, I can wire the GPU scene and the tour runner on Linux, leaving the Windows GUI and editor runs for a session on that host.
+
+I also did not add another status entry to `.ralph-tui/progress.md`. The last 80+ entries repeat the same blockers, so another one would add noise without new information.

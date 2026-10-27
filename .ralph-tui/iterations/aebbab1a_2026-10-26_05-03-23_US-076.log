@@ -1,0 +1,44 @@
+# Iteration 659 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:03:23.809Z
+- **Ended At**: 2026-10-26T02:03:40.079Z
+- **Duration**: 16s
+- **Input Tokens**: 20
+- **Output Tokens**: 2148
+- **Total Tokens**: 2168
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log.
+[94m[Bash][0m Inspect repo state, progress log, and US-076 PRD section $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-076" -A40 tasks/prd-open-world-engine.m...
+[94m[Bash][0m Check latest driver edit time and newest benchmark artifacts $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp && ls -t artifacts/bench | head -12 && grep -n...
+US-076 is not complete, and I did not signal completion. Nothing in the tree changed in this pass, so I did not rerun any gates or benchmarks.
+
+**Current state (verified by file times):**
+- The last `render_stress.cpp` edit (04:15:43) predates the newest benchmark report, and the earlier Linux gate results still describe the tree.
+- Eight reports exist under `artifacts/bench/us076-*`: indexed, indirect, and meshlet paths on DX12 and Vulkan, plus meshlet runs with mesh shaders forced off. These cover the fallback criterion.
+- The driver reports `full_1080` as unsupported, not passed.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on placement.** The route start sees about 312,068 of the 2,000,000 triangles the contract requires. p99 frame time is 35–47 ms against a 16.7 ms budget. Instances are spread uniformly over 8192 m, so the route rarely sees them. Fixing this means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`. The contract forbids reducing the workload, so I have not made that change. Do you approve it?
+2. **`full_1080` profile is unsupported.** `ENGINE_FSR2_AVAILABLE` is off because the vendored FSR 2 is missing its generated `*_permutations.h` tables. Until you choose a vendoring route, only `native_1080` runs, so the "both profiles" criterion is only partly met.
+
+**Not run because of this environment:**
+- Native Linux Vulkan GPU suite and benchmark: WSL has no usable Vulkan device.
+- `linux-gcc` gate: local GCC 9.4 cannot build Jolt.
+
+**Gate status from earlier passes:**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build (0 warnings), and `linux-unit` (30/30) passed on the current tree.
+- Windows: the earlier run passed `win-unit` (29/29) and the DX12/Vulkan GPU suites, but those results predate this pass and I did not rerun them.
+
+I did not append a new progress entry, since the log already has six identical "blocked" entries and a seventh adds nothing. If you tell me which option to take for items 1 and 2, I can carry it out and rerun the affected gates.

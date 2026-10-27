@@ -1,0 +1,42 @@
+# Iteration 1126 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:12:26.694Z
+- **Ended At**: 2026-10-26T21:12:42.287Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2309
+- **Total Tokens**: 2337
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress tail and list repo and artifacts $ ls artifacts/bench 2>/dev/null | head
+The progress log shows 30+ prior passes that concluded US-080 is blocked on this host. Before deciding whether to repeat that, I'll check whether any blocker has changed.
+[94m[Bash][0m Check whether host blockers for US-080 have changed $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1
+Nothing has changed since the last pass, so I'll record this check in the progress log and stop without a COMPLETE signal.
+[94m[Bash][0m Append status check entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 under WSL only. - No source change, build, or bench ...
+US-080 is not complete, and I have not signalled COMPLETE. The blockers that stop sign-off are the same as in the previous passes, and I rechecked them now.
+
+- **No native Linux Vulkan device:** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`), which does not count as the native Linux/Vulkan report.
+- **FSR 2 is not buildable:** `third_party/fsr2` has 0 of the `*_permutations.h` files that its generated shader tables need. Choosing how to vendor them is a user decision.
+- **Benchmark workloads are missing:** `benchmarks/manifest.json` still has four entries with `implementation: none` (lines 88, 108, 122, 132). The physics, streaming and all_features workloads are not implemented.
+- **No acceptance run exists:** `artifacts/bench` has no acceptance run, and `samples/` is absent.
+
+I did not run any builds, quality gates or benchmarks in this pass. Running them would not change the outcome, because the acceptance reports need the RTX 5080 reference computer and the three native GPU runs (Windows/DX12, Windows/Vulkan, native Linux/Vulkan) with three repeats each.
+
+To move forward, you need to do one of these:
+1. Run the acceptance reports on the reference RTX 5080 machine, or give me access to a native Linux GPU environment.
+2. Decide how FSR 2 should be vendored (the generated permutation headers, or dropping FSR).
+3. Decide whether the four unimplemented workloads should be built now, or whether the story should be re-scoped.
+
+I appended a status-check entry to `.ralph-tui/progress.md`, consistent with the earlier entries.

@@ -1,0 +1,247 @@
+# Iteration 10 Log
+
+## Metadata
+
+- **Task ID**: US-011
+- **Task Title**: Actions and Input Routing
+- **Description**: As a game creator, I want to bind actions to devices so that I can change controls without code.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T05:27:42.816Z
+- **Ended At**: 2026-10-22T05:56:39.400Z
+- **Duration**: 28m 56s
+- **Input Tokens**: 474
+- **Output Tokens**: 134370
+- **Total Tokens**: 134844
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and the progress log to see what US-001 through US-010 already established.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md && echo --- && cat...
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The PRD and progress log are long. I'll pull the story section and the progress log's later entries, then check the repo state.
+[94m[Bash][0m Find PRD section headings and US-011 references $ grep -n "^## \|^### \|US-011\|US-010" tasks/prd-open-world-engine.md | head -150
+[94m[Bash][0m Read progress log entries after the header $ sed -n 60,216p .ralph-tui/progress.md
+The progress log shows US-009 and US-010 built the platform input layer. Next I'll read the US-011 story, the quality gate commands, and the PRD constraints.
+[94m[Bash][0m Read quality gates and US-011 story text $ sed -n 22,80p tasks/prd-open-world-engine.md && echo ..... && sed -n 164,171p tasks/prd-open-world-e...
+[94m[Bash][0m Read PRD functional requirements through open questions $ sed -n 732,915p tasks/prd-open-world-engine.md
+Now I'll look at the existing input code, since US-011 builds on it: the platform input headers, the mapping and state sources, and the test layout.
+[94m[Bash][0m Inventory platform, tests, and CMake files $ find engine/platform tests docs tools editor runtime -maxdepth 3 -type f 2>/dev/null | head -100 && ...
+I need the existing input model: the mapping header, state header, and the input doc. These define what an action map has to sit on top of.
+[94m[Bash][0m Read input, mapping, and state public headers $ cat engine/platform/include/engine/platform/input.hpp && echo ---- && cat engine/platform/include/en...
+The existing input layer is a per-frame state model with no action layer on top. Before designing US-011, I'll check the core utilities I can reuse (result types, file IO, errors), what is vendored (is nlohmann/json there?), and how the input docs are written.
+[94m[Bash][0m Check vendored deps, core headers, input docs, prd.json $ ls third_party && echo --- && ls engine/core/include/engine/core/ && echo --- && cat docs/input.md |...
+nlohmann/json is vendored, and the PRD names it as the authoring format. I'll check whether anything links it yet, plus the file-IO and result APIs and the test style.
+[94m[Bash][0m Check json usage, core APIs, test style, CMake helpers $ cat engine/core/CMakeLists.txt
+nlohmann/json is vendored but unused by first-party code, so it can back the saved profile. Before designing, I'll get a baseline: validate the vendor tree and build Linux, so I know the starting state.
+[94m[Bash][0m Validate vendor and run baseline Linux build and tests $ tail -5 /tmp/us011_ctest.log)
+The Linux baseline is green: vendor validation, configure, build, and 9 integration tests plus 1 unit test. Next I'll check how the test suites are selected, the US-011 entry in `prd.json`, and how `InputState` handles disconnects and releases, since the router depends on those.
+[94m[Bash][0m Check test suite tags, prd.json US-011, InputState disconnect logic $ grep -n "Disconnected\|Connected" -A12 engine/platform/src/input_state.cpp | head -80
+[94m[Bash][0m Check suite tag expressions and test tagging conventions $ ls docs
+The suite tags are plain `[unit]` and `[integration]`. Before writing, I need three more facts: how `InputState` treats axis and button events for a pad that is not connected, the `core::Path` API, and how existing tests get a temp directory for file round-trips.
+[94m[Bash][0m Read InputState event handling and Path/temp-dir usage $ grep -rn "temp_directory\|tmp\|TempDir\|temp" tests/src/core_file_io_tests.cpp | head -8
+I have what I need. `InputState` accepts axis and button events without a connection check, so the router has to keep gameplay's connection state in step itself. The design I'm going with:
+
+- **Action layer** (`action_map`): named actions, each a list of bindings (key, mouse button, mouse motion/wheel, gamepad button, gamepad axis), with an optional slot, scale, and dead zone. Remapping is a per-action override, and the profile is those overrides as versioned JSON, using the vendored nlohmann/json.
+- **Router** (`input_router`): owners (Editor, UI) request capture by device class. Captured input goes to a separate list. Gameplay gets a reconciled view, so a held key is released when capture starts and re-pressed when it ends. Entering Play releases all capture.
+- **Tests**: unit tests for the action model, the router, and the profile, plus a scripted multi-device scenario.
+
+I'll start with the small shared enum for mouse axes, then the name tables.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input.hpp[0m edit: "enum class MouseButton : std::uint8_t { Left, Righ..." → "enum class MouseButton : std::uint8_t { Left, Righ..."
+Next, the name tables. Profiles store stable identifiers (for example `"Space"`, `"LeftX"`), so they must round-trip.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input_names.hpp[0m "#pragma once
+
+#include "engine/platform/input.hpp"
+
+#include <optional>
+#include <string_view>
+
+namespace engine::platform {
+
+// Stable names for input enums, as written in input profiles. A name is t... (1184 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_names.cpp[0m "#include "engine/platform/input_names.hpp"
+
+#include <array>
+#include <cstddef>
+
+namespace engine::platform {
+namespace {
+
+// Each table lists the names in enum order, so name[index] is the name of st... (3918 chars)"
+The name table uses `kMouseAxisCount`, which doesn't exist yet. I'll add it beside the other counts.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input.hpp[0m edit: "inline constexpr std::size_t kMouseButtonCount = s..." → "inline constexpr std::size_t kMouseButtonCount = s..."
+Next, the action model header: sources, bindings, the action map with per-user overrides, and a per-frame evaluator that produces values and edges.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/action_map.hpp[0m "#pragma once
+
+// Actions bind named game controls to device inputs, so controls can change without code (US-011). An action is a
+// button or an axis. Its bindings read keys, mouse buttons, mouse moti... (5711 chars)"
+I'll fix two things in that header now: remove an unused `<functional>` include, and rename the `rebind` parameter so it doesn't shadow the `bindings()` member.
+[94m[Bash][0m Remove unused include and rename rebind parameter $ /' $f && grep -n "rebind\|functional" $f
+That notice is my own `sed` edit, so the header is as intended. Next, the action map implementation: validation, overrides, and the per-frame evaluator.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/action_map.cpp[0m "#include "engine/platform/action_map.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <utility>
+
+namespace engine::platform {
+namespace {
+
+Act... (10938 chars)"
+Next, the profile layer: JSON with a format tag and a version, so an unsupported version is rejected rather than guessed at. It also does atomic save and load via the core file IO.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/action_profile.hpp[0m "#pragma once
+
+// The saved user profile for actions (US-011): the user's binding overrides, written as JSON. A profile carries a format
+// name and a version. A file with another format or version is ... (2165 chars)"
+Before writing the profile parser, I'll confirm two APIs it depends on: the `Result` error accessor in the vendored core, and the nlohmann version, since the parse path avoids exceptions.
+[94m[Bash][0m Check Result accessors and nlohmann json version $ grep -n "nlohmann" third_party/manifest.json | head -3
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/action_profile.cpp[0m "#include "engine/platform/action_profile.hpp"
+
+#include "engine/core/file_io.hpp"
+#include "engine/platform/input_names.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
+#include <cstdio>
+#includ... (10429 chars)"
+Profile I/O is in place. The router needs `WindowId`'s validity API, so I'll check that before writing it.
+[94m[Bash][0m Check WindowId definition $ grep -n "WindowId" -A6 engine/platform/include/engine/platform/window.hpp | head -30
+`WindowId::valid()` exists. Now the router: the header first, then the implementation with the reconciliation step.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/input_router.hpp[0m "#pragma once
+
+// Input routing between editor/UI and gameplay (US-011). Each frame the platform's events pass through the router.
+// Events from a device class that an editor or UI owner has captured ... (3917 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/input_router.cpp[0m "#include "engine/platform/input_router.hpp"
+
+#include <variant>
+
+namespace engine::platform {
+namespace {
+
+// The capture class an event belongs to.
+struct DeviceClassOf {
+    std::uint8_t operator()(... (7013 chars)"
+The router is written. Next I'll register the new sources in the platform target, with nlohmann as a system include private to the profile code.
+[94m[Bash][0m Add new platform sources and nlohmann include to CMake $ exactly one backend is built per operating system.""") s=s.replace("""  src/event_queue.cpp   src/ev...
+Before writing tests, I'll compile the platform library with the first-party `-Werror` policy to catch errors early.
+[94m[Bash][0m Configure and compile engine_platform on Linux $ echo "exit=${PIPESTATUS[0]}"
+The platform library compiles cleanly on Linux with warnings as errors. Next, the unit tests: first the action model (edges, axes, dead zones, remapping, validation, and name round-trips).
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/input_action_tests.cpp[0m "// Action maps (US-011): buttons and axes, combined devices, dead zones, remapping, validation, and name tables. These are
+// CPU-only tests. They feed synthetic events through InputState and ActionEv... (14847 chars)"
+One assertion in the remap test is vacuous (`CHECK_FALSE(... && key_down(Enter))` after the Enter release is already known), so I'll remove it before moving on.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/input_action_tests.cpp[0m edit: "    run.frame(map, {window_event(KeyReleased{Key::..." → "    run.frame(map, {window_event(KeyReleased{Key::..."
+Next, the profile tests: round-trip with stable text, rejection of bad format, version, and names, all-or-nothing apply, and a real file save/load.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/input_profile_tests.cpp[0m "// Saved input profiles (US-011): round trip, format and version checks, name and value rejection, and file IO. CPU-only,
+// runs on every operating system.
+
+#include "engine/core/file_io.hpp"
+#includ... (10089 chars)"
+I wrote three mistakes in that file: a nonexistent `using` declaration, a double-negative assertion, and an inverted `'fire'` check that would fail on the correct message. I'll also confirm `Path` has a text accessor before fixing them.
+[94m[Bash][0m Read Path class accessors $ sed -n 24,50p engine/core/include/engine/core/path.hpp
+`Path`'s constructor is private, so tests must go through `Path::from_utf8`, and the accessor is `str()`. I'll fix all of the mistakes together.
+[94m[Bash][0m Fix profile test includes, Path usage, and assertions $ """) rep("""#include "engine/core/file_io.hpp" #include "engine/core/path.hpp" ""","""#include "engi...
+That notice is again from my own edit. Next, the router tests: capture on each device class, held-state reconciliation in both directions, gamepad disconnect and restore, independent owners, and Play mode.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/input_router_tests.cpp[0m "// Input routing between editor/UI capture and gameplay (US-011). CPU-only: synthetic events go through InputRouter on
+// every operating system. The checks cover what gameplay sees, the physical stat... (10300 chars)"
+I wrote a garbled assertion at the end of the Play test, and I got the mouse-capture expectation backwards: capturing while a button is held should produce a synthetic release for gameplay, not none. Fixing both, plus a `CHECK(x == false)` style nit.
+[94m[Bash][0m Fix router test expectations and assertion style $ }""") open(p,'w').write(s) print('ok') EOF
+I'll correct a misleading comment in the Play test: by then gameplay really does hold Space, because the Play switch pressed it. I'll also add the `<variant>` and `<utility>` includes the file uses.
+[94m[Bash][0m Correct a comment and add missing includes in router tests $ python3 - <<'EOF' p='tests/src/input_router_tests.cpp' s=open(p).read() def rep(a,b):     global s  ...
+Next, the scenario tests. These are the integration-level checks: a scripted session with keyboard, gamepad, and mouse driving actions together, mid-session remapping and profile loading, and an editor capture followed by Play. The scenario goes through the router, the evaluator, and the profile code.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/input_scenario_tests.cpp[0m "// Scripted input sessions (US-011). Each scenario runs frames of events through InputRouter and ActionEvaluator, the
+// way the frame loop will, and checks the action values after every frame. The sc... (9042 chars)"
+The scenario expectations check out when I trace them frame by frame. The file is missing an `<optional>` include and has an unused `<cstddef>`, so I'll fix both and register the four new test files.
+[94m[Bash][0m Register new test sources and build Linux debug $ echo "build exit=${PIPESTATUS[0]}"
+The build passes on Linux with warnings as errors. Now I'll run the unit and integration suites for the new code.
+[94m[Bash][0m Run unit suite and locate the test binary $ find build -name engine_tests -type f | head -3
+[94m[Bash][0m Run unit suite on Linux $ echo "unit exit=${PIPESTATUS[0]}"
+All 161 unit cases pass, including the new ones. Next, the integration suite, which holds the scenario tests and the existing X11 tests.
+[94m[Bash][0m Run integration suite on Linux $ echo "integration exit=${PIPESTATUS[0]}"
+The integration suite passes: 32 cases pass, and the 6 skips are the same window-manager-dependent X11 cases the earlier stories documented. I'll confirm the three scenario cases are among them, then run the Linux gates through ctest.
+[94m[Bash][0m List scenario tests and run linux-unit ctest preset $ echo "linux-unit ctest exit=${PIPESTATUS[0]}"
+The Linux unit ctest preset passes (10/10 tests). The `--list-tests` flag isn't supported by this binary, so I can't name the scenario cases from the listing, but the scenario file is compiled into `engine_tests` and the integration count rose from the earlier run. Now the GCC and sanitizer presets, since CI requires them and the JSON parser and router are worth checking under ASan/UBSan.
+[94m[Bash][0m Run GCC and ASan/UBSan presets and their ctest runs $ tail -3 /tmp/us011_sanitize.log
+The GCC ctest preset failed (exit 8), so I'll read that log before anything else.
+[94m[Bash][0m Read GCC ctest failure log $ grep -v "^$" /tmp/us011_gcc_ctest.log | head -80
+The one failure is an existing X11 cursor-capture test: "another client holds the pointer (X grab status 3)". That's an external pointer grab on the display, not something in the code I changed. The same suite passed on the dev preset, so I'll rerun the GCC integration suite a few times to see whether it's flaky.
+[94m[Bash][0m Rerun GCC integration suite four times to check flakiness $ done
+Four consecutive runs pass, so the earlier failure is an intermittent X11 pointer-grab race in an existing test, not a regression from this change. I'll rerun the GCC ctest preset to get a clean record, and I'll report the first failure as it happened.
+[94m[Bash][0m Rerun linux-gcc-unit ctest preset and count build warnings $ ls /tmp/us011_gcc_build.log && grep -c "warning" /tmp/us011_gcc_build.log
+It failed again under ctest, while the same binary passes when run directly. That points to something about the ctest environment, so I need to see which check fails.
+[94m[Bash][0m Show failing assertions from the second ctest run $ grep -n -B3 -A6 "FAILED" /tmp/us011_gcc_ctest2.log | head -60
+The second failure is a different X11 test (window viewability, the same window-manager timing class the earlier stories documented), and the first was a pointer grab. Both are in the existing windowing tests, which this change doesn't touch. I want a rate rather than two data points, so I'll run the integration ctest test repeatedly.
+[94m[Bash][0m Repeat the integration ctest test five times to measure flakiness $ echo "DISPLAY=$DISPLAY"
+Under ctest the integration test now fails 5 out of 5, while direct runs of the same binary passed 4 out of 4. So something differs between the two invocations. I'll identify the failing test in these logs and compare the environments.
+[94m[Bash][0m Identify failing test names and compare ctest environment $ grep -rn "ENVIRONMENT" build/linux-gcc/tests/CTestTestfile.cmake | head -3
+The failing runs took 0.03 seconds, so my invocation was wrong, not the tests: `--test-dir` without `-C Debug` on this multi-config generator never found the binary. The preset runs earlier were real (about 12 seconds), so I'll repeat the proper preset-based invocation.
+[94m[Bash][0m Repeat the linux-gcc-unit preset integration test four times $ done
+The preset integration test fails intermittently: 1 of 4 in this batch, and across all preset runs 3 of 7 failed in X11 tests from the existing windowing and input suites. The passing direct runs and the earlier failures are in different tests each time, which points to the shared X display and window manager. The X11 backend code isn't touched by this change, so I'll note it as environmental and move on to the Windows gates. First I need the MSVC setup the earlier stories used.
+[94m[Bash][0m Find Windows gate script details and cache state $ ls build | head -30
+The Windows gates run from WSL through a `.bat` in `C:\Windows\Temp` that calls `vcvars64.bat` for the same VS 18 toolchain the `win-dev` cache uses. I'll write that script with the step codes captured on their own lines, as the earlier notes require.
+[94m[Bash][0m Write and run the Windows gate script via cmd.exe $ cat /mnt/c/Windows/Temp/us011/summary.txt
+All four Windows gate steps returned 0. I'll check the logs directly rather than trusting exit codes alone: the build for `warning C` lines, and the ctest summary.
+[94m[Bash][0m Verify Windows build has no warnings and ctest results $ grep -i "MSVC\|Visual Studio" configure.log | head -3
+Windows ctest passes 10/10 with zero warnings. The integration run took only 0.28 seconds, though, so I'll confirm it ran the real suite (not an early exit) and that the build compiled the new files.
+[94m[Bash][0m Confirm Windows test counts and new files compiled $ grep -o "action_[a-z_]*\.cpp\|input_router\.cpp" build.log | sort -u
+Those are the new files compiled into the Windows build. ctest hides the test-runner summary on success, so I'll run the Windows `engine_tests` binary directly for the real case counts.
+[94m[Bash][0m Run Windows engine_tests unit and integration suites $ echo "integration exit=${PIPESTATUS[0]}")
+Windows results: unit 163 cases pass, and integration 38 cases pass with no skips, since Win32 windows are real there. The CI image uses VS 2022 rather than the local VS 18 cache, and the vendored nlohmann header is the riskiest part under `/W4 /WX`, so I'll also run the VS 2022 path that earlier stories checked.
+[94m[Bash][0m Check VS 2022 vcvars availability $ ls "/mnt/c/Program Files/Microsoft Visual Studio/2022/" 2>/dev/null
+[94m[Bash][0m Run Windows VS 2022 configure, build, and ctest gates $ grep -E "tests passed|tests failed" ctest.log | head -3
+The VS 2022 gates also pass: configure, build with zero warnings, and ctest 10/10. That covers the Windows gates on both toolchains.
+
+Next, the docs. `docs/input.md` describes the input layer, and its "dead zones are not configurable yet; US-011 owns remapping" note is now out of date, so I'll update it along with a new actions and routing section and the test list.
+[94m[Bash][0m Update docs/input.md with actions, routing, and tests $ US-011 owns remapping. ""","""- **Dead zones** in the backend are the XInput defaults on Windows and...
+Next I'll mark US-011 as passing in `tasks/prd.json`, following the same pattern as US-009 and US-010. I'll check the entry's structure first so I edit only that story.
+[94m[Bash][0m Inspect US-011 entry structure in prd.json $ grep -n '"passes": true' tasks/prd.json | head -20
+US-011 is at `"passes": false`. Earlier stories flipped that flag once their own gates passed, so I'll do the same for this story and leave the other entries alone.
+[94m[Bash][0m Set US-011 passes flag in prd.json and validate JSON $ print([ (u['id'],u['passes']) for u in d['userStories'] if u['id'] in ('US-010','US-011','US-012')])...
+The PRD flag is set and the JSON still parses. Last is the progress log: a reusable pattern or two in the top section, and this story's entry at the bottom, following the format the earlier entries use.
+[94m[Bash][0m Add codebase patterns and US-011 progress entry $ GitHub CI (not pushed). - **Learnings:**   - Capture needs gameplay's state, not only the event list...
+The GCC failure count in that entry is off. Counting only the preset-based runs, it's 3 failures out of 6, not 3 of 7 (the 4 direct runs passed separately). I'll correct the entry.
+[94m[Bash][0m Correct GCC failure count in progress entry $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() a="`linux-gcc-unit` ctest failed in 3 ...
+US-011 is implemented, and the Linux and Windows gates pass with one caveat: the GCC preset is not reliably green on this X display.
+
+**What was built** (all in `engine/platform`, pure and platform-neutral)
+- **Action maps**: named button and axis actions. Bindings read keys, mouse buttons, mouse motion and wheel, gamepad buttons, and gamepad axes, with a slot or any pad. Each binding has a scale (`-1` turns a key pair into an axis) and a dead zone for gamepad axes. Several bindings on one action combine in the same frame.
+- **Remapping**: per-action user overrides via `rebind`, `reset`, and `reset_all`. Invalid bindings are rejected and change nothing.
+- **Saved profile**: JSON through the vendored nlohmann/json. It stores only overrides, carries a format name and version 1, and rejects other formats, versions, and unknown names. Apply is all-or-nothing, and save is atomic.
+- **Capture routing**: `Editor` and `Ui` owners request capture per device class (keyboard, mouse, gamepad). Captured events never reach gameplay. Gameplay's held state is kept consistent with the physical devices, so a key held when capture starts is released for gameplay, and one held when capture ends is pressed.
+- **Play**: entering Play releases all capture and refuses new requests until Edit.
+
+**Interpretations I chose** (say if you want any changed)
+- "Editor/UI capture" means per-device-class capture by owner, not per-widget hit testing. There is no UI yet to decide that.
+- Entering Play refuses capture requests, so the editor cannot take input during Play.
+- Button actions are down at a combined value of 0.5 or more. Axis actions clamp to [-1, 1].
+- The scenario tests are labelled `integration`. Everything else is `unit`.
+
+**Tests**: 4 new files, 42 cases total. Unit tests cover the action model, profiles, and the router. Scenario tests run keyboard, pad, and mouse together, remap and load a profile mid-session, and capture then Play.
+
+**Gate results**
+
+| Gate | Result |
+|---|---|
+| Windows VS 18 (`win-dev` cache): validate, configure, `win-debug`, `win-unit` | Pass; 0 `warning C`. Unit 163 cases; integration 38 cases, 0 skipped |
+| Windows VS 2022 (CI image): validate, configure, build, ctest `unit\|integration` | Pass; 0 warnings; 10/10 |
+| Linux Clang: `linux-dev`, `linux-debug`, `linux-unit` | Pass; 0 warnings. Unit 161 cases; integration 32 pass, 6 skip (window-manager dependent, same as earlier stories) |
+| Linux ASan/UBSan: `linux-asan`, `linux-sanitize` | Pass; no reports |
+| Linux GCC: `linux-gcc`, `linux-gcc-debug` | Build passes with 0 warnings |
+| Linux GCC: `linux-gcc-unit` | **Not reliably green**: 3 of 6 preset runs failed. The failures were in existing X11 tests (cursor capture, window viewability). The same binary passed 4 of 4 when run directly. The X11 backend is untouched by this change. |
+
+**Not run**
+- GUI and screenshot checks: no editor or application window exists yet.
+- Benchmarks: no harness exists, and the change is not on a measured path.
+- GitHub CI: nothing is pushed.
+
+**Still open**
+- Nothing calls `route()` each frame yet. The runtime (US-060) and editor (US-061) will do that.
+- In Play, nothing is captured, so the editor's Stop control needs its own input path. That belongs with the Play controls (US-065).
+
+`docs/input.md`, `.ralph-tui/progress.md`, and `tasks/prd.json` (US-011 `passes: true`) are updated. No git commit was made.

@@ -1,0 +1,70 @@
+# Iteration 1077 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:33:51.037Z
+- **Ended At**: 2026-10-26T20:42:27.658Z
+- **Duration**: 8m 36s
+- **Input Tokens**: 132
+- **Output Tokens**: 11510
+- **Total Tokens**: 11642
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness.
+[94m[Bash][0m Read progress log and list benchmark artifacts $ ls benchmarks 2>/dev/null
+The log shows US-080 blocked since the last pass: no acceptance run exists, the render budget is failing, and native Linux Vulkan is absent. Before deciding what I can move forward, I'll check the Windows gate route in memory and the render_stress budget numbers.
+[94m[Bash][0m Read Windows gate and Vulkan environment memory notes $ 
+Docs tools aren't needed here. The open items that I can act on now are the Windows quality gates, which no US-080 pass has run yet. I'll check for stale batches first, then write the gate batch.
+[94m[Bash][0m Check for running batches and gate presets $ grep -o '"p99[^,]*' artifacts/bench/us076-dx12-meshlets/report.json | head -3
+[94m[Bash][0m Read an existing gate batch template $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && cat us010_gates.bat | head -40
+I'll run the four Windows gates from the same template, with a distinct batch name and per-step logs.
+[94m[Bash][0m Run the four Windows quality gates via cmd.exe $ cat us080_rc.txt
+All four Windows gates exited 0. Per the memory notes, exit codes alone aren't enough, so I'll check the logs for real build and test output.
+[94m[Bash][0m Inspect Windows gate logs for real results $ tail -n 3 us080_validate.log
+The build log ends mid-count (`33/171`) and the ctest label summary shows only one unit test. I need to confirm the build finished and see the full test totals before I call these gates passed.
+[94m[Bash][0m Confirm build completion and ctest totals $ grep -i "Not Run\|Failed" us080_ctest.log | head -3
+The Windows gates pass with real output: validation succeeded, ctest reports 29/29, and the build exit is 0. Next, the DX12 GPU suite on the RTX 5080 is a cheap, concrete check that I can run now, so I'll find the built binary.
+[94m[Bash][0m Locate the built engine_tests executable $ find build -name engine_tests.exe 2>/dev/null | head -3
+[94m[Bash][0m Run DX12 GPU suite on the RTX 5080 $ tail -n 5 us080_gpu_dx12.log
+The DX12 GPU suite passed. I'll confirm the adapter in the log is the RTX 5080 and not a software device.
+[94m[Bash][0m Confirm GPU adapter identity in log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && grep -i "adapter\|5080\|software\|warp" us080_gpu_dx12....
+The adapter is the RTX 5080 with validation on. I'll run the Vulkan GPU suite on Windows too, since it's the same cheap check.
+[94m[Bash][0m Run Vulkan GPU suite on the RTX 5080 $ grep "backend=" us080_gpu_vulkan.log | head -1
+The Vulkan GPU suite fails 67 of 73 cases on the RTX 5080. I'll read the first failure to see whether it's a validation error or a shared cause.
+[94m[Bash][0m Find first Vulkan GPU suite errors $ grep -c -i "VUID\|validation error" us080_gpu_vulkan.log
+Every failure traces to one validation error: `VUID-VkDeviceCreateInfo-pNext-pNext`, with `VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures` in the device-create chain. That's a single cause in device creation, so I'll look at the message and the code that builds the chain.
+[94m[Bash][0m Read full VUID message and locate the zero-init feature code $ cd /mnt/d/dev/haiku_game_engine && grep -rn "ZeroInitializeWorkgroupMemory\|zero_initialize_workgrou...
+The struct is `VK_STRUCTURE_TYPE 1000328000`, which is the zero-initialize-workgroup-memory feature. My grep of the RHI sources found no reference, so I'll search the whole tree for where it's added to the device chain.
+[94m[Bash][0m Search tree for zero-init feature and device pNext setup $ grep -rn "pNext" engine/rhi/src/vulkan/vulkan_device.cpp | head -20
+The engine's device chain never adds that struct type, so the stray entry most likely comes from the validation layer setup. My memory notes say the Windows Vulkan gate needs a pinned 1.4.363 layer, and this run used whatever layer path is configured. I'll check that note against the run.
+[94m[Bash][0m Read Windows Vulkan layer memory and check layer folders $ grep -rn "VK_LAYER_PATH" /mnt/d/dev/haiku_game_engine/tests/src/*.cpp /mnt/d/dev/haiku_game_engine/e...
+The cause is that my batch ran the old SDK 1.3.224 layer, which the memory note says can't handle this device chain. The pinned 1.4.363 layer is staged at `D:\dev\vvl_build\layer`, so I'll rerun the Vulkan suite with `VK_LAYER_PATH` pointed there.
+[94m[Bash][0m Rerun Vulkan GPU suite with pinned 1.4.363 layer $ grep -c "Validation Error" us080_gpu_vulkan2.log
+The Vulkan GPU suite passes on the RTX 5080 with the pinned layer: 73/73 cases and zero validation errors. I'll record this pass in the progress log.
+[94m[Bash][0m Append US-080 status entry to progress log $ `full_1080` needs FSR 2 permutation headers.   5. `linux-gcc*` needs GCC 11+ or clang 14+ (host has ...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. This pass ran the Windows quality gates and both GPU suites on the RTX 5080, but the performance acceptance itself is still blocked.
+
+**Passed this pass (real output checked, not just exit codes):**
+- Windows gates: `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset win-dev`, `cmake --build --preset win-debug`, and `ctest --preset win-unit --no-tests=error` all exit 0. ctest reports 29/29 (1 unit, 28 integration).
+- `engine_tests --suite gpu --backend dx12`: 72 cases, 43923 assertions passed, on "NVIDIA GeForce RTX 5080" with validation on.
+- `engine_tests --suite gpu --backend vulkan`: 73/73 cases passed, 0 validation errors, on the RTX 5080, with the pinned 1.4.363 layer.
+
+**Vulkan fix in the run, not a code change:** my first Vulkan run failed 67/73 with `VUID-VkDeviceCreateInfo-pNext-pNext`. The batch had loaded the installed SDK 1.3.224 layer, which mis-reports the mesh-shader device chain. Setting `VK_LAYER_PATH=D:\dev\vvl_build\layer` fixed it. The Windows batch must set this path for every Vulkan run.
+
+**Still open, so US-080 stays incomplete:**
+1. **Frame budget:** `render_stress` p99 is about 42 ms against the 16.7 ms target (`artifacts/bench/us076-dx12-meshlets/report.json`). The contract says to fix the measured cause, so this needs profiling and implementation work.
+2. **No acceptance run:** `engine_bench --suite acceptance` (30 s warmup, 180 s measured, 3 repeats per scene/profile/backend) has not been run on DX12 or Vulkan. I didn't start it because item 1 would fail it.
+3. **Native Linux/Vulkan:** `/dev/dri` is absent, so there is no native GPU report from this machine.
+4. **`all_features`:** still `implementation: none`, and `full_1080` needs FSR 2 permutation headers that the tree lacks.
+5. **`linux-gcc*`:** needs GCC 11+ or clang 14+. This host has g++ 9.4 and clang 10.
+
+I appended this status to `.ralph-tui/progress.md`. No source files changed and no git commits were made.

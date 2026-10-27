@@ -1,0 +1,42 @@
+# Iteration 1156 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:20:42.184Z
+- **Ended At**: 2026-10-26T21:20:54.902Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1686
+- **Total Tokens**: 1704
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and bench artifacts $ ls && wc -l .ralph-tui/progress.md && tail -c 6000 .ralph-tui/progress.md && ls artifacts/bench 2>/d...
+[94m[Bash][0m Recheck the known blockers on this host $ ls samples 2>&1 | head -1
+US-080 is not complete, and I'm not signalling COMPLETE. The blockers that the log records are still there, and this host cannot clear any of them.
+
+Re-checked just now:
+- **No native Linux Vulkan device:** `/dev/dri` is absent, so the native Linux/Vulkan GPU run cannot happen here.
+- **FSR 2 permutations missing:** `third_party/fsr2` has 0 `*_permutations.h` files. FSR cannot build until you pick a vendoring route.
+- **Workloads not implemented:** `benchmarks/manifest.json` still has 4 entries with `implementation: none`.
+- **No acceptance reports:** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+- **Reference GPU only under WSL:** `nvidia-smi` sees the RTX 5080 (driver 617.42), but only through WSL.
+
+The acceptance criteria need 3 × 180 s measured runs on the RTX 5080 for Windows/DX12, Windows/Vulkan, and native Linux/Vulkan, plus the full scene and profile matrix. That run has to happen on the reference machine. Running it here would not produce a valid report.
+
+The `render_stress` frame budget is also still failing (p99 over 16.7 ms). Fixing it needs profiling and Windows runs, and I did not change any budget or workload to make it pass.
+
+`.ralph-tui/progress.md` already has 55 identical "cannot be signed off on this host" entries. I did not add a 56th, and I made no source or build changes in this pass.
+
+**Decisions needed from you:**
+1. Which FSR 2 vendoring route to take: supply the generated permutation headers, or drop FSR from this acceptance.
+2. Whether to implement the 4 missing workloads (physics, streaming, all_features, and the remaining one) before the reference runs.
+3. Who runs the Windows and native Linux reference runs, and where the raw reports should be collected.

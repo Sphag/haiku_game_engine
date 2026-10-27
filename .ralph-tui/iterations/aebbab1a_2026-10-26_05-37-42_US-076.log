@@ -1,0 +1,38 @@
+# Iteration 768 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:37:42.810Z
+- **Ended At**: 2026-10-26T02:38:00.996Z
+- **Duration**: 18s
+- **Input Tokens**: 22
+- **Output Tokens**: 2165
+- **Total Tokens**: 2187
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 already has code in the tree.
+[94m[Bash][0m Read progress log and locate render_stress code $ grep -rn "render_stress" --include=*.cpp --include=*.hpp --include=*.json --include=*.txt --include=...
+The log shows this story has been blocked for many passes on the same decisions. I'll check that the tree still matches the last record before reporting.
+[94m[Bash][0m Check source mtimes and latest bench artifacts $ ls -t artifacts/bench 2>/dev/null | head -3
+US-076 is not complete, and I have not signalled COMPLETE. I made no code changes in this pass.
+
+I checked the tree against the last recorded status. The source, workload, and manifest mtimes are unchanged since the previous pass, and the latest `us076-*` bench artifacts are in place. The story is blocked on three items:
+
+1. **Route-start triangle floor and frame budget.** The indexed path submits 312,068 triangles at the route start, against the contract's 2,000,000. The p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this changes the fixed workload contract. It means bumping `kWorkloadVersion` (currently 1), regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. I have not made that change because it alters a pinned contract. It needs your approval, or your decision to accept the failing measured run as the result.
+2. **`full_1080` profile.** It is unsupported until the vendored FSR 2 permutation headers exist. Choosing how to vendor them is your call.
+3. **Native Linux Vulkan GPU and linux-gcc.** Neither can run here. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+The Linux unit suite passed 30/30 and `engine_workload --check` matched all four scenes in the last pass. The Windows gates were not rerun in this pass.
+
+I did not append another progress entry, because the last 20 or so entries repeat the same blocker with no new facts.
+
+To move this forward, please decide on item 1: approve the workload change, or accept the failing measured run as the story's result. Items 2 and 3 still need their own resolution before the acceptance list can pass.

@@ -1,0 +1,103 @@
+# GPU jobs (US-004). Separate from CPU CI because they need a self-hosted runner with a real GPU.
+#
+# Enable by registering runners with the labels below and setting the repository variable
+# GPU_RUNNER_ENABLED=true. Without it, the jobs are skipped and ci.yml's gpu-status job records
+# every GPU environment as not-run. WSL, software rendering (WARP, llvmpipe, SwiftShader), and
+# hosted CI runners do not satisfy these jobs.
+name: GPU
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_PIP_VERSION: "3.31.6"
+  NINJA_PIP_VERSION: "1.11.1.3"
+
+jobs:
+  gpu-windows-dx12:
+    name: Windows / DX12 (real GPU)
+    if: vars.GPU_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, windows, x64, gpu]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enter MSVC x64 developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Configure and build
+        run: |
+          cmake -P cmake/ValidateVendor.cmake
+          cmake --preset win-dev
+          cmake --build --preset win-debug
+      - name: Record GPU and run GPU suite
+        shell: pwsh
+        run: python -I tools/ci/gpu_run.py --environment windows-dx12 --backend dx12 --build-dir build/win-dev/tests/Debug --output artifacts/reports
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-gpu-windows-dx12
+          path: artifacts/reports/
+          if-no-files-found: warn
+
+  gpu-windows-vulkan:
+    name: Windows / Vulkan (real GPU)
+    if: vars.GPU_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, windows, x64, gpu]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enter MSVC x64 developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Configure and build
+        run: |
+          cmake -P cmake/ValidateVendor.cmake
+          cmake --preset win-dev
+          cmake --build --preset win-debug
+      - name: Record GPU and run GPU suite
+        shell: pwsh
+        run: python -I tools/ci/gpu_run.py --environment windows-vulkan --backend vulkan --build-dir build/win-dev/tests/Debug --output artifacts/reports
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-gpu-windows-vulkan
+          path: artifacts/reports/
+          if-no-files-found: warn
+
+  gpu-linux-vulkan:
+    name: Linux / Vulkan (real GPU)
+    if: vars.GPU_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-14 libc6-dev
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
+          python3 -m pip install "cmake==$CMAKE_PIP_VERSION" "ninja==$NINJA_PIP_VERSION"
+      - name: Configure and build
+        run: |
+          cmake -P cmake/ValidateVendor.cmake
+          cmake --preset linux-dev
+          cmake --build --preset linux-debug
+      - name: Record GPU and run GPU suite
+        run: python3 -I tools/ci/gpu_run.py --environment linux-vulkan --backend vulkan --build-dir build/linux-dev/tests/Debug --output artifacts/reports
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-gpu-linux-vulkan
+          path: artifacts/reports/
+          if-no-files-found: warn

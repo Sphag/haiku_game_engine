@@ -1,0 +1,46 @@
+# Iteration 894 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:15:47.567Z
+- **Ended At**: 2026-10-26T12:21:37.585Z
+- **Duration**: 5m 50s
+- **Input Tokens**: 38
+- **Output Tokens**: 3202
+- **Total Tokens**: 3240
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since the prerequisites and existing work determine what this story can actually deliver here.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features references $ grep -rl "all_features" --include=* . 2>/dev/null | grep -v third_party | head -20
+The progress log shows about a dozen earlier passes on US-079 that changed no code and stopped short of COMPLETE. Before deciding whether this pass can move anything, I'll read the existing all_features test and the benchmark scene table.
+[94m[Bash][0m Read all_features tests and references in benchmarks/tools $ grep -rn "all_features" benchmarks tools --include=*.json --include=*.cpp --include=*.hpp --include=...
+The tree still matches the log. The remaining acceptance items need a Windows GPU session, a native Linux Vulkan device, GCC 11+, and FSR 2 permutation headers, and none of those exist on this host. I'll re-run the one Linux gate that is cheap to check, so the report reflects the current tree.
+[94m[Bash][0m Validate vendor manifest, run Linux unit tests, check host GPU and compiler $ command -v g++ && g++ --version | head -1
+[94m[Bash][0m Get ctest pass/fail summary line $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests passed|tests fa...
+[94m[Bash][0m Append status entry to progress log $ linux-gcc*). - No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/progress.md
+I'm not signalling COMPLETE for US-079. Several acceptance items are still open, and this host can't close them.
+
+**Verified in this pass (Linux, clang 10, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 30/30.
+
+**Still open, not reported as passed:**
+- **Tour runner:** no automated tour with screenshots or an action log exists. The CPU test in `tests/src/all_features_tests.cpp` checks markers but does not drive the running app.
+- **GI/RT/upscale profiles and forced geometry paths:** `all_features` is `implementation: none` in `benchmarks/manifest.json` (route "pending final benchmark scene"). FSR 2 also cannot link because its `*_permutations.h` headers are missing.
+- **Package relaunch:** only Build Game's own verify step runs; the published folder is not launched again.
+- **Windows gates:** the earlier log records Windows results from before the last `all_features_editor_tests.cpp` change. I did not re-run them in this pass.
+- **Native Linux Vulkan GPU, GUI checks, `engine_bench --suite acceptance`:** need a Linux render device, a GUI session, and the bench scene. This host has no `/dev/dri`.
+- **`linux-gcc*` and `linux-asan`/`linux-sanitize`:** the host has only g++ 9.4 and clang 10, and Jolt needs GCC 11+.
+
+**What would close it:** a `builtin` GPU scene and route for `all_features` in `tools/benchmark`, a Windows GPU session for the DX12 and Vulkan runs, a native Linux Vulkan device, a GCC 11+ host, and the FSR 2 permutation headers.
+
+I made no source changes. I appended a status entry to `.ralph-tui/progress.md`, which is the same kind of entry earlier passes recorded.

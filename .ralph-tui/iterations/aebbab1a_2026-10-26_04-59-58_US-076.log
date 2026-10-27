@@ -1,0 +1,55 @@
+# Iteration 649 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T01:59:58.247Z
+- **Ended At**: 2026-10-26T02:00:18.658Z
+- **Duration**: 20s
+- **Input Tokens**: 22
+- **Output Tokens**: 3284
+- **Total Tokens**: 3306
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark sources $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark tools/benchmark/src && grep -n "render...
+The log says US-076 is measured but blocked on a decision about instance placement and the route. Before deciding anything, I'll check what the PRD and contract actually specify for the route and placement.
+[94m[Bash][0m Search PRD for route and placement contract, read manifest scene $ ls artifacts/bench | head -30
+US-076 is not complete. The render driver, route, both paths, the mesh-shader-off fallback, and the counters are all implemented and measured. What's left needs your decision.
+
+**What's blocking**
+
+- **Triangle floor fails.** The manifest requires at least 2,000,000 submitted triangles on the starting frame of the indexed path. The measured value is 312,068 on every indexed run, on both DX12 and Vulkan.
+- **Frame budget fails.** p99 is 35–47 ms against the 16.7 ms budget, with 0% of frames within budget.
+- **Cause:** the 20,000 instances are placed uniformly over the 8192 m world. The route start at (4096 m, 4096 m) sees about 330 items. The contract forbids reducing the workload, so I didn't change it.
+
+**Options**
+
+1. **Keep the contract and report the failures as the result.** The story then can't be marked passing on the performance criteria.
+2. **Choose a denser route start.** The PRD says to "record the route," and the route is defined in `benchmarks/manifest.json`, so this is a route change, not a workload change. I haven't measured whether any start reaches 2M triangles; it may not be enough, since the gap is about 6×.
+3. **Change instance placement.** This is a workload change: bump `kWorkloadVersion`, regenerate `workload_expected.json`, and rerun the eight reports.
+
+I'd try option 2 first, because it doesn't touch the workload. It needs a quick check of visible triangles over candidate starts before committing to a 10-minute run per report.
+
+**What's verified on the current tree**
+
+- The indexed, indirect, and meshlet paths run on DX12 and Vulkan, with screenshots and counters under `artifacts/bench/us076-*`.
+- The forced mesh-shader-off run falls back to indirect-indexed, and it reports `mesh_shaders: disabled: forced off`.
+- Windows gates from the last run: ValidateVendor, `win-dev`, `win-debug` (0 warnings), `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72 cases) and Vulkan (73 cases), and the Release `engine_bench` build.
+- Linux gates on the current tree: ValidateVendor, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` (30/30).
+
+**Still open regardless of the decision**
+
+- `full_1080` is unsupported because FSR 2's permutation tables are missing, so only the `native_1080` profile has been run.
+- Native Linux Vulkan GPU and `linux-gcc` haven't been run. WSL has no Vulkan device, and GCC 9 can't build Jolt.
+- The `linux-asan` run hasn't been done.
+
+Which option do you want? If you pick option 2, I'll measure candidate route starts first.

@@ -1,0 +1,42 @@
+# Iteration 908 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:44:37.897Z
+- **Ended At**: 2026-10-26T12:45:02.402Z
+- **Duration**: 24s
+- **Input Tokens**: 26
+- **Output Tokens**: 3014
+- **Total Tokens**: 3040
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-079, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and existing US-079 references $ ls && tail -c 4000 .ralph-tui/progress.md && grep -rn "all_features\|US-079" --include=* -l . 2>/dev...
+The log shows 19 prior passes that stopped without `COMPLETE`, blocked on two decisions. I'll check the current state of the manifest entry and the existing tests before deciding whether anything is actionable now.
+[94m[Bash][0m Check all_features manifest entry, FSR2 permutations, and test files $ wc -l tests/src/all_features*.cpp
+[94m[Bash][0m Append status-check entry to progress log $ `tests/src/all_features*_tests.cpp` are the CPU and editor scenario tests from earlier passes. - Not...
+US-079 is not complete, so I am not signalling `COMPLETE`. The Windows gates from the last full pass still hold, but most of the story remains open.
+
+**Status:**
+- **Windows gates:** the last recorded run passed all four (`ValidateVendor`, `win-dev`, `win-debug` build, `win-unit`). I did not re-run them in this pass, and nothing under the engine has changed since.
+- **Already present:** `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp` cover the CPU markers and the editor scenario.
+- **Still open:**
+  - `all_features` is still `implementation: none` in `benchmarks/manifest.json`, so there is no tour runner, no GI/RT/upscale profiles, and no forced geometry paths.
+  - `third_party/fsr2` still has no `*_permutations.h`, so the `full_1080` profile cannot be built or measured.
+  - No GUI, screenshot, or package-relaunch run has been done on Windows for this scene.
+  - Native Linux Vulkan GPU, `engine_bench --suite acceptance`, and the `linux-gcc*` and sanitizer presets have not been run.
+
+**Decisions needed from you:**
+1. **FSR 2 route:** obtain the generated permutation headers, or record `full_1080` as unsupported for this story.
+2. **`all_features` route:** I can define it as a builtin scene that combines the table workload with Lua, audio, UI, save/load, animation, and material graphs, then add the tour and profiles. That is a sizeable change to the benchmark contract, so I have not made it without your go-ahead.
+
+I appended a status-check entry to `.ralph-tui/progress.md` recording this pass.

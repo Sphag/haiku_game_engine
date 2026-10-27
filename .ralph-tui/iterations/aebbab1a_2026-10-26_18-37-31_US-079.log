@@ -1,0 +1,46 @@
+# Iteration 1005 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:37:31.394Z
+- **Ended At**: 2026-10-26T15:37:55.967Z
+- **Duration**: 24s
+- **Input Tokens**: 26
+- **Output Tokens**: 2699
+- **Total Tokens**: 2725
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo layout and search for all_features $ ls && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && grep -rn "all_features" --inclu...
+[94m[Bash][0m Read the tail of the progress log $ tail -150 .ralph-tui/progress.md
+[94m[Bash][0m Re-check the open blockers for US-079 $ grep -n "all_features_route_v1" benchmarks/manifest.json | head -3
+[94m[Bash][0m Append a status entry to the progress log $ (3) a Windows GUI session for the tour, GI/RT/upscale profiles, forced geometry paths, and the live ...
+US-079 is not complete, so I'm not signalling COMPLETE. I re-checked the blockers and made no code changes this pass.
+
+**Already in place (from earlier passes):**
+- `tests/src/all_features_tests.cpp` covers the workload digests, Lua gameplay and audio, animation, UI click, save round trip, material graph, and a marker tour, all on the CPU.
+- `tests/src/all_features_editor_tests.cpp` covers scene, material, animation, and terrain edits, undo/redo, Play/Stop, and Build Game package verify.
+- Last recorded gate results: Linux `linux-debug` build and `linux-unit` 30/30 pass, and `ValidateVendor` passes. Windows `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` 29/29 pass. Both GPU suites pass on Windows (DX12 72 cases, Vulkan 73 cases).
+
+**Still open, not reported as passed:**
+- `all_features` has no benchmark runner (`implementation: none` in `benchmarks/manifest.json`), so there are no GI/RT/upscale profiles and no forced indirect/meshlet runs. `tools/benchmark/src` has no `all_features` branch.
+- No `samples/all_features` project exists, so the live editor scenario, package relaunch, screenshots, and action log have not run in the app.
+- `full_1080` is unsupported because FSR 2 permutation headers are absent (`third_party/fsr2` has 0 `*_permutations.h`).
+- The Linux ASan run is intermittently flaky on X11 input tests under WSL focus timing; one run passed 30/30 with no sanitizer reports.
+- Native Linux Vulkan GPU suite, `engine_bench --suite acceptance`, and the `linux-gcc` presets are not run. The local host has GCC 9.4 only.
+
+**Needed from you:**
+1. Approve `all_features_route_v1` (manifest line 152). It fixes the benchmark contract, so I haven't treated it as approved.
+2. Vendor the FSR 2 permutation headers, or decide to leave `full_1080` unsupported.
+3. Run the tour, profiles, forced geometry paths, and live editor run with package and relaunch on a Windows machine with a GUI session.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this.

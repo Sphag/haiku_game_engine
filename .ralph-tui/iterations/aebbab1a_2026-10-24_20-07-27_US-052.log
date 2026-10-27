@@ -1,0 +1,39 @@
+# Iteration 287 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:07:27.066Z
+- **Ended At**: 2026-10-24T17:07:42.012Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1961
+- **Total Tokens**: 1983
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-052, since the memory notes say the adapter is largely done.
+[94m[Bash][0m Inspect physics module, progress log, and memory note $ ls && ls engine/physics && tail -n 80 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-...
+The log shows US-052 as Partial, with the `linux-gcc` gate and the acceptance benchmark still open. I'll check whether the toolchain has changed since the last entry, and confirm the source and the Linux gates still hold.
+[94m[Bash][0m Check compilers, sudo, and file timestamps for physics $ grep -rn "engine_bench" --include=CMakeLists.txt . | grep -v third_party | head -3
+US-052 is not complete, and I'm not emitting the COMPLETE signal. Nothing has changed since the last pass, and the two open items are blocked by the environment, not by code.
+
+**What exists:** the Jolt adapter in `engine/physics/` (pimpl state, fixed 60 Hz stepping, callback queue) and 13 cases in `tests/src/physics_world_tests.cpp`. The source files are unchanged since 13:05–13:13, after the last passing runs.
+
+**Verified earlier, per the progress log and memory note (not re-run this turn):**
+- Windows: validate, win-dev, win-debug, and win-unit pass (21/21).
+- Linux clang 10: ValidateVendor, linux-dev, linux-debug, and linux-unit pass (22/22 with 1 unit and 21 integration).
+- ASan/UBSan (linux-asan build plus linux-sanitize ctest) passes.
+
+**Still open:**
+1. **`linux-gcc` gate.** Jolt needs GCC 11+ for `__builtin_bit_cast`. This machine has only g++-9 and clang++-10. No `/opt` compiler, micromamba, conda, or docker is present, and `sudo -n` needs a password. I checked this again and nothing changed. Closing it needs `sudo apt install g++-11` (the apt lists I checked don't include it, so refresh them first) or a CI GCC 11 job.
+2. **`engine_bench --suite acceptance`.** No `engine_bench` target exists in any non-vendored CMakeLists.txt. That is US-074, so this is not applicable to US-052 yet.
+
+I did not add another progress entry. The log already has about ten identical "no-change" entries for this story, and another one would add noise without new information. Once GCC 11 is available, the next step is `cmake --preset linux-gcc` followed by the build and ctest presets. If you want the Windows gates re-run on the current tree, that needs a Windows session per the memory notes.

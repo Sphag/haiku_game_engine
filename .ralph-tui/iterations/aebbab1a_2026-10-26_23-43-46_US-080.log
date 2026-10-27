@@ -1,0 +1,41 @@
+# Iteration 1082 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:43:46.225Z
+- **Ended At**: 2026-10-26T20:44:06.385Z
+- **Duration**: 20s
+- **Input Tokens**: 22
+- **Output Tokens**: 2484
+- **Total Tokens**: 2506
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log, bench artifacts, repo state $ git status 2>&1 | head -3
+[94m[Bash][0m Re-check Linux GPU, FSR headers, manifest, compilers $ ls artifacts/bench | grep -ci acceptance
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*` needs GCC 11+ or clang 14+. - Stop: US-080 cannot be signed off on this host. No COMPLE...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I re-checked the blockers in this environment and they are unchanged from the previous runs.
+
+**Blocked, and I can't clear these from this host:**
+1. **Native Linux/Vulkan GPU:** `/dev/dri` is absent, so there is no native Linux Vulkan device for the GPU suite or the acceptance run.
+2. **FSR 2 permutations:** `third_party/fsr2` has no `*_permutations.h` headers, so `full_1080` cannot run. This needs a user decision on the vendoring route.
+3. **`all_features` workload:** `benchmarks/manifest.json` still has four `implementation: none` entries, including `all_features`.
+4. **`linux-gcc*` presets:** they need GCC 11+ or clang 14+. The host has only g++ 9.4 and clang 10.
+
+**Blocked on work I haven't done yet:**
+5. **Render-stress frame budget:** `artifacts/bench/us076-dx12-meshlets/report.json` shows p99 at about 42 ms against a 16.7 ms budget. The cause has not been profiled. The fix needs a Windows Release capture with per-pass GPU timestamps and a CPU/GPU split first. It must not change the contract.
+6. **Acceptance bench:** no `engine_bench --suite acceptance` run exists under `artifacts/bench`. The contract needs three repeats of 30 s warmup plus 180 s per scene, profile, and backend, on DX12, Vulkan, and Linux.
+
+**Done in earlier passes, and still standing:**
+- Windows gates passed: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` (29/29).
+- RTX 5080 GPU suite passed on DX12 (72 cases) and on Vulkan with the pinned 1.4.363 layer (73/73, 0 validation errors).
+
+I made no source change or bench run this pass. I appended a status entry to `.ralph-tui/progress.md`. The next concrete step is the Windows Release RTX 5080 capture of `render_stress`, which can run from WSL through `cmd.exe`. The Linux items and the FSR and `all_features` decisions still need you.

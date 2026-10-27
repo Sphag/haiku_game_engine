@@ -1,0 +1,38 @@
+# Iteration 286 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:07:09.812Z
+- **Ended At**: 2026-10-24T17:07:26.019Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2472
+- **Total Tokens**: 2494
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect physics module, progress log, and memory notes $ ls engine/physics && tail -n 60 .ralph-tui/progress.md && ls /home/max/.claude/projects/-mnt-d-dev-h...
+[94m[Bash][0m Check for GCC 11+ toolchain and recent source changes $ date +%H:%M
+[94m[Bash][0m Append recheck entry to progress log $ `sudo -n` needs a password. `linux-gcc*` stays blocked (Jolt needs GCC 11+). - Benchmark: no `engine...
+US-052 is still **Partial**, so I'm not signalling COMPLETE. The remaining gaps need a GCC 11+ toolchain and the benchmark harness, and neither is available here.
+
+**What I checked this pass**
+- The physics sources and tests are unchanged since the last passing runs. `engine/physics/CMakeLists.txt` was last modified at 13:13, `physics_world.cpp` at 13:05, and `physics_world_tests.cpp` at 13:06.
+- The Windows gates (validate, win-dev, win-debug, win-unit) and the Linux clang gates (validate, linux-dev, linux-debug, linux-unit, plus linux-asan/linux-sanitize) passed on this source in earlier runs. I did not rerun them in this pass.
+- The Linux toolchain has only g++-9, gcc-9 and clang++-10. There is no `/opt` compiler, no micromamba, conda or docker, and `sudo -n` needs a password.
+
+**What's open**
+1. **`linux-gcc` gate (blocked).** Jolt needs GCC 11+ for `__builtin_bit_cast`, and the local GCC is 9.4. Closing this needs a GCC 11+ install (for example `sudo apt install g++-11` after refreshing the package lists) or a CI GCC 11 job. I can't do either without your sudo password or CI access.
+2. **Acceptance benchmark (not applicable yet).** There is no `engine_bench` target in the tree; that comes with US-074. The story's own text says to run it only once the harness exists.
+
+I appended a short recheck entry to `.ralph-tui/progress.md` recording these findings. No source changes were made.
+
+**To finish US-052:** install GCC 11+ or provide a CI job that runs the three `linux-gcc` presets. Then rerun them and the Windows gates to confirm, and the story can be signalled complete. The benchmark stays deferred to US-074.

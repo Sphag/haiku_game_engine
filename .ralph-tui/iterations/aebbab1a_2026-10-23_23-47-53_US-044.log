@@ -1,0 +1,254 @@
+# Iteration 33 Log
+
+## Metadata
+
+- **Task ID**: US-044
+- **Task Title**: Dynamic RT GI
+- **Description**: As a player, I want dynamic indirect lighting so that it responds to scene changes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T20:47:53.705Z
+- **Ended At**: 2026-10-23T21:27:30.220Z
+- **Duration**: 39m 36s
+- **Input Tokens**: 632
+- **Output Tokens**: 155675
+- **Total Tokens**: 156307
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the PRD story.
+[94m[Bash][0m Inspect repo root, progress log, and PRD $ grep -n "US-04[0-4]" tasks/prd-open-world-engine.md | head -40
+[94m[Bash][0m Read PRD header and RT story section $ sed -n 380,460p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read progress log head and tail $ tail -120 .ralph-tui/progress.md | cut -c1-600
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+The story is large and the prior log shows the gate workflow. Next I'll read the memory notes on Windows gates and check what GI and RT code already exists.
+[94m[Bash][0m Read memory notes on Windows gate runs $ done
+[94m[Bash][0m Find probe GI code and render module layout $ ls build | head
+There is an existing `engine/gi` probe module. I'll read it along with the RT effects pass it will need to plug into.
+[94m[Bash][0m List GI module and read probes header $ cat engine/gi/include/engine/gi/probes.hpp
+The GI module is CPU-only baked probes. Dynamic GI needs a GPU trace pass, so I'll look at how the RT effects pass is built and wired before deciding the design.
+[94m[Bash][0m Measure RT and GI source sizes; read RtEffects header $ cat engine/render/include/engine/render/rt_effects.hpp
+The RT effects pass is a full compute pipeline with its own descriptors and buffers. I'll read its build wiring, its shader, and its `create()` path so the new GI pass follows the same pattern.
+[94m[Bash][0m Read render, gi, and test CMake wiring $ grep -n "rt_\|gi_\|render_rt\|add_executable\|engine_add_test\|LABELS\|suite" tests/CMakeLists.txt |...
+[94m[Bash][0m Read full tests CMake configuration $ sed -n 126,260p tests/CMakeLists.txt | cut -c1-260
+Next, the RT pass implementation, to copy its create/record/upload pattern.
+[94m[Bash][0m List function signatures in rt_effects.cpp $ grep -n "^[a-zA-Z].*(\|^}" engine/render/src/rt_effects.cpp | head -80
+[94m[Bash][0m Read RtEffects create, upload, record, release $ sed -n 474,717p engine/render/src/rt_effects.cpp
+Now the shader, to reuse its ray-query idioms and the parameter layout.
+[94m[Bash][0m Read the RT effects HLSL shader $ sed -n 1,234p engine/render/shaders/rt_effects.hlsl
+The shader gives me the ray-query idioms I need. Before settling the design, I'll check the CPU intersection helpers and the buffer-usage constants in `rt_effects.cpp`, and the RHI readback API.
+[94m[Bash][0m Read rt_effects helpers and RHI readback API $ grep -n "download\|read_buffer\|readback" engine/rhi/include/engine/rhi/device.hpp | head
+The RHI has `read_buffer`, and the CPU intersection helpers can be reused. Before I fix the design, I need three more facts: the PRD constraints on GI and probe budgets, the SH convention the existing probe code uses, and how the GPU tests register.
+[94m[Bash][0m Grep PRD for GI, budget, and performance constraints $ grep -n -i "probe\|GI\b\|global illum\|Non-Goal\|Functional Requirements\|Technical Considerations\|...
+[94m[Bash][0m Read SH convention, BufferUsage flags, transition API $ grep -n "transition" engine/rhi/include/engine/rhi/command_list.hpp
+[94m[Bash][0m Read GPU test registration pattern in RT tests $ grep -n "\[gpu\]\|\[unit\]\|backend" tests/src/render_rt_tests.cpp | head -5
+The PRD fixes the full-profile dynamic GI contract (grid 32×8×32, 4 m spacing, 64 rays per probe, 1/16 update per frame). I'll read the non-goals, technical considerations, and the profile table row to get the exact constraints.
+[94m[Bash][0m Read non-goals, technical considerations, and profile table $ sed -n 846,866p tasks/prd-open-world-engine.md | cut -c1-900
+Full-profile values are fixed. Now the GPU test scaffolding: the RT fixture and how a case builds its device and acceleration structures.
+[94m[Bash][0m Read RT fixture and GPU test device setup $ sed -n 60,200p tests/src/render_rt_gpu_tests.cpp | cut -c1-260
+[94m[Bash][0m Read rest of the RT GPU test harness $ sed -n 200,330p tests/src/render_rt_gpu_tests.cpp | cut -c1-260
+The harness is reusable in shape. One RHI detail decides the upload path for per-frame data: which states a CpuWrite buffer allows, and what `upload_buffer` requires.
+[94m[Bash][0m Read RHI resource state rules and upload API $ grep -n "upload_buffer\|write_buffer\|read_buffer" -B3 engine/rhi/include/engine/rhi/device.hpp | cu...
+[94m[Bash][0m Check buffer state rules for CpuWrite and usage flags $ grep -n "enum class BufferUsage" -A14 engine/rhi/include/engine/rhi/types.hpp
+Per-frame GI data has to go through a copy, not `upload_buffer`, because CpuWrite memory allows only CopySource. I'll also confirm the SH band weights, the warning flags, and how the suites select tests.
+[94m[Bash][0m Check band weights, warning flags, suite selection $ grep -n "function(engine_add_hlsl_shader" -A6 cmake/ShaderToolchain.cmake | head -12
+The band weights match the existing SH convention, so the GPU estimate can reuse `evaluate_irradiance` unchanged. Last checks before writing: the `core::Result` helpers and the warning policy on MSVC.
+[94m[Bash][0m Check Result helpers, MSVC warning flags, import_buffer $ grep -n "import_buffer" engine/render/include/engine/render/render_graph.hpp
+I have what I need, so I'm settling the design now. The plan:
+
+- **CPU core** (`engine_gi`, no RHI): a toroidal probe grid that follows the camera, a round-robin update budget, count-based temporal blending, lighting-change and region/teleport resets, and a view onto the existing `GiVolume` sampler.
+- **GPU pass** (`engine_render`): a ray-query compute shader that traces each budgeted probe, projects to the existing SH convention, and blends into a persistent history buffer.
+- **Tests**: CPU unit tests for the grid, render-layout unit tests, and a DX12/Vulkan GPU suite covering budget, finiteness, and a moving-light change.
+
+I'll start with the CPU core header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m "#pragma once
+
+// Dynamic probe-grid GI (US-044): the bookkeeping of the ray-traced diffuse probe grid that the render pass (engine/render/dynamic_gi.hpp)
+// traces and blends. The grid is toroidal. Pr... (6477 chars)"
+The header is in place. Next is the implementation. I'm keeping the cell wrap, the window math, and the clamps in one anonymous namespace, and I'm avoiding local names that collide with member functions so `-Wshadow` and MSVC C4458 stay quiet.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/dynamic_grid.cpp[0m "#include "engine/gi/dynamic_grid.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <utility>
+
+namespace engine::gi {
+
+namespace {
+
+// Bounds the grid origin, so a far-away eye ca... (8356 chars)"
+Three fixes before moving on: the header needs the `core::Result` include, the `reset_region` doc has to describe what it returns, and I'm dropping `[[nodiscard]]` from the defaulted `operator==`. The `to_volume` index line also needs wrapping.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "#include "engine/gi/probes.hpp"
+
+#include <glm/glm..." → "#include "engine/core/result.hpp"
+#include "engine..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "    [[nodiscard]] bool operator==(const DynamicLig..." → "    bool operator==(const DynamicLighting& other) ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "    // Discards the history of the probes whose po..." → "    // Discards the history of the probes whose po..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/dynamic_grid.cpp[0m edit: "        const auto index = static_cast<std::size_t..." → "        const auto ux = static_cast<std::size_t>(l..."
+The CPU core is done. Next is the GPU side. The per-frame upload helper currently lives inside `rt_effects.cpp`, and the new pass needs the same copy-through-graph path. I'll move it into a shared internal helper so both passes use one implementation.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/gpu_upload.hpp[0m "#pragma once
+
+// Uploads for the ray-traced passes (US-043, US-044). A device buffer that the shaders read is filled by a copy through the render graph,
+// so the barriers and the wait are the graph's... (1116 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/gpu_upload.cpp[0m "#include "gpu_upload.hpp"
+
+#include "engine/core/result.hpp"
+#include "engine/render/render_graph.hpp"
+
+namespace engine::render::detail {
+
+using rhi::BufferDesc;
+using rhi::BufferHandle;
+using rhi::B... (2667 chars)"
+Next I'll swap `rt_effects.cpp` onto the shared helper. First I need the exact line range of its private copy, so I'll print it before deleting anything.
+[94m[Bash][0m Confirm line range of private upload helper $ sed -n 553,558p engine/render/src/rt_effects.cpp && echo ... && sed -n 589,594p engine/render/src/rt...
+[94m[Bash][0m Remove private upload helper and point call sites at shared one $ sed -n 548,560p $f
+The shared helper now backs both passes. Next is the render-side header for the GI pass, which fixes the byte layouts the shader reads.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m "#pragma once
+
+// Dynamic ray-traced GI (US-044): the full profile's probe grid, traced on the GPU. DynamicGi owns a gi::DynamicGrid (the camera-following
+// cells, sample counts, and round-robin plan,... (6018 chars)"
+The header needs two more flags. The helper leaves each buffer in ShaderRead, but the first upload starts from Common, so I'll track whether the parameter and plan buffers have been uploaded yet.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/dynamic_gi.hpp[0m edit: "    rhi::ResourceState history_state_ = rhi::Resou..." → "    rhi::ResourceState history_state_ = rhi::Resou..."
+Now the pass implementation. It follows the RT effects pass for descriptors, scene binding, and uploads, and adds the grid ownership, the plan upload, and the commit on record.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/dynamic_gi.cpp[0m "#include "engine/render/dynamic_gi.hpp"
+
+#include "engine/core/result.hpp"
+#include "gpu_upload.hpp"
+
+#include <cmath>
+#include <cstring>
+#include <utility>
+
+namespace engine::render {
+
+namespace {
+
+u... (14106 chars)"
+The pass is written. One cleanup: `Format` is an unused using-declaration, and the repo builds with `-Werror`, so I'm removing it before it causes trouble.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/src/dynamic_gi.cpp[0m edit: "using rhi::Feature;
+using rhi::Format;
+using rhi::..." → "using rhi::Feature;
+using rhi::ResourceState;"
+Now the shader. It mirrors the layout the C++ side packs, and the SH basis and band weights match `probes.cpp`.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/shaders/dynamic_gi.hlsl[0m "// Dynamic ray-traced GI (US-044): the compute pass that DynamicGi (engine/render/src/dynamic_gi.cpp) dispatches. One thread traces one
+// planned probe. It casts rays_per_probe directions on a spheri... (8998 chars)"
+Next is the build wiring: the GI and render sources, and the shader target that the GPU suite loads.
+[94m[Bash][0m Wire new sources, tests, and shader target into CMake $ python3 - <<'EOF' import re p='engine/gi/CMakeLists.txt' s=open(p).read() s=s.replace("  src/probes....
+The wiring is in. Before writing tests, I'll check the house style of an existing GI test file.
+[94m[Bash][0m Read existing GI test file header style $ sed -n 1,30p tests/src/gi_probe_tests.cpp | cut -c1-200
+I'm writing the CPU unit tests against the grid core now. Each case pins a property the story requires: camera-follow resets only the entering plane, the update budget covers the grid in round-robin, blend weights floor, lighting change cuts history, and the volume layout matches the sampler.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/gi_dynamic_grid_tests.cpp[0m "// Dynamic probe-grid GI bookkeeping (US-044), on the CPU. These cases check the description's limits, the camera-following toroidal cells,
+// the round-robin update budget, the temporal blend weights... (12069 chars)"
+Before building, I re-derived a few expected cells by hand and found a mistake in my own test. A slot's cell is the window cell with the same residue, so slot 0 holds cell (0,0,0), not (-4,-2,-4). I'm fixing those expectations and the odd `create` check, and adding the `<utility>` include.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/gi_dynamic_grid_tests.cpp[0m edit: "    CHECK_FALSE(DynamicGrid::create(small_desc(32)..." → "    CHECK(DynamicGrid::create(small_desc(32)).ok()..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/gi_dynamic_grid_tests.cpp[0m edit: "#include <set>
+#include <vector>" → "#include <set>
+#include <utility>
+#include <vector..."
+The CPU grid tests are corrected. Next are the render-layer unit tests for the byte layouts and the full-profile contract, which run without a GPU.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_dynamic_gi_tests.cpp[0m "// The dynamic GI pass's CPU contract (US-044): the full profile's grid numbers, the byte images the shader reads, and the record strides.
+// These cases need no device. The GPU trace and blend are ch... (3662 chars)"
+Next is the GPU suite. It needs the box BLAS and TLAS, a pass per case, a per-frame run, and a history readback. The RT suite's harness lives in an anonymous namespace, so I'm writing a compact copy for this file. The assertions cover the budget, finiteness, the moving-light change, and the reset.
+The GPU file calls a helper I never defined, `pass_budget_all()`. I'm replacing it with a named constant for the grid's probe count.
+[94m[Bash][0m Replace undefined budget helper with a named constant $ |' $f && grep -n "kGridProbes" $f
+That change is from my own sed, so the current file state is the intended one. Next I'll verify the CMake source list picked up `gpu_upload.cpp`, then configure and build the Linux debug preset.
+[94m[Bash][0m Validate vendor tree and configure Linux dev preset $ grep -n "gpu_upload\|dynamic_gi" engine/render/CMakeLists.txt && (cmake -P cmake/ValidateVendor.cmak...
+ValidateVendor hashes about 8,500 files and is still running in the background. While it runs, I'll write the design doc that the render CMake header points to.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/dynamic-gi.md[0m "# Dynamic ray-traced GI (US-044)
+
+The full profile's diffuse bounce comes from a probe grid that the GPU traces every frame. The native profile keeps the baked probes of
+US-040 and does not use this p... (4127 chars)"
+[94m[Bash][0m Check background vendor validation output $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/41f49a9b-80fe-48dc-9f92-327831e70d8b/tasks/bp178ph...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/41f49a9b-80fe-48dc-9f92-327831e70d8b/tasks/bp178phsj.output tail -20. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read background validation output and process status $ pgrep -fa "ValidateVendor|cmake" | head -5
+Vendor validation passed (26 dependencies, 8,542 files). The Linux configure is still running, so I'll load the Monitor tool to wait on it without a sleep loop.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Notify when the Linux dev configure finishes $ echo "configure finished"
+The Linux configure is still running. I'll wait for its completion notice before starting the build, so I don't race it.
+The Linux configure finished with exit 0. I'll start the `linux-debug` build in the background and capture its output for warnings.
+[94m[Bash][0m Build the Linux debug preset, logging to a file $ echo "exit=$?" >> /tmp/gi_build.log
+The Linux debug build is running in the background, and I'll get a notice when it completes. Its log goes to `/tmp/gi_build.log`.
+[94m[Bash][0m Check build log for warnings and errors $ ls build/linux-dev/tests/Debug/engine_tests 2>/dev/null || find build/linux-dev -name engine_tests -...
+The build is clean: exit 0 and no warnings. Next I'll run the new unit tests directly, then the full `linux-unit` preset.
+[94m[Bash][0m Run the new dynamic GI unit test cases $ ./build/linux-dev/tests/Debug/engine_tests "Dynamic*,The dynamic*,The full profile*,The parameter bl...
+The binary takes `--suite`, not Catch2 test-name filters. I'll run the whole unit suite, which includes the new cases.
+[94m[Bash][0m Run the full CPU unit suite $ echo "exit=${PIPESTATUS[0]}"
+All 542 unit test cases pass, up from 527. The 15 new cases account for the difference exactly (11 in the grid file, 4 in the render file). Next is the `linux-unit` ctest preset, as the gate requires.
+[94m[Bash][0m Run the linux-unit ctest preset $ echo "exit=${PIPESTATUS[0]}"
+The `linux-unit` preset passes. Next, the GCC and sanitizer gates. Both need their own configure first, so I'll chain configure, build, and tests in one background run.
+[94m[Bash][0m Run GCC and sanitizer gates, logging to a file $ echo done >> /tmp/gi_gcc_asan.log
+While the GCC and sanitizer gates run, I'll prepare the Windows gate batch. My memory notes say to reuse the existing batch template, and to confirm no earlier batch is still running first.
+[94m[Bash][0m Find previous Windows gate batch and check running processes $ cmd.exe /c "tasklist" 2>/dev/null | grep -i "engine_tests\|cmake\|ninja\|\.bat" | head
+No batch is running, and the Vulkan layer is in place. I'll write the batch from the template, with the GI suite added, convert it to CRLF, and launch it.
+[94m[Bash][0m Create and launch the Windows gate batch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us044a_gate.bat" > us044a_out.txt 2>&1 & echo la...
+The Windows batch is running. I'll arm a monitor on its done file so I'm notified when the run ends.
+[94m[Monitor][0m Notify when the Windows gate batch writes its done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us044a_rc.txt
+Both background gates and the Windows batch are running. I'll wait for their completion notices before recording results in the progress log.
+The Windows batch reports exit 0 for every step. Before I trust that, I'll check the logs for real compiles and real GPU test counts, since a stale binary can also exit 0.
+[94m[Bash][0m Verify Windows gate logs show real builds and GPU runs $ tail -3 $T/us044a_5.log
+The Windows logs look real. The build compiled the new objects and the DX12 and Vulkan shader outputs, with zero `warning C` or `error C` lines. The GPU counts rose by exactly the three new cases per backend. I'll confirm the unit step's summary line too.
+[94m[Bash][0m Confirm Windows unit test summary $ grep -c "Passed" $T/us044a_3.log
+The Windows unit step passes 21 of 21. Next I'll check the GCC and sanitizer gates running in the background.
+[94m[Bash][0m Check GCC and sanitizer gate progress $ grep -c "warning:" /tmp/gi_gcc_asan.log
+[94m[Monitor][0m Notify when GCC and sanitizer gates finish $ grep "gcc_exit\|asan_exit\|tests passed\|tests failed" /tmp/gi_gcc_asan.log
+[94m[Monitor][0m Notify when GCC and sanitizer gates finish $ grep "gcc_exit\|asan_exit\|tests passed\|tests failed" /tmp/gi_gcc_asan.log
+[94m[Monitor][0m Notify when GCC and sanitizer gates finish $ grep "gcc_exit\|asan_exit\|tests passed\|tests failed" /tmp/gi_gcc_asan.log
+The GCC and sanitizer gates are still running. The Windows gates are all green, and the Linux clang gates passed, so I'll wait for the background completion notice before writing the progress log.
+That monitor is stale: the configure it watched finished long ago. I'll check the GCC and sanitizer log directly.
+[94m[Bash][0m Check GCC and sanitizer gate results $ tail -2 /tmp/gi_gcc_asan.log
+[94m[Bash][0m Find errors in GCC gate log $ grep -n "error\|FAILED\|Error" /tmp/gi_gcc_asan.log | head -30
+GCC rejects the defaulted `operator==`: its `noexcept` doesn't match the implicit exception spec from glm's `operator==`. Clang accepted it. I'll drop the `noexcept` so both compilers agree.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "    bool operator==(const DynamicLighting& other) ..." → "    bool operator==(const DynamicLighting& other) ..."
+The header changed, so the earlier Windows and Linux clang results no longer describe the tree and will need a rerun. I'll rebuild the GCC gate and run the sanitizer gate, since the chain stopped before it.
+[94m[Bash][0m Rebuild GCC gate and run sanitizer gate $ grep "gcc_exit\|asan_exit\|tests passed\|tests failed\|error:" /tmp/gi_gcc_asan2.log | head
+[94m[Bash][0m Wait briefly for background gates to progress $ cat /dev/null
+The GCC rebuild and sanitizer gate are running again in the background. I'll wait for their completion notice before reporting results.
+That notice is for the earlier chain, whose subshell exits 0 regardless of the gate result. The run that matters is `bur01kn4w`, so I'll check its log.
+[94m[Bash][0m Check status of the rerun GCC and sanitizer gates $ tail -1 /tmp/gi_gcc_asan2.log
+The rerun still fails in GCC. Removing `noexcept` was not enough: GCC won't default this comparison with glm members. The monitor's "9 failed" and "asan_exit=8" lines come from the first chain, where the failed build was followed by `ctest` against stale binaries, so I'm not treating them as current. I'll replace the defaulted comparison with an explicit one.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/dynamic_grid.hpp[0m edit: "    bool operator==(const DynamicLighting& other) ..." → "    [[nodiscard]] bool same_as(const DynamicLighti..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/dynamic_grid.cpp[0m edit: "    if (lighting == lighting_) {" → "    if (lighting.same_as(lighting_)) {"
+Those are the same stale results from the first chain. I'm stopping the rerun that is building the old header, so it doesn't race the fresh build I'm about to start.
+[94m[TaskStop][0m
+Those monitors are stale and I'm ignoring them. I'll run the full chain against the fixed header in one background job: clang debug and unit, then GCC, then the sanitizer gate, each logged separately.
+[94m[Bash][0m Run clang, GCC, and sanitizer gates on the fixed header $ echo ALLDONE) > /tmp/gi_final.log 2>&1 & echo started
+[94m[Monitor][0m Notify when the final Linux gate chain finishes $ grep "clang_exit\|gcc_exit\|asan_exit\|tests passed\|tests failed\|error:" /tmp/gi_final.log
+[94m[Monitor][0m Notify when the final Linux gate chain finishes $ grep "clang_exit\|gcc_exit\|asan_exit\|tests passed\|tests failed\|error:" /tmp/gi_final.log
+The final Linux chain is running in the background. I'll report once it finishes.
+All three Linux gates pass on the fixed header: clang unit 22/22, GCC unit 22/22, and sanitizer 22/22. The Windows results predate this header change, so I'll check the log for warnings and then rerun the Windows batch.
+[94m[Bash][0m Check Linux log for warnings and relaunch Windows batch $ sed 's/us044a/us044b/g' us044a_gate.bat > us044b_gate.bat && rm -f us044b_done.txt us044b_rc.txt && ...
+[94m[Monitor][0m Notify when the second Windows gate batch finishes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us044b_rc.txt
+The second Windows batch is running against the fixed tree. I'll write the progress entry once its results are in.
+[94m[Bash][0m Verify second Windows batch logs $ grep "tests passed\|tests failed" $T/us044b_3.log $T/us044b_4.log $T/us044b_5.log
+The second Windows batch is fully green on the fixed tree: vendor, dev, build with zero compiler warnings, win-unit 21/21, DX12 GPU 59 cases, and Vulkan GPU 60 cases. Now I'll record the work in the progress log, with the codebase pattern at the top and the entry at the end.
+[94m[Bash][0m Append US-044 progress entry and codebase pattern $ grep -c "US-044" .ralph-tui/progress.md
+US-044 is **partial**, so I have not signalled completion. The GI system is built and verified on Windows GPUs, but the lighting pass does not read the grid yet.
+
+**What's in place**
+- **CPU grid core** (`engine/gi/…/dynamic_grid.{hpp,cpp}`): a camera-following toroidal grid, a round-robin update budget, a count-based blend (weight 1/(1+samples) with a floor), lighting-change history cuts, and teleport and streaming resets. `to_volume()` reuses the existing baked-probe sampler.
+- **GPU pass** (`DynamicGi`, `shaders/dynamic_gi.hlsl`): one thread per planned probe, inline ray queries against the RT scene, shadow rays for the sun, and an SH9 projection in the existing diffuse convention. Results blend into a persistent history buffer. `full_profile_grid()` encodes the PRD contract (32×8×32, 4 m, 64 rays, 1/16 per frame).
+- **Shared upload helper**: `rt_effects.cpp` now uses the same copy-through-graph helper as the new pass.
+
+**Verification**
+- **Windows (RTX 5080, debug and validation layers):** `ValidateVendor`, `win-dev`, `win-debug` (no compiler warnings), `win-unit` 21/21, `gpu dx12` 59 cases, `gpu vulkan` 60 cases. All pass.
+- **Linux clang:** `ValidateVendor`, `linux-debug` (no warnings), `linux-unit` 22/22, `engine_tests --suite unit` 542 cases.
+- **Linux GCC:** `linux-gcc-debug` and `linux-gcc-unit` 22/22.
+- **Linux sanitizers:** `linux-asan` build and `linux-sanitize` 22/22.
+
+**Not done / not claimed**
+- `SceneRenderer` and `scene.hlsl` do not sample the grid, so the grid does not light the frame. The history is readable through `history()` and `grid().to_volume()`. This is the main open item.
+- Native Linux Vulkan GPU suite: not run, no device on this host.
+- `engine_bench --suite acceptance`: not run, US-074 is not built, so there are no frame-time numbers.
+- GUI check and GitHub CI: not run.
+
+**Choices I made**
+- Probe-inside-geometry is not detected. Alpha-masked triangles are treated as opaque for this pass (`FORCE_OPAQUE`).
+- The sky is uniform, and the sun has no lobe.
+
+The progress log has the full entry under `US-044`. The design is in `docs/dynamic-gi.md`.

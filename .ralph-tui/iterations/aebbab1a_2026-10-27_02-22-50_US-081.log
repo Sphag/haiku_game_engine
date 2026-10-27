@@ -1,0 +1,46 @@
+# Iteration 1246 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:22:50.963Z
+- **Ended At**: 2026-10-26T23:23:05.444Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2154
+- **Total Tokens**: 2176
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and what the quality gates need on this machine.
+[94m[Bash][0m Inspect repo root, progress log, and existing docs $ ls cmake benchmarks tests 2>/dev/null | head -50
+The progress log shows earlier passes already ran the gates and stopped on hardware and decision blockers. I'll confirm those blockers still hold on this machine before deciding whether there's anything new to do.
+[94m[Bash][0m Check GPU device, GCC versions, LICENSE, and acceptance open items $ grep -n -i "open\|pending\|not run\|incomplete" docs/acceptance.md | head -40
+US-081 is not signed off, so I'm not emitting the COMPLETE signal. I re-checked the blockers on this machine and nothing has changed since the last several passes, so I made no source or doc changes this pass.
+
+**Still open (cannot be done from this machine):**
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so `engine_tests --suite gpu --backend vulkan` on native Linux can't run.
+- **linux-gcc:** only GCC 9.4 is installed. Jolt needs GCC 11+, so `linux-gcc` is not run.
+- **LICENSE:** no LICENSE file exists, and the license choice is yours to make.
+- **RTX 5080 benchmark:** `engine_bench --suite acceptance` has not been run on any backend.
+- **Visual editor smoke tests:** not run on either OS, so no screenshots exist.
+- **Clean-directory package smoke test:** no package has been built from a real sample game on either OS. Linux has only the CPU test in `editor_distribution_tests.cpp`.
+- **FSR 2 permutations:** the vendored tree lacks the generated shader tables, so FSR cannot link.
+
+**Still open (could be run from WSL, but would not change the outcome):**
+- **Windows Vulkan editor suite:** `docs/acceptance.md` lists it as not run. The `win-dev`, `win-debug`, `win-release`, and unit gates already passed earlier today, per the progress log. This one is runnable through the `cmd.exe` + `.bat` route in memory, but it would not finish the story.
+
+**Verified in earlier passes today (logs in `artifacts/reports/us081/`):**
+- Vendor validation passed on Windows and Linux.
+- Windows: `win-dev`, `win-debug` build, `win-unit` (29/29), `win-release` build, and the DX12 and Vulkan GPU suites on the RTX 5080 all passed.
+- Linux: `linux-debug` build, `linux-unit` (30/30), `linux-release` build and unit (30/30). The editor suite passed on Linux with 106 cases, CPU only.
+- README and `docs/` cover the required sections.
+
+Nothing here needs a code change. Final acceptance waits on the RTX 5080 benchmark, a native Linux Vulkan device, a GCC 11+ compiler, the visual smoke tests, and your LICENSE decision.

@@ -1,0 +1,46 @@
+# Iteration 885 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:29:16.918Z
+- **Ended At**: 2026-10-26T11:29:50.706Z
+- **Duration**: 33s
+- **Input Tokens**: 44
+- **Output Tokens**: 4418
+- **Total Tokens**: 4462
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress file, the PRD, and whether the prerequisite stories' deliverables exist.
+[94m[Bash][0m Inspect repo layout and progress notes $ grep -rl "all_features" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=*...
+The progress log shows US-079 is partly done: a CPU combined test and an editor scenario exist. Open items are the tour runner, profiles, forced geometry paths, package relaunch, and GUI/native checks. I'll look at the PRD requirements and the existing tests to see which open items I can finish here.
+[94m[Bash][0m Read US-079 PRD text and manifest entries $ ls tools/ci tools/benchmark
+The manifest still marks `all_features` as `implementation: none`, and its route is "pending final benchmark scene". I'll read the existing CPU test and the benchmark wiring to pick a bounded increment.
+[94m[Bash][0m Read existing all_features test and benchmark hooks $ grep -rn "geometry_path\|implementation" tools/benchmark/src/*.cpp tools/benchmark/include -r | head...
+The remaining acceptance items need a GPU `all_features` scene, which does not exist yet (`implementation: none`, route pending), plus native Linux Vulkan, GCC 11+, and FSR 2 headers. Before deciding, I'll confirm nothing has changed since the last recorded gate run.
+[94m[Bash][0m Check for files changed since last gate run and toolchain $ find third_party -name "*permutations*.h" | head -2
+Nothing has changed since the last recorded gate run, and the host toolchain is the same. I'll log this status check in the progress file, as the workflow requires, without claiming completion.
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*` (no GCC 11+). - Next step that would close these: define the all_features route and a `...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. I made no code changes this session. I only appended a status entry to `.ralph-tui/progress.md`.
+
+**What exists:**
+- `tests/src/all_features_tests.cpp`: a CPU scenario that checks the `all_features` workload digests, plus a combined run of Lua gameplay, audio, animation, UI, save/load, and a material graph. Feature markers are checked in order.
+- `tests/src/all_features_editor_tests.cpp`: an editor scenario covering scene, material, animation, and terrain edits, undo/redo, Play/Stop, and a Build Game package. Last recorded: 106/106 editor cases pass on Linux.
+- Gate results recorded in the progress log: Linux and Windows gates pass on this tree. Nothing has changed since then.
+
+**Why the remaining items are still open:**
+- **Profiles and forced geometry paths:** `all_features` is still `implementation: none` in `benchmarks/manifest.json`, with its route marked "pending final benchmark scene". There is no GPU scene to profile or force onto alternative paths.
+- **Upscale profile:** FSR 2 cannot link here because the `*_permutations.h` headers are missing from the vendored tree.
+- **Tour and relaunch:** there is no tour runner with screenshots or an action log, and the package is not relaunched beyond Build Game's own verify step.
+- **Other platforms:** no native Linux Vulkan device (`/dev/dri` is absent), no GCC 11+ for `linux-gcc*`, and no GUI session.
+- **Acceptance bench:** `engine_bench --suite acceptance` cannot run for `all_features` until it has an implementation.
+
+**Suggested next step:** define the `all_features` route and a builtin GPU scene in `tools/benchmark`, then run the profiles on a Windows GPU session. I can start on that scene if you want. It is a larger change than this loop has been making, and it depends on the route definition, which the PRD leaves open.

@@ -1,0 +1,41 @@
+# Iteration 368 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:31:16.555Z
+- **Ended At**: 2026-10-24T22:34:26.173Z
+- **Duration**: 3m 9s
+- **Input Tokens**: 28
+- **Output Tokens**: 2341
+- **Total Tokens**: 2369
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what US-054 already has in the tree, since the codebase notes mention `character.cpp` and joints.
+[94m[Bash][0m Inspect repo layout, physics sources, and progress log $ tail -c 4000 .ralph-tui/progress.md
+The progress log says US-054 is Partial after 14 status checks. The open items are the `linux-gcc` gate (no GCC 11+ here) and the acceptance benchmark (US-074 not built). I'll confirm the current tree still passes the Linux gates I can run, rather than trust the old log.
+[94m[Bash][0m Run ValidateVendor, Linux debug build, and unit tests $ echo "ctest=${PIPESTATUS[0]}"
+The Linux gates I can run pass on the current tree. I'll record this check in the progress log.
+[94m[Bash][0m Append status check entry to progress log $ US-074), `physics_stress` (US-077). - Status call: US-054 stays **Partial**. Open: the `linux-gcc` g...
+US-054 is still Partial, so I am not signalling COMPLETE. The implementation and tests are in the tree, and the Linux gates I can run here pass. Two required gates cannot be run on this host.
+
+**Passed this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21)
+
+**Not run or not passing:**
+- **`linux-gcc` gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`):** Jolt needs GCC 11+ (`__builtin_bit_cast`). This host has only GCC/G++ 9 and clang 10, and the earlier logs show the build failing inside Jolt. This needs the CI Linux/GCC job or a machine with GCC 11+.
+- **Acceptance benchmark:** `engine_bench --suite acceptance` does not exist yet (US-074). `physics_stress` also does not exist (US-077).
+- **`linux-sanitize`:** not rerun this pass. The last run passed 22 of 22, but an earlier run had three X11 focus failures under ctest that did not recur. I did not change anything to address that.
+- **Windows gates:** not rerun in this pass. The last Windows pass was 21 of 21, and no source has changed since.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. No source files were changed.

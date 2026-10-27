@@ -1,0 +1,49 @@
+# Iteration 71 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:52:43.313Z
+- **Ended At**: 2026-10-24T00:54:31.671Z
+- **Duration**: 1m 48s
+- **Input Tokens**: 22
+- **Output Tokens**: 2102
+- **Total Tokens**: 2124
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-046 work already exists.
+[94m[Bash][0m Read progress log tail and check FSR state $ ls engine/rhi/src | head -50
+The log shows US-046 blocked on a vendoring decision, with no change since the last re-check. I'll confirm that against the tree before deciding anything.
+[94m[Bash][0m Verify FSR 2 permutation headers and vendor validation $ tail -3 /tmp/vv.log
+US-046 is still blocked, and nothing in the tree has changed since the last re-check, so I have not made any edits this iteration.
+
+**Blocker:** FSR 2 cannot build. The vendored tree has no `*_permutations.h` headers (0 found under `third_party` and `engine/rhi`). `ENGINE_FSR2_AVAILABLE` therefore stays off, and both backends return `Unsupported`. The pinned archive ships the generator, `tools/sc/FidelityFX_SC.exe`, but not the generated headers, so the tables cannot be produced from the vendored source as it stands.
+
+**Done and verified:**
+- The CPU contract, RHI upscaler interface, both backend scaffolds, and their unit tests are in place from earlier iterations.
+- `cmake -P cmake/ValidateVendor.cmake` exits 0 (26 dependencies, 8542 files).
+
+**Not done, and each waits on a working FSR 2:**
+- The FSR 2 upscale call on both backends.
+- The reactive mask.
+- `SceneRenderer` switching the full profile to 1280×720.
+- Composing the UI after upscaling.
+- Every GPU and gate check that exercises an upscale.
+
+I did not run the Windows or Linux quality gates beyond vendor validation, since the story's own checks depend on the upscale path.
+
+**Decision needed from you:** which route should produce the permutation tables?
+1. **Vendor the hash-pinned outputs of `FidelityFX_SC.exe`.** This is the faster route, but it needs a documented exception to the no-prebuilt-tools rule.
+2. **Regenerate the blobs with the engine's pinned DXC through a first-party generator.** This keeps the rule intact but means writing a generator that reproduces the permutation logic, which is a substantial piece of work.
+
+My recommendation is option 2 if the no-prebuilt-tools rule is meant strictly. If the schedule matters more, take option 1 with the archive's SHA-256 recorded alongside the outputs.
+
+I have not added another re-check entry to `.ralph-tui/progress.md`, because it would repeat the earlier ones. No COMPLETE signal is emitted.

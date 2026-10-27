@@ -1,0 +1,42 @@
+# Iteration 1078 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:42:28.707Z
+- **Ended At**: 2026-10-26T20:42:48.338Z
+- **Duration**: 19s
+- **Input Tokens**: 24
+- **Output Tokens**: 3239
+- **Total Tokens**: 3263
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and existing bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Check US-079 notes and benchmark tooling $ ls /mnt/d/dev/haiku_game_engine/CMakePresets.json && grep -n '"name"' CMakePresets.json | head -60
+[94m[Bash][0m Re-check hardware and blocker state $ grep -n '"implementation"' benchmarks/manifest.json | head -20
+[94m[Bash][0m Append status entry to progress log $ `linux-gcc*`. - No COMPLETE signal: acceptance cannot pass on this host. --- EOF tail -3 .ralph-tui/...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. Nothing in the tree or on this host changed since the last recorded run, and the blockers that stop sign-off are still there.
+
+**Still open:**
+1. **Frame budget fails.** `render_stress` p99 is about 35–47 ms against the 16.7 ms budget (`artifacts/bench/us076-*`). The story requires fixing the measured cause in the implementation. That needs a profile on the RTX 5080, which I can't get from this WSL shell. A contract change would need your decision.
+2. **No acceptance run.** `artifacts/bench` only has us076–us078 runs. Nothing exists for `engine_bench --suite acceptance` with three 30 s + 180 s repeats on DX12, Vulkan, or Linux. Running it now would just record the budget failure above.
+3. **No native Linux Vulkan GPU.** `/dev/dri` is absent, so that report can't be produced here.
+4. **`all_features` and `full_1080`.** `all_features` is still `implementation: none` in `benchmarks/manifest.json`. `full_1080` needs the FSR 2 `*_permutations.h` headers, which `third_party/fsr2` still lacks.
+5. **`linux-gcc*`.** This host has g++ 9.4 and clang 10 only, which can't build the Jolt-based code.
+
+**Passing on the last recorded runs (not re-run this pass):**
+- Linux gates: ValidateVendor, `linux-dev`, `linux-debug` build, and `linux-unit` pass.
+- Windows gates: ValidateVendor, `win-dev`, `win-debug` build, and `win-unit` (29/29) pass.
+- GPU suite on the RTX 5080: DX12 72 cases passed; Vulkan 73/73 passed with the pinned validation layer (`VK_LAYER_PATH=D:\dev\vvl_build\layer`).
+
+I appended a status entry to `.ralph-tui/progress.md`. I didn't make code changes this pass, since the frame-budget fix needs a Windows GPU profile first.
+
+**What would move this forward:** a decision on the frame-budget path (fix the implementation vs. change the placement contract), approval of the `all_features` route, FSR 2 permutation headers or a decision to keep `full_1080` unsupported, and a native Linux Vulkan device plus a GCC 11+ or clang 14+ host.

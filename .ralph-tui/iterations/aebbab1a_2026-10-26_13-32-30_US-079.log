@@ -1,0 +1,190 @@
+# Iteration 869 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T10:32:30.717Z
+- **Ended At**: 2026-10-26T11:08:42.538Z
+- **Duration**: 36m 11s
+- **Input Tokens**: 330
+- **Output Tokens**: 39343
+- **Total Tokens**: 39673
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rl "all_features" --include=* . 2>/dev/null | grep ...
+[94m[Bash][0m List tools, tests, engine dirs and PRD US-079 section $ grep -n "US-079" -A40 tasks/prd-open-world-engine.md | head -80
+The story is large. I'll check what exists for the sample project, the benchmark CLI, and the runtime, so I can scope what's buildable here.
+[94m[Bash][0m Survey benchmark, editor, runtime, and manifest layout $ grep -rn "all_features\|\"scenes\"\|sample" CMakeLists.txt tools/*/CMakeLists.txt benchmarks/manifes...
+The manifest already has an `all_features` placeholder. I'll read that section and how the other scenes are wired.
+[94m[Bash][0m Read manifest scenes and benchmark dispatch $ grep -n "all_features\|streaming_stress\|render_stress\|physics_stress" tools/benchmark/src/*.cpp | ...
+Before deciding scope, I need to know how the workload generator treats scene tables. The generator refuses unknown keys, so that decides whether `all_features` can be generated at all.
+[94m[Bash][0m Read workload generator API and key handling $ grep -n "\"[a-z_]*\"" tools/benchmark/src/workload.cpp | grep -i "key\|refus\|known\|unknown\|scene ...
+[94m[Bash][0m Check workload generator and locate built binaries $ find build -name engine_tests -type f | head -2
+[94m[Bash][0m Run workload check on the dev build $ $B/engine_workload --help 2>&1 | head -20
+[94m[Bash][0m Check expected workloads and probe generation $ echo "exit=$?"
+[94m[Bash][0m Inspect all_features in expected workloads $ grep -n "kKnown\|known" tools/benchmark/src/workload.cpp | head -30
+The `all_features` workload is already generated and pinned, so the table part is done. Next I'll check which subsystems a combined scene could call, and whether any existing test already combines them.
+[94m[Bash][0m List tests and inspect runtime lifecycle $ sed -n 1,80p engine/runtime/src/lifecycle.cpp
+[94m[Bash][0m List remaining tests and read runtime game_main $ sed -n 1,123p engine/runtime/src/game_main.cpp | head -130
+No subsystem combines the others yet, so the combined scene has to be assembled from existing public APIs. I'll read the existing tests for each subsystem to learn the call patterns.
+[94m[Bash][0m Read script-audio test for API usage $ sed -n 1,90p tests/src/script_audio_tests.cpp
+[94m[Bash][0m Read script-UI test for API usage $ sed -n 1,80p tests/src/script_ui_tests.cpp
+[94m[Bash][0m Read save and animation state machine tests $ sed -n 1,60p tests/src/animation_state_machine_tests.cpp
+I have the audio, UI, and Lua patterns. Next I need the public signatures for the animation machine, save slots, and material graph analysis.
+[94m[Bash][0m Read animation and save public APIs $ grep -n "class SaveSlots\|struct SaveData\|write\|read\|load\|public:" engine/save/include/engine/sa...
+[94m[Bash][0m Read material graph and script engine APIs $ grep -n "run\|bind\|take_errors\|class ScriptEngine\|call" engine/script/include/engine/script/scrip...
+[94m[Bash][0m Read specific signatures for SM, save, material, runner $ grep -n "ScriptRunner\|attach\|create\|tick\|update\|class" engine/script/include/engine/script/scri...
+The combined test needs sample graph documents. I'll look for existing animation and material graph fixtures to reuse.
+[94m[Bash][0m Find animation and material graph fixtures $ grep -n "ClipLibrary" -A6 engine/animation/include/engine/animation/*.hpp | head -30
+[94m[Bash][0m Read material graph fixture and animation script test setup $ grep -n "R\"(\|ClipLibrary" tests/src/animation_graph_edit_tests.cpp | head -10
+[94m[Bash][0m Read script animation test as a combined pattern $ sed -n 1,140p tests/src/script_animation_tests.cpp
+I have the animation pattern. Last, I need the material evaluator types, the save script snapshot, and how the workload tests load the manifest.
+[94m[Bash][0m Read evaluator types, save snapshot, and manifest loading in tests $ grep -n "ENGINE_TEST_FIXTURE_DIR\|ENGINE_" tests/CMakeLists.txt | head
+[94m[Bash][0m Read manifest load and test registration details $ grep -n "render\|rasteri" engine/ui/include/engine/ui/*.hpp | head -8
+[94m[Bash][0m Check manifest scenes, scratch helper, surface API $ grep -n "ScriptRunner\|tick\|begin_frame" tests/src/save_tests.cpp | sed -n 1,4p
+I have what I need for a CPU-level combined test. I'll write it to exercise the generated `all_features` workload, a Lua gameplay script driving audio and the animation machine, a UI button callback, a save round trip, and a material graph evaluation, with feature markers checked at the end.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m "// The combined feature scene (US-079) on the CPU. One scenario uses the generated all_features workload (its counts and digests from the
+// benchmark table), a Lua gameplay script that drives audio e... (6465 chars)"
+I left the gameplay script half-written, so I'll finish the file properly. Before that I need three details: the `create_offline` return type, how the save test builds a `SaveData`, and the `ScriptSnapshot` usage.
+[94m[Bash][0m Check audio factory type and save fixture construction $ grep -n "voice_count" engine/audio/include/engine/audio/audio_engine.hpp
+I have everything needed. Writing the complete file now, with the scenario test and the workload check.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m "// The combined feature scene (US-079) on the CPU. One scenario uses the generated all_features workload (its counts and digests from the
+// benchmark table), a Lua gameplay script that drives 16 audi... (11661 chars)"
+Before building I'm fixing a few things I can see in the file. The Lua string concatenation is fragile. `Catch::Approx` may not be included. The click marker is read before the click runs. I'll check the input event names and whether a button fires on press or release.
+[94m[Bash][0m Check input event names and UI activation semantics $ sed -n 80,95p tests/src/script_ui_tests.cpp
+Press and release is the activation pattern, so the click sequence is right. Now I'll replace the fragile script assembly with plain string pieces, and make `mark` a global that keeps `marker_text` current.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m edit: "    // The gameplay script: the markers are append..." → "    // The gameplay script. `mark` is global, so l..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m edit: "    run_ok(script, "marker_text = marker_text .. '..." → "    run_ok(script, "mark('animation.transition')")..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m edit: "    CHECK(global_text(script, "marker_text") == "a..." → "    CHECK(global_text(script, "marker_text") ==
+  ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m edit: "    CHECK(material.base_color.r == Catch::Approx(1..." → "    CHECK_THAT(material.base_color.r, WithinAbs(1...."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/all_features_tests.cpp[0m edit: "#include "engine/save/save.hpp"
+#include "engine/s..." → "#include "engine/save/save.hpp"
+#include "engine/s..."
+Now I'll register the test source in the CMake list and check the list's shape first.
+[94m[Bash][0m Inspect test source list header $ sed -n 140,150p tests/CMakeLists.txt
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt[0m edit: "  src/bench_streaming_tests.cpp
+  src/fixture_prov..." → "  src/bench_streaming_tests.cpp
+  src/all_features..."
+Building the Linux debug preset with the new test source.
+[94m[Bash][0m Build linux-debug preset $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Run integration tests including the new scenario $ $T "[integration]" 2>&1 | tail -n 60
+[94m[Bash][0m Run integration suite via the dev build's engine_tests $ $T --suite integration 2>&1 | tail -n 40
+The integration suite passes, but I need to confirm the new cases actually ran, and that the binary is the freshly built one.
+[94m[Bash][0m Locate linux-debug binary dir and confirm new cases ran $ build/linux-dev/tests/Debug/engine_tests --suite integration -r compact 2>/dev/null | grep -i "combi...
+[94m[Bash][0m Check new test names are in the built binary $ build/linux-dev/tests/Debug/engine_tests "[integration]" -r compact 2>/dev/null | tail -3
+[94m[Bash][0m Check engine_tests options for listing tests $ build/linux-dev/tests/Debug/engine_tests --suite integration --list-tests 2>&1 | grep -i "combined\|...
+The integration count went from 132 to 134 cases with 1696 assertions passing, which matches the two new cases. Now the Linux gates: vendor validation, the unit ctest preset, and the sanitizer build, since this scenario drives Lua.
+[94m[Bash][0m Run vendor validation and linux-unit ctest $ echo "ctest=${PIPESTATUS[0]}"
+[94m[Bash][0m Build the linux-asan preset with sanitizers $ grep -c "warning" /tmp/asan_build.log
+[94m[Bash][0m Run sanitizer ctest preset $ echo "ctest=${PIPESTATUS[0]}"
+The sanitizer run has one integration failure. I need to find out whether it is my new scenario or an existing test.
+[94m[Bash][0m Run sanitizer integration suite and capture failures $ tail -5 /tmp/asan_int.log
+[94m[Bash][0m Inspect the failing X11 input assertion $ sed -n 425,445p tests/src/platform_x11_input_tests.cpp
+This failure is in the X11 focus test, which depends on the window manager's timing under WSL and does not touch Lua or my scenario. I'll rerun the sanitizer suite once to check whether it is flaky.
+[94m[Bash][0m Rerun sanitizer integration suite to check flakiness $ tail -2 /tmp/asan_int2.log
+The sanitizer suite passed on rerun, so the earlier X11 failure was flaky and unrelated. Next are the Windows gates. The memory notes describe running them from WSL through a batch file, so I'll read that procedure.
+[94m[Bash][0m Read Windows gate run memory notes and locate batch files $ ls /mnt/d/dev/haiku_game_engine/*.bat 2>/dev/null
+
+[91m[Error: Exit code 2
+---
+name: reference-windows-gate-runs
+description: "How to run the Windows quality gates and the real-GPU suite from WSL for this repo (cmd.exe + .bat in the user's Temp dir)"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: a4687e22-62cc-49f2-88b8-2ac41e53e24d
+  modified: 2026-10-22T22:06:46.509Z
+---
+
+Windows gates cannot run from WSL's toolchain. They run through `cmd.exe` on the Windows host, which is the same tree at `D:\dev\haiku_game_engine`.
+
+- Write a `.bat` that calls `vcvars64.bat` (VS 18 Community), `cd /d D:\dev\haiku_game_engine`, then runs each gate and prints `name=%ERRORLEVEL%` on its own line with no redirect. Copy it to `/mnt/c/Users/bucha/AppData/Local/Temp/` and launch from WSL as `cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\<name>.bat" > result.txt 2>&1`, then read the codes from `result.txt`.
+- The `.bat` needs CRLF line endings: after writing it from WSL, run `sed -i 's/$/\r/' <file>`.
+- Do not write exit codes with `echo name=%ERRORLEVEL%>> "%RES%"`. On 2026-10-22 that line printed a blank code and wrote no file, even with CRLF. The stdout capture above worked, and it is the only method checked so far.
+- On 2026-10-23 (US-017) the `echo step=%ERRORLEVEL%` lines did not reach the stdout capture, which held only `[exited with code 0]`. Use `set RC=%ERRORLEVEL%` then `(echo rc=%RC%)> %TEMP%\rc.txt` on its own line, and read the per-step logs from Temp.
+- Run one gate batch at a time. A second `cmd.exe` during a run makes both fail on file locks.
+- The Windows host has a real NVIDIA GeForce RTX 5080, so `engine_tests --suite gpu --backend dx12` runs there and is a valid GPU report. WSL and software adapters are not.
+- Check the logs, not only exit codes: a build log can be short when the build directory is already warm.
+- On 2026-10-23 (US-033) a relaunch while the first run was still going mixed both runs in one `*_rc.txt`, and the GPU suites ran a stale `engine_tests.exe`. Before relaunching, wait until `pgrep -f <bat name>` finds nothing, and delete the result file then. A failed build does not stop the batch, so the test steps after it run an old binary: check the build log before you trust `unit=0` or `gpu=0`.
+---
+name: feedback-windows-gate-overlap
+description: "Before launching a Windows gate or GPU batch from WSL, confirm no earlier cmd.exe batch is still running; a stale batch keeps running its GPU steps after a relaunch"
+metadata:
+  node_type: memory
+  type: feedback
+  originSessionId: 30fb1424-41dc-4e24-9498-83de33d6f9dd
+  modified: 2026-10-23T19:50:41.209Z
+---
+
+On 2026-10-23 (US-038) a relaunch of the Windows gate batch started while the first batch was still in its GPU step. Two batches shared
+the Temp result files, and the first one kept running a stale `engine_tests.exe`. The fix was to terminate the matching processes and relaunch.
+
+**Why:** the first batch had reported `build=2` (a compile error) and then went on to the GPU steps with the old binary, so its numbers
+looked like results of the new code.
+
+**How to apply:**
+- Before each launch, check for the batch by its own name in the process list (`ps -eo pid,args | grep <name>.bat`). Use a name that
+  does not also appear in the command you run to check.
+- To stop leftovers, use PowerShell `Get-CimInstance Win32_Process` filtered by command line, then `Invoke-CimMethod ... Terminate`. The
+  filter string also matches the PowerShell process itself, so use a pattern that the check command does not contain.
+- A build failure does not stop the batch. Read the build log before trusting `unit=` or `gpu_*=` lines.
+- Keep one background waiter per batch, and make it wait on the batch's done file with a bounded timeout. Repeated Monitors on the same
+  file re-deliver the same result many times.
+- 2026-10-23 (US-043) it happened again: I relaunched after the done file was written, but the batch's GPU steps were still running, so
+  the link failed with LNK1168 (`engine_tests.exe` locked) and the rc file mixed both runs. Check the process list after the done file,
+  not only the done file. `tasklist /FI` fails under WSL's `cmd.exe` quoting; run `cmd.exe /c tasklist` and grep, or run a `.ps1` file.
+  Kill a stale batch with `taskkill /PID <pid> /T /F` (the `/T` takes its children), then relaunch.
+
+See [[reference-windows-gate-runs]] for the batch template.
+- 2026-10-24 (US-045): `pgrep -f "us04.*gate.bat"` matched its own bash shell, because the pattern sat in the command line, so it looked like a stale batch. Check with `ps -eo pid,args | grep <name>.bat | grep -v grep` and a name that the check command does not contain.
+linux-asan-ubsan.xml
+linux-clang-unit.xml
+linux-gcc-unit.xml
+offline-linux-dev-unit.xml
+win-msvc-unit.xml][0m
+The procedure is documented. I'll reuse the previous story's batch as a template and first confirm no gate batch is still running.
+[94m[Bash][0m Check running batches and read previous gate batch template $ cat "/mnt/c/Users/bucha/AppData/Local/Temp/us078.bat" 2>/dev/null | tr -d '\r' | head -60
+No batch is running, so I'll write the us079 batch from that template, with the same gate steps, and launch it in the background.
+[94m[Write][0m [95m/mnt/c/Users/bucha/AppData/Local/Temp/us079.bat[0m "@echo off
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
+cd /d D:\dev\haiku_game_engine
+set VK_LAYER_PATH=D:\dev\vvl_build\layer
+cmake -P cmake/Valid... (727 chars)"
+[94m[Bash][0m Launch Windows gate batch in background $ ps -eo pid,args | grep "us079.bat" | grep -v grep | head -2
+The batch is running. I'll wait with a bounded poll for its done file rather than starting another heavy build.
+[94m[Bash][0m Poll Windows gate batch for completion $ ps -eo pid,args | grep "us079.bat" | grep -v grep | wc -l
+All four Windows steps report exit 0. I'll check the logs for compiler warnings and the test counts, since a clean exit code alone is not enough.
+[94m[Bash][0m Check Windows build and ctest logs for warnings and counts $ tail -2 us079_build.log
+The Windows build has zero warnings and win-unit passes 29/29, which covers the two new integration cases. The GPU suites are required by the story too, so I'll run them in a second batch on the same tree.
+[94m[Bash][0m Run Windows GPU suites on DX12 and Vulkan $ tail -3 us079_gpu_vk.log
+Both GPU suites pass on the Windows host: DX12 72 cases and Vulkan 73 cases, the same counts as US-078. I'll record the work in the progress log, with the criteria that remain open stated plainly.
+[94m[Bash][0m Append US-079 progress entry to the progress log $ the editor tests cover each part separately.   - Native Linux Vulkan GPU suite: WSL has no usable Vu...
+US-079 is only partly done, so I have not emitted the completion signal. The combined CPU scene and the required Windows and Linux gates pass. The editor scenario, GPU profiles, forced geometry runs, and the acceptance benchmark are not implemented.
+
+**What I built**
+- `tests/src/all_features_tests.cpp`, registered in `tests/CMakeLists.txt`, with two `[integration]` cases:
+  1. The `all_features` workload generated from the benchmark table matches `benchmarks/workload_expected.json`. The table part of the story was already in place.
+  2. A combined scenario with no GPU or window. A Lua gameplay script starts 16 spatial audio emitters and sets the hero's animation parameter. The animation machine transitions idle to walk on the host update. A UI button runs its Lua callback once on press and release. A save slot round-trips a script snapshot. A sample material graph evaluates on the CPU. Feature markers are checked in order.
+
+**Verified on this tree**
+- Linux: vendor validation passes, the linux-debug build has zero warnings, and `ctest --preset linux-unit` passes 30/30.
+- Linux sanitizers: `linux-asan` builds and `linux-sanitize` passes on rerun. The first run had one X11 focus test fail, which depends on window-manager timing and does not touch this code.
+- Windows (`us079.bat` on the host): vendor validation, `win-dev`, `win-debug` (zero warnings), and `win-unit` (29/29) all pass. The GPU suite passes on DX12 (72 cases) and Vulkan (73 cases).
+
+**Not done (open acceptance items)**
+- **Automated tour:** the test checks markers and outputs, but there is no tour runner and no screenshots.
+- **GPU profiles and forced geometry paths:** the GI/RT/upscale profiles and the indirect/meshlet forced runs for `all_features` are not run. FSR 2 cannot link yet because its permutation headers are missing.
+- **Editor scenario:** scene/material/animation/terrain edits, undo/redo, Play/Stop, and package-and-relaunch on this project are not implemented. The repo has no `all_features` project.
+- **Not run here:** the native Linux Vulkan GPU suite (WSL has no usable Vulkan device), the `linux-gcc` gate (no GCC 11+ on the host), the acceptance benchmark (`all_features` has no runner), and GUI screenshots.
+
+The progress log has the full entry, including these open items.

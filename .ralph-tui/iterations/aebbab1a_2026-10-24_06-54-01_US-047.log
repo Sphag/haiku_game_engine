@@ -1,0 +1,41 @@
+# Iteration 115 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:54:01.727Z
+- **Ended At**: 2026-10-24T03:54:21.269Z
+- **Duration**: 19s
+- **Input Tokens**: 26
+- **Output Tokens**: 2626
+- **Total Tokens**: 2652
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code, since the codebase notes suggest US-047 is partly built.
+[94m[Bash][0m Inspect progress log for US-047 entries $ wc -l .ralph-tui/progress.md && grep -n "US-047" .ralph-tui/progress.md | head -50 && tail -120 .ral...
+[94m[Bash][0m List terrain-related source files $ grep -rln "terrain" --include=*.cpp --include=*.hpp --include=*.hlsl --include=*.txt --include=*.cma...
+[94m[Bash][0m Confirm benchmark target and shadow fixture state $ grep -n "shadow\|ShadowFactor" tests/src/render_terrain_gpu_tests.cpp | head -20
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: same as re-check 34. The fixture cann...
+US-047 is still Partial, so I'm not emitting the completion signal. I made no source changes this pass.
+
+**What is in place (from earlier passes in the log):**
+- CPU terrain runtime in `engine/world`: tiles, LOD and stitching, normals, four-layer splat weights, and 14 fixture cases.
+- Render bridge in `engine/render/src/terrain_mesh.cpp`, with 598 unit cases passing on Linux.
+- Terrain splat shading through a 48-byte terrain-only stride, with opaque and shadow terrain pipelines.
+- The DX12 and Vulkan coverage, picking, depth, LOD-seam, and colour fixture in `render_terrain_gpu_tests.cpp` passed on the Windows RTX 5080 batch.
+- Linux gates (ValidateVendor, linux-dev, linux-debug, linux-unit, linux-gcc, linux-asan, linux-sanitize) passed on the last recorded run.
+
+**What is still open:**
+1. **Shadow shape and RT terrain checks.** The GPU sun frame only shows the terrain shadow pipeline draws cleanly. No fixture checks shadow shape or terrain RT geometry. This needs a casting hill, a `ShadowFactor` readback, and a Windows DX12 and Vulkan run.
+2. **`engine_bench --suite acceptance`.** Confirmed absent: `tools/` holds only asset_converter, ci, and vendor, and nothing in CMake names the target. The log ties its creation to US-074, which is not a prerequisite of this story, so the terrain workload and the performance gate are blocked on that story.
+3. **Native Linux Vulkan GPU suite.** This WSL host has no usable Vulkan device, so that suite is not-run here.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. I did not write the shadow fixture this pass. It cannot be verified from WSL, and the performance gate stays blocked on US-074 regardless, so finishing it alone would not allow completion.

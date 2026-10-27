@@ -1,0 +1,47 @@
+# Iteration 1290 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:01:39.522Z
+- **Ended At**: 2026-10-27T00:01:56.148Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2060
+- **Total Tokens**: 2082
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the existing docs against the acceptance criteria.
+[94m[Bash][0m Inspect repo layout, docs, and progress log $ ls tests/fixtures | head -30
+Previous iterations already recorded this story as not signed off. I'll confirm the open items in `docs/acceptance.md` are still accurate before deciding anything.
+[94m[Bash][0m Check open items, device nodes, license, and recent edits $ find . -newer artifacts/reports/us081 -type f -not -path "./build/*" -not -path "./third_party/*" -n...
+US-081 is not complete, so I'm not signalling COMPLETE. I re-checked the state, and it matches the last recorded status.
+
+**What is done (verified in the repo and in `docs/acceptance.md`):**
+- The README has the required sections, and the docs (architecture, schemas, capability matrix, benchmarks, vendor manifest) exist.
+- Linux: `ValidateVendor` passes (26 dependencies, 8542 files), `linux-dev` and `linux-debug` pass, and `linux-unit` passes 30/30. The ASan/UBSan run and the release build are recorded as passing. The offline clean-copy build passes.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (29/29), and `win-release` pass. `engine_tests --suite gpu` passes on DX12 (72 cases) and Vulkan (73 cases) on the RTX 5080, and the editor suite passes on both backends.
+
+**What blocks final acceptance (recorded as incomplete, not passed):**
+- **Native Linux Vulkan GPU report:** `/dev/dri` is absent, so there is no native Linux Vulkan device here. WSL does not count.
+- **Full acceptance benchmark:** `engine_bench --suite acceptance` has not run as a release gate. The acceptance scenes produce no GPU timestamps, and the render_stress p99 is above 16.7 ms.
+- **Linux visual editor smoke:** `game_editor` exits at start on WSL with no Vulkan adapter. Windows has only a launch smoke test, with no project opened and no action sequence.
+- **linux-gcc:** the local GCC 9.4 cannot build Jolt, and the preset needs GCC 11+.
+- **FSR 2 permutations:** the vendored tree lacks the generated shader tables. Choosing a vendoring route is your decision.
+- **LICENSE file:** the repo has none. This is also your decision.
+
+Nothing in the tree has changed since the last recorded gates, so re-running them would add no evidence. I did not append another identical status entry to `.ralph-tui/progress.md`.
+
+**To finish US-081, you need:**
+1. A native Linux machine with a Vulkan GPU, to run the Linux GPU suite, the Linux editor smoke, and `linux-release`.
+2. The RTX 5080 run of `engine_bench --suite acceptance` on each backend, with a Release build and GPU timestamps.
+3. Decisions on the FSR 2 vendoring route and the LICENSE file.
+4. A GCC 11+ toolchain for `linux-gcc`.

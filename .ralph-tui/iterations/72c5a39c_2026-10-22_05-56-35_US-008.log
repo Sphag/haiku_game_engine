@@ -1,0 +1,61 @@
+# Iteration 7 Log
+
+## Metadata
+
+- **Task ID**: US-008
+- **Task Title**: In-House Linux Windowing
+- **Description**: As a Linux user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T02:56:35.546Z
+- **Ended At**: 2026-10-22T03:03:59.463Z
+- **Duration**: 7m 23s
+- **Input Tokens**: 78
+- **Output Tokens**: 7347
+- **Total Tokens**: 7425
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD, the progress log, and the current repo state.
+[94m[Bash][0m List repo root and read progress log $ ls -la && echo --- && cat .ralph-tui/progress.md | head -400 && echo --- && wc -l tasks/prd-open-wor...
+[94m[Bash][0m Read the PRD document $ cat tasks/prd-open-world-engine.md | head -600
+The progress log already has US-008 entries from earlier passes. Before signalling completion I need to confirm the code is actually in the tree and the gates still pass, so I'll check the X11 files and the story's PRD section.
+[94m[Bash][0m Check X11 files exist and read US-008 PRD section $ grep -n -A30 "US-008" tasks/prd-open-world-engine.md | sed -n '1,60p'
+The X11 backend files are present, and the PRD's US-008 criteria match the progress log. Next I'll re-run the Linux gates with exit codes captured from the real commands, not through a pipe.
+[94m[Bash][0m Run Linux validate, configure, build, and unit gates $ tail -5 /tmp/us008/unit.log
+Linux validate, configure, build, and unit gates pass with zero warnings. Next I'll check the X11 integration suite on the available display and with no display, plus the GCC gate.
+[94m[Bash][0m Run X11 integration, missing-display, and GCC gates $ echo "gcc-unit=$?"
+Linux gates pass. The integration run used the ASan build's binary, so I'll re-run the integration suite on the Debug build too. Then I'll attempt the Windows gates, which the progress log says run through a `.bat` file with `vcvars64.bat`.
+[94m[Bash][0m Run integration suite on Debug build and inspect Windows toolchain $ grep -E "CMAKE_LINKER|CMAKE_CXX_COMPILER:" build/win-dev/CMakeCache.txt | head -3
+[94m[Bash][0m Locate Debug test binary and Windows preset details $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat"
+[94m[Bash][0m Run integration suite from the linux-dev build $ grep -c "warning" /tmp/us008/build.log
+Linux is fully verified. Now the Windows gates, run through a `.bat` under `C:\Windows\Temp` with `vcvars64.bat` loaded, as the progress notes describe.
+[94m[Bash][0m Run Windows validate, configure, build, and unit gates $ tail -3 /mnt/c/Windows/Temp/us008_win_unit.log
+All eight gates pass on both platforms. I'll record this pass in the progress log, which requires reading the file before editing it.
+[94m[Bash][0m Show the end of the progress log $ tail -n 4 .ralph-tui/progress.md | cat -A | cut -c1-80
+[94m[Bash][0m Append US-008 completion-check entry to progress log $ harness does not exist), `linux-asan`/`linux-sanitize` (windowing is outside the memory/ECS/jobs/str...
+US-008 (in-house X11 windowing) was already implemented by earlier passes. This pass re-checked it and re-ran the gates; all of them pass, and no code changed.
+
+**Gates (exit codes checked directly)**
+- **Windows/MSVC:** `ValidateVendor`, `win-dev`, `win-debug` build (0 `warning C`), and `win-unit` ctest all pass.
+- **Linux/Clang:** `ValidateVendor`, `linux-dev`, `linux-debug` build (0 warnings), and `linux-unit` ctest all pass.
+- **Linux/GCC:** `linux-gcc`, `linux-gcc-debug` (0 warnings), and `linux-gcc-unit` ctest all pass.
+- **X11 on XWayland (`DISPLAY=:0`):** integration suite 27 pass, 2 skip, 0 fail. The two skips are window-manager dependent and are named in the log.
+- **Missing display (`DISPLAY=unix:4321`):** 21 pass, 8 skip, 0 fail. CPU tests keep running without a `Platform`.
+
+**Not run, so not counted as passed**
+- Native X11 session: only WSLg/XWayland is available here.
+- GUI and screenshot checks: no editor or application UI exists yet.
+- Benchmarks: the change does not affect performance, and the harness does not exist yet.
+- `linux-asan`/`linux-sanitize`: windowing is not in the story's memory/ECS/jobs/streaming/Lua/physics list.
+- Vulkan surface creation from the handles: depends on the RHI (US-027/028).
+- GitHub CI: not pushed.
+
+The PRD's acceptance checkboxes are still unchecked, and I left them unchanged. The story is complete against its own deliverables. The native X11 verification criterion is the one left open, because no native X11 session is available here.
+
+I appended a completion-check entry to `.ralph-tui/progress.md`. No git commit was made.
+
+<promise>COMPLETE</promise>

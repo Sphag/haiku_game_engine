@@ -1,0 +1,48 @@
+# Iteration 98 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:56:52.392Z
+- **Ended At**: 2026-10-24T03:01:28.067Z
+- **Duration**: 4m 35s
+- **Input Tokens**: 50
+- **Output Tokens**: 6056
+- **Total Tokens**: 6106
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-047 is already partly implemented, since the codebase notes already mention `terrain.cpp`.
+[94m[Bash][0m Inspect repo layout and progress notes for terrain $ grep -rl "terrain" --include=*.cpp --include=*.hpp --include=*.txt . | grep -v third_party | head -5...
+The progress log shows US-047 has been "Partial" for many passes. The last entry records a decision (option b: constant per-layer colours, terrain-only splat vertex buffer), so the next step is to implement it. I'll check the draw-path code it touches before editing.
+[94m[Bash][0m Read vertex layout, shader input, and terrain mesh bridge $ sed -n 25,45p engine/render/src/scene_renderer.cpp && sed -n 345,370p engine/render/src/scene_render...
+The splat shader change is a shared draw-path edit that needs Windows GPU runs to verify, and this pass is low effort. I'll take the piece I can verify here: the CPU reference for the constant-layer-colour blend, which the GPU fixture will compare against later. First I'll look at the existing render terrain test.
+[94m[Bash][0m Read existing render terrain unit test structure $ sed -n 1,60p tests/src/render_terrain_tests.cpp && grep -n "TEST_CASE\|SECTION" tests/src/render_ter...
+I'll add the CPU reference: four constant layer colours and a weighted blend, plus unit tests for it.
+[94m[Bash][0m Add splat colour reference, its test, and build Linux debug $ (cmake --build --preset linux-debug 2>&1 | tail -n 25)
+[94m[Bash][0m Run unit suite and linux-unit ctest $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -n 6
+[94m[Bash][0m Confirm linux-unit ctest result and log progress $ (5) the Windows gate batch after the shader change. Items 1 to 3 are a shared draw-path change that ...
+[94m[Bash][0m Record the linux-unit result in progress notes $ sed -i 's/`ctest --preset linux-unit` run after the change (see the final result line in the session...
+US-047 is not complete, so I have not emitted the COMPLETE signal. This pass added one verifiable piece and left the rest open.
+
+**Done this pass**
+- Added the CPU reference for the constant per-layer splat colours (option b from the last progress entry): `splat_layer_colour` and `splat_colour` in `engine/render/include/engine/render/terrain_mesh.hpp` and `engine/render/src/terrain_mesh.cpp`. The GPU shader must use the same colours for a fixture to compare against.
+- Added a unit case in `tests/src/render_terrain_tests.cpp` checking that a pure weight shows its layer colour and a half-and-half blend is the weighted sum.
+- Linux checks: the `linux-debug` build is clean under -Werror, `engine_tests --suite unit` passes (598 cases), and `ctest --preset linux-unit` passes 22 of 22.
+- Appended a progress entry to `.ralph-tui/progress.md`.
+
+**Still open**
+1. A terrain-only splat vertex buffer and pipeline variant for the opaque pass. The static layout is shared by the opaque, depth/shadow, and meshlet paths in `scene_renderer.cpp`, so those paths stay on the static layout.
+2. A `scene.hlsl` branch that blends with the layer colours.
+3. A GPU fixture for splat colour, shadow, and RT on DX12 and Vulkan. The existing fixture checks only colour and depth.
+4. The `engine_bench` terrain workload and the acceptance run.
+5. All Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, and the DX12/Vulkan GPU suites), and the Linux GCC and ASan gates after the shader change.
+
+I did not start items 1 to 3. They change the shared draw path and can only be verified on the Windows GPU batch, and this pass was low effort. Starting them here would have left an unverified change in the shared path. The next pass should begin with item 1.

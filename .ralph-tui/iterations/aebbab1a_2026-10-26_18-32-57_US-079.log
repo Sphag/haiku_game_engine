@@ -1,0 +1,55 @@
+# Iteration 1000 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:32:57.807Z
+- **Ended At**: 2026-10-26T15:33:12.490Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2509
+- **Total Tokens**: 2531
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for `all_features` and the prerequisites.
+[94m[Bash][0m Read progress log and search for all_features $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -ril "all_features" --exclude-dir=.git --exc...
+The progress log shows this story has been re-checked many times with the same blockers. Before deciding whether anything new is actionable, I'll confirm the current blocker state directly.
+[94m[Bash][0m Confirm manifest, samples, FSR and benchmark blockers $ grep -rn "all_features_route_v1" docs tasks benchmarks 2>/dev/null | head -5
+US-079 is not complete, so I'm not signaling COMPLETE. I made no source changes this pass.
+
+I re-confirmed the blockers directly:
+
+- **`all_features` benchmark contract is unapproved.** `benchmarks/manifest.json` still has `implementation: none`, with `all_features_route_v1` only a proposal. That route fixes the benchmark contract, so I did not wire the benchmark branch or the tour against it without your approval.
+- **FSR 2 permutation headers are absent.** `third_party/fsr2` has 0 `*_permutations.h` files, so the `full_1080` profile stays unsupported under the manifest's policy. Vendoring them, or deciding to leave `full_1080` unsupported, is your call.
+- **No `samples/all_features` project exists.** The `samples/` directory is absent.
+- **`tools/benchmark/src/main.cpp` has no `all_features` branch.**
+
+What exists and was verified in earlier passes (last run at checks 71, 73, 77):
+
+- `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are built into `engine_tests`.
+- Linux debug build passes. `ValidateVendor` passes. `linux-unit` is 30/30. `integration` is 132 passed, 3 skipped, 0 failed. `editor` passes 106 cases.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (29/29) passed. The DX12 and Vulkan GPU suites passed with validation on.
+- Linux ASan passed 30/30 on one rerun. The X11 input tests are intermittent under WSL focus timing and are still open.
+
+Still open, none of it reported as passed:
+
+- The tour run with screenshots and an action log.
+- GI/RT/upscale profiles and forced indirect/meshlet paths.
+- The live GUI editor scenario with package and relaunch.
+- Native Linux Vulkan GPU suite, `engine_bench --suite acceptance`, and the linux-gcc presets.
+
+To unblock, I need from you:
+
+1. Approval of `all_features_route_v1`, or a change to it.
+2. FSR 2 permutation headers, or confirmation to leave `full_1080` unsupported.
+3. A Windows session with a GUI for the live editor run and the profiles.
+
+I did not append another progress entry. The log already has 85 status entries with the same blockers, and one more would add noise. Once you answer the three points above, I can implement the benchmark branch and tour directly.

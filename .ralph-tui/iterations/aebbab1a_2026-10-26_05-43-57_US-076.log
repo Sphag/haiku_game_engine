@@ -1,0 +1,40 @@
+# Iteration 784 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:43:57.076Z
+- **Ended At**: 2026-10-26T02:44:09.839Z
+- **Duration**: 12s
+- **Input Tokens**: 20
+- **Output Tokens**: 1854
+- **Total Tokens**: 1874
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark code.
+[94m[Bash][0m Read progress log and benchmark sources $ git status --short 2>/dev/null | head -30
+[94m[Bash][0m Check file mtimes and PRD decision note $ sed -n 715,730p tasks/prd-open-world-engine.md
+US-076 is not complete, so I have not emitted the COMPLETE signal. Nothing has changed since the last status check: the source, workload, and manifest files have the same modification times, and `kWorkloadVersion` is still 1. I did not rerun the gates.
+
+**What is stuck:** the route-start scene does not meet the contract. PRD line 875 requires at least 2,000,000 submitted triangles on the indexed path at the starting frame. The current route start submits 312,068. The frame budget is also exceeded, with p99 at 35–47 ms against a 16.7 ms target. Fixing this means changing a fixed contract (the manifest camera route, pinned by SHA-256, and the seeded placement, whose digests are pinned). PRD line 722 reserves that for a separate user decision, so I did not change it.
+
+**Decisions I need from you:**
+1. **Route-start triangle floor and frame budget.** Either approve a placement or route change, which bumps `kWorkloadVersion`, regenerates `benchmarks/workload_expected.json`, and updates the manifest hash, or accept the failing measured run as this story's result.
+2. **full_1080 profile.** It is unsupported until the FSR 2 permutation headers exist. Choosing a vendoring route is also your call.
+
+**Still not run:**
+- Native Linux Vulkan GPU suite. WSL has no usable Vulkan device.
+- linux-gcc gate. The local GCC 9.4 cannot build Jolt.
+- Acceptance run (`engine_bench --suite acceptance`) on native DX12 and Vulkan.
+
+**What is verified:** on linux-dev, `cmake --build --preset linux-debug` builds, `ctest --preset linux-unit` passes 30/30, and `engine_workload --check benchmarks/workload_expected.json` reports all four scenes matching (from the last status check; not rerun here). The Windows gates and the ASan/UBSan run were not re-checked in this pass.
+
+I did not append a new progress entry, because it would only repeat the 27 status entries already there. Tell me which option you choose in item 1 and I will carry it out.

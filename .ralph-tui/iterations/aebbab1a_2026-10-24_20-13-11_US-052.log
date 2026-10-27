@@ -1,0 +1,44 @@
+# Iteration 293 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:13:11.630Z
+- **Ended At**: 2026-10-24T17:13:28.122Z
+- **Duration**: 16s
+- **Input Tokens**: 30
+- **Output Tokens**: 2335
+- **Total Tokens**: 2365
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state of the US-052 work against the acceptance criteria before running anything.
+[94m[Bash][0m Inspect physics directory and progress log $ ls engine/physics/ && grep -n "US-052" .ralph-tui/progress.md | tail -20 && tail -60 .ralph-tui/prog...
+[94m[Bash][0m Read saved physics and gate memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The notes say US-052 has been Partial for several passes, blocked on GCC 11+ and the benchmark target. I'll check whether the toolchain or benchmark target has changed since then.
+[94m[Bash][0m Check compilers and benchmark target availability $ git status 2>&1 | head -2
+Nothing has changed since the last pass: only GCC 9.4 and clang 10 are installed, and no `engine_bench` target exists. I'll record this pass in the progress log without repeating the earlier entries.
+[94m[Bash][0m Append US-052 recheck entry to progress log $ the earlier 2026-10-24 entries record passing Windows and Linux clang gates on this source. - Status...
+US-052 is still **Partial**, so I'm not signalling COMPLETE. The two open items can't be closed on this machine.
+
+**What's blocking it**
+- **`linux-gcc` gate:** Only GCC 9.4 and clang 10 are installed. Jolt needs GCC 11+ (`__builtin_bit_cast`). Installing GCC 11 needs sudo, which requires a password here. The gate needs either a GCC 11+ install or a CI job.
+- **Acceptance benchmark:** `engine_bench --suite acceptance` can't run because no `engine_bench` target exists in any non-vendored CMakeLists.txt. That target belongs to US-074.
+
+**What I checked this pass**
+- The physics sources and the physics test file are unchanged since the last passing Windows and Linux clang gate runs. The earlier progress entries record those passes.
+- I did not re-run the gates this pass, because nothing in the source changed.
+
+**Progress log**
+I appended a short recheck entry to `.ralph-tui/progress.md`. It records the status as Partial and names the two open items.
+
+**To finish the story**
+1. Install GCC 11+ (or add a CI GCC 11 job), then run `cmake --preset linux-gcc`, `cmake --build --preset linux-gcc-debug`, and `ctest --preset linux-gcc-unit --output-on-failure --no-tests=error`.
+2. Once US-074 adds `engine_bench`, run `engine_bench --suite acceptance --backend <dx12|vulkan>` on the native OS/backend combinations.

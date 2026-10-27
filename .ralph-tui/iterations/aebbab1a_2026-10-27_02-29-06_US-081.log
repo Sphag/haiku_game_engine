@@ -1,0 +1,42 @@
+# Iteration 1257 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:29:06.550Z
+- **Ended At**: 2026-10-26T23:29:18.430Z
+- **Duration**: 11s
+- **Input Tokens**: 22
+- **Output Tokens**: 1868
+- **Total Tokens**: 1890
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and what documentation already exists.
+[94m[Bash][0m Inspect repo layout and progress log $ wc -l README.md 2>/dev/null
+The log shows several earlier passes that ended at the same blockers. I'll check whether any blocker has changed on this machine before deciding whether there is work to do.
+[94m[Bash][0m Recheck blockers: GPU device, GCC, license, FSR tables $ grep -n -i 'open' docs/acceptance.md | head -40
+US-081 is not complete, and I have not signaled COMPLETE. The blockers that stop sign-off are unchanged from the last several passes, and none of them can be cleared from this machine.
+
+I rechecked them just now:
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent, so the Linux Vulkan GPU suite cannot run.
+- **linux-gcc:** only GCC 9.4 is installed. Jolt needs GCC 11+, so the `linux-gcc` gate cannot run.
+- **LICENSE:** there is no LICENSE file. Choosing one is your decision.
+- **FSR 2:** there are 0 `*_permutations.h` files under `third_party`, so FSR cannot link.
+
+The gates recorded in `artifacts/reports/us081/` and `docs/acceptance.md` still describe the current tree. Windows `win-dev`, `win-debug`, `win-unit`, and `win-release` pass, as do the DX12 and Vulkan GPU suites and the DX12 and Vulkan editor suites on the RTX 5080. The Linux vendor check, `linux-debug`, `linux-release`, and `linux-unit` also pass. The README and `docs/` already cover the required sections.
+
+Still open, in order of what unblocks the most:
+1. **Your decisions:** pick a LICENSE, and choose how to vendor the FSR 2 permutation tables (the tree and the pinned archive both lack them).
+2. **Hardware or toolchain:** a native Linux machine with `/dev/dri` for the Vulkan GPU suite, and GCC 11+ for `linux-gcc`.
+3. **Runs on the RTX 5080:** the full `engine_bench --suite acceptance` for DX12 and Vulkan, and the visual editor smoke test with a project opened and an action sequence (currently launch-only on Windows, not run on Linux).
+4. **Packages:** a standalone package built from a real sample game on each OS, tested from a clean directory.
+
+I did not add another status entry to `.ralph-tui/progress.md`. Several recent entries already record these same blockers, and adding another would not change the state of the work.

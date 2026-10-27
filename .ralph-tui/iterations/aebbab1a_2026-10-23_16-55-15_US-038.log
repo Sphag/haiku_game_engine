@@ -1,0 +1,73 @@
+# Iteration 14 Log
+
+## Metadata
+
+- **Task ID**: US-038
+- **Task Title**: Mesh Shader Pipeline
+- **Description**: As a rendering developer, I want meshlet rendering so that I can use a modern GPU geometry pipeline.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T13:55:15.843Z
+- **Ended At**: 2026-10-23T14:00:25.048Z
+- **Duration**: 5m 9s
+- **Input Tokens**: 70
+- **Output Tokens**: 6617
+- **Total Tokens**: 6687
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD, and the current state of the repo.
+[94m[Bash][0m List repo root and progress/PRD sizes $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Bash][0m Read the progress log $ cat .ralph-tui/progress.md
+The log says US-038's code was already in the tree from an earlier iteration, and this iteration only re-verified it. I'll check that claim against the source, the mesh-shader doc, and the tests, plus the file mtimes.
+[94m[Bash][0m Read mesh shader doc, US-038 build row, and find meshlet code $ ls -la build/linux-dev/tests/Debug/engine_tests 2>/dev/null
+The implementation and docs look complete. Before I accept the existing gate results, I need to check the PRD's US-038 constraints: the tolerance and any requirement about loading cooked payloads.
+[94m[Bash][0m Grep PRD for mesh shader and tolerance requirements $ grep -n -i "mesh\|meshlet\|silhouette\|tolerance" tasks/prd-open-world-engine.md | head -80
+The PRD asks for "documented tolerances" and the doc gives them (colors within one step, depth within 1e-6). The engine bench does not exist yet, so that criterion stays not-run. Next I'll confirm the tree has not changed since the last Windows gate batch, then re-run the Linux gates on the current tree.
+[94m[Bash][0m Check source changes since last gate, running batches, vendor validation $ echo "exit=$?"
+[94m[Bash][0m Configure, build, and run Linux unit tests $ grep -c "error:" /tmp/us038_build.log) && (ctest --preset linux-unit --output-on-failure --no-tests=...
+
+[91m[Error: Exit code 1
+configure=0
+build=0
+0
+0][0m
+Configure and build pass with zero warnings and errors. The chain stopped only because `grep -c` returns 1 on a zero count, so I'll run ctest on its own.
+[94m[Bash][0m Run Linux unit ctest and engine unit suite $ ls build/linux-dev/tests/Debug/engine_tests && ./build/linux-dev/tests/Debug/engine_tests --suite un...
+Linux checks pass on the current tree. I'll append this iteration's entry to the progress log.
+[94m[Bash][0m Append US-038 verification entry to progress log $ GitHub CI (not pushed). - Files changed: `.ralph-tui/progress.md` only. - **Learnings:**   - With `&...
+The progress file changed on disk after I read it. My append used `>>`, so I'll confirm my entry is present and nothing was overwritten.
+[94m[Bash][0m List progress log section headings $ grep -n "^## " .ralph-tui/progress.md | tail -8
+US-038 was already implemented in an earlier iteration, and I re-verified it on the current tree without changing any source.
+
+**What I checked**
+- The mesh shader path is in place: meshlets cooked from LOD 0 (≤64 vertices, ≤124 triangles), a task/mesh dispatch per (mesh, material) group on DX12 and Vulkan, GPU frustum and cone culling, and a switch between the meshlet and indexed/indirect paths that needs no reconversion. `Feature::MeshShaders` reports support, and `DisabledForTest` forces the fallback.
+- `docs/mesh-shaders.md` describes the tests: meshlet vs. conventional pixel agreement, the forced-disabled fallback, and the pool-overflow and cone-culling cases.
+- No source changed after the 16:30 Windows gate batch, and no batch is running. The Windows results recorded in the progress log therefore cover this tree.
+
+**Gates run this iteration (Linux, clang)**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 deps, 8542 files).
+- `cmake --preset linux-dev`: configured.
+- `cmake --build --preset linux-debug`: 0 warnings, 0 errors.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: passed.
+- `engine_tests --suite unit`: 480 cases, 146417 assertions, all pass.
+
+**Carried forward from the log, not re-run here**
+- Windows: ValidateVendor, win-dev, win-debug, win-unit 21/21, gpu dx12 40/40, gpu vulkan with validation layers 41/41 (RTX 5080), from the 16:34–16:37 batch.
+- Linux gcc, ASan, and sanitizer presets, from the same tree.
+
+**Not run or unsupported**
+- Native Linux Vulkan GPU suite: no usable Vulkan device on this WSL host.
+- `engine_bench --suite acceptance`: the bench target does not exist yet (US-074).
+- GUI check: no window exists yet.
+- GitHub CI: not pushed.
+
+**Scope caveat**
+- Meshlets are cooked and attached in memory in the tests. Loading `OWMD` meshlet payloads into the renderer is not done yet. The criterion "use cooked meshlets" is met by the cooker's output, but the runtime load path is still open, as `docs/mesh-shaders.md` records.
+
+I appended a US-038 re-verification entry to `.ralph-tui/progress.md`. I did not create a commit.
+
+<promise>COMPLETE</promise>

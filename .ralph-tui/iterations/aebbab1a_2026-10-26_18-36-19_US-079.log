@@ -1,0 +1,48 @@
+# Iteration 1002 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:36:19.394Z
+- **Ended At**: 2026-10-26T15:36:41.425Z
+- **Duration**: 22s
+- **Input Tokens**: 24
+- **Output Tokens**: 2847
+- **Total Tokens**: 2871
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether `all_features` already exists.
+[94m[Bash][0m Inspect repo, progress log, and existing all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=* -l . 2>/dev/null | gr...
+[94m[Bash][0m Read US-079 PRD section and tool layout $ ls benchmarks 2>/dev/null
+The progress log shows this story has been stalled for many iterations on the same blockers. I'll confirm those blockers are still current before deciding what to do.
+[94m[Bash][0m Check manifest all_features entry and FSR2 permutation headers $ grep -n "all_features" tests/CMakeLists.txt
+US-079 is not complete, so I'm not signalling COMPLETE. The blockers that earlier iterations recorded are still present, and the remaining work can't be finished from this environment.
+
+**Still blocked, needs your decision:**
+1. **Approve `all_features_route_v1`.** The manifest's `all_features` entry has `implementation: none`, and its route is the fixed benchmark contract (world centre, waypoints, 30 m/s walk, `full_1080` unsupported). The PRD says contract changes need a separate user decision, so I haven't wired the benchmark branch or the tour to it.
+2. **FSR 2 permutation headers, or a decision to leave `full_1080` unsupported.** `third_party/fsr2` still has 0 `*_permutations.h`, so the `full_1080` profile can only be reported as unsupported.
+3. **A Windows GUI session.** The editor scenario (scene, material, animation and terrain edits, undo/redo, Play/Stop, package/relaunch), the live tour, and the GI/RT/upscale profiles need a running native app. Screenshots and an action log have to come from that run.
+
+**Already in place (verified):**
+- `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` exist and are wired in `tests/CMakeLists.txt`.
+- Linux `linux-debug` builds. `engine_tests --suite integration` passes 132, skips 3 (X11 window-manager cases), and passes 1766/1766 assertions. `ctest --preset linux-unit` passes 30/30.
+- Windows gates from the earlier run (status check 86): `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (29/29) all exit 0.
+
+**Still open, not reported as passed:**
+- `samples/all_features` (directory absent).
+- The `all_features` benchmark branch and `engine_bench --suite acceptance`.
+- The GI/RT/upscale profiles and the forced indirect/meshlet runs.
+- The automated tour from a real run.
+- The live editor run with screenshots.
+- GPU suites on DX12 and Vulkan.
+- `linux-asan` and `linux-gcc`.
+
+I didn't add another status entry to `.ralph-tui/progress.md`, since the last 80+ entries say the same thing. Once you approve the route and pick an option for FSR 2, I can wire the benchmark branch and the profiles. The GUI editor run needs you or a Windows session.

@@ -1,0 +1,43 @@
+# Iteration 1149 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:18:50.108Z
+- **Ended At**: 2026-10-26T21:19:04.860Z
+- **Duration**: 14s
+- **Input Tokens**: 26
+- **Output Tokens**: 2098
+- **Total Tokens**: 2124
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any benchmark artifacts already exist.
+[94m[Bash][0m Inspect progress log and benchmark directories $ ls tools/benchmark 2>/dev/null
+The log shows many earlier status checks that each stopped on the same blockers. I'll re-check those blockers directly, since they may have changed.
+[94m[Bash][0m Re-check hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status check entry to progress log $ no `acceptance` run in `artifacts/bench`. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL onl...
+US-080 is not complete, and I have not signalled COMPLETE. The acceptance criteria need hardware and assets this WSL host does not have, and I made no code changes.
+
+I re-checked the blockers just now:
+
+- **No native Linux Vulkan device.** `/dev/dri` does not exist. The RTX 5080 is visible to `nvidia-smi` under WSL only, which does not count as a native Linux/Vulkan report.
+- **No acceptance runs.** `artifacts/bench` has no `acceptance` run. The existing runs are earlier diagnostics (us076, us077, us078, us080).
+- **Missing FSR 2 shader tables.** `third_party/fsr2` has 0 `*_permutations.h` files, so FSR cannot build and the upscaler stays unavailable.
+- **Incomplete benchmark workloads.** `benchmarks/manifest.json` still has 4 entries marked `implementation: none`. Those are the physics, streaming, and teleport/render routes.
+
+Even with those fixed, the contract needs three 180 s measured repeats (plus 30 s warmup) per scene, profile, and backend on Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. That means running on the reference RTX 5080 machine. I can't do that from here, and I'm not going to report passes or shorten the contract to get them.
+
+Two things need your decision:
+
+1. **FSR 2 route.** Either vendor the generated permutation headers, or drop FSR from the acceptance build. I need you to pick which.
+2. **Reference-machine runs.** Someone needs to run `engine_bench --suite acceptance` on the reference machine for each backend, and make the native Linux Vulkan GPU available. Once those reports exist, I can review them against the thresholds.
+
+I appended one more status entry to `.ralph-tui/progress.md` (check 50). The log already had 49 similar entries, so further repeats would add little. The next useful step needs one of the two decisions above.

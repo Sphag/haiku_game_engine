@@ -1,0 +1,45 @@
+# Iteration 350 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T20:31:52.533Z
+- **Ended At**: 2026-10-24T20:32:12.394Z
+- **Duration**: 19s
+- **Input Tokens**: 30
+- **Output Tokens**: 3190
+- **Total Tokens**: 3220
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log against the US-053 criteria.
+[94m[Bash][0m Inspect progress log and US-053 mentions $ ls && tail -n 120 .ralph-tui/progress.md && grep -n "US-053" .ralph-tui/progress.md | head -50
+[94m[Bash][0m List physics engine files and repo status $ ls artifacts 2>/dev/null | head
+The progress log shows US-053 at Partial across many passes. The open items are the `linux-gcc` gate and the acceptance benchmark. I'll check whether anything changed in the toolchain or the tree since the last entry.
+[94m[Bash][0m Check compilers, tree changes, and terrain wiring notes $ sed -n 2225,2240p .ralph-tui/progress.md
+Nothing in the tree changed since the last recorded pass, and the toolchain is still GCC 9.4 with no GCC 11+. I'll log this pass in the progress file as the workflow requires.
+[94m[Bash][0m Append status-check entry to progress log $ no GCC 11+, so `linux-gcc*` cannot build Jolt here. - Status call: US-053 stays **Partial**. Open: t...
+US-053 is not complete, so I'm not emitting the COMPLETE signal. The code is in the tree, but one acceptance gate cannot run on this machine.
+
+**Blocked:**
+- **`linux-gcc` gate (`cmake --preset linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`):** Jolt needs GCC 11+ (`__builtin_bit_cast`). This machine has only GCC/G++ 9.4 and clang 10. I checked `/usr/bin` and `/usr/local/bin` again and found nothing newer. Installing GCC 11+ needs `sudo`, which requires a password I don't have. This gate needs either a GCC 11+ install or the CI job.
+- **Acceptance benchmark (`engine_bench --suite acceptance`):** there is no `engine_bench` target yet. That belongs to US-074, so this criterion can't be verified yet.
+
+**Not re-run this pass:** I didn't rebuild or retest. No file under `engine/`, `tests/`, or `cmake/` has changed since the last full pass. The progress log records these results from earlier passes:
+- Linux: vendor validation, `linux-dev`, `linux-debug`, `linux-unit` (22 of 22), and `linux-asan` / `linux-sanitize` (22 of 22, no sanitizer reports).
+- Windows: vendor validation, `win-dev`, `win-debug`, and `win-unit` at 21 of 21 on the last full run. Earlier runs had an intermittent `engine_tests_cli_help` capture failure that passes when run alone.
+
+**Open items beyond the blocked gates:**
+- Terrain tiles are not streamed by the world streamer. `WorldCell` has no terrain field, so a caller loads `terrain_tile_cell` directly.
+- The intermittent Windows `engine_tests_cli_help` failure is unfixed.
+
+I appended a status-check entry to `.ralph-tui/progress.md`. It repeats the existing status and records that the environment is unchanged.
+
+To finish, someone with `sudo` needs to install GCC 11+ and run the `linux-gcc` presets, or the CI job needs to run. The acceptance benchmark waits on US-074.

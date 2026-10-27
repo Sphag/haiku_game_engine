@@ -1,0 +1,36 @@
+# Iteration 778 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:40:20.830Z
+- **Ended At**: 2026-10-26T02:40:38.722Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1626
+- **Total Tokens**: 1648
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Inspect repo state and progress log $ ls && tail -80 .ralph-tui/progress.md && grep -rn "render_stress" --include=*.cpp --include=*.txt --...
+The log shows 26 earlier status passes, all blocked on the same user decision. I'll check whether anything has changed since the last one before deciding whether to rerun anything.
+[94m[Bash][0m Check mtimes of benchmark sources and latest artifacts $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp tools/benchmark/src/workload.cpp benchmarks/wo...
+US-076 is not complete, and I did not change anything in this pass. Nothing has moved since the last recorded check: the source, workload, and manifest files have the same modification times, and `kWorkloadVersion` is still 1. I did not rerun the benchmarks or gates, and I did not append another identical status entry to `.ralph-tui/progress.md`.
+
+The blocker is a decision only you can make, because each fix changes the fixed benchmark contract:
+
+1. **Route-start triangle floor and frame budget fail.** At the start of the route, the indexed path submits 312,068 triangles against the 2,000,000 the contract requires. Frame p99 is 35–47 ms against the 16.7 ms budget. Fixing this means changing instance placement, which means bumping `kWorkloadVersion`, regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. Alternatively, you can accept the measured failing run as the result. Either way, the story's acceptance criteria are not met as written.
+2. **full_1080 is unsupported.** The FSR 2 shader permutations are missing from the vendored tree, so that profile cannot run until you choose how to vendor them.
+3. **Native Linux Vulkan GPU and linux-gcc have not been run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+The Linux unit gate still passes (30/30 in the last check, with `engine_workload --check` matching all 4 scenes). The mesh-shader fallback, the screenshots, and the counters are recorded under `artifacts/bench/us076-*`.
+
+Tell me which way to go on item 1 and whether to vendor FSR 2 for item 2. I can then make the workload change, rebuild, and rerun the gates and benchmarks.

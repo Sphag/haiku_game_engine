@@ -1,0 +1,71 @@
+# Iteration 1287 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:58:32.698Z
+- **Ended At**: 2026-10-26T23:58:57.659Z
+- **Duration**: 24s
+- **Input Tokens**: 38
+- **Output Tokens**: 3377
+- **Total Tokens**: 3415
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and what documentation already exists.
+[94m[Bash][0m Inspect repo root, docs, and progress log $ tail -c 4000 .ralph-tui/progress.md
+The log shows US-081 was already worked and left open on hardware and user-decision blockers. Before deciding whether anything is actionable, I'll check what changed since the last recorded gate run.
+[94m[Bash][0m Check changes since last US-081 gate report $ ls LICENSE* COPYING* 2>&1
+
+[91m[Error: Exit code 2
+total 968
+drwxrwxrwx 1 max max   4096 Oct 27 02:28 .
+drwxrwxrwx 1 max max   4096 Oct 27 02:20 ..
+-rwxrwxrwx 1 max max   1698 Oct 27 02:20 win-debug-build.log
+-rwxrwxrwx 1 max max    320 Oct 27 02:20 win-editor-dx12.log
+-rwxrwxrwx 1 max max 976043 Oct 27 02:28 win-editor-smoke-launch.png
+-rwxrwxrwx 1 max max    322 Oct 27 02:27 win-editor-vulkan.log
+-rwxrwxrwx 1 max max    465 Oct 27 02:20 win-gpu-dx12.log
+-rwxrwxrwx 1 max max    482 Oct 27 02:20 win-gpu-vulkan.log
+-rwxrwxrwx 1 max max   4208 Oct 27 02:20 win-unit-ctest.log
+---
+./tasks/prd.json
+./docs/acceptance.md
+./artifacts/reports/us081/win-editor-smoke-launch.png
+---
+---
+ls: cannot access '/dev/dri': No such file or directory
+6613:## 2026-10-27 - US-081 (status check; not signed off; no COMPLETE signal)
+6622:## 2026-10-27 - US-081 (status check; not signed off; no COMPLETE signal)
+6631:## 2026-10-27 - US-081 (status check; not signed off; no COMPLETE signal)
+6640:## 2026-10-27 - US-081 (status check; not signed off; no COMPLETE signal)
+6649:## 2026-10-27 - US-081 (status check; not signed off; no COMPLETE signal)
+ls: cannot access 'LICENSE*': No such file or directory
+ls: cannot access 'COPYING*': No such file or directory][0m
+Nothing in source, tests, or CMake has changed since the last recorded gates. Only the acceptance doc, PRD bookkeeping, and a launch screenshot changed. I'll read the open items in the acceptance doc so my report matches it.
+[94m[Bash][0m List open items in acceptance doc $ grep -n -i "open\|not run\|incomplete\|blocked\|pending" docs/acceptance.md | head -60
+[94m[Bash][0m Read open items section of acceptance doc $ sed -n 120,150p docs/acceptance.md
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not complete, so I'm not signalling COMPLETE. The docs and gate evidence are in place, but final acceptance still depends on hardware and decisions I can't make here.
+
+**What I checked**
+- Nothing in source, tests, or CMake has changed since the last recorded gate run (`artifacts/reports/us081`). Only `docs/acceptance.md`, `tasks/prd.json`, and the Windows launch screenshot changed, so I did not re-run any gate.
+- The documentation deliverables already exist in `docs/` (architecture, schemas, vendor, benchmarks, capability matrix, distribution, acceptance).
+
+**Still open (from `docs/acceptance.md`, "Open items")**
+1. **Native Linux Vulkan GPU report.** This WSL machine has no `/dev/dri`, so no native Linux Vulkan device is available.
+2. **Full acceptance benchmark.** The render, streaming, all-features, and physics scenes do not yet produce GPU timestamps, so an acceptance run reports `incomplete`. This is engineering work and needs the RTX 5080 machine.
+3. **FSR 2.** The vendored tree lacks its generated shader permutations. This needs your vendoring choice.
+4. **linux-gcc.** The local GCC 9.4 cannot build Jolt; the gate needs GCC 11 or newer.
+5. **Visual editor smoke test.** Windows has a launch-only screenshot; no action sequence has run. Linux has no native run.
+6. **Package from a real game.** The clean-directory and offline checks pass, but no package built from a real sample game exists yet.
+7. **License.** The repository has no license file. This is your decision.
+
+I appended a short status entry to `.ralph-tui/progress.md`. I did not run any new gates this turn.

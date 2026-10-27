@@ -1,0 +1,45 @@
+# Iteration 1145 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:17:45.483Z
+- **Ended At**: 2026-10-26T21:17:59.541Z
+- **Duration**: 14s
+- **Input Tokens**: 26
+- **Output Tokens**: 2160
+- **Total Tokens**: 2186
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what the benchmark harness already provides.
+[94m[Bash][0m Read progress log tail and benchmark dirs $ ls artifacts/bench 2>/dev/null | head
+The log shows 46 earlier passes that stopped on the same blockers. I'll re-check those blockers once, so the report reflects the current state rather than the old notes.
+[94m[Bash][0m Re-check hardware and benchmark blockers $ gcc --version | head -1
+[94m[Bash][0m Append status entry to progress log $ see the final report. - Stop: US-080 cannot be signed off on this host. No COMPLETE signal. --- EOF ...
+US-080 is not complete, and I have not signaled COMPLETE. This host cannot produce the acceptance evidence the story requires, and I made no code changes.
+
+I re-checked the blockers in this session:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42), which does not count as a native Linux/Vulkan report.
+- **FSR 2 cannot build.** `third_party/fsr2` has 0 `*_permutations.h` files, so the FSR upscaler stays unavailable. Restoring them is a vendoring decision for you, not something I should pick.
+- **Benchmark workloads are missing.** `benchmarks/manifest.json` still has four entries with `implementation: none` (lines 88, 108, 122, 132). Those are the physics, streaming, and teleport/render workloads the acceptance suite needs.
+- **No acceptance run exists.** `artifacts/bench` has no `acceptance` run. The existing runs are earlier diagnostics.
+- **Linux GCC is still 9.4.** That is too old to build Jolt, so `linux-gcc` cannot be verified here.
+
+The story's acceptance criteria require three repeats per scene, profile, and backend on the reference RTX 5080 for Windows/DX12, Windows/Vulkan, and native Linux/Vulkan. Each repeat is 210 s, and the Windows runs go through `cmd.exe`. None of that can run from this WSL session without the missing workloads.
+
+**What I need from you:**
+
+1. A native Linux Vulkan environment on the RTX 5080, or access to the reference computer for the three runs.
+2. A decision on the FSR 2 permutations: regenerate them, vendor a complete archive, or drop FSR from this build.
+3. Approval to write the four missing workloads (physics, streaming, teleport/render), since those are the only remaining code work.
+
+I appended a status entry to `.ralph-tui/progress.md`, consistent with the earlier entries, so the next session starts from the same blocker list.

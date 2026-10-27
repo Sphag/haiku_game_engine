@@ -1,0 +1,222 @@
+# Iteration 15 Log
+
+## Metadata
+
+- **Task ID**: US-016
+- **Task Title**: Scene Graph and Transforms
+- **Description**: As a scene author, I want an object hierarchy so that I can edit related transforms.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T07:13:17.013Z
+- **Ended At**: 2026-10-22T07:34:28.587Z
+- **Duration**: 21m 11s
+- **Input Tokens**: 378
+- **Output Tokens**: 106222
+- **Total Tokens**: 106600
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the PRD and the progress log to see what US-014 and US-015 left in place.
+[94m[Bash][0m List repo root and read progress log $ ls -la && wc -l tasks/prd-open-world-engine.md .ralph-tui/progress.md && cat .ralph-tui/progress.md
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The PRD and progress log are long. I'll pull the US-014 to US-016 sections, the quality-gate sections, and the progress entries.
+[94m[Bash][0m Index PRD headings and user stories $ grep -n "US-0\|^## \|^### " tasks/prd-open-world-engine.md | head -150
+[94m[Bash][0m Index progress log entries $ grep -n "^## \|^### \|US-01[4-7]" .ralph-tui/progress.md | tail -60
+[94m[Bash][0m Read progress log header and latest entries $ sed -n 1,48p .ralph-tui/progress.md && echo ----- && sed -n 300,351p .ralph-tui/progress.md
+[94m[Bash][0m Read quality gates and US-015/016/050 PRD text $ sed -n 22,80p tasks/prd-open-world-engine.md && echo ----- && sed -n 188,212p tasks/prd-open-world-e...
+Next, the PRD's Non-Goals, Technical Considerations, and performance contract, plus the existing scene and ECS code.
+[94m[Bash][0m Grep PRD for constraints relevant to transforms $ grep -n -i "non-goal\|technical consideration\|transform\|scene graph\|hierarch\|large-world\|camera...
+[94m[Bash][0m List relevant source files and CMake setup $ find engine/ecs engine/scene tests docs cmake -type f | head -80 && cat CMakeLists.txt && cat engine...
+Now the Non-Goals, Technical Considerations, and the existing reflection and ECS headers I'll build on.
+[94m[Bash][0m Read PRD requirements, non-goals, technical considerations, benchmark contract $ sed -n 867,915p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read ECS world, registry, and entity headers $ cat engine/ecs/include/engine/ecs/world.hpp engine/ecs/include/engine/ecs/registry.hpp engine/ecs/in...
+The scene graph needs vector, quaternion, and matrix types. I'll check what `engine/core` already provides and how the reflection header is shaped.
+[94m[Bash][0m List core files and search for math types $ find engine/core -type f | sort && cat engine/core/CMakeLists.txt && grep -rn "struct Vec\|class Vec...
+[94m[Bash][0m Read coordinates header and reflection header $ sed -n 1,200p engine/scene/include/engine/scene/reflection.hpp | head -120
+GLM is already vendored, which gives me double-precision matrices and quaternions. Before designing, I'll check the `Result` API, the test style, and the available presets and toolchain.
+[94m[Bash][0m Read Result API, test style, sparse set, presets, toolchain $ ls third_party
+The design depends on a few more facts: the ECS library's link setup, the warning flags, the test tag convention, and whether `tasks/prd.json` exists to update.
+[94m[Bash][0m Check ECS CMake, warning flags, tags, docs, and prd.json $ grep -n "US-01[456]" -A3 tasks/prd.json 2>/dev/null | head -30
+[94m[Bash][0m Read US-015 and US-016 entries in prd.json $ sed -n 459,521p tasks/prd.json
+I have what I need. The design, following the PRD's constraints:
+
+- **Transforms** are double precision, so positions far from the origin keep accuracy. Local is TRS, and world is a composed matrix, because a parent's non-uniform scale under a rotated child produces shear that TRS can't represent.
+- **Storage** uses `ecs::Registry`, with `Hierarchy`, `Transform`, and `WorldState` components. Destroying a node then removes its components automatically.
+- **Dirty flags** have an invariant (a dirty node's descendants are all dirty), so propagation stops at nodes that are already dirty.
+- **Cycles and world-preserving reparents** are rejected with explicit errors, and the graph is left unchanged on failure.
+- **Deep hierarchies** use iterative traversal, so there is no recursion depth limit.
+
+I'll write the transform header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/transform.hpp[0m "#pragma once
+
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
+#include <optional>
+
+namespace engine::scene {
+
+// Local transform of a node, relative to its parent (or to the world for a root... (1235 chars)"
+Next, the transform implementation. The exactness check compares the recomposed linear part against the input, which catches shear. The translation is copied exactly, so it doesn't need a tolerance.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/transform.cpp[0m "#include "engine/scene/transform.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+namespace engine::scene {
+namespace {
+
+// Relative tolerance for the linear part of a decomposition, measured against the ... (3565 chars)"
+Next, the scene graph header. Its components stay private, and the public API is the handle-based operations. Cycle, singular-parent, and shear checks all return errors without changing state.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene_graph.hpp[0m "#pragma once
+
+#include "engine/scene/transform.hpp"
+
+#include "engine/core/result.hpp"
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/registry.hpp"
+
+#include <cstddef>
+#include <vector>
+
+namesp... (5084 chars)"
+Now the implementation. Traversals are iterative, so a 10 000-deep chain cannot overflow the stack.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_graph.cpp[0m "#include "engine/scene/scene_graph.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <optional>
+
+namespace engine::scene {
+namespace {
+
+// Same relative tolerance as decompose_exact: singularity is... (10310 chars)"
+Before compiling, I'm renaming some parameters and locals that shadow member functions (`local`, `parent`, `children`). `-Wshadow -Werror` is on for first-party code.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene_graph.hpp[0m edit: "    [[nodiscard]] core::Result<ecs::EntityHandle, ..." → "    [[nodiscard]] core::Result<ecs::EntityHandle, ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/include/engine/scene/scene_graph.hpp[0m edit: "    [[nodiscard]] Status set_local(ecs::EntityHand..." → "    [[nodiscard]] Status set_local(ecs::EntityHand..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_graph.cpp[0m edit: "core::Result<ecs::EntityHandle, HierarchyError> Sc..." → "core::Result<ecs::EntityHandle, HierarchyError> Sc..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_graph.cpp[0m edit: "        const ecs::EntityHandle grandparent = pare..." → "        const ecs::EntityHandle grandparent = pare..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/scene/src/scene_graph.cpp[0m edit: "SceneGraph::Status SceneGraph::set_local(ecs::Enti..." → "SceneGraph::Status SceneGraph::set_local(ecs::Enti..."
+Now the build wiring: the scene library gets the new sources and links `engine_ecs`, since the graph's storage is built on the ECS registry.
+[94m[Bash][0m Wire scene sources into CMake and test list $ cat > engine/scene/CMakeLists.txt <<'EOF' # Component reflection (US-015): descriptors, validation, ...
+Next, the tests. Transform math goes in its own file, and the graph behavior goes in another. Each test case has a unique name, since Catch refuses duplicates across files.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_transform_tests.cpp[0m "// Transform math (US-016): TRS composition, exact decomposition, and rejection of shear. CPU-only; these run on every OS.
+
+#include "engine/scene/transform.hpp"
+
+#include <catch2/catch_test_macros.hp... (5488 chars)"
+I wrote a bug into the test. `near` has no `dvec4` overload, so `matrix()[1]` silently converts to `dvec3` and drops a component. I'll compare whole matrices instead.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_transform_tests.cpp[0m edit: "    CHECK(near(glm::dvec3(recovered->matrix()[0]),..." → "    CHECK(near(recovered->matrix(), original.matri..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_transform_tests.cpp[0m edit: "    CHECK(near(recovered->scale, glm::dvec3(-2.0, ..." → "    CHECK(near(recovered->scale, glm::dvec3(-2.0, ..."
+Now the graph tests. They cover the acceptance criteria: world composition, scaling and rotation, dirty propagation, reparenting in both modes, cycle rejection, both delete policies, deep chains, and large coordinates.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_graph_tests.cpp[0m "// Scene graph (US-016): local and world transforms, dirty propagation, reparenting, cycle rejection, and child policies.
+// CPU-only; these run on every OS.
+
+#include "engine/scene/scene_graph.hpp"
+
+... (19121 chars)"
+I'll add the `<initializer_list>` include the braced-list loop needs, then configure and build the Linux debug tree to see what the compiler says.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_graph_tests.cpp[0m edit: "#include <cstddef>
+#include <limits>
+#include <vec..." → "#include <cstddef>
+#include <initializer_list>
+#in..."
+[94m[Bash][0m Validate vendor tree and configure Linux dev preset $ tail -5 /tmp/us016_configure.log
+[94m[Bash][0m Build Linux debug preset and capture diagnostics $ tail -3 /tmp/us016_build.log
+The Linux debug build is clean with no warnings. Next I'll run the unit suite and check the new case count, which the progress notes say to verify directly.
+[94m[Bash][0m Run Linux unit tests and show scene test results $ ./build/linux-debug/tests/Debug/engine_tests --suite unit 2>&1 | tail -40
+[94m[Bash][0m Show unit test failure output and binary path $ find build/linux-dev -name engine_tests -type f
+One failure, and it's a bug in my test, not the graph. The freed slot was already taken by `survivor` before the final check, so the expected index was wrong. I'll restructure the assertion so it checks slot reuse directly.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_graph_tests.cpp[0m edit: "    const EntityHandle survivor = make(graph, pose..." → "    // This node takes the slot that the destroyed..."
+I dropped the dead-parent check in that edit. It matters most here, because a stale parent handle must not resolve to the node that now occupies its slot. I'll put it back in the final block.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/scene_graph_tests.cpp[0m edit: "    const auto reparent_from_stale = graph.reparen..." → "    // A stale handle used as a parent must not re..."
+The CLI failure is downstream of the unit failure, so it should clear with this fix. I'll rebuild and rerun the unit suite.
+[94m[Bash][0m Rebuild and run Linux unit tests after fix $ tail -4 /tmp/us016_unit.log
+The unit suite now passes, and the build has no warnings. The integration failure is in X11 input tests, which the progress log records as a known XWayland flake. I'll confirm the unit count and look at that failure specifically before calling it unrelated.
+[94m[Bash][0m Confirm unit results and inspect the X11 failure $ grep -n "integration" -A3 /tmp/us016_unit.log | head -5
+The unit suite passes: 266 cases, which is the previous 242 plus my 24 new ones. The integration failure is an X11 pointer-capture test reporting nonsense deltas (6360 instead of 3), in code I didn't touch. I'll rerun the integration suite a few times to see whether it's the known flake.
+[94m[Bash][0m Rerun integration suite three times $ done
+The integration suite passes on all three reruns, with the skip count varying between runs. That matches the flake the progress log describes. Next are the GCC and ASan gates. The story touches ECS and memory, so the sanitizer run is required.
+[94m[Bash][0m Configure, build, and test the GCC preset $ grep "tests passed\|test cases\|FAILED" /tmp/us016_gcc_unit.log | head -5)
+The GCC build is clean. The `linux-gcc-unit` run failed on the X11 focus test at `platform_x11_input_tests.cpp:437`, which the progress log names as the known XWayland flake. I'll confirm that is the only failure and that the scene tests ran under GCC.
+[94m[Bash][0m Identify GCC CTest failures and run GCC unit binary $ ls build | head
+The GCC unit binary passes all 266 cases. Its CTest failure is the same integration X11 test, at the same line the progress log records. Next the ASan/UBSan gate.
+[94m[Bash][0m Configure, build, and run the ASan and UBSan gate $ grep -n "Test #\|tests passed" /tmp/us016_sanitize.log | head -12
+The ASan/UBSan gate passes 10/10 with no sanitizer reports. Last are the Windows gates. The progress log describes running them from WSL through a `.bat` file, so I'll look at what the previous story used rather than rebuilding that approach from scratch.
+[94m[Bash][0m Find previous Windows gate scripts in Windows temp $ [ -n "$f" ] && cat "$f"
+
+[91m[Error: Exit code 1
+latest bat:][0m
+[94m[Bash][0m Check Windows temp access and VS toolchain cache $ grep -n "vcvars\|CMAKE_LINKER" /mnt/d/dev/haiku_game_engine/build/win-dev/CMakeCache.txt 2>/dev/null...
+The Windows temp directory isn't writable from WSL, so I'll use a user temp directory instead. First I need the VS 18 `vcvars64.bat` that matches the win-dev cache.
+[94m[Bash][0m Locate vcvars64 and Windows temp path $ ls /mnt/c/Users 2>/dev/null
+Before running, I'll write the gate script to the user's Windows temp directory. Each step's exit code is saved on its own line right after the command, which the progress log says is required.
+[94m[Bash][0m Run Windows quality gates via generated batch script $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us016_w_summary.txt 2>&1
+All four Windows gates exit 0. I'll check the logs directly for the warning count and the unit case count, not just the exit codes.
+[94m[Bash][0m Inspect Windows gate logs for warnings and test counts $ tr -d '\r' < us016_w_validate.log | tail -1
+The Windows build has zero warnings and zero link errors, and CTest passes 10/10. CTest hides per-case counts, so I'll run the Windows unit binary directly to confirm the 266 cases, the same check the progress log uses.
+[94m[Bash][0m Run Windows unit binary to confirm test case count $ "$exe" --suite unit 2>&1 | tail -2
+The Windows unit binary runs 268 cases against Linux's 266. The extra two are the Win32 platform tests, which exist only on Windows. Next I'll write the design doc, following the style of `docs/reflection.md`.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/scene-graph.md[0m "# Scene Graph and Transforms
+
+The object hierarchy of `engine_scene` (`engine/scene/`): `SceneGraph` (`scene_graph.hpp`) and `Transform` (`transform.hpp`). The inspector (US-062), the gizmos (US-063),... (4834 chars)"
+One sentence in that doc reads awkwardly, so I'll fix it before updating the story tracking.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/scene-graph.md[0m edit: "A cycle cannot be made. Every operation takes hand..." → "A cycle cannot be made. Every operation checks its..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String: A cycle cannot be made. Every operation takes handles that are checked against their world. A stale handle, or a handle from another world, returns `NotAlive`, even when its slot has been reused.</tool_use_error>][0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/scene-graph.md[0m edit: "Every operation takes handles that are checked aga..." → "Every operation checks its handles against the gra..."
+Next, the tracking files. I'll flip US-016 to passing in `prd.json`, using the `dependsOn` pair as the anchor since `passes: false` appears in many stories.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tasks/prd.json[0m edit: "      "passes": false,
+      "notes": "",
+      "d..." → "      "passes": true,
+      "notes": "",
+      "de..."
+Before recording results, I want one more clean `linux-unit` CTest run. The first full run after the fix failed only the X11 integration case, and the reruns were of the integration binary alone. I'd rather report a fresh full-preset result.
+[94m[Bash][0m Run full linux-unit CTest preset again $ grep -n "The following tests FAILED" -A3 /tmp/us016_unit2.log
+Now the `linux-unit` preset passes 10/10. Next I'll record the progress entry, and add the reusable patterns at the top of the Codebase Patterns list.
+[94m[Bash][0m Add Codebase Patterns and US-016 progress entry $ grep -n "Scene graph dirty flags" .ralph-tui/progress.md
+I wrote two version numbers into that entry that I didn't verify in this session: "Clang 19-era" and "GCC 9.4". I'll remove them.
+[94m[Bash][0m Remove unverified compiler version claims from log $ python3 - <<'PYEOF' p = ".ralph-tui/progress.md" s = open(p, encoding="utf-8").read() for old, new i...
+[94m[Bash][0m Locate version claims in progress entry $ grep -n "Linux/Clang 19\|Linux/GCC 9" .ralph-tui/progress.md | tail -3
+Line 353 belongs to the earlier US-015 entry, so I'll leave it alone and fix only my two lines.
+[94m[Bash][0m Fix version claims in my log lines only $ 379s/  - Linux\/GCC 9.4: `linux-gcc` configure/  - Linux\/GCC (`linux-gcc`): configure/' .ralph-tui/...
+The Windows gates ran after my last code change, so that evidence still applies. The GCC CTest preset is the one gate I haven't seen fully green, so I'll rerun it once before I summarize.
+[94m[Bash][0m Rerun linux-gcc-unit CTest preset once more $ grep -n "tests passed\|FAILED:" /tmp/us016_gcc_unit2.log | head -4
+The GCC preset passes 10/10 on this run. I'll correct the log line that still says it wasn't verified.
+[94m[Bash][0m Update GCC gate line in progress log $ python3 - <<'PYEOF' p = ".ralph-tui/progress.md" s = open(p, encoding="utf-8").read() old = "`linux-...
+US-016 is implemented and every gate I could run passes. The scene graph lives in `engine_scene` on top of the ECS registry, with transforms in double precision. Nothing is committed, because this isn't a git repo and you asked me not to commit.
+
+**Interpretation:** "Deleting a parent has an explicit policy for children" became a required `ChildPolicy` argument with no default. The two options are `DestroySubtree` and `ReparentToParent`. The second keeps children's world transforms, and the whole deletion fails if any child can't keep its world transform.
+
+**What was built**
+- **Transforms:** `Transform` is authored TRS. World matrices are full affine matrices, because a rotated child under a non-uniformly scaled parent has shear, which TRS can't hold. Keeping a world transform is refused, with `NotRepresentable`, when TRS can't represent the result. Shear is never silently dropped.
+- **Dirty propagation:** a changed node marks its subtree dirty. `world_matrix()` refreshes on demand, and `update()` refreshes everything and returns the count.
+- **Reparenting:** `KeepWorldTransform` or `KeepLocalTransform`. A cycle returns `Cycle`, and a singular parent returns `SingularParent`. Every failure leaves the graph unchanged.
+- **Traversals:** all of them are iterative, so depth isn't limited by the stack.
+
+**Files:** `engine/scene/{include,src}/` (`transform`, `scene_graph`), `engine/scene/CMakeLists.txt`, `tests/CMakeLists.txt`, `tests/src/scene_transform_tests.cpp` (6 cases), `tests/src/scene_graph_tests.cpp` (18 cases), `docs/scene-graph.md`, `tasks/prd.json` (US-016 passes), and `.ralph-tui/progress.md`.
+
+**Verification** (exit codes checked directly)
+
+| Gate | Result |
+|---|---|
+| Windows: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` | All exit 0. 0 warnings, 0 link errors. Unit binary: 268 cases pass. |
+| Linux: `ValidateVendor`, `linux-dev`, `linux-debug` | Exit 0, 0 warnings. Unit binary: 266 cases pass. |
+| Linux: `linux-unit` ctest | 10/10 on the final run. The first full run failed only the X11 integration test. |
+| Linux/GCC: `linux-gcc`, `linux-gcc-debug` | Exit 0, 0 warnings. |
+| Linux/GCC: `linux-gcc-unit` ctest | 10/10 on the rerun. The first run failed the same X11 integration test. |
+| Linux ASan/UBSan: `linux-asan`, `linux-sanitize` | Build 0 warnings. ctest 10/10, no sanitizer reports. |
+
+The X11 failures are in `platform_x11_input_tests.cpp` (lines 437 and 453–454). They're the XWayland flake that the progress log documents for US-011 and US-013, and this change doesn't touch that code. I'm reporting it, not calling it fixed. Integration reruns passed 3 of 3.
+
+**Not run**
+- `engine_bench --suite acceptance`: no benchmark harness exists yet, and the scene graph isn't on a measured path.
+- GPU suites and GUI checks: no GPU backend or UI exists yet.
+- Release builds: not checked in this story.
+- GitHub CI: not pushed.
+
+**Known limits:** the graph isn't thread-safe. `update()` scans every node. A node whose world has a zero scale axis can't be reparented with `KeepWorldTransform`, and it fails with `NotRepresentable`. Persistent GUIDs on nodes wait for the scene format in US-017.

@@ -1,0 +1,50 @@
+# Iteration 1291 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:01:57.191Z
+- **Ended At**: 2026-10-27T00:02:16.719Z
+- **Duration**: 19s
+- **Input Tokens**: 30
+- **Output Tokens**: 2292
+- **Total Tokens**: 2322
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the PRD, and the progress log.
+[94m[Bash][0m List repo root, docs, and progress files $ git status 2>&1 | head -3
+Many of the required documents already exist under `docs/`. Next I'll check the progress log for US-080 and any earlier US-081 notes, and look at the README and the acceptance doc.
+[94m[Bash][0m Inspect progress log tail and doc sizes $ wc -l docs/acceptance.md docs/capability-matrix.md docs/architecture.md docs/schemas.md docs/vendor....
+The log shows US-081 has been checked many times and stays open for reasons outside this environment. I'll confirm the current state before deciding whether to run anything.
+[94m[Bash][0m Check for changes since last gate and open items $ sed -n '/Open items/,$p' docs/acceptance.md | head -40
+US-081 is not complete, so I'm not signalling COMPLETE. Nothing in this environment can close the remaining items, and I made no changes this session.
+
+**What exists:**
+- The README covers OS/SDK requirements, offline CMake setup, the editor workflow, the Lua API, the asset pipeline, and native packaging.
+- The required docs are in `docs/`: architecture, schemas, capability matrix, vendor manifest, benchmarks, distribution, and build. `docs/acceptance.md` maps each story to its tests and artifacts.
+- The last recorded gates (`cmake -P cmake/ValidateVendor.cmake` and the link check) pass. `artifacts/reports/us081` is the reference point.
+
+**Why it stays open:**
+- **Native Linux Vulkan GPU report:** `/dev/dri` is absent, so there is no native Linux Vulkan device. WSL does not count.
+- **Full acceptance benchmark:** `render_stress` p99 frame time is above the 16.7 ms budget. That is US-080's fix, and a contract change needs your decision. The acceptance scenes also produce no GPU timestamps.
+- **FSR 2:** the `*_permutations.h` shader tables are missing, so the FSR build stays gated. Choosing how to vendor them is your decision.
+- **linux-gcc:** the local GCC is 9.4, and Jolt needs GCC 11 or newer.
+- **Visual editor smoke:** only the Windows launch has been captured. Linux is not covered.
+- **Sample-game package and clean-copy offline build:** not done.
+- **LICENSE file:** missing. It's a licensing decision for you.
+
+Changes since the last gate are documentation and bookkeeping only, so re-running the gates would add no evidence. I did not add another entry to `.ralph-tui/progress.md`, because the last ten entries already record the same status.
+
+To move forward, I need one of these from you:
+1. Access to a native Linux host with a Vulkan device and GCC 11+, or a run on the RTX 5080 machine.
+2. A decision on the FSR 2 vendoring route.
+3. A decision on the license.
+4. A decision on whether to change the frame-budget contract.

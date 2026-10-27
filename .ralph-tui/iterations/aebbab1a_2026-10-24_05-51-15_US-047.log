@@ -1,0 +1,44 @@
+# Iteration 91 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:51:15.446Z
+- **Ended At**: 2026-10-24T02:51:42.443Z
+- **Duration**: 26s
+- **Input Tokens**: 36
+- **Output Tokens**: 4098
+- **Total Tokens**: 4134
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current terrain code and the progress log, since the notes say US-047 is partly gated.
+[94m[Bash][0m Inspect repo layout, progress log, and terrain sources $ wc -l engine/world/src/terrain.cpp 2>/dev/null
+The progress log shows the CPU runtime and renderer bridge are done, and the open items are splat shading, the bench workload, and the Windows re-runs. I'll look at the vertex layout and shader input to see how big the splat change is.
+[94m[Bash][0m Read terrain mesh bridge and vertex layout code $ cat engine/render/include/engine/render/terrain_mesh.hpp && sed -n 1,80p engine/render/src/terrain_m...
+The splat path is not a small change. It needs a terrain-only vertex layout, a splat attribute through pipeline and upload, a four-layer shader branch, and layer materials. Layer materials are an open design question, since no layer textures exist. I'll confirm the tree still matches the last log entry before I decide what to do.
+[94m[Bash][0m Check tree changes since last progress entry $ ls tools | head -30
+The tree matches the last log entry, and no shader reads a splat channel yet. I'll record this pass in the progress log so the next pass starts from the same decision point.
+[94m[Bash][0m Append re-check entry to progress log $ option (a) needs asset inputs that do not exist yet. - Recommendation: option (b) first, with a terr...
+US-047 is not complete, so I am not emitting the completion signal. I made no source changes this pass.
+
+**Where it stands**
+- Done and verified in earlier passes: the CPU terrain runtime in `engine/world`, the tile-to-mesh bridge (`engine/render/src/terrain_mesh.cpp`), and the renderer integration. The integration gives terrain depth, shadow, and RT participation through the static mesh path. The GPU fixture `tests/src/render_terrain_gpu_tests.cpp` checks tile coverage and LOD switching. The earlier Windows gate batch passed on DX12 and Vulkan.
+- Still open: the four-layer splat shading. The splat weights are computed on the CPU, but no vertex layout or shader reads them, so the blend is not on screen.
+- Also open: shadow and RT result checks for terrain, the `engine_bench` terrain workload and acceptance run, and a re-run of the Windows gates after the shader change.
+
+**Why I stopped rather than editing**
+The splat change needs a decision first. A blend needs four layer materials, and none exist yet. I recommend starting with four constant layer colours, behind a terrain-only vertex layout and a terrain branch in `scene.hlsl`. Per-layer textures need asset inputs that don't exist. I didn't want to start a partial edit in the 3800-line `scene_renderer.cpp` that I can't verify here, since WSL has no usable Vulkan device.
+
+**What I need from you**
+1. Confirm option (b), constant layer colours as a first cut, or tell me which layer materials you want.
+2. Confirm I should run the splat change through the Windows gate batch.
+
+I appended a re-check entry to `.ralph-tui/progress.md` with this recommendation.

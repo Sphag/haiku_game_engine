@@ -1,0 +1,47 @@
+# Iteration 881 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:27:45.080Z
+- **Ended At**: 2026-10-26T11:28:12.042Z
+- **Duration**: 26s
+- **Input Tokens**: 32
+- **Output Tokens**: 2963
+- **Total Tokens**: 2995
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and whether the prerequisite stories and `all_features` scene already exist.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features" --include=* -l . 2>/dev/nul...
+[94m[Bash][0m Read US-079 PRD section and list tools and benchmarks $ ls benchmarks 2>/dev/null
+The progress log shows six earlier status checks with no code change, and the remaining items need a Windows GPU, a native Linux Vulkan device, or GCC 11+. Before I decide whether anything is actionable here, I'll look at the existing `all_features` tests and the tour-related code.
+[94m[Bash][0m Locate all_features code, tests, and manifest entry $ grep -n "all_features" -B2 -A12 benchmarks/manifest.json | head -60
+The CPU and editor tests exist, and the remaining gaps are the tour runner, GPU profiles, and hardware gates. I'll read the current CPU scenario to see whether a feature-marker tour can be added on this host.
+[94m[Bash][0m Read the all_features CPU test scenario $ sed -n 1,177p tests/src/all_features_tests.cpp
+I'm not signaling COMPLETE for US-079, and I made no code changes in this pass.
+
+**Why:** the story has open acceptance items that this host cannot satisfy:
+
+- **Automated tour with screenshots and an action log:** not built. The existing CPU test (`tests/src/all_features_tests.cpp`) checks feature markers and outputs in order, but there is no tour runner, no screenshots, and no action log.
+- **GI/RT/upscale profiles and forced geometry paths for `all_features`:** not run. FSR 2 cannot link because its generated `*_permutations.h` headers are missing from `third_party/`.
+- **Package relaunch:** only Build Game's own verify step runs. The published folder is not launched a second time.
+- **Benchmark and GPU gates:** `all_features` is still `implementation: none` in `benchmarks/manifest.json`, so `engine_bench --suite acceptance` has nothing to run. The native Linux Vulkan GPU suite needs a `/dev/dri` device, which this WSL host lacks.
+- **Linux/GCC gates:** the host has only g++ 9.4 and clang 10. Jolt needs GCC 11+ or clang 14+, so `linux-gcc*` cannot run here.
+- **Windows gates and GUI checks:** these need the Windows host and a GUI session, which I did not run in this pass.
+
+**What I checked:** the progress log's last six entries record no source changes and the same blockers. I did not add a seventh no-op entry. I also did not rebuild or re-run the CPU suite, so the recorded results are the last ones logged, not a fresh run.
+
+**What would unblock it:**
+1. The FSR 2 permutation headers, or a decision to vendor them another way.
+2. A Windows GPU session for the DX12/Vulkan gates and the RTX 5080 benchmark.
+3. A native Linux Vulkan device and a GCC 11+ or clang 14+ toolchain.
+
+Once those exist, the tour runner and the `all_features` manifest entry are the next pieces of work.

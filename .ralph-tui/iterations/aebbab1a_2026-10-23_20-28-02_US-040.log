@@ -1,0 +1,134 @@
+# Iteration 22 Log
+
+## Metadata
+
+- **Task ID**: US-040
+- **Task Title**: Native-Profile GI and Reflections
+- **Description**: As a player, I want indirect lighting without heavy RT so that I can use the native profile.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T17:28:02.049Z
+- **Ended At**: 2026-10-23T17:38:56.861Z
+- **Duration**: 10m 54s
+- **Input Tokens**: 338
+- **Output Tokens**: 22747
+- **Total Tokens**: 23085
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log and the PRD section for this story, then check what already exists in the repo.
+[94m[Bash][0m Inspect repo root and progress log tail $ ls -la && wc -l .ralph-tui/progress.md && tail -150 .ralph-tui/progress.md
+[94m[Bash][0m Search PRD for GI and probe requirements $ grep -n -i "US-040\|GI\b\|irradiance\|probe" tasks/prd-open-world-engine.md | head -80
+US-040 is already marked Partial across several earlier iterations. I'll read the GI doc's stated scope and the open items to choose what this pass should finish.
+[94m[Bash][0m Read GI doc, build.md row, memory notes, and check running batches $ pgrep -fa "gate|us0" | grep -v pgrep | head
+The remaining open items are: no startup path calls `load_gi_volume`, alpha-blended surfaces get no reflections, and off-screen mirrors fall back. I'll check whether a real startup path exists to wire the loader into.
+[94m[Bash][0m Find renderer users and executable targets $ grep -n "set_gi_volume\|clear_gi_volume" engine/render/include/engine/render/scene_renderer.hpp
+No game executable exists; only `engine_tests` and `asset_converter` are built. So the loader can't be wired into a shipped startup path yet. The closest tractable step is to have the GPU fixture load the converter output through the real cooked-file loader rather than through in-memory deserialization. I'll look at the fixture and the loader API.
+[94m[Bash][0m Read loader header, GPU fixture usage, asset registry API $ ls engine/assets/include/engine/assets/ 2>/dev/null
+The registry round-trip test in `gi_probe_tests.cpp` already exercises the cook-then-load path. I'll reuse its setup in the GPU fixture.
+[94m[Bash][0m Read registry round-trip test and GPU fixture bake helper $ sed -n 340,380p tests/src/render_gi_gpu_tests.cpp
+I'll switch the GPU fixture's `bake_room` to write the cooked file and load it with `load_gi_volume`. First, the include lines the existing test uses.
+[94m[Bash][0m Check include lines of test files $ grep -n "temp_directory\|remove_all" tests/src/render_gi_gpu_tests.cpp | head
+I'll make the edit: the fixture cooks the importer's payload into a container file, registers the asset, and loads it through `load_gi_volume`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_gi_gpu_tests.cpp[0m edit: "    const engine::converter::ImporterRegistry regi..." → "    const engine::converter::ImporterRegistry conv..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_gi_gpu_tests.cpp[0m edit: "#include "asset_converter/importer.hpp"
+#include "..." → "#include "asset_converter/importer.hpp"
+#include "..."
+The fixture now uses `std::filesystem`, so I'll add that include and then build the Linux debug preset.
+[94m[Bash][0m Add filesystem include and build linux-debug $ grep -c "error:" /tmp/us040e_linux_debug.log || true
+The Linux debug build is clean (0 warnings, 0 errors). The file-changed notice is from my own `sed` include edit. Next I'll run the Linux unit suite and the vendor validation.
+[94m[Bash][0m Run vendor validation and Linux unit tests $ echo unit_rc=$?) && grep "tests passed\|tests failed" /tmp/us040e_unit.log
+The vendor validation is long-running, so it moved to the background. While it runs, I'll look for the previous Windows batch template in the Temp dir so the Windows gate run matches the earlier ones.
+[94m[Bash][0m Locate previous Windows gate batch template $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+The template is clear. I'll write the us040e batch from it, after confirming no earlier gate batch is still running.
+[94m[Bash][0m Create and launch us040e Windows gate batch $ echo launched
+The Windows batch is running. I'll check on the Linux background job and the batch's progress.
+[94m[Bash][0m Check background Linux job and Windows batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us040e
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -3 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/b4704297-e2a2-4ba1-9926-e63e237a5107/tasks/b3hom67me.output echo --- cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us040e. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check background Linux job and Windows batch progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us040e
+Linux vendor validation passed. I'll wait for the Linux unit run and the Windows batch with a bounded until-loop on the done file.
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check Linux unit run result $ cat /tmp/us040e_unit.log 2>/dev/null | tail -3
+[94m[Monitor][0m Wait for Linux unit ctest to finish $ grep "tests passed\|tests failed" /tmp/us040e_unit.log
+While the tests run, I'll update the GI doc so it describes the fixture's new path accurately.
+[94m[Bash][0m Update GI doc for cooked-file fixture path $ the coverage view is green inside and red outside. The fixture runs the   `gi_probes` importer, writ...
+[94m[Monitor][0m Wait for Linux unit ctest to finish $ grep "tests passed\|tests failed" /tmp/us040e_unit.log
+Linux unit tests pass 22/22. Waiting on the Windows batch now.
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check Windows batch partial results $ grep "tests passed\|test cases" us040e_4.log us040e_5.log us040e_6.log 2>/dev/null | tail -6
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check Windows batch progress files $ tail -2 us040e_3.log 2>/dev/null
+
+[91m[Error: Exit code 1
+validate=0
+us040e_1.log
+us040e_2.log
+us040e_gate.bat
+us040e_rc.txt
+us040e_result.txt
+us040e_vc.log][0m
+The configure step is still running. I'll keep waiting on the done file.
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check Windows batch file status and time $ date
+Configure and build both returned 0 and the unit step is running. I'll check the build log for compiler warnings or errors while the tests run.
+[94m[Bash][0m Count MSVC warnings and errors in build log $ grep -c "render_gi_gpu_tests" us040e_3.log
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e batch done file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check Windows batch result file and time $ ls -la us040e_done.txt 2>&1 | tail -1
+Unit tests pass on Windows (`unit=0`). The GPU steps are still running, so I'll wait for the done file again.
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Monitor][0m Wait for Windows us040e GPU steps to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us040e_rc.txt
+[94m[Bash][0m Check GPU step progress and log tail $ tail -c 600 us040e_5.log 2>/dev/null
+The GPU step is still running (DX12 suite started at 20:34). I'll wait with a bounded loop.
+[94m[Bash][0m Wait up to 110s for batch completion file $ date
+[94m[Bash][0m Wait up to 110s more for batch completion $ date
+The Windows batch finished with every step at 0. I'll confirm the GPU logs show the expected case counts and that validation was on.
+[94m[Bash][0m Confirm Windows GPU log results and validation state $ cd /mnt/d/dev/haiku_game_engine && grep -n "gpu_vulkan\|validation" /mnt/c/Users/bucha/AppData/Local...
+Windows results are clean: validation layers on, software=no, DX12 47/47 cases and Vulkan 48/48 cases. The changed test also compiles under GCC with warnings as errors, so I'll rebuild the `linux-gcc-debug` preset and run its unit suite.
+[94m[Bash][0m Build linux-gcc-debug preset and count diagnostics $ echo "err=$(grep -c 'error:' /tmp/us040e_gcc_build.log)"
+[94m[Bash][0m Run linux-gcc unit tests $ grep "tests passed\|tests failed" /tmp/us040e_gcc_unit.log
+Linux GCC unit tests pass 22/22. Now I'll record the result in the build table row and the progress log.
+[94m[Bash][0m Update build.md row and append progress entry $ python3 - <<'EOF' p='docs/build.md' s=open(p).read() old="**Still open:** no game startup path calls...
+US-040 is still **Partial**, so I have not signalled completion. This pass closed one gap, and the gates it touched pass.
+
+**What changed:** The GPU GI fixture (`tests/src/render_gi_gpu_tests.cpp`) no longer hands the deserialized payload straight to the renderer. It runs the `gi_probes` importer, writes the payload as `<guid>.cooked`, registers the record, and loads it through `engine::gi::load_gi_volume`. The renderer now gets the volume the runtime loader reads. I also updated `docs/gi-probes.md`, the US-040 row in `docs/build.md`, and appended a `.ralph-tui/progress.md` entry.
+
+**Gate results (current tree):**
+- Windows (RTX 5080, validation layers on, `software=no`): `ValidateVendor`, `win-dev`, `win-debug` (no `warning C`/`error C`), and `win-unit` 21/21 all return 0. `gpu dx12` 47 cases and `gpu vulkan` 48 cases pass.
+- Linux clang: `ValidateVendor` passed, `linux-debug` built with 0 warnings, `linux-unit` 22/22.
+- Linux gcc: `linux-gcc-debug` 0 warnings, `linux-gcc-unit` 22/22.
+
+**Still open, so the story stays Partial:**
+- No game executable exists (only `engine_tests` and `asset_converter` are built), so no startup path calls `load_gi_volume`. Shipped scenes do not get their probes from the converter yet.
+- Alpha-blended surfaces get no reflections.
+- Off-screen mirror images fall back to the environment.
+- Not run: `linux-asan`/`linux-sanitize` (no memory, ECS, jobs, streaming, Lua, or physics change), the native Linux Vulkan GPU suite (no usable device on this WSL host), `engine_bench --suite acceptance` (no bench target until US-074), a GUI check, and GitHub CI.
+
+Nothing was committed. The repo is not under git, so no commit was made.

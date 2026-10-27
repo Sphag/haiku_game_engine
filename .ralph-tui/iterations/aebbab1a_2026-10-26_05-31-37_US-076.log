@@ -1,0 +1,44 @@
+# Iteration 758 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:31:37.445Z
+- **Ended At**: 2026-10-26T02:32:00.626Z
+- **Duration**: 23s
+- **Input Tokens**: 32
+- **Output Tokens**: 3173
+- **Total Tokens**: 3205
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Inspect progress log and existing render_stress code $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src && grep -rn "render_stress\|US-076...
+The log shows 21 prior passes that stopped at the same user decision. Before I add another status entry, I'll check whether that blocker is real or something I can resolve.
+[94m[Bash][0m Inspect workload placement code and contract $ grep -n -i "triangle\|placement\|2,000,000\|2000000" tasks/prd-open-world-engine.md | head -30
+[94m[Bash][0m Check route start camera and latest benchmark report $ cat artifacts/bench/us076-dx12-indexed/*.json 2>/dev/null | head -c 1500
+[94m[Bash][0m Append status entry to progress log $ (3) native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal. --- EOF
+US-076 is not complete, and I did not make a new change this pass. The blocker is the same one the last 21 passes recorded, and it needs your decision.
+
+**What is blocked**
+
+1. **Triangle floor and frame budget.** The contract (PRD line 875) requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The recorded runs measure 312,068 triangles, and p99 frame time is 35–47 ms against a 16.7 ms budget. Every `us076-*` report exits 1 on these checks.
+2. **Why I did not change it.** The start pose comes from the manifest camera route, which is pinned by SHA-256. The instance placement comes from the seeded generator, whose digests are pinned in `workload_expected.json`. Either fix changes a fixed contract, so it needs your approval. Options are a route-start change or a placement change, which bumps `kWorkloadVersion` and regenerates the expected file and manifest hash. Alternatively, you can accept the failing measured run as the result.
+3. **full_1080** stays unsupported until the vendored FSR 2 shader permutations exist. Choosing a vendoring route is your call.
+4. **Native Linux Vulkan GPU and linux-gcc** have not been run. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What I did**
+
+- Appended a status entry to `.ralph-tui/progress.md` that records this check and the open decisions.
+
+**What I need from you**
+
+- Approve a placement or route-start change, or tell me to close the story as measured with the failing result.
+- Choose an FSR 2 vendoring route if you want full_1080 covered.

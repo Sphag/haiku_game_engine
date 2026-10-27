@@ -1,0 +1,41 @@
+# Iteration 386 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:07:55.932Z
+- **Ended At**: 2026-10-24T23:12:54.329Z
+- **Duration**: 4m 58s
+- **Input Tokens**: 24
+- **Output Tokens**: 2323
+- **Total Tokens**: 2347
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ grep -n "US-054" -r --include=*.md . | head -20
+The progress log shows US-054 marked Partial across many prior passes. I'll re-check the toolchain and run the Linux gates once to see whether anything has changed.
+[94m[Bash][0m Check toolchains, then run Linux gates $ tail -3 /tmp/ct.log
+[94m[Bash][0m Append status entry to progress log $ US-074), `physics_stress` (US-077). Windows gates not rerun (no source change since the last Windows...
+US-054 is still **Partial**, so I did not emit the COMPLETE signal. The code and the Linux/Clang gates I could run here pass, but two acceptance criteria can't be run on this host.
+
+**Re-run this pass (Linux, Clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass
+- `cmake --preset linux-dev`: pass
+- `cmake --build --preset linux-debug`: pass
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: pass (60.9 s)
+
+No source file under `engine/`, `tests/`, or `cmake/` changed since the last pass.
+
+**Still open:**
+- **Linux/GCC gate** (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`): the host has only GCC 9.4, and Jolt needs GCC 11+. This needs a newer toolchain or the CI job.
+- **Performance measurement:** `engine_bench --suite acceptance` has no harness yet (that is US-074), and `physics_stress` is US-077.
+- **Sanitizers and Windows:** `linux-sanitize` was last run on this unchanged tree (22 of 22 pass). The Windows gates were not rerun because nothing changed since the last Windows pass.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results.

@@ -1,0 +1,37 @@
+# Iteration 392 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T23:19:39.288Z
+- **Ended At**: 2026-10-24T23:21:19.669Z
+- **Duration**: 1m 40s
+- **Input Tokens**: 22
+- **Output Tokens**: 2214
+- **Total Tokens**: 2236
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 is already in the tree, since the codebase notes mention `character.cpp`.
+[94m[Bash][0m Inspect physics sources and progress log for US-054 $ grep -n "US-054" tasks/prd-open-world-engine.md | head -20
+The progress log shows US-054 marked Partial across many prior passes. Before deciding anything, I'll confirm the tree still builds and passes the Linux unit suite.
+[94m[Bash][0m Rebuild Linux debug and run the unit test suite $ ls /usr/bin | grep -E '^(g\+\+|gcc|clang\+\+)-'
+US-054 is not complete, so I'm not emitting `<promise>COMPLETE</promise>`. The implementation is in the tree, but two acceptance items are still open.
+
+**What I checked this turn:**
+- `cmake --build --preset linux-debug` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` exits 0: 21 integration tests and 1 unit test pass.
+- I did not rerun `ValidateVendor`, the Windows gates, or `linux-sanitize` this turn. The progress log records them passing on the unchanged tree.
+
+**What is still open:**
+1. **Linux/GCC gate.** `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11+ because Jolt uses `__builtin_bit_cast`. This host has only GCC/G++ 9.4 and clang 10, and no newer compiler turned up in the earlier searches. Installing GCC 11+ needs root, or the CI job can verify it.
+2. **Performance measurement.** The acceptance criterion calls for `engine_bench --suite acceptance`. `engine_bench` is US-074 and has no harness yet, so this cannot run.
+
+The last 29 status passes in `.ralph-tui/progress.md` report the same two blockers with no source change. I did not add another no-change entry. Once someone installs GCC 11+ and runs the CI Linux/GCC job, the story can be closed out.

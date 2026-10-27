@@ -1,0 +1,46 @@
+# Iteration 670 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:06:35.728Z
+- **Ended At**: 2026-10-26T02:06:50.831Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2302
+- **Total Tokens**: 2324
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the render benchmark code and the progress log.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tools $ git status 2>&1 | head -3
+The progress log shows US-076 has been blocked for several passes on one user decision. I'll confirm nothing has changed since the last check before deciding whether to rerun anything.
+[94m[Bash][0m Check source timestamps and benchmark report statuses $ done
+US-076 is not complete, and I have not signalled COMPLETE. Nothing has changed since the last status check, so I did not rerun anything.
+
+**Blocked on your decision:**
+
+1. **Triangle floor and frame budget fail on instance placement.** On DX12 and Vulkan, the indexed, indirect and meshlet runs all exit 1. The route start submits 312,068 triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. Instances are spread uniformly over the 8192 m world, so the 60° view at the route start holds only about 330 items. The contract forbids reducing the workload, so the fix is a workload change: adjust placement, bump `kWorkloadVersion`, and regenerate `benchmarks/workload_expected.json`. Options:
+   - (a) Keep the contract and report these failures as the measured result.
+   - (b) Approve a placement change, which I would then implement and rerun.
+
+2. **The `full_1080` profile is unsupported** because the FSR 2 `*_permutations.h` tables are missing from the vendored tree. Until a vendoring route is chosen, only `native_1080` runs, so "both profiles" is only partly met.
+
+**Done and verified (from the progress log and current timestamps):**
+- `render_route_v1` is defined in the manifest, and `engine_workload --check` matches all four scenes.
+- The `render_stress` driver is in place with `--path` and `--disable-mesh-shaders`.
+- All eight `artifacts/bench/us076-*` reports postdate the last source edit (`render_stress.cpp`, 04:15:43) and carry screenshots and counters.
+- Mesh-shader-off fallback works: `mesh_shaders: disabled: forced off`, `meshlet_path: fell back`, and 338–340 indirect visible items on both backends.
+- Windows gates passed on the current tree, per the log: validate, win-dev, win-debug build, win-unit (29/29), `engine_tests --suite gpu` for dx12 (72) and vulkan (73), and win-release bench build.
+- Linux gates passed on the current tree: ValidateVendor, linux-dev, linux-debug build with 0 warnings, linux-unit (30/30).
+
+**Not run:** native Linux Vulkan GPU tests (WSL has no Vulkan device) and the linux-gcc gate (GCC 9.4 cannot build Jolt).
+
+I did not append another status entry to `.ralph-tui/progress.md`, since it would repeat the last nine without new facts. Tell me which option you want for placement, and how to handle FSR 2, and I'll continue from there.

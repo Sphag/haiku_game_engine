@@ -1,0 +1,223 @@
+# Iteration 162 Log
+
+## Metadata
+
+- **Task ID**: US-049
+- **Task Title**: Asynchronous World Streaming
+- **Description**: As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T06:56:36.391Z
+- **Ended At**: 2026-10-24T07:24:04.179Z
+- **Duration**: 27m 27s
+- **Input Tokens**: 372
+- **Output Tokens**: 82283
+- **Total Tokens**: 82655
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for US-049, and what streaming code already exists.
+[94m[Bash][0m Inspect repo layout and PRD streaming references $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && grep -n "US-049\|US-048\|st...
+[94m[Bash][0m Read recent progress and find existing streaming code $ tail -150 .ralph-tui/progress.md && ls engine && grep -ril "stream" engine --include=*.hpp --include...
+The progress log is mostly repeated US-047 re-checks, so I'll rely on the code. Next I'll read the US-049 spec and the partition API it builds on.
+[94m[Bash][0m Read US-049 spec, world module layout and tests $ sed -n 455,480p tasks/prd-open-world-engine.md && sed -n 870,900p tasks/prd-open-world-engine.md && ...
+[94m[Bash][0m Read partition header, jobs header, test registration $ ls engine/core/include/engine/core/ && sed -n 75,100p tests/CMakeLists.txt && sed -n 1,40p tests/src...
+The partition model is in place. Next I'll read the rest of the jobs API, since the streaming IO will run as jobs, and the cell-file loader it will call.
+[94m[Bash][0m Read job API, cell loader, and Windows gate memory $ sed -n 80,200p engine/core/include/engine/core/jobs.hpp && grep -n "load_cell\|load_layer" -A12 engi...
+The job system gives me what I need for the IO and decode stages. Before writing the streaming code, I'll confirm the path and file-IO helper signatures and the assert macro.
+[94m[Bash][0m Check file IO, path, result, and assert APIs $ grep -n "read_text_file\|describe\|file_size\|Path\b" engine/core/include/engine/core/file_io.hpp en...
+[94m[Bash][0m Check save/join usage and result helpers $ sed -n 438,470p engine/world/src/partition.cpp && grep -n "IoResult\|IoError" engine/core/include/en...
+The APIs match what I need. Last check before writing: how the partition tests build worlds and temp directories, and the Guid and tag conventions, so the new tests follow them.
+[94m[Bash][0m Read test helpers, Guid API, and ctest labels $ sed -n 40,75p tests/src/world_partition_tests.cpp && grep -n "generate\|static.*Guid\|class Guid\|st...
+[94m[Bash][0m Find temp-directory helper used by partition tests $ grep -n "temp_directory\|scratch\|TempDir\|unique" tests/src/world_partition_tests.cpp | head -8 && ...
+I have the picture. The plan: a `StreamingManager` in `engine/world` that runs IO and decode as jobs, with per-update IO, decode, and GPU-upload budgets. It activates, deactivates, and unloads only at a `safe_point()`, and it notifies subscribers of each lifecycle step. I'll start with the header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/streaming.hpp[0m "#pragma once
+
+// Asynchronous world streaming (US-049), on the CPU. The manager keeps the cells around the camera resident: an active window (9x9
+// cells by default) whose cells are drawn and simulat... (6609 chars)"
+Now the implementation. Jobs capture only their own `Request`, so the manager can be destroyed while IO is in flight.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/streaming.cpp[0m "#include "engine/world/streaming.hpp"
+
+#include "engine/core/assert.hpp"
+#include "engine/core/file_io.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <filesystem>
+#include <ma... (17205 chars)"
+Before compiling, I see three problems in what I wrote. `Impl` is private to the class, so the free helpers in the anonymous namespace can't name it. A cancelled decode leaves `cell` empty, and the code dereferences it. And `Request` sits at namespace scope with external linkage. I'll fix the header first.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/streaming.hpp[0m edit: "namespace engine::world {
+
+enum class CellPhase" → "namespace engine::world {
+
+namespace detail {
+stru..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/include/engine/world/streaming.hpp[0m edit: "private:
+    struct Impl;
+    std::unique_ptr<Impl..." → "private:
+    std::unique_ptr<detail::StreamingStat..."
+Now the implementation file: move `Request` into the anonymous namespace, make the state a named `detail` type so the helpers can use it, and guard the cancelled-job cases.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/streaming.cpp[0m edit: "// Shared by a cell's IO job and its decode job. A..." → "namespace {
+
+// Shared by a cell's IO job and its ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/streaming.cpp[0m edit: "    bool frame_open = false;
+    StreamingStats st..." → "    bool frame_open = false;
+    StreamingStats st..."
+Next, the cancelled-job handling in the two stage branches of `update()`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/streaming.cpp[0m edit: "        if (entry.phase == CellPhase::Reading && i..." → "        if (entry.phase == CellPhase::Reading && i..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/world/src/streaming.cpp[0m edit: "        } else if (entry.phase == CellPhase::Decod..." → "        } else if (entry.phase == CellPhase::Decod..."
+The code now handles the cancelled cases. Next I'll write tests that cover each acceptance point: lifecycle order, safe-point activation, a render consumer, rapid direction changes, teleport, missing cells, budgets, and teardown with requests in flight.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/world_streaming_tests.cpp[0m "// Asynchronous world streaming (US-049), on the CPU. These cases check the cell lifecycle as subscribers see it, activation only at
+// safe points, a render consumer whose draw list changes only ther... (16469 chars)"
+The test file is written. Before building I'll clean up two things: an unused lookup in the missing-cell test, and the `<algorithm>` include that `std::max` needs.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/world_streaming_tests.cpp[0m edit: "    const World world = author_world(scratch.direc..." → "    const World world = author_world(scratch.direc..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/world_streaming_tests.cpp[0m edit: "#include <catch2/catch_test_macros.hpp>
+
+#include ..." → "#include <catch2/catch_test_macros.hpp>
+
+#include ..."
+Next I'll register the new source and test file in CMake, then configure and build the Linux debug preset.
+[94m[Bash][0m Configure and build Linux debug with the new streaming code $ grep -n "warning\|error" /tmp/build.log | head -40
+[94m[Bash][0m Wait and check build progress and warnings $ grep -n "warning\|error:" /tmp/build.log | head -30
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -3 /tmp/cfg.log tail -3 /tmp/build.log grep -n "warning\|error:" /tmp/build.log head -30. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check configure and build logs $ grep -n "warning\|error:" /tmp/build.log 2>/dev/null | head -30
+[94m[Monitor][0m Wait for Linux debug build to finish $ grep -n "warning:\|error:\|FAILED" /tmp/build.log | head -30
+[94m[Bash][0m Check build log for warnings and errors $ grep -n "warning:\|error:\|FAILED" /tmp/build.log | head -30
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: tail -4 /tmp/build.log grep -n "warning:\|error:\|FAILED" /tmp/build.log head -30. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check build status without sleeping $ pgrep -f "build --preset linux-debug" | head -2
+The world library built cleanly and the test object is compiling. I'll wait for the build to finish.
+[94m[Monitor][0m Wait until the Linux debug build process exits $ grep -n "error:\|FAILED" /tmp/build.log | head
+[94m[Monitor][0m Wait until the Linux debug build exits $ echo done
+[94m[Monitor][0m Hold while build continues $ echo tick
+[94m[Monitor][0m Wait for Linux debug build exit $ echo done
+[94m[Bash][0m Report build log tail, warnings, and any errors $ pgrep -fa "linux-debug" | head -3
+[94m[Monitor][0m Wait for cmake build process to exit $ echo done
+[94m[Monitor][0m Hold while the build keeps going $ echo tick
+[94m[Monitor][0m Wait for cmake build process to exit $ echo done
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check build progress and errors $ pgrep -fa "cmake --build --preset linux-debug" | grep -v bash | head -2
+The Linux debug build is still compiling `engine_tests`, which has a large set of test sources. No warnings or errors so far. I'll resume when the build finishes.
+[94m[Bash][0m Check build result and run world tests via ctest $ timeout 110 ctest --preset linux-unit --output-on-failure --no-tests=error -R "world|Stream|stream" ...
+The debug build links with zero warnings. The ctest filter found nothing, so I'll run the streaming cases directly with Catch2.
+[94m[Bash][0m Run streaming test cases directly $ timeout 100 build/linux-dev/tests/Debug/engine_tests --list-tests 2>/dev/null | grep -i "teleport\|c...
+[94m[Bash][0m Run streaming unit tests $ echo rc=$?
+[94m[Bash][0m Run all CPU unit tests $ echo rc=${PIPESTATUS[0]}
+All 622 CPU unit tests pass, and that set includes the new streaming cases. Next I'll run the remaining Linux gates: the vendor check, the unit ctest, and the sanitizer build.
+[94m[Bash][0m Run vendor validation and linux-unit ctest $ tail -4 /tmp/ctest_unit.log
+[94m[Monitor][0m Wait for linux-unit ctest to finish $ cat /tmp/vv.log | tail -2
+[94m[Monitor][0m Hold while ctest runs $ echo tick
+[94m[Bash][0m Check ctest progress $ pgrep -fa "ctest --preset" | grep -v bash | head -2
+[94m[Monitor][0m Wait for ctest process to exit $ echo done
+[94m[ScheduleWakeup][0m
+The streaming code and its tests are in, and the Linux debug build has no warnings. The full Linux unit ctest is still running, so I haven't yet confirmed the complete gate.
+
+**What's in place**
+- `engine/world/include/engine/world/streaming.hpp` and `engine/world/src/streaming.cpp`: a `StreamingManager` that reads cell files from the partition data.
+  - Each cell moves through Unloaded → Reading → Decoding → Loaded → Ready → Active, and back down.
+  - IO and decode run as jobs. Each stage is capped per update by its own byte budget (IO, decode, GPU upload).
+  - Activation, deactivation, and unload happen only in `safe_point()`, which asserts it is not called during a frame.
+  - Subscribers get each lifecycle event, and they receive the cell as a shared pointer, so they can keep it after unload.
+  - Jobs capture only their own request, not the manager. Destroying the manager cancels, waits for in-flight jobs, and unloads resident cells through the subscribers.
+- `tests/src/world_streaming_tests.cpp` (registered in `tests/CMakeLists.txt`): 7 cases on a real 17×17-cell world written to disk. They cover:
+  - the window and ring residency;
+  - lifecycle order, and no activation before the safe point;
+  - a render consumer whose draw list changes only at safe points;
+  - rapid direction changes;
+  - a teleport, with peak resident cells and transient bytes checked;
+  - a missing cell that fails once and is retried only after leaving the ring;
+  - per-stage budgets;
+  - teardown with requests in flight.
+
+**Verified so far (Linux, this tree)**
+- `cmake --preset linux-dev` configure: passed.
+- `cmake --build --preset linux-debug`: passed, 0 warnings.
+- `engine_tests --suite unit`: all 622 test cases passed.
+- `cmake -P cmake/ValidateVendor.cmake`: passed.
+
+**Not yet verified or not run**
+- `ctest --preset linux-unit`: still running in the background; I'll read its result when it finishes.
+- `linux-asan` build and `linux-sanitize` ctest: not run. The streaming work is in the list of areas that need them, so they are still owed.
+- Windows gates (ValidateVendor, win-dev, win-debug, win-unit): not run.
+- GPU suites and `engine_bench`: not run. `engine_bench` is not in the tree (US-074), and the streaming scene in the performance contract needs it.
+
+**Scope limits**
+- The render consumer exists only as a test subscriber. It is not wired to the real renderer.
+- GPU upload is a budget plus a subscriber callback. No GPU resource is created yet.
+- The World catalog is read once at construction. Cells added to the world later are not picked up.
+
+So US-049 is not complete. The remaining gates and the GPU and bench items are still open, and I'll report them as they finish.
+[94m[Bash][0m Read linux-unit ctest summary $ tail -6 /tmp/ctest_unit.log
+[94m[Bash][0m Check ctest pass count $ grep -n "tests passed\|Failed\|Passed" /tmp/ctest_unit.log | tail -3
+The linux-unit ctest passed, 22 of 22. Next is the AddressSanitizer and UBSan gate, which the streaming work requires. I'll start the sanitizer build in the background.
+[94m[Bash][0m Start ASan configure, build, and sanitize ctest in background $ echo "asan_rc=$?" > /tmp/asan_rc.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for sanitizer pipeline to finish $ cat /tmp/asan_rc.txt
+[94m[Bash][0m Check sanitizer build and ctest results $ grep -n "stream" /tmp/asan_ctest.log | head -3
+[94m[Bash][0m Confirm sanitizer ctest result and streaming test run $ ls build | head
+The sanitizer gate passed. I'll record this pass in the progress log, then stop, since the Windows gates and the GPU and bench items are still open.
+[94m[Bash][0m Append US-049 progress entry $ the state is `detail::StreamingState` instead. --- EOF echo ok
+US-049 is **partial**. The CPU streaming manager and its tests pass on Linux, including the sanitizer gate. The Windows gates, the GCC job, the GPU suites, and the benchmark have not been run, so the story is not complete.
+
+**What I built**
+- `StreamingManager` in `engine/world/` (`streaming.hpp`, `streaming.cpp`). Cells move through Unloaded → Reading → Decoding → Loaded → Ready → Active and back down.
+- IO and decode run as jobs. Each stage has a per-update byte budget: IO, decode, and GPU upload.
+- Activation, deactivation, and unload happen only in `safe_point()`, which asserts it is not called during a frame.
+- Subscribers receive every lifecycle step. They hold the cell as a `shared_ptr`, so it stays readable after unload.
+- Jobs capture only their own request, never the manager. A cancelled or abandoned job therefore can't write into freed memory.
+- Missing or unparsable cells end Failed. They are retried only after leaving the prefetch ring.
+- `tests/src/world_streaming_tests.cpp` adds 7 cases. They cover:
+  - residency rings and the lifecycle order;
+  - activation only at the safe point;
+  - a render consumer whose draw list changes only there;
+  - rapid direction changes;
+  - teleport, with residency peaks checked;
+  - missing cells;
+  - per-stage budgets;
+  - teardown with requests in flight.
+
+**Verified on Linux, current tree**
+- ValidateVendor: passed.
+- `linux-dev` configure: passed.
+- `linux-debug` build: passed, 0 warnings.
+- `engine_tests --suite unit`: 622 cases passed.
+- `linux-unit` ctest: 22 of 22 passed.
+- `linux-asan` build: 0 warnings. `linux-sanitize` ctest: 22 of 22 passed (ASan and UBSan).
+
+**Not run**
+- Windows gates: ValidateVendor, `win-dev`, `win-debug`, `win-unit`.
+- Linux GCC gates: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`.
+- GPU suites for DX12 and Vulkan. No GPU path changed, but the story asks for them once the GPU subsystems exist.
+- `engine_bench --suite acceptance`. The benchmark target is not in the tree (US-074), so the streaming scene's performance numbers are not measured.
+
+**Scope limits**
+- The render consumer exists only as a test subscriber. It is not wired to the real renderer.
+- GPU upload is a budget plus a subscriber callback. No GPU resource is created.
+- The catalog is read once at construction, so cells added to the world later are not picked up.
+
+I appended a US-049 entry to `.ralph-tui/progress.md` with these results and the open items. I did not create a commit.
+That's a stale monitor timing out. The Linux debug build finished earlier, and the results are already in my last report, so there's nothing new to act on.
+
+US-049 is still partial. Linux CPU streaming is done and passes its unit, ctest, and sanitizer gates. The Windows gates, the GCC job, the GPU suites, and the benchmark haven't been run. Say if you want me to start the Windows batch next.
+This is another stale monitor from the earlier build, so nothing has changed. US-049 status is the same as in my last report: Linux CPU streaming passes, and the Windows gates, GCC job, GPU suites, and benchmark are still open. I'm not re-arming the watch.
+Another stale monitor from the earlier build expired. I'm not re-arming it, and nothing has changed since my last report. US-049 is still partial: the Linux CPU streaming work passes, and the Windows gates, GCC job, GPU suites, and benchmark remain open.
+This is a routine tick from a finished hold monitor, so there's nothing new to report. The status is unchanged: US-049 is partial, with Linux CPU streaming passing and the Windows gates, GCC job, GPU suites, and benchmark still open.
+This is a stale monitor for the linux-unit ctest. That run finished earlier with 22 of 22 passing, so I'm not re-arming it. US-049 status is unchanged: partial, with the Windows gates, GCC job, GPU suites, and benchmark still open.
+Another stale monitor, for the ctest process that finished earlier. Nothing new to act on. US-049 is still partial, as in my last report.
+Both checks were already run, so here are the results.
+
+- **linux-unit ctest:** 22 of 22 passed (`/tmp/ctest_unit.log`).
+- **linux-asan build:** no warnings.
+- **linux-sanitize ctest (ASan and UBSan):** 22 of 22 passed (`/tmp/asan_ctest.log`, exit 0).
+
+**US-049 status: partial.** The CPU streaming manager and its 7 test cases are complete and pass on Linux, including the sanitizer gate. Still open:
+- Windows gates: ValidateVendor, `win-dev`, `win-debug`, `win-unit`.
+- Linux GCC gates: `linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`.
+- GPU suites on DX12 and Vulkan.
+- `engine_bench --suite acceptance`. The benchmark target isn't in the tree yet (US-074).
+
+I can start the Windows batch next if you want it.

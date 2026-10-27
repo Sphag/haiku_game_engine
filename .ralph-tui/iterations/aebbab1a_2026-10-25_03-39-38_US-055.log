@@ -1,0 +1,40 @@
+# Iteration 410 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T00:39:38.764Z
+- **Ended At**: 2026-10-25T00:42:17.310Z
+- **Duration**: 2m 38s
+- **Input Tokens**: 44
+- **Output Tokens**: 3491
+- **Total Tokens**: 3535
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress log $ tail -60 .ralph-tui/progress.md
+[94m[Bash][0m Find US-055 entries in progress log $ grep -n "^## " .ralph-tui/progress.md | grep -n "US-055" | head -3
+[94m[Bash][0m Read the first US-055 entry and check toolchains $ ls /usr/bin | grep -E "^(g\+\+|clang\+\+)-"
+[94m[Bash][0m Look for a GCC 11+ toolchain and files changed since last work $ cd /mnt/d/dev/haiku_game_engine && find engine tests cmake -newer engine/script/src/script_bindings....
+[94m[Bash][0m Rebuild Linux debug and run linux-unit tests $ timeout 600 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -6
+[94m[Bash][0m Rerun linux-unit tests and capture the result line $ grep -E "tests passed|Failed|script" /tmp/us055_ctest.log | tail -5
+[94m[Bash][0m Append a status entry to the progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (100%, 22 of 22). - Toolchai...
+US-055 is not complete, so I'm not signalling COMPLETE. The Lua API was implemented in an earlier pass, and the one gate still open can't be run on this machine.
+
+**Verified in this pass (Linux):**
+- `cmake --build --preset linux-debug` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22, including the 15 script cases in `tests/src/script_lua_tests.cpp`.
+
+**Still open:**
+- The `linux-gcc` gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`). Jolt needs GCC 11 or newer. The host has only GCC 9.4 and clang 10, and no container runtime, so this gate can only run in the CI job.
+
+**Earlier passes, per the progress log:** the Linux gates (`ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`, `linux-asan`, `linux-sanitize`) and the Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) passed. The log doesn't say whether those Windows runs were on this same source tree. `engine_bench` has no harness yet (US-074), so it hasn't run.
+
+I appended a short status entry to `.ralph-tui/progress.md`. The log already has many identical re-check entries, so I kept this one brief and didn't repeat the earlier detail.

@@ -1,0 +1,44 @@
+# Iteration 510 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:43:18.927Z
+- **Ended At**: 2026-10-25T07:46:12.445Z
+- **Duration**: 2m 53s
+- **Input Tokens**: 40
+- **Output Tokens**: 3268
+- **Total Tokens**: 3308
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since the Codebase Patterns say US-058 may already be partly built.
+[94m[Bash][0m Inspect repo layout, UI folder, and progress log $ git status 2>&1 | head -5
+The log says US-058 is already implemented and only partly verified. Next I'll check which Linux gates have actually run and what is still open.
+[94m[Bash][0m Search progress log for US-058 Linux gate results $ grep -n -i "linux-unit\|linux-debug\|linux-dev\|ValidateVendor\|set_overlay\|application\|screenshot...
+Many prior passes already recorded the same blocked state. Before I repeat them, I'll check whether the tree changed and whether a GCC 11+ compiler is now on the machine, since that is the one blocker that could move.
+[94m[Bash][0m Check tree changes, compilers, and rerun Linux build and unit tests $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -5)
+[94m[Bash][0m Confirm unit pass count and warning count $ cmake --build --preset linux-debug 2>&1 | grep -c -E "warning:|error:"
+Build and tests are clean, so I'll record this pass in the progress log the way earlier passes did.
+[94m[Bash][0m Append this verification pass to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 passed. - Status: US...
+US-058 is not complete, so I am not emitting the COMPLETE signal. The UI code is in place and the gates I could run here pass, but three acceptance items are blocked.
+
+**What I checked in this pass**
+- The tree is unchanged since the last recorded pass, so the earlier results still describe the code.
+- `cmake --build --preset linux-debug` succeeded with 0 `warning:`/`error:` lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passed 22 of 22.
+- The Windows gates and the DX12/Vulkan GPU suites were recorded as passing in earlier passes. I did not re-run them here.
+
+**What is still open**
+1. **`linux-gcc` gate and CI job.** Jolt needs GCC 11 or newer. This machine has only g++ 9.4 and clang 10. Installing a newer compiler needs your go-ahead.
+2. **Native Linux Vulkan GPU run.** WSL has no usable Vulkan device, so this needs a native Linux machine.
+3. **Running-application check with screenshots.** No application host calls `PostProcessor::set_overlay` yet. The overlay composition is covered only by the GPU fixture in `tests/src/render_postprocess_gpu_tests.cpp`. Verifying the UI in a running app needs a host that is outside this story's engine/ui scope.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this pass. No source files changed.

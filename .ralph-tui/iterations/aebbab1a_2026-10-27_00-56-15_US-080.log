@@ -1,0 +1,43 @@
+# Iteration 1211 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:56:15.989Z
+- **Ended At**: 2026-10-26T21:56:31.474Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2003
+- **Total Tokens**: 2025
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log, bench artifacts, repo state $ git status 2>&1 | head -3
+[94m[Bash][0m Verify hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status entry to progress log $ RTX 5080 (driver 617.42) visible under WSL only. - No build or bench run. US-080 is not signed off. ...
+US-080 is not complete, so I am not signalling COMPLETE. I re-checked the blockers in this session and nothing has changed since the earlier entries in `.ralph-tui/progress.md`.
+
+**What's blocking acceptance:**
+- **No native Linux Vulkan device.** `/dev/dri` does not exist here, so the native Linux/Vulkan report cannot be produced. WSL and software rendering do not count as that report.
+- **FSR 2 is not buildable.** There are 0 `*_permutations.h` files under `third_party`. `ENGINE_FSR2_AVAILABLE` gates the backends off, so this needs a vendoring decision from you.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` still has four `implementation: "none"` entries. An acceptance run would exit 3 (incomplete) on them.
+- **A known CPU budget miss on DX12/Vulkan meshlets.** The `us076` meshlets run measured CPU p99 of 42.4 ms against a 16.7 ms budget. The cause is not yet identified. It needs a Release profile on the RTX 5080 through `cmd.exe`, timing extract, render, and fence waits in `SceneRenderer::render`. The contract forbids relaxing the budget without your decision.
+
+**What I did not run:** no build, no quality gates, and no `engine_bench` acceptance batch. Running the batch now would only produce an incomplete result.
+
+**What I changed:** I appended a status entry to `.ralph-tui/progress.md`. No code changed.
+
+**What I need from you to proceed:**
+1. A native Linux host with `/dev/dri`, or confirmation that native Linux Vulkan is out of scope for this story.
+2. A decision on FSR 2: vendor the generated permutation headers, or drop FSR from the build.
+3. The sources for the four unimplemented workloads, or permission to implement them.
+4. Whether to profile the meshlets CPU hotspot now on the RTX 5080. If the budget still fails after the fix, that is a contract decision only you can make.
+
+I'd suggest starting with item 4, since the Windows side is the part I can move without new hardware. Repeated unattended status checks have not changed any of these facts, so I'd stop looping on this story until you answer.

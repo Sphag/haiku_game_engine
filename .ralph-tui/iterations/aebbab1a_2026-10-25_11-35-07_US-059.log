@@ -1,0 +1,56 @@
+# Iteration 517 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:35:07.393Z
+- **Ended At**: 2026-10-25T08:37:58.960Z
+- **Duration**: 2m 51s
+- **Input Tokens**: 56
+- **Output Tokens**: 3982
+- **Total Tokens**: 4038
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-059 is already in the tree, since the codebase patterns already describe a save system.
+[94m[Bash][0m Locate repo and check save module and progress notes $ grep -n "US-059" -A3 .ralph-tui/progress.md | tail -40
+The progress log marks US-059 Partial. I'll check what's still open: whether a GCC 11+ compiler now exists, and whether the Windows gates were ever run.
+[94m[Bash][0m Check compilers, Windows gate notes, and bench target $ grep -n "engine_bench" -r CMakeLists.txt engine tests tools 2>/dev/null | head -5
+Windows and Linux gates are recorded as passing. I'll check whether the ASan preset was run for US-059, since the change touches Lua and streaming.
+[94m[Bash][0m Check ASan coverage notes and available presets $ grep -n '"name"' CMakePresets.json | grep -i asan
+The verifiable gates were already run in earlier passes. I'll confirm the tree hasn't changed since the last Linux run before I rely on that.
+[94m[Bash][0m Check tree changes and rerun Linux build and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -3
+[94m[Bash][0m Rerun Linux unit tests and report pass count $ echo "exit=${PIPESTATUS[0]}"
+Linux unit tests pass on the current tree (22 of 22). The one remaining hard gate is `linux-gcc`, which needs GCC 11+. I'll check for a newer toolchain elsewhere on the machine before concluding it's blocked.
+[94m[Bash][0m Search for a GCC 11+ toolchain on this machine $ sudo -n true 2>&1 | head -1
+No GCC 11+ exists here and sudo needs a password, so the GCC gate can't run. I'll record this pass in the progress log, keeping the story Partial.
+[94m[Bash][0m Append re-check entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22. - Still blocked: `l...
+US-059 is implemented and verified on Windows and Linux, but it is still **Partial**, so I'm not emitting the COMPLETE signal. One hard gate and one benchmark item can't run here.
+
+**What's in place**
+- `engine/save/`: save slots with format, version, build, CRC-32 checksum, and body; `.prev` copy of the last good save; atomic writes; rejection of corrupt or incompatible files.
+- World deltas for changed unloaded cells, written to a runtime directory rather than the authored project.
+- Script instance state capture and restore as JSON (`engine/script/src/script_state.cpp`).
+
+**Gates**
+
+| Gate | Result |
+|---|---|
+| Windows: ValidateVendor, win-dev, win-debug, win-unit | Pass (21 of 21), recorded in an earlier pass |
+| Linux: ValidateVendor, linux-dev, linux-debug | Pass, recorded earlier |
+| Linux: linux-unit | Pass, rerun this session: 22 of 22 |
+| Linux: linux-asan + linux-sanitize | Pass (ASan and UBSan), recorded earlier |
+| linux-gcc, linux-gcc-debug, linux-gcc-unit | **Not run.** Only GCC 9.4 is installed. No GCC 11+ exists on the machine, and sudo needs a password. |
+| engine_bench --suite acceptance | **Not run.** The benchmark harness doesn't exist yet (US-074). |
+| Save/load in a running game | **Not verified.** There's no application host yet (US-060); only the library paths are tested. |
+
+I confirmed no source files changed since the last Windows and Linux runs. I appended a re-check entry to `.ralph-tui/progress.md`.
+
+**To finish:** install GCC 11+ (or run the linux-gcc gate on a machine that has it), and rerun the benchmark and play-session save once US-060 and US-074 exist.

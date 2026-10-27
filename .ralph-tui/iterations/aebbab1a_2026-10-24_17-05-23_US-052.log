@@ -1,0 +1,39 @@
+# Iteration 222 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T14:05:23.105Z
+- **Ended At**: 2026-10-24T14:10:18.332Z
+- **Duration**: 4m 55s
+- **Input Tokens**: 22
+- **Output Tokens**: 1890
+- **Total Tokens**: 1912
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log, physics memory, and physics dir $ tail -n 60 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/mem...
+[94m[Bash][0m Re-run Linux clang gates for US-052 $ tail -n 3 /tmp/us052_ctest.log
+[94m[Bash][0m Summarize test results and build warnings $ grep -ciE "warning:|error:" /tmp/us052_build.log
+US-052 is not complete, so I'm not emitting the COMPLETE signal. The Jolt adapter is implemented and the gates I could run pass, but two acceptance items are blocked by the environment.
+
+**Re-verified this pass (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22/22
+
+The earlier progress entries record the Windows gates (validate, win-dev, win-debug, win-unit) and the ASan/UBSan sanitize run as passing. I did not re-run those this pass.
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. The only compilers installed are `g++-9`/`gcc-9`, and Jolt needs GCC 11+ for `__builtin_bit_cast`. I found no GCC 11+ here, and the memory notes say apt has no candidate either. This needs a GCC 11+ environment or the CI job.
+- **`engine_bench --suite acceptance`:** cannot run. The tree has no `engine_bench` target; that harness is US-074.
+
+The tree has not changed since the earlier entries, so I did not add another identical progress entry. Closing US-052 needs a GCC 11+ run of the `linux-gcc` presets and the benchmark harness from US-074.

@@ -1,0 +1,41 @@
+# Iteration 361 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:00:40.143Z
+- **Ended At**: 2026-10-24T22:03:51.270Z
+- **Duration**: 3m 11s
+- **Input Tokens**: 28
+- **Output Tokens**: 2703
+- **Total Tokens**: 2731
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-054 is already partly implemented, since the codebase notes mention `character.cpp`.
+[94m[Bash][0m Inspect repo state, progress log, physics sources $ git status 2>&1 | head -5
+The log shows US-054 implemented and gated across several passes, stuck at Partial on the Linux/GCC job and the benchmark. I'll re-verify the Linux gates on the current tree and check for any source changes since the last entry.
+[94m[Bash][0m Re-run Linux validate, debug build, and unit tests $ tail -n 4 /tmp/ctest.log
+Gates pass and nothing changed since the last entry. I'll append this pass's log entry.
+[94m[Bash][0m Append status entry to progress log $ 60.45 s). - Environment: `/usr/bin` still has only GCC/G++ 9 and clang 10, so `linux-gcc*` cannot bu...
+US-054 is still **Partial**, so I am not emitting the completion signal. The character controller, joints, and cell fixture were already implemented in earlier passes, and the Linux gates I could run pass on the current tree.
+
+**Verified this pass (Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21, 60.45 s)
+- No file under `engine/`, `tests/`, `cmake/`, or `docs/` changed since the last log entry, so I did not rerun the Windows gates.
+
+**Still open, and why I can't close them here:**
+- **`linux-gcc` gate:** the machine has only GCC/G++ 9 and clang 10. Jolt needs GCC 11+, so the `linux-gcc` preset and its unit run must come from the CI job or a machine with a newer GCC.
+- **`engine_bench --suite acceptance`:** no `engine_bench` target exists in any CMakeLists. The criterion applies only once the harness exists, which is US-074.
+- **`physics_stress` scene:** the PRD benchmark contract is recorded in `docs/physics.md`, but the scene itself is US-077.
+
+I appended a status entry to `.ralph-tui/progress.md`. Those three items are the blockers: the story needs a GCC 11+ environment or CI run, plus US-074 and US-077, before it can be marked complete.

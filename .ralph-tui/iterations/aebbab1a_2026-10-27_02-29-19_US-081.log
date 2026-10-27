@@ -1,0 +1,47 @@
+# Iteration 1258 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:29:19.493Z
+- **Ended At**: 2026-10-26T23:31:24.270Z
+- **Duration**: 2m 4s
+- **Input Tokens**: 36
+- **Output Tokens**: 3146
+- **Total Tokens**: 3182
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the existing docs.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The progress log shows earlier passes already did most of this and left it unsigned. I'll read the acceptance doc and README to see what's still missing.
+[94m[Bash][0m Read acceptance doc, README headings, and report files $ g++ --version | head -1
+Most of the story is already in place. I'll confirm the required docs exist and that the Linux vendor check still passes, then record the result.
+[94m[Bash][0m Check required docs, vendor notices, and vendor validation $ find . -newer docs/acceptance.md -not -path './build/*' -not -path './.git/*' -not -path './.ralph-t...
+The docs are present, the vendor check passes, and nothing in the tree has changed since the last recorded gate run. I'll log this pass in the progress file.
+[94m[Bash][0m Append status entry to progress log $ only `tasks/prd.json` is newer. No gate re-run. - Blockers, unchanged: no `/dev/dri` (native Linux V...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. The documentation deliverables exist, and the gates I could run here pass. The remaining acceptance items need hardware or decisions this machine does not have.
+
+**Done and verified:**
+- The required docs exist: architecture, schemas, vendor, benchmarks, capability matrix, acceptance, and build. The README has sections for requirements, offline CMake setup, editor, Lua API, asset pipeline, and packaging.
+- `cmake -P cmake/ValidateVendor.cmake` passes on Linux (26 dependencies, 8542 files).
+- The Windows gates, the Windows and Linux editor and GPU results, the Linux ASan run, and the release builds are recorded in `docs/acceptance.md` with their logs under `artifacts/reports/us081/`. I did not re-run them in this pass.
+- I appended a status entry to `.ralph-tui/progress.md`. No source, test, or doc changed in this pass.
+
+**Still open, and why I can't close them here:**
+1. **Native Linux Vulkan GPU run.** There is no `/dev/dri` on this WSL2 machine.
+2. **Linux/GCC gate.** The local compiler is GCC 9.4, and Jolt needs GCC 11 or newer.
+3. **Full acceptance benchmark.** `engine_bench --suite acceptance` is not complete on DX12 or Vulkan. Several scenes do not yet produce GPU timestamps, so runs report `incomplete`.
+4. **Visual smoke tests.** Windows has a launch screenshot only, with no action sequence. Linux has not been run.
+5. **Sample-game package on each OS.** The editor suite's clean-folder package case passes, but no package built from a real game exists yet.
+6. **FSR 2.** The vendored tree lacks its generated permutation headers, so temporal upscaling is unavailable.
+7. **License.** The repo has no LICENSE file. This is your decision to make, not something I should choose.
+
+To finish, the next steps are a native Linux RTX 5080 session for the Vulkan GPU run, a GCC 11+ toolchain, the acceptance benchmark runs, and your call on the license.

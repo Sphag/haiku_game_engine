@@ -1,0 +1,193 @@
+# Iteration 18 Log
+
+## Metadata
+
+- **Task ID**: US-019
+- **Task Title**: Asset Converter CLI
+- **Description**: As a developer, I want a command-line converter so that I can prepare resources without the editor.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T08:28:56.057Z
+- **Ended At**: 2026-10-22T08:57:30.457Z
+- **Duration**: 28m 34s
+- **Input Tokens**: 392
+- **Output Tokens**: 135587
+- **Total Tokens**: 135979
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m List repo root and progress/PRD files $ cat CMakePresets.json 2>/dev/null | head -c 600
+[94m[Bash][0m Read top and tail of progress log $ sed -n 1,60p .ralph-tui/progress.md && echo ... && tail -120 .ralph-tui/progress.md
+[94m[Bash][0m Inspect tools, engine, tests layout and CMake root $ find tools engine tests -maxdepth 2 | head -150 && echo --- && cat CMakeLists.txt && echo --- && fin...
+The repo has the engine libraries through US-018. Next I'll pull the PRD's US-019 story and the constraints it names.
+[94m[Bash][0m Find headings and US-019 references in PRD $ grep -n "^#\|US-019\|US-018\|converter\|asset_converter\|cook\|Non-Goal\|benchmark\|engine_bench" ta...
+[94m[Bash][0m Read PRD quality gates, US-019, FR, non-goals, tech considerations $ sed -n 22,76p tasks/prd-open-world-engine.md && echo ..... && sed -n 220,236p tasks/prd-open-world-e...
+The story has several hard requirements: a headless CLI, a machine-readable report with error codes, deterministic output hashes, and atomic publish that keeps the last valid result. Next I'll read the existing assets module, the core I/O and job APIs it will build on, and the test and CMake wiring.
+[94m[Bash][0m Read assets module CMake and public headers $ cat engine/assets/CMakeLists.txt && ls engine/assets/include/engine/assets engine/assets/src engine/...
+[94m[Bash][0m Read test CMake, CLI contract, and engine target helpers $ cat tests/CMakeLists.txt && cat tests/cli/CliContract.cmake | head -80 && ls tools/ci && cat cmake/E...
+The CLI contract pattern and the first-party warning policy are clear. Next I'll read the core file I/O, result, and path APIs the converter will use, and check the existing build state.
+[94m[Bash][0m Read file_io, result, path headers; check build dirs $ cat engine/core/include/engine/core/file_io.hpp && sed -n 1,200p engine/core/include/engine/core/res...
+I have the core APIs. Next I'll check how the scan walks the tree and parses JSON, and look at an existing test file so the new code matches.
+[94m[Bash][0m Read asset_project implementation and test style $ grep -n "" engine/core/include/engine/core/guid.hpp | sed -n 1,60p | grep -n "static\|class\|std::st...
+The existing code parses JSON with nlohmann, walks trees with `std::filesystem`, and returns `Result` values. One thing matters for the design: `write_file_atomic` uses a fixed `<path>.tmp` name, which two parallel writers would share. I'll check that, plus whether the scan fills content hashes and how `prd.json` tracks US-019.
+[94m[Bash][0m Check hashing in scan, file_io temp naming, prd.json entries $ cat tools/ci/offline_verify.sh | head -40
+The core job system is a prerequisite for this story, so the parallel cook should use it instead of raw threads. I'll read its public API.
+[94m[Bash][0m Read JobSystem public API $ sed -n 40,200p engine/core/include/engine/core/jobs.hpp | grep -v "^$" | head -150
+The job system supports dependency-aware submission and cancels a dependent when its dependency fails. That fits the "blocked by a failed dependency" behavior I want. I'll check the few remaining APIs I need: UTF-8 validation, the core link setup, and the existing CLI option style.
+[94m[Bash][0m Check utf8 API, core CMake, CLI style, fixture sidecar $ cat tests/fixtures/assets/registry_project/*.meta | head -20
+[94m[Bash][0m Show a fixture sidecar and preset names $ find tests/fixtures/assets -name "*.meta" | head -3 && cat "$(find tests/fixtures/assets -name '*.me...
+I have enough context to design this. The plan:
+
+- **Library `engine_converter`** (`tools/asset_converter/`) with a separate `asset_converter` executable, so the runtime never links it (FR-03).
+- **Importers** are a small plugin interface. Built-in: `blob`, `text` (with a setting), and `json`. Texture and model importers belong to US-020/021, so I'll leave those out.
+- **Cache keys** hash the converter version, importer type and version, canonical settings, source hash, and each dependency's cook key. Dependency keys chain through, so a change propagates transitively.
+- **Publishing** writes to a unique temp file and renames it. A failed import never touches the previous output.
+- **Scheduling** runs each dependency level as a wave on the existing `JobSystem`. A dependent of a failed asset is marked blocked, not cooked.
+
+I'll write the importer interface first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/include/asset_converter/importer.hpp[0m "#pragma once
+
+// Importers (US-019): each one turns a source's bytes and its canonical settings into an imported payload. The payload is
+// what the cook step packs, so two runs with the same source, ... (2661 chars)"
+Next, the built-in importers and the registry.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/importer.cpp[0m "#include "asset_converter/importer.hpp"
+
+#include "engine/core/utf8.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <utility>
+
+namespace engine::converter {
+namespace {
+
+using Json = nlohmann::json;
+usin... (6164 chars)"
+The `TextImporter::import` parameter is named `canonical_settings`, which shadows the member function and fails `-Wshadow -Werror`. I'll rename it in both places.
+[94m[Bash][0m Rename shadowing parameter in importer files $ /' src/importer.cpp && grep -n "settings" include/asset_converter/importer.hpp src/importer.cpp | gr...
+The rename is in place. Next is the public converter API header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/include/asset_converter/converter.hpp[0m "#pragma once
+
+// Asset converter (US-019): validates, imports, and cooks a project headlessly. The command-line tool is a thin wrapper
+// over run(); the editor and the tests call the same entry point... (6307 chars)"
+Now the core pipeline. It has four parts: planning (keys, dependency walk, cycle and missing-dependency detection), per-asset conversion with atomic publish, wave scheduling on the job system, and report serialization.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/converter.cpp[0m "#include "asset_converter/converter.hpp"
+
+#include "engine/assets/asset_project.hpp"
+#include "engine/assets/asset_registry.hpp"
+#include "engine/assets/content_hash.hpp"
+
+#include "engine/core/file_i... (28020 chars)"
+The converter core is written. Next is the CLI, which parses arguments, runs the command, writes the report, and maps results to exit codes (0 ok, 1 failed assets, 2 usage).
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/asset_converter/src/main.cpp[0m "// asset_converter: headless import, cook, and validate for a project (US-019).
+//
+// Exit codes: 0 when every asset passed, 1 when the report has errors (see the report or the diagnostics on stderr),... (7422 chars)"
+A missing include for `std::errc`, then the CMake target. After that I'll wire it into the root build.
+[94m[Bash][0m Add converter CMake target and wire into root build $ grep -h "TEST_CASE" tests/src/assets_project_tests.cpp | head -3
+I'll configure and build the converter target now to catch compile errors before writing the tests.
+[94m[Bash][0m Configure linux-dev and build asset_converter target $ grep -n "error\|warning" /tmp/us019_build.log | head -60
+The target compiles cleanly under Clang with warnings as errors. Next I'll create a checked-in fixture project (text with CRLF, blob, and a JSON file that depends on the text asset) and run the CLI against it.
+[94m[Bash][0m Create fixture project and smoke-run converter CLI $ od -c /tmp/us019_out/3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b00.cooked | head -3
+The binary path guess was wrong. I'll locate it.
+[94m[Bash][0m Locate built asset_converter binary $ 
+[94m[Bash][0m Run validate and cook twice on fixture project $ od -c /tmp/us019_out/3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b00.cooked | head -3
+Validate and cook both work end to end. The second cook reports every asset as `up_to_date`, and the cooked file carries the `OWCK` header. One Windows concern: `rename` over a target that another process has open can fail with a sharing violation, so I'll add a short bounded retry to `publish`.
+[94m[Bash][0m Add bounded rename retry for Windows sharing conflicts $ \n',1) s=s.replace('#include <algorithm>\n#include <cstdint>','#include <algorithm>\n#include <chron...
+Now the test suite. It covers the acceptance criteria directly: incremental keys, transitive invalidation, determinism, failed-import preservation, blocking and cycles, scan errors, the JSON report, and concurrent cooks into one output directory.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/converter_tests.cpp[0m "// Asset converter (US-019): import, cook, validate, the machine-readable report, incremental reuse, determinism, and safe
+// publishing. Every case works in a scratch project and output directory, so... (23624 chars)"
+Next I'll wire the tests and the CLI contract into CMake. The existing CLI contract helper is hard-wired to `engine_tests`, so I'll generalize it to take an `EXECUTABLE` input and keep the existing call sites working.
+[94m[Bash][0m Generalize CLI contract and register converter tests in CMake $ grep -n "EXECUTABLE" tests/CMakeLists.txt | head -3
+The CLI contract now takes an executable, and the existing engine tests still pass theirs through the same input. Next I'll build the whole Linux debug tree, which also reconfigures, and look for warnings and errors.
+[94m[Bash][0m Build all linux-debug targets and capture errors $ grep -n "error\|warning:" /tmp/us019_build.log | head -60
+[94m[Bash][0m Run linux-unit ctest and converter test cases $ $B --suite integration 2>&1 | grep -i "converter\|failed\|passed" | head -40
+All 17 ctest entries pass on Linux, including the new CLI contract tests. Before I trust the integration count, I'll confirm the converter integration cases are actually selected by the suite's tag filter.
+[94m[Bash][0m Confirm integration tag selection covers converter tests $ grep -n "Converter:" tests/src/converter_tests.cpp | wc -l
+The 18 converter cases are the 3 unit tests plus 15 integration tests, and the suite selects them by tag. Next are the other Linux gates: vendor validation, the GCC job, and the ASan/UBSan job. The converter uses the job system and threads, so the sanitizer gate applies.
+[94m[Bash][0m Run vendor validation, GCC configure/build/unit tests $ tail -4 /tmp/us019_gcc_ctest.log
+The GCC job builds with zero warnings and passes all unit and integration tests. Next is the ASan/UBSan job.
+[94m[Bash][0m Configure, build, and run ASan/UBSan gate $ grep -n "ERROR: AddressSanitizer\|runtime error\|SUMMARY" /tmp/us019_asan_ctest.log | head
+ASan/UBSan is clean. The last gates are Windows, which the notes say run from WSL through a `.bat` that calls `vcvars64.bat`. I'll look up the compiler and the user path that the existing Windows cache uses.
+[94m[Bash][0m Find MSVC compiler path and Windows user temp directory $ ls /mnt/c/Windows/Temp/*.bat 2>/dev/null | head -3
+A previous story left a gate `.bat` behind. I'll use it as the template.
+[94m[Bash][0m Read previous story's Windows gate script $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us018_gates.bat
+[94m[Bash][0m Run Windows quality gates via gate batch file $ grep -n "error C\|error LNK\|: error" /mnt/c/Users/bucha/AppData/Local/Temp/us019_w_build.log | head...
+The Windows build fails on one MSVC warning, so the `ctest=0` in the summary came from the stale binary and doesn't count. I'll look at the diagnostic.
+[94m[Bash][0m Inspect the MSVC warning and its source line $ cd /mnt/d/dev/haiku_game_engine && sed -n 136,141p tests/src/converter_tests.cpp
+MSVC treats code after `FAIL` as unreachable and `/WX` turns that into an error. I'll make `outcome_for` return by value and record a failing `CHECK` for a missing GUID. That keeps the failure visible without the unreachable code.
+[94m[Bash][0m Fix MSVC warning and rerun Windows gates $ tail -5 /mnt/c/Users/bucha/AppData/Local/Temp/us019_w_ctest.log
+Windows configure, build, and ctest now pass with zero `warning C`. The integration run took 1.9 s here against 27 s on Linux, which is worth a look, so I'll check the Windows log for the actual case counts and any skips.
+[94m[Bash][0m Check Windows ctest case counts and converter entries $ grep -n "converter" /mnt/c/Users/bucha/AppData/Local/Temp/us019_w_ctest.log | head
+ctest reports all 17 passed. The per-case output for `engine_tests` isn't in that log, so I'll run the Windows integration binary directly to confirm the converter cases execute on MSVC.
+[94m[Bash][0m Run Windows engine_tests suites directly $ tail -3 /tmp/us019_w_unit.txt
+Windows passes both suites: 296 unit cases (the Linux count plus the two Win32-only cases) and 66 integration cases, including the 15 converter integration cases. The last Linux runs were before the `outcome_for` edit, so I'll rerun the Linux gates on the final tree.
+[94m[Bash][0m Rerun Linux clang, GCC, and ASan gates on final tree $ grep -c "runtime error\|AddressSanitizer" /tmp/f_asan_t.log
+The ASan gate has one failing test. I need to see which one before deciding whether my change is involved.
+[94m[Bash][0m Identify which sanitizer test failed $ grep -n "failed\|FAILED\|with expansion\|REQUIRE\|CHECK" /tmp/f_asan_t.log | head -20
+The failure is the known X11 cursor-capture flake from earlier stories (`platform_x11_input_tests.cpp:453-454`, "another client holds the pointer"). It has nothing to do with the converter. Earlier stories' guidance is to rerun and check the failing case is an X11 case, so I'll rerun the sanitizer gate.
+[94m[Bash][0m Rerun sanitizer gate three times to confirm flake $ done
+Two of three reruns are clean, and the one failure is in the X11 input tests. I'll confirm the failing runs have no sanitizer reports, then move on to the docs and tracking files.
+[94m[Bash][0m Confirm no sanitizer reports and read docs style $ sed -n 1,30p /mnt/d/dev/haiku_game_engine/docs/asset-registry.md
+No sanitizer reports in any run. Next I'll write the converter doc, matching the style of the registry doc.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/asset-converter.md[0m "# Asset Converter
+
+The asset converter (US-019) prepares source assets without the editor. `asset_converter` validates a project, imports its sources, and cooks them into files that the runtime reads.... (7324 chars)"
+The doc matches what I built and verified. Last, I'll mark US-019 as passing in `prd.json` with a targeted edit, so I don't reformat the whole file, and then append the progress entry.
+[94m[Bash][0m Mark US-019 passing in prd.json and check progress file tail $ tail -c 300 .ralph-tui/progress.md | od -c | tail -3
+The `id` string didn't match the way I expected. I'll look at how the entry is written in the file.
+[94m[Bash][0m Locate US-019 entry formatting in prd.json $ grep -n "US-019\|\"passes\"" tasks/prd.json | head -8 | cut -c1-160
+[94m[Bash][0m Show id and passes format around US-019 entries $ sed -n 285,292p tasks/prd.json | cut -c1-120
+The first grep was truncated by `head`, so I'll search for the exact entry directly.
+[94m[Bash][0m Find the exact US-018 and US-019 lines in prd.json $ grep -n "US-019\|US-018" tasks/prd.json | cut -c1-100
+The file uses lowercase JSON `false`, and my script searched for Python's `False`. I'll fix the match and apply the edit.
+[94m[Bash][0m Set US-019 passes to true in prd.json $ python3 - <<'EOF' import json p='tasks/prd.json' s=open(p,encoding='utf-8').read() i=s.index('"id": ...
+`prd.json` is updated. Next I'll record the learnings in the progress log. Two of them are reusable patterns, so they go in the Codebase Patterns section at the top.
+[94m[Bash][0m Add US-019 learnings to progress log and codebase patterns $ the test that bumps the version covers it.   - A dependency cycle is found by DFS on the active stac...
+The four pattern bullets landed in the middle of the log, after US-013, because I anchored on US-014's header rather than the first log entry. I'll move them into the Codebase Patterns section at the top.
+[94m[Bash][0m Move pattern bullets into Codebase Patterns section $ sed -n 318,330p .ralph-tui/progress.md | cut -c1-80
+The bullets are now at lines 70-73. I'll check the seam around the top of the log and the separator before US-014.
+[94m[Bash][0m Verify progress file seams after the edit $ sed -n 326,331p .ralph-tui/progress.md | cut -c1-60
+The bullets sit after the separator `---` at line 69, which belongs below the pattern list. I'll move that separator to after my bullets.
+[94m[Bash][0m Fix separator placement in progress patterns section $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p,encoding='utf-8').read() old='\n---\n- Paralle...
+US-019 is done. `asset_converter` supports `validate`, `import`, and `cook`, with a JSON report that carries stable error codes. All local Windows and Linux gates pass. The GitHub CI jobs were not run because nothing is pushed.
+
+**What's in place**
+- **Library and CLI:** `engine_converter` in `tools/asset_converter/` holds the pipeline, and the `asset_converter` executable wraps it. Neither is linked by the runtime. Exit codes are 0 ok, 1 errors in the report, 2 usage.
+- **Report:** `--report <file|->` writes `engine.converter_report` v1 JSON. It has per-asset status (`valid`, `imported`, `cooked`, `up_to_date`, `failed`, `blocked`) and diagnostics with stable codes such as `IMPORT_FAILED`, `MISSING_DEPENDENCY`, `DEPENDENCY_CYCLE`, and the `SCAN_*` family.
+- **Incremental:** import keys cover the converter version, importer type and version, canonical settings, and source hash. Cook keys add each direct dependency's cook key, so invalidation is transitive. Outputs are reused only if the file still matches its recorded hash.
+- **Determinism:** identical inputs give identical bytes, whatever the worker count. The tests compare `--jobs 1` with `--jobs 8`.
+- **Parallel safety:** each file is written to a unique temp name and then renamed into place. Assets run in dependency-level waves on the existing `JobSystem`. A failed import or cook writes nothing for that asset, and its dependents are marked `blocked`.
+
+**Choices I made**
+- The importers are `blob`, `text` (with `normalize_newlines`), and `json`. Texture, model, and audio importers belong to US-020 and US-021, so I did not build them.
+- A dependent of a failed asset is blocked during cook. During import, dependencies are not checked, because an import does not read them.
+- I did not use `write_file_atomic` for outputs. It always uses a fixed `<path>.tmp` name, so two parallel writers could tear each other's file. I left the core function unchanged.
+- LOD, meshlet, and pack output belong to US-023 and US-060. The PRD's FR-15 scope is covered only as far as import/cook/validate.
+
+**Verification**
+
+| Gate | Result |
+|---|---|
+| `ValidateVendor` (Windows, Linux) | 0, 0 |
+| Windows `win-dev` configure / `win-debug` build | 0 / 0 (0 `warning C`) |
+| Windows `win-unit` ctest | 17/17 |
+| Linux `linux-dev` configure / `linux-debug` build | 0 / 0 (0 warnings) |
+| Linux `linux-unit` ctest | 17/17 |
+| Linux GCC 9.4 `linux-gcc-debug` build / `linux-gcc-unit` | 0 (0 warnings) / 17/17 |
+| Linux `linux-asan` build / `linux-sanitize` | 0 (0 warnings) / 2 of 4 runs clean |
+
+- **ASan flake:** the other two sanitizer runs failed in the X11 input tests, which is the known XWayland cursor-capture flake from earlier stories. No run reported an ASan, UBSan, or LeakSanitizer finding.
+- **Windows binary:** runs 296 unit and 66 integration cases, all passing. The 15 converter integration cases are included.
+- **Not run:** `engine_bench --suite acceptance` (no harness exists yet, and the converter is not on a measured path). GPU and GUI checks (not applicable to this story). Release builds (the `core_assert_tests.cpp` issue from US-014 still blocks the Release test binary). GitHub CI.
+
+**Files**
+- New: `tools/asset_converter/` (CMake, two headers, three sources), `tests/src/converter_tests.cpp`, `tests/fixtures/converter/project/`, `docs/asset-converter.md`.
+- Changed: root `CMakeLists.txt`, `tests/CMakeLists.txt`, `tests/cli/CliContract.cmake` (the executable input is now `EXECUTABLE` instead of `ENGINE_TESTS`), `tasks/prd.json` (US-019 `passes: true`), `.ralph-tui/progress.md`.
+
+This is not a git repository, so I made no commits.
+
+<promise>COMPLETE</promise>

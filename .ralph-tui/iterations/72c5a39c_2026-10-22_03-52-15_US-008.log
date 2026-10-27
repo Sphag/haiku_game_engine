@@ -1,0 +1,439 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: US-008
+- **Task Title**: In-House Linux Windowing
+- **Description**: As a Linux user, I want a native window so that I can run the editor and game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T00:52:15.878Z
+- **Ended At**: 2026-10-22T02:24:08.609Z
+- **Duration**: 1h 31m 52s
+- **Input Tokens**: 1106
+- **Output Tokens**: 164686
+- **Total Tokens**: 165792
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD, the progress log, and the current state of the repo.
+[94m[Bash][0m List repo root and key planning files $ ls -la && echo --- && ls tasks .ralph-tui 2>/dev/null && echo --- && wc -l tasks/prd-open-world-engi...
+[94m[Bash][0m Read the progress log $ cat .ralph-tui/progress.md | head -400
+The Docs tools that just appeared aren't needed here; the user asked for code, not a document. Next I'll read the PRD sections that constrain this story and the existing windowing code.
+[94m[Bash][0m List PRD section headings $ grep -n "^#" tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m Inspect platform module and its public header $ find engine/platform tests/src docs cmake -type f | sort && echo --- && cat engine/platform/CMakeLis...
+[94m[Bash][0m Read PRD overview, quality gates, and early stories $ sed -n 1,135p tasks/prd-open-world-engine.md
+[94m[Bash][0m Read US-008 story and FR/Non-Goals/Technical/perf sections $ sed -n 136,148p tasks/prd-open-world-engine.md && echo ---- && sed -n 732,915p tasks/prd-open-world-...
+Now the existing windowing code, which I need to match for the Win32 contract, plus the environment's X11 and Vulkan availability.
+[94m[Bash][0m Read window API, unsupported backend, DPI header $ cat engine/platform/include/engine/platform/window.hpp && echo ---- && cat engine/platform/src/platf...
+[94m[Bash][0m Read slot table, event queue, window.cpp $ cat engine/platform/include/engine/platform/slot_table.hpp && echo ---- && cat engine/platform/inclu...
+[94m[Bash][0m Check X11 and Vulkan header availability and display env $ ls /mnt/d/dev/haiku_game_engine/third_party | head -50
+X11 headers aren't installed, which decides how the backend gets built. I'll check whether I can install them, what libraries exist, and whether the display works.
+[94m[Bash][0m Check X11 libs, sudo, apt candidates, display, toolchain $ clang++ --version 2>/dev/null | head -1
+No sudo, so I can't install X11 headers. The display is reachable through XWayland (WSLg, `DISPLAY=:0`). Next I'll read the Win32 backend for the contract I need to mirror, and the test and build wiring.
+[94m[Bash][0m Size check and read first part of Win32 backend $ wc -l engine/platform/src/win32/platform_win32.cpp engine/platform/src/event_queue.cpp tests/src/pla...
+[94m[Bash][0m Read rest of Win32 backend $ sed -n 260,472p engine/platform/src/win32/platform_win32.cpp
+[94m[Bash][0m Read test CMake, target helper, presets $ cat tests/CMakeLists.txt && echo ---- && cat cmake/EngineTargets.cmake && echo ---- && sed -n 1,80p ...
+Next, the Win32 test file (to mirror its style for X11) and the existing platform tests.
+[94m[Bash][0m Read first part of Win32 tests $ sed -n 1,120p tests/src/platform_win32_tests.cpp
+[94m[Bash][0m Read window tests header and test case list, main $ sed -n 1,60p tests/src/platform_window_tests.cpp && echo ... && grep -n "TEST_CASE" tests/src/platfo...
+I have the Win32 contract. Before designing the X11 side, I need to confirm which Xlib symbols are real exports (some Xlib names are macros), the Catch2 version, and whether the CI workflow sets up a display.
+[94m[Bash][0m Verify Xlib exports, Catch2 version, CI display setup $ which xwd import xdotool wmctrl xwininfo 2>&1 | head
+All the Xlib functions I need are real exports, so I can bind them at runtime without X11 headers. Catch2 3.16 has `SKIP`, which lets display-dependent tests report not-run instead of passing. Next I'll check the headless path and the existing Linux build state.
+[94m[Bash][0m Look for headless mode, build dirs, and windowing docs $ sed -n 1,60p docs/windowing.md
+The codebase has no headless mode yet, so "keep CPU headless available" means the CPU code paths must not depend on a window or display. Before changing anything, I'll get a Linux baseline for the gates.
+[94m[Bash][0m Run baseline Linux gates and record exit codes $ grep -c "warning" /tmp/us008/build.log
+The baseline build is running in the background. I'll keep reading (read-only) until it finishes, so I don't edit sources under it.
+[94m[Bash][0m Read remaining platform test cases $ sed -n 250,265p tests/src/platform_window_tests.cpp && echo ---- && sed -n 120,322p tests/src/platfo...
+The Win32 tests show the contract I need to match. Next I'll check whether the baseline run has finished.
+[94m[Bash][0m Check baseline progress logs $ tail -2 /tmp/us008/build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/us008/validate.log tail -3 echo "validate=$(cat /tmp/us008/validate.log >/dev/null 2>&1; echo)" ls -la /tmp/us008/ tail -2 /tmp/us008/cfg.log tail -2 /tmp/us008/build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check baseline progress logs $ tail -3 /tmp/us008/ctest.log 2>/dev/null
+
+[91m[Error: Exit code 1
+total 32
+drwxr-xr-x  2 max  max   4096 Oct 22 03:55 .
+drwxrwxrwt 58 root root 20480 Oct 22 03:55 ..
+-rw-r--r--  1 max  max      0 Oct 22 03:55 cfg.log
+-rw-r--r--  1 max  max     57 Oct 22 03:55 validate.log][0m
+[94m[Bash][0m Inspect background baseline job output and processes $ pgrep -fa "cmake|ninja" | head -5
+The baseline configure is still running. I'll wait on it with a Monitor loop rather than writing sources that the running build would pick up.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Notify when the baseline Linux gate run finishes $ echo "BASELINE_DONE"
+The monitor is armed; the baseline will report when it finishes. Meanwhile I'll write the new X11 files under `engine/platform/src/x11/`. CMake lists sources explicitly, so these files don't touch the running build.
+
+The design, decided from what I found:
+- **No X11 headers and no sudo.** I'll bind libX11.so.6 at runtime with `dlopen` and a minimal Xlib ABI declared in-house. This needs no `-dev` package, and a machine without libX11 or a display gets a clear `NoDisplay` error while CPU code keeps working.
+- **Vulkan surface handles** are exposed as `Display*`, `Window`, and screen, so the header stays free of OS types.
+
+I'll start with the ABI header.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/x11/xlib_abi.hpp[0m "#pragma once
+
+// The subset of the Xlib ABI used by the in-house X11 backend (US-008), for LP64 Linux. The Xlib headers are not
+// needed to build: libX11.so.6 is bound at run time with dlopen, so a m... (5338 chars)"
+Next, the loader that binds those symbols with `dlopen`/`dlsym`:
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/x11/xlib_abi.cpp[0m "#include "xlib_abi.hpp"
+
+#include <dlfcn.h>
+
+#include <cstring>
+
+namespace engine::platform::x11 {
+
+namespace {
+
+// Copies a symbol address into a function pointer without a cast that the pedantic war... (3223 chars)"
+The baseline finished. The `exit 1` on the background job is only `grep -c` finding zero warnings, so I'll read the actual logs to confirm each gate's status.
+[94m[Bash][0m Summarize baseline Linux gate logs $ grep -E "Test +#|100%" /tmp/us008/ctest.log | tail -4
+The Linux baseline is green: vendor validation, configure, debug build with 0 warnings, and 10/10 ctest. Next I'll confirm the Catch2 `SKIP` semantics and the logging signature before writing the backend.
+[94m[Bash][0m Check Catch2 SKIP and log/assert signatures $ grep -n "ENGINE_ASSERT" engine/core/include/engine/core/assert.hpp | head -3
+Catch2 `SKIP` marks a test as skipped rather than passed, which matches the "not-run" rule. Before writing the backend, I'll check the logging levels and the `Result` helpers.
+[94m[Bash][0m Check log levels and Result helper names $ grep -n "success\|failure" engine/core/include/engine/core/result.hpp | head -8
+Now the backend. It follows the Win32 structure: owner-thread assertions, generation-checked ids, a coalescing event queue, and the same event semantics.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/x11/platform_x11.cpp[0m "// In-house X11 windowing (US-008). Talks to the X server through the Xlib subset in xlib_abi.hpp; no SDL or GLFW.
+//
+// X11 has no modal size loop: the window manager resizes a window without holding... (17712 chars)"
+Next I'll update the shared headers: a `NoDisplay` error code and an `XlibWindowHandles` type next to the Win32 handles.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/window.hpp[0m edit: "struct WindowInfo {" → "// Native handles for Xlib (X11 backend). VkXlibSu..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/window.hpp[0m edit: "    NotFound,          // the id is stale or was n..." → "    NotFound,          // the id is stale or was n..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/window.cpp[0m edit: "        case PlatformErrorCode::NotFound:
+        ..." → "        case PlatformErrorCode::NotFound:
+        ..."
+Now the public `Platform` header, the Win32 backend, and the unsupported-OS stub need `xlib_handles`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/platform.hpp[0m edit: "    // Selects per-monitor DPI awareness for the p..." → "    // Selects per-monitor DPI awareness for the p..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/include/engine/platform/platform.hpp[0m edit: "    [[nodiscard]] core::Result<Win32WindowHandles,..." → "    [[nodiscard]] core::Result<Win32WindowHandles,..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/win32/platform_win32.cpp[0m edit: "core::Result<Win32WindowHandles, PlatformError> Pl..." → "core::Result<Win32WindowHandles, PlatformError> Pl..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/platform_unsupported.cpp[0m edit: "core::Result<Win32WindowHandles, PlatformError> Pl..." → "core::Result<Win32WindowHandles, PlatformError> Pl..."
+Now the CMake wiring. Linux gets the X11 backend with `dlopen` support, and the unsupported stub stays for other systems.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/platform_unsupported.cpp[0m edit: "// Windowing for operating systems without an in-h..." → "// Windowing for operating systems without an in-h..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/CMakeLists.txt[0m edit: "# In-house windowing (US-007 Win32, US-008 X11). T..." → "# In-house windowing (US-007 Win32, US-008 X11). T..."
+I noticed `xlib_abi.cpp` uses `std::string` without including `<string>`. Fixing that now.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/platform/src/x11/xlib_abi.cpp[0m edit: "#include <cstring>
+
+namespace" → "#include <cstring>
+#include <string>
+
+namespace"
+Next, the tests. The existing "Unsupported on Linux" test is no longer true, so I'll restrict it to systems without a backend and add the `NoDisplay` name check.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_window_tests.cpp[0m edit: "    CHECK(to_string(PlatformErrorCode::NotFound) =..." → "    CHECK(to_string(PlatformErrorCode::NotFound) =..."
+Now the X11 test file. It drives real X windows through the same connection (XSendEvent for close, XResizeWindow, XSetInputFocus, and iconify), and it reports SKIP when no display or no window manager is available. The tests need a few Xlib functions beyond the backend's set, so they bind those locally with `dlsym`.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m "// X11 windowing against a real X server (XWayland or Xorg). These tests need DISPLAY to point at a running server.
+// Without one they report SKIP, which Catch2 counts as not-run rather than passed. ... (14981 chars)"
+I'll clean up a few things I wrote carelessly before building: a leftover no-op `XEvent`, a needless struct copy of `Api`, a `/ 1` in the expected size, and a missing `<cstring>` include.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    driver().XResizeWindow(display_of(*platform, w..." → "    // XResizeWindow takes device pixels, which is..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    driver().XSetInputFocus(display_of(*platform, ..." → "    driver().XSetInputFocus(display_of(*platform, ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    api.XFlush(display_of(*platform, second));" → "    x11::load_api(nullptr)->XFlush(display_of(*pla..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "#include <chrono>
+#include <cstdint>
+#include <cst..." → "#include <chrono>
+#include <cstdint>
+#include <cst..."
+Now the test CMake: the X11 tests are built only on Linux, with the backend's private include directory and `dl` for the test's own symbol binding.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt[0m edit: "# Win32 windows need a desktop session; their test..." → "# Win32 windows need a desktop session; their test..."
+Now I'll build the Linux debug preset with warnings-as-errors, which will show whether the new code compiles cleanly.
+[94m[Bash][0m Configure and build Linux debug preset $ grep -n "error" /tmp/us008/build2.log | head -40
+One compile error: `to_string` returns a `string_view`. Fixing the concatenation.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    skip_reason = engine::platform::to_string(crea..." → "    skip_reason = std::string(engine::platform::to..."
+[94m[Bash][0m Rebuild Linux debug after fix $ grep -n "error:\|warning:" /tmp/us008/build3.log | head -30
+The debug build is clean with no warnings. Now the real run: unit and integration suites with this WSL session's display (XWayland at `:0`).
+[94m[Bash][0m Run linux-unit ctest and integration suite with display $ "$B" --suite integration 2>&1 | tail -40
+Real X11 runs now: 24 passed, 2 skipped, and one failure. The failure is my test's assumption, not the backend: the resize goes from 1280 down to 900, so my `>` check was wrong. I'll fix that. The skips and the `BadMatch` error suggest there's no window manager here, so I'll check which window manager (if any) the display has.
+[94m[Bash][0m Check for a running window manager on the display $ ps -eo comm | grep -iE "weston|mutter|kwin|xfwm|openbox|metacity|marco|wm" | sort -u | head
+The display has a real window manager, "Weston WM" (WSLg's XWayland). So the two skips are a legitimate "window manager did not honour the request" outcome, and they will be reported as not-run. The `BadMatch` is a race in my test: it calls `XSetInputFocus` before the window manager has mapped the window, so the window isn't viewable yet. I'll make the test wait until the server reports the window viewable, and correct the resize expectation.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "struct DriverApi {
+    x11::Status (*XSendEvent)(x..." → "struct DriverApi {
+    x11::Status (*XSendEvent)(x..."
+The struct needs to be declared before `DriverApi` uses it, so I'll add the definition above.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "// Functions the backend does not need but the tes..." → "// Mirrors XWindowAttributes from <X11/Xutil.h> (x..."
+Next: bind `XGetWindowAttributes`, add a `wait_viewable` helper, use it in the focus and minimize tests, and fix the resize expectation.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "
+// Only the fields the tests read. Mirrors XWindo..." → "
+constexpr int kIsViewable = 2;  // map_state of a..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "        bind_symbol(library, "XSetInputFocus", api..." → "        bind_symbol(library, "XSetInputFocus", api..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "// Size the server reports for the window, read in..." → "// Waits until the server shows the window. The wi..."
+I introduced an unnecessary `const_cast` in `wait_viewable`. Cleaning that up, then the focus, minimize, and resize changes.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    const x11::Display* display = display_of(platf..." → "    x11::Display* display = display_of(platform, i..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    const WindowInfo after = info_of(*platform, wi..." → "    const WindowInfo after = info_of(*platform, wi..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    REQUIRE(platform->minimize_window(window).ok()..." → "    REQUIRE(wait_viewable(*platform, window));
+   ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    driver().XSetInputFocus(display_of(*platform, ..." → "    REQUIRE(wait_viewable(*platform, first));
+    ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    driver().XSetInputFocus(display_of(*platform, ..." → "    REQUIRE(wait_viewable(*platform, second));
+   ..."
+Rebuilding and re-running the integration suite:
+[94m[Bash][0m Rebuild and rerun integration suite with display $ "$B" --suite integration 2>&1 | tail -30
+A segfault now, in the minimize test. I'll look at the line it points to.
+[94m[Bash][0m Inspect the code at the reported crash line $ sed -n 140,156p tests/src/platform_x11_tests.cpp
+The crash is my mistake: `XGetWindowAttributes` writes the full `XWindowAttributes` struct, and my mirror stopped at `map_state`, so the call overran the stack buffer. I'll extend the mirror to the full layout.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "// Mirrors XWindowAttributes from <X11/Xutil.h> (x..." → "// Mirrors XWindowAttributes from <X11/Xutil.h> (x..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    int map_installed;
+    int map_state;
+};" → "    int map_installed;
+    int map_state;
+    long..."
+[94m[Bash][0m Rebuild and rerun integration suite $ echo "exit=$?"
+Integration is now 25 passed and 2 skipped, and the skips are real: this window manager doesn't iconify or focus the test windows. Those two paths would otherwise have no coverage here, so I'll add tests that exercise the backend's handling directly. One unmaps and maps a window (no window manager involved), and the other sends synthetic focus events to the window. Both are labelled as synthetic in their names.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "    int (*XGetWindowAttributes)(x11::Display* disp..." → "    int (*XGetWindowAttributes)(x11::Display* disp..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "        bind_symbol(library, "XGetWindowAttributes..." → "        bind_symbol(library, "XGetWindowAttributes..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/platform_x11_tests.cpp[0m edit: "TEST_CASE("A platform can be created again after t..." → "TEST_CASE("Unmapping and mapping a window report m..."
+The focus test uses `std::count_if`, so I need `<algorithm>`. Adding it and rerunning:
+[94m[Bash][0m Add algorithm include, rebuild and run integration suite $ grep -B2 -A6 "SKIPPED" /tmp/us008/integ.log | grep -E "^[A-Z]|SKIPPED|explicitly"
+Integration is now 27 passed and 2 skipped, with 278 assertions passing. The two skips are the real-window-manager minimize and focus tests; the synthetic tests cover that logic. (The "changed on disk" note is from my own `sed` edit adding `<algorithm>`.) Next, the full Linux/Clang unit gate:
+[94m[Bash][0m Run Linux unit ctest, then GCC configure and build $ grep -n "error:" /tmp/us008/gcc_build.log | head -5
+Two problems. GCC 9 doesn't synthesize `!=` from `==` under C++20, so I'll write those checks as `CHECK_FALSE(a == b)`. And the Clang ctest run has one failure I need to look at.
+[94m[Bash][0m Find the failing ctest entry details $ grep -n -B3 -A12 "FAILED:" /tmp/us008/ctest3.log | head -60
+The failing check is the viewability wait in the unmap test, and the suite takes 140 s, which is far too slow. Both point at the Weston window manager mapping windows asynchronously, with the 3 s wait sometimes too short. Before changing the timeout, I want measurements, so I'll time the suite and check how long a new window takes to become viewable.
+[94m[Bash][0m Time two integration runs to check flakiness $ done
+[94m[Bash][0m Identify which checks fail across runs $ grep -n "^[A-Z][a-z].*" /tmp/us008/run_1.log | head -60
+[94m[Bash][0m Read the failure details for the flaky checks $ sed -n 425,431p tests/src/platform_x11_tests.cpp
+Two separate issues:
+
+1. **Focus count (3 vs 2):** the real window manager also sends focus events, so an absolute count is wrong. I'll rewrite that test to check the sequence and that a grab-induced focus change emits nothing.
+2. **Viewability timeout:** I need the actual latency before choosing a value. I'll write a small probe outside the repo that measures create-to-viewable time under this window manager.
+[94m[Write][0m [95m/tmp/us008/probe/probe_map.c[0m "/* Measures how long a new X11 window takes to become viewable under the running window manager. Scratch tool, not part of the repo. */
+#include <dlfcn.h>
+#include <stdio.h>
+#include <time.h>
+#include... (2167 chars)"
+[94m[Bash][0m Compile and run the map-latency probe $ ./probe_map
+The probe maps in 2–5 ms, so the server isn't slow to map in isolation. The failure is specific to the test process, so I'll make `wait_viewable` report the last observed `map_state` in the failure instead of guessing. First, a quick check on the 140 s: was the integration suite that slow before my change?
+[94m[Bash][0m Compare baseline integration suite timing $ grep -n "Start\|Test #" /tmp/us008/ctest.log | head -3
+The baseline integration suite ran in 0.04 s, so the 140 s is entirely from my X11 tests. I'll timestamp the output to see which test takes the time.
+[94m[Bash][0m Timestamp integration output to locate slow tests $ done | grep -E "^[0-9.]+ [A-Z][a-z]|SKIPPED|FAILED" | head -60
+The timestamps show a roughly 17 s gap between two tests, so some waits are running to their full timeout. I'll add temporary timeout logging to find out which waits, then remove it.
+[94m[Bash][0m Add temporary timeout logging and run to locate waits $ grep -n "DBG\|SKIPPED\|FAILED\|^[A-Z][a-z].*$" /tmp/us008/dbg_run.log | head -40
+Only two timeouts occurred, which is about 6 s, so most of the 140 s is spent somewhere else. I'll timestamp the platform open, the waits, and the test-case boundaries to find the gap.
+[94m[Bash][0m Instrument timings and rerun integration suite $ grep -E "DBG|SKIPPED|FAILED|^[A-Z][a-z].*$" /tmp/us008/dbg_run2.log | head -80
+Now I have the picture: after one test finishes, there's a stall of about 135 s before the next test opens its display. The waits themselves are fine. The stall is in between, probably in the platform teardown (`XCloseDisplay` or the window destroy). I'll check for a tracing tool to confirm the blocking call directly.
+[94m[Bash][0m Check for debugger or tracer on the system $ cd /mnt/d/dev/haiku_game_engine && grep -n "DBG" /tmp/us008/dbg_run2.log | wc -l
+`strace` is available. I'll trace the run and look for the largest gap between syscalls, which should point at the blocking call.
+[94m[Bash][0m Trace run with strace and find the largest syscall gap $ 
+[94m[Bash][0m Show syscalls around the largest gap $ sed -n 320,345p /tmp/us008/st.log | cut -c1-220
+That's the cause. The NoDisplay test sets `DISPLAY=":65535"`, and Xlib's fallback TCP connection wraps to port 5999 on localhost, which silently drops packets, so `connect()` waits about 135 s before timing out. The backend isn't at fault, but the test is. I'll use a display number that refuses quickly, and I'll restore the file from before the temporary instrumentation.
+
+Plan for the remaining fixes in the test file:
+- `DISPLAY=":4321"` (refused fast on localhost, unlikely to be in use).
+- Rewrite the focus test to check the sequence rather than an absolute count.
+- Have `wait_viewable` return the last `map_state` so a failure states what the server reported.
+- Replace `!=` on value types with `CHECK_FALSE(a == b)` for GCC 9.
+[94m[Bash][0m Restore test file without debug instrumentation and list fix points $ grep -n "65535\|!= \|wait_viewable\|count_if" tests/src/platform_x11_tests.cpp
+I'll apply all the fixes in one scripted pass and then review the result.
+[94m[Bash][0m Apply test fixes: display, GCC comparisons, focus sequence $ }  ''' s=s.replace(old_tail,new_tail,1) open(p,'w').write(s) print("ok") EOF grep -n "wait_for(\*pla...
+That `wait_for(... return false)` would block for the full 3 s timeout. It's a fixed pump, so I'll give it its own short helper. I'll also make `wait_viewable` report the last state it saw.
+[94m[Bash][0m Add pump helper, return map state, rebuild $ grep -n "error:\|warning:" /tmp/us008/b7.log | head
+Something in my scripted edit corrupted the file: errors on lines 2–4 mean the top of the file is wrong. I'll look at the start of the file.
+[94m[Bash][0m Inspect the start of the corrupted test file $ grep -n "^// Waits until\|^int wait_viewable\|^bool wait_viewable\|^void pump_for" tests/src/platfor...
+I found it: the focus-test slice had its end index before its start (the unmap test sits between them in the file), so the replacement inserted the new text at position 0. I'll strip the inserted prefix by cutting everything before the original header comment, then redo the focus-test rewrite with a correct slice.
+[94m[Bash][0m Strip stray prefix, rewrite focus test body, rebuild $ grep -n "error:\|warning:" /tmp/us008/b8.log | head
+The script stopped before writing, so the file is unchanged and still has the stray prefix. I'll redo it with checks that print what they find instead of failing silently.
+[94m[Bash][0m Replace the focus test block cleanly and rebuild $ grep -n "error:\|warning:" /tmp/us008/b9.log | head
+The build is clean and the file starts with the correct header. Next I'll check for duplicated test cases, then run the integration suite and time it.
+[94m[Bash][0m Check for duplicate tests and run integration suite three times $ done
+Still about 140 s, and two runs have failures. I'll check whether the stall moved to the new display number and see which checks failed.
+[94m[Bash][0m Find failing checks and connect targets in the stall $ grep connect /tmp/us008/conn.log | head -5
+The connect stall is gone; the new display is refused immediately. The remaining failure is in the unmap/map test: after `WindowRestored` arrives, `minimized` is still true. I'll read that code path before deciding what's wrong.
+[94m[Bash][0m Read the unmap test and its failure output $ sed -n 20,30p /tmp/us008/r2.log
+The test does what it says, so the state must change again after `WindowRestored`: most likely the window manager unmaps the window a second time. My backend treats every unmap as minimize, which would make that a real backend issue. To confirm the event sequence rather than guess, I'll add temporary stderr tracing to the backend's event handler.
+[94m[Bash][0m Add temporary event tracing and rerun until the flaky case reproduces $ grep -c DBGEV /tmp/us008/dbgev1.log
+The tracing is in place and the failure reproduced in run 3. I'll look at the event sequence around the unmap test in the failing run.
+[94m[Bash][0m Show event trace for failing run $ done 2>/dev/null | head -90
+Tracing explains the focus failure. The real window manager sends its own focus events while the test is pumping during the "grab" phase. That's a test race, not a backend bug. I'll let the window manager settle before the grab phase. The unmap failure from the earlier run I haven't captured yet, so I'll loop the suite until it reproduces with the trace on.
+[94m[Bash][0m Settle the focus test and loop the suite five times $ done
+The loop is running long, which suggests the stall is still there somewhere. I'll wait for the background job to finish and then look at the per-run timings.
+[94m[Monitor][0m Notify when the five-run integration loop finishes $ echo LOOP_DONE
+[94m[Monitor][0m Notify when loop run 5 completes and summarize $ echo LOOP_DONE
+[94m[Monitor][0m Wait for loop run five to finish and summarize all runs $ echo LOOP_DONE
+[94m[Monitor][0m Placeholder check to confirm monitor delivery $ echo started
+I'm looping on monitors without progress. I'll check the loop's status directly instead.
+[94m[Bash][0m Summarize completed loop runs and check for running tests $ pgrep -fa "engine_tests --suite" | grep -v pgrep | head -3
+Every run still takes about 140 s and fails one to three checks, so I'm not done. I'll stop the loop and find the stall with `strace` again, since the earlier fix moved it.
+[94m[Bash][0m Trace again to find the remaining stall $ grep -n "connect(" /tmp/us008/st2.log | grep -v ECONNREFUSED | head -5
+
+[91m[Error: Exit code 144][0m
+The `pkill` pattern matched my own shell command and killed it (exit 144), so the strace never ran. I'll rerun it without that.
+[94m[Bash][0m Trace the integration run to locate the remaining stall $ grep "connect(" /tmp/us008/st2.log | grep -v ECONNREFUSED | head -5
+[94m[Bash][0m Show syscalls around the remaining stall $ sed -n 7315,7330p /tmp/us008/st2.log | cut -c1-200
+Found it: the stall is Xlib's TCP fallback. For `:4321` it tries `127.0.0.1:10321`, and in this WSL network stack that connect times out after 135 s instead of being refused, so changing the display number didn't help. `unix:4321` restricts Xlib to the Unix socket only, which fails at once. I'll use that in the test.
+[94m[Bash][0m Use unix-only display for the missing-display test and rerun $ grep -B12 "FAILED:" /tmp/us008/t1.log | grep -E "FAILED|cpp:[0-9]+:|^[A-Z][a-z]" | head -12
+Wall time is down to 11 s. One failure is left, in the focus test. I'll look at the exact check.
+[94m[Bash][0m Show the failing focus check and its source line $ sed -n 498,504p tests/src/platform_x11_tests.cpp
+The synthetic `FocusOut` does arrive. The real window manager then gives the window focus again, so the last focus event is `focused=true`, and my "last event" predicate never settles. I'll change the predicates to "saw a focus event with this value", which doesn't depend on what the window manager does afterwards.
+[94m[Bash][0m Use value-based focus predicates and rerun three times $ done
+Now line 524 fails because the window manager may have focused the window after my establish step, so my assumption of "unfocused at the grab check" doesn't hold. The grab check should assert "unchanged by grab events" and "no focus event emitted", both of which are independent of the window manager's state. I'll also look at line 421.
+[94m[Bash][0m Make grab check state-relative and inspect failing line 421 $ grep -A4 "421: FAILED" /tmp/us008/t4.log | head -6
+Line 421 is the real-window-manager focus test: the window stays "unviewable" (map_state 1) for the whole 3 s wait. That's the window manager's mapping, not the backend. I'll treat "the window manager did not show the window" as a SKIP in the two WM-driven tests, and keep the hard requirement in the synthetic unmap test, where the server state is all that matters.
+[94m[Bash][0m Skip WM-dependent tests when no window is shown, rerun four times $ done
+Four clean runs in a row: 27–28 pass and the rest are skips for the window manager. Now I'll remove the temporary tracing from the backend and confirm no debug code remains anywhere.
+[94m[Bash][0m Restore backend without tracing and check for debug leftovers $ echo "clean-check-done"
+Clean. Now the required Linux gates: Clang debug build and unit ctest, then the GCC configure, build, and unit ctest. I'll record the exit codes directly.
+[94m[Bash][0m Run Linux Clang and GCC build and unit gates $ grep "tests passed\|tests failed" /tmp/us008/g_gcc_ctest.log
+Both Linux compilers pass the debug build with zero warnings and the unit ctest. Next is the sanitizer preset. It's not strictly required for windowing, but the X11 path does raw memory handling and dlopen, so I'll run it in the background while I set up the Windows gates.
+[94m[Bash][0m Start sanitizer gates in background and locate Windows toolchain $ ls /mnt/c/Windows/Temp 2>/dev/null | head -5
+The Windows build cache points at VS 18 (MSVC 14.51), so the gate script will load that `vcvars64.bat`. I'll generate the script with CRLF line endings, following the approach the progress notes describe (inline `cmd.exe /c "call …"` fails on quoting), and log each step's exit code.
+[94m[Bash][0m Write Windows gate script with CRLF line endings $ ls "/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat" && py...
+
+[91m[Error: Exit code 1
+/mnt/c/Program Files/Microsoft Visual Studio/18/Community/VC/Auxiliary/Build/vcvars64.bat
+bat written][0m
+The `exit 1` came from my trailing `cat` on a status file that doesn't exist yet; the script was written and vcvars is present. I'll run the Windows gates in the background, since the MSVC build is long.
+[94m[Bash][0m Start Windows quality gates in background $ echo "win_gates_cmd_exit=$?" >> /tmp/us008/win_gates.out) & echo started
+While those run, I'll update the documentation. Here's the rest of `docs/windowing.md`, which needs a Linux section:
+[94m[Bash][0m Read rest of windowing doc and build doc Linux mentions $ grep -n "X11\|Linux\|Unsupported\|display" docs/build.md | head -20
+I'll update `docs/windowing.md`: the opening status line, the X11 backend and its differences from Win32, and the test list.
+[94m[Bash][0m Update windowing docs with the X11 backend $ print("ok") EOF grep -n "Linux/X11\|xlib" docs/windowing.md | head -5
+Now I'll check on the Windows gates and the sanitizer run.
+[94m[Bash][0m Check Windows gate and sanitizer progress $ cat /mnt/c/Windows/Temp/us008_gates.log 2>/dev/null | tail -3
+Both are still running (the ASan configure builds the DXC host tool, and validation hashes about 8,500 files). I'll wait on a monitor for the Windows run to finish.
+[94m[Monitor][0m Notify when the Windows gate run completes $ echo WIN_DONE
+While the Windows run continues, I'll check the sanitizer progress with a single read.
+[94m[Bash][0m Check sanitizer configure status $ tail -2 /tmp/us008/asan_cfg.log 2>/dev/null
+[94m[Monitor][0m Wait for Windows gate completion and summarize exit codes $ echo WIN_DONE
+[94m[Monitor][0m Notify once the Windows gate script exits $ echo WIN_DONE
+[94m[Bash][0m Check Windows gate output after a short wait $ ls -la /tmp/us008/ | tail -3
+
+[91m[Error: <tool_use_error>Blocked: sleep 45 followed by: cat /tmp/us008/win_gates.out tail -5 echo --- cat /mnt/c/Windows/Temp/us008_gates.log tail -3 ls -la /tmp/us008/ tail -3. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check current Windows gate and sanitizer output $ cat /tmp/us008/asan_status 2>/dev/null || echo "asan still running"
+Windows vendor validation passed; the configure step is running. I'll wait for the remaining Windows steps and the sanitizer run to complete.
+[94m[Monitor][0m Wait for Windows gates to finish and print exit codes $ grep -E "_EXIT|win_gates_cmd_exit" /tmp/us008/win_gates.out
+[94m[Monitor][0m Wait for sanitizer gate status file $ echo ASAN_STATUS_READY
+The sanitizer and Windows runs are still going. I'll use a single background wait that notifies me when both finish, rather than polling.
+[94m[Bash][0m Wait for Windows gates and sanitizer gate to both finish $ cat /tmp/us008/asan_status
+Both background waits are armed. The Windows gate and the sanitizer run will each report back when they finish, so I'll pause here until then.
+The Windows gates all exited 0. Before I trust that, I'll confirm the ctest run actually executed tests and the build had no warnings.
+[94m[Bash][0m Confirm Windows ctest ran and check build warnings $ cat /tmp/us008/asan_status 2>/dev/null || echo "asan still running"
+[94m[Bash][0m Get Windows ctest summary line and warning count $ grep -ci "warning" /tmp/us008/win_gates.out
+Windows is 10/10 with no warnings. The sanitizer run is the only one left, so I'll wait for it in the background.
+[94m[Bash][0m Wait for sanitizer gate to finish and read results $ echo ASAN_DONE
+While the sanitizer finishes, I'll write the progress-log entry and the build-doc verification row. The ASan result goes in once it arrives.
+[94m[Bash][0m Read the verification table in build docs $ sed -n 155,172p docs/build.md
+[94m[Bash][0m Add US-008 verification row to build docs $ print('ok') EOF
+[94m[Bash][0m Append US-008 entry to the progress log $ print('ok') EOF
+The new entry is in. I'll also add the reusable X11-binding pattern to the Codebase Patterns section at the top, then wait for the sanitizer.
+[94m[Bash][0m Add reusable X11 binding pattern to progress log $ print('ok') EOF
+[94m[Bash][0m Wait for sanitizer gate and report results $ echo ASAN_DONE
+The ASan run is still going. I'm waiting on the background notification before I report the final results.
+[94m[Bash][0m Read sanitizer gate results $ grep -E "engine_tests_integration" /tmp/us008/asan_ctest.log | tail -2
+The waiter exited early: the status file is written after configure, not after the build, so the sanitizer run is still in progress. I'll check the real state.
+[94m[Bash][0m Check whether the sanitizer build is still running $ ls /tmp/us008/asan_ctest.log 2>/dev/null || echo "no ctest log yet"
+The ASan build is still compiling the DXC host tool, which is slow. I'll wait for the actual `asan_ctest=` line this time.
+[94m[Bash][0m Wait for the sanitizer ctest result and summarize $ grep -c "warning:" /tmp/us008/asan_build.log
+The Windows and Linux gates are green. The sanitizer run is the one still open: its build is still compiling the DXC host tool, and I'll report it when it finishes.
+
+**Verified so far**
+- **Windows/MSVC** (VS 18, the cached toolset): `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit` 10/10 passed.
+- **Linux/Clang**: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` 10/10 passed.
+- **Linux/GCC 9.4**: `linux-gcc`, `linux-gcc-debug` (0 warnings), `linux-gcc-unit` 10/10 passed.
+- **X11 integration** on XWayland (WSLg `DISPLAY=:0`, window manager Weston): 27 pass and 2 skip. The skips are the minimize and focus tests that need the real window manager to act; it didn't, so they report not-run. Stable over repeated runs.
+
+**What I built**
+- An in-house X11 backend in `engine/platform/src/x11/`. It binds `libX11.so.6` at run time with `dlopen`, using an Xlib ABI subset I declared myself. No X11 headers or `-dev` package are needed, and sudo wasn't available to install them.
+- A missing library or display returns a new `NoDisplay` error with the reason. CPU code doesn't depend on a `Platform`, so headless use stays available.
+- Close, resize, minimize/restore, focus, UTF-8 titles, and non-resizable windows, mapped onto the Win32 event contract. Differences from Win32 are documented in `docs/windowing.md`. The main ones: DPI is read once at creation, and the modal tick never runs because X11 has no modal size loop.
+- `xlib_handles(id)` exposes the `Display*` and `Window` for Vulkan Xlib surfaces.
+
+**Interpretation I took:** "in-house X11 backend" means implemented directly against Xlib, with no SDL or GLFW.
+
+**Not verified, and why**
+- **Native X11 session:** not available in this environment; only XWayland was tested.
+- **GUI screenshot and visual check:** no application window exists in the repo yet.
+- **Vulkan surface creation** with the handles: the RHI doesn't exist yet.
+- **GitHub CI:** not pushed. The Linux CI job has no X display, so the X11 tests would skip there. Adding `xvfb` to the workflow would make them run; I didn't change CI.
+- **Benchmarks:** not applicable, since this change doesn't affect performance.
+
+**Test-harness issues I fixed along the way**
+- `DISPLAY=:N` for a missing display made Xlib fall back to TCP, which stalled about 135 s on this WSL network. The test now uses `unix:4321`, which fails at once.
+- `XGetWindowAttributes` writes the whole struct, so my partial mirror was overrun. It's now the full layout.
+- The real window manager maps and focuses windows asynchronously. Assertions now check "saw an event with value X" rather than the last event, and the WM-dependent tests skip when the WM doesn't act.
+
+**Files**
+- New: `engine/platform/src/x11/{xlib_abi.hpp,xlib_abi.cpp,platform_x11.cpp}`, `tests/src/platform_x11_tests.cpp`.
+- Changed: `engine/platform` CMake and headers, Win32 backend (`xlib_handles` returns Unsupported), `tests/CMakeLists.txt`, `platform_window_tests.cpp`, `docs/windowing.md`, `docs/build.md`, `.ralph-tui/progress.md`.
+- No git commits, per the workflow.
+That notification is the earlier monitor reporting the configure step, not the sanitizer result. The real completion is still tracked by the `b8aa4vzo7` waiter, so I'll check whether the build is progressing.
+[94m[Bash][0m Check sanitizer build progress $ pgrep -f "cmake --build --preset linux-asan" >/dev/null && echo "build still running" || echo "build...
+The sanitizer gate is still running. Configure passed and the build is at 26 of 27 steps, so `cmake --build` and the `linux-sanitize` ctest haven't finished yet. The `b8aa4vzo7` waiter will report the ctest result when it completes.
+
+Results so far, all from earlier in this task:
+- **Windows/MSVC**: validate, `win-dev`, `win-debug` (0 warnings), `win-unit` 10/10 passed.
+- **Linux/Clang**: validate, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` 10/10 passed.
+- **Linux/GCC 9.4**: `linux-gcc`, `linux-gcc-debug` (0 warnings), `linux-gcc-unit` 10/10 passed.
+- **X11 integration on XWayland**: 27 pass, 2 skip. The skips are the real window-manager minimize and focus checks, reported as not-run.
+
+Not yet verified: the ASan/UBSan ctest result, native X11, GUI screenshots, Vulkan surface creation, and GitHub CI.
+That's an old monitor from the earlier loop expiring with no events, so nothing has changed. I'll check whether the sanitizer run has finished.
+[94m[Bash][0m Check sanitizer gate status $ grep -E "tests passed|tests failed" /tmp/us008/asan_ctest.log 2>/dev/null || echo "ctest not finishe...
+The sanitizer ctest finished with one failure. I'll see which test failed and why.
+[94m[Bash][0m Find the failing sanitizer test and its error $ grep -n -B3 -A25 "FAILED\|AddressSanitizer\|runtime error" /tmp/us008/asan_ctest.log | head -60
+The ASan failure is the real-window-manager minimize test. It saw `WindowMinimized`, but by the time it checked the state, the window manager had already restored the window. That's the same window-manager race I hit before, now showing up under ASan's timing. I'll make the wait's predicate check the live state as well as the event, so the assertion runs at the same moment as the event.
+[94m[Bash][0m Locate the minimize wait predicate $ grep -n "has_event<WindowMinimized>(seen, window)" tests/src/platform_x11_tests.cpp
+[94m[Bash][0m Read the real-WM minimize wait block $ sed -n 386,398p tests/src/platform_x11_tests.cpp
+[94m[Bash][0m Fix minimize predicate, rebuild, run integration three times $ done
+Three clean runs on the normal build. Next I'll rebuild with the sanitizers and rerun the `linux-sanitize` ctest in the background.
+[94m[Bash][0m Rebuild sanitizer preset and run sanitizer ctest $ echo ASAN2_DONE
+While the sanitizer build runs, I'll rerun the Clang and GCC unit ctests, since the test file changed.
+[94m[Bash][0m Rerun Clang and GCC unit gates after the test change $ grep "tests passed\|tests failed" /tmp/us008/final_gcc.log
+[94m[Bash][0m Wait for the sanitizer rerun to finish $ grep -c "runtime error\|AddressSanitizer" /tmp/us008/asan_ctest2.log
+The rerun is in progress. I'll wait for its result before I update the docs and the progress log.
+[94m[Bash][0m Wait for sanitizer rerun completion $ grep -c "runtime error\|AddressSanitizer" /tmp/us008/asan_ctest2.log
+[94m[Bash][0m Show the sanitizer rerun failure details $ grep -n "test cases\|assertions:" /tmp/us008/asan_ctest2.log
+The sanitizer run now fails in the resize test: the 900×500 `ConfigureNotify` never arrived within 3 s. The resize request goes through the window manager, which may not have finished managing the new window yet. I'll make the test wait for the window to be viewable before resizing, the same precondition the WM-driven tests use.
+[94m[Bash][0m Locate resize test setup before the resize request $ ', i) seg_old=s[i:j] print(seg_old[-400:]) EOF
+[94m[Bash][0m Wait for viewability before resize, rebuild, run three times $ done
+Resize now skips in some runs, which means I'm losing coverage of resize. I'll check which tests skipped and why.
+[94m[Bash][0m List which tests skipped and their messages $ grep -B3 "SKIPPED:" /tmp/us008/f2_run3.log | grep -E "^[A-Z]"
+The window stays unviewable (`map_state 1`) for more than 3 s in some runs. That's XWayland/Weston delaying the window manager's mapping, not the backend. I'll give `wait_viewable` a 10 s budget so the skip only fires when the window manager really never shows the window, then measure how often it still skips.
+[94m[Bash][0m Extend viewability wait to 10 s and measure skips over five runs $ done
+[94m[Bash][0m Show the failure in run five and which test skipped on map state $ grep -B3 "map_state" /tmp/us008/f3_run3.log | grep -E "^[A-Z]|cpp:" | head -3
+The synthetic unmap test required viewability, and in this run the window never became viewable even after 10 s. That test doesn't need the window manager at all: the server's map state is enough for `UnmapNotify`/`MapNotify` to flow. I'll drop that precondition from the synthetic test and leave the WM-driven tests gated.
+[94m[Bash][0m Drop viewability precondition from synthetic unmap test and rerun five times $ done
+[94m[Bash][0m Show failures for the new runs $ done
+Now the synthetic test fails every time: the window manager re-maps the window right after a client unmap, so the state check races with the remap. A client-withdrawn window (`XWithdrawWindow`, which is the ICCCM way to hide a window without iconifying it) should stay unmapped, so the test is deterministic. I'll switch the synthetic test to withdraw.
+[94m[Bash][0m Switch synthetic unmap test to ICCCM withdraw $ print('ok') EOF grep -n "XWithdrawWindow(display" tests/src/platform_x11_tests.cpp
+I wrote a nonsense screen argument there. The screen should come from the window's handles, so I'll fix that and rebuild.
+[94m[Bash][0m Rebuild with withdraw and run integration five times $ done
+Withdraw doesn't deliver the `UnmapNotify` to the window itself (ICCCM sends it to the root), so this route is wrong too. I'll go back to `XUnmapWindow`, but make the assertions event-based: an event's presence in the log, not the window's state after the event. The window manager's remaps can still add events, but they can't invalidate the check.
+[94m[Bash][0m Make synthetic unmap test event-based and run five times $ done
+With the viewability precondition gone, the server doesn't deliver `UnmapNotify` to the window at all while the window manager hasn't mapped its frame. So the window manager's mapping is a real precondition for this test too. The right behaviour is to wait for it and skip if it never happens, with the event-based assertions after that.
+[94m[Bash][0m Restore viewability precondition with skip and run five times $ done
+Five clean runs in a row, with 2–3 skips that are all window-manager dependent. Last, the full gate set on the final test file: Clang unit, GCC unit, and the sanitizer run in the background.
+[94m[Bash][0m Run final Clang and GCC gates while ASan rebuilds $ grep "tests passed\|tests failed" /tmp/us008/last_gcc.log
+[94m[Bash][0m Wait for final sanitizer gate and summarize $ grep -E "test cases" /tmp/us008/asan_ctest3.log
+While the final sanitizer run goes, I'll correct the docs and progress log. The synthetic unmap test does depend on the window manager showing the window, and the pass/skip numbers need to match the final runs.
+[94m[Bash][0m Correct docs and progress log for final test behaviour $ print('ok') EOF
+[94m[Bash][0m Wait for final sanitizer gate result $ grep "test cases" /tmp/us008/asan_ctest3.log
+The final sanitizer run is still going. I'll report once it completes.
+[94m[Bash][0m Read final sanitizer gate results $ grep "test cases" /tmp/us008/asan_ctest3.log
+The final sanitizer run passed 10/10 with no sanitizer reports. I'll record that in the progress log, replacing the placeholder.
+[94m[Bash][0m Record final sanitizer result in progress log $ print('ok') EOF
+US-008 (in-house Linux X11 windowing) is implemented, and every required gate I could run passes. Native X11, GUI checks, Vulkan surface creation, and GitHub CI were not run.
+
+**Gate results (exit codes checked directly)**
+- **Windows/MSVC** (VS 18, the cached toolset): `ValidateVendor`, `win-dev`, `win-debug` (0 warnings), `win-unit` 10/10.
+- **Linux/Clang**: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), `linux-unit` 10/10.
+- **Linux/GCC 9.4**: `linux-gcc`, `linux-gcc-debug` (0 warnings), `linux-gcc-unit` 10/10.
+- **Linux ASan/UBSan**: `linux-asan` build and `linux-sanitize` 10/10, with no sanitizer reports.
+- **X11 integration** on XWayland (WSLg `DISPLAY=:0`, window manager Weston): 27 pass and 2–3 skip. Stable over 5 runs.
+
+**Not run, and why**
+- **Native X11 session:** this environment only has XWayland.
+- **GUI check and screenshots:** no application UI exists in the repo yet.
+- **Vulkan surface creation:** the RHI doesn't exist yet. The backend exposes the `Display*` and `Window` handles.
+- **GitHub CI:** not pushed. The Linux CI job has no X display, so the X11 tests would skip there. Adding `xvfb` to that workflow would run them; I didn't change CI.
+- **Benchmarks:** not applicable, since nothing here affects performance.
+
+**What I built**
+- An X11 backend in `engine/platform/src/x11/`. It binds `libX11.so.6` at run time with `dlopen`, using a minimal Xlib ABI declared in-house. No X11 headers or `-dev` package are needed. I read "in-house X11 backend" as: written directly against Xlib, with no SDL or GLFW.
+- A missing library or display returns a new `NoDisplay` error with the reason. CPU-only code doesn't need a `Platform`, so headless use stays available.
+- Close, resize, minimize/restore, focus, UTF-8 titles, and non-resizable windows follow the Win32 event contract. The differences are documented in `docs/windowing.md`. The main ones: DPI is read once at creation, and the modal tick never runs because X11 has no modal size loop.
+- `xlib_handles(id)` returns the handles for a Vulkan Xlib surface.
+
+**Test limitations**
+- The minimize and focus tests depend on the window manager, and skip when it doesn't act.
+- The synthetic unmap test needs the window manager to show the window first, and skips otherwise.
+- The synthetic focus test sends focus events and needs no window manager.
+
+The docs, progress log, and build verification table are updated. Nothing is committed.

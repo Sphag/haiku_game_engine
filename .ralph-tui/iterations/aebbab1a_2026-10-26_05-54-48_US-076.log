@@ -1,0 +1,38 @@
+# Iteration 811 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:54:48.740Z
+- **Ended At**: 2026-10-26T02:55:00.281Z
+- **Duration**: 11s
+- **Input Tokens**: 18
+- **Output Tokens**: 1538
+- **Total Tokens**: 1556
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes, benchmark sources, and git state $ git log --oneline | head -5
+[94m[Bash][0m Check mtimes of benchmark files and the recorded blocker $ grep -n -i "312,068\|312068\|frame budget\|p99" .ralph-tui/progress.md | tail -5
+US-076 is not complete, and I have not signaled COMPLETE. Nothing has changed since the last 30 or so status passes: the source and manifest files have the same mtimes, and `kWorkloadVersion` is still 1. I did not rerun the gates or append another identical progress entry.
+
+**What blocks acceptance**
+
+1. **Route-start placement and frame budget.** The `render_stress` scene's start pose on the manifest camera route sees only 312,068 of 2,000,000 triangles on the indexed path. Measured p99 frame time is 35–47 ms against a 16.7 ms budget. The fix is either:
+   - a placement change in the seeded generator, which bumps `kWorkloadVersion`, regenerates `workload_expected.json`, and updates the manifest hash, or
+   - an implementation fix (LOD or culling) so the existing scene meets budget.
+
+   The notes say PRD US-080 requires a missed budget to be fixed in the implementation first, and that workload reductions need your explicit agreement. Acceptance cannot pass on the current placement without one of those.
+2. **`full_1080` is unsupported** until the vendored FSR 2 permutation headers exist (see `project-fsr2-permutations-missing`).
+3. **Not run:** native Linux Vulkan GPU suite and `linux-gcc`. Both are environment gaps on this machine, and the Windows gates are a separate run from WSL.
+
+**What I need from you**
+
+Which route do you want for item 1: change the placement (workload contract, version bump), or fix the implementation (LOD/culling) with the current scene? Once you pick, I can do that change and then run the Windows and Linux gates, the `--backend` benchmark runs, and the screenshot and counter capture for the indexed, indirect, and meshlet paths.

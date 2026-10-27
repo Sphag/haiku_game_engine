@@ -1,0 +1,39 @@
+# Iteration 772 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:38:47.910Z
+- **Ended At**: 2026-10-26T02:39:00.418Z
+- **Duration**: 12s
+- **Input Tokens**: 24
+- **Output Tokens**: 1835
+- **Total Tokens**: 1859
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark code.
+[94m[Bash][0m Read progress log and benchmark tool state $ tail -n 80 .ralph-tui/progress.md && echo ---- && ls tools/benchmark tools/benchmark/src 2>/dev/null...
+[94m[Bash][0m Find US-076 details in PRD $ grep -n "US-076" -A60 tasks/prd-open-world-engine.md | head -150
+The log shows this story has been blocked on the same user decisions for many passes. I'll check whether anything changed since the last recorded status.
+[94m[Bash][0m Check mtimes of benchmark sources and latest artifacts $ ls -t artifacts/bench 2>/dev/null | head -3
+US-076 is not complete, and I did not emit the completion signal. Nothing has changed since the last recorded status, so I made no edits and ran no gates or benchmarks this pass.
+
+The story cannot pass its acceptance criteria on the current tree, and the blockers need your decision:
+
+1. **Route-start triangle floor and frame budget fail.** The `render_stress` start frame has 312,068 submitted triangles against the contract's 2,000,000, and p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing the count means changing the seeded placement, which bumps `kWorkloadVersion` (currently 1), regenerates `benchmarks/workload_expected.json`, and updates the manifest hash. The PRD (US-080) reserves contract changes for a user decision, so I did not make it.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated permutation headers, so that profile cannot run. Choosing how to vendor them is your call.
+3. **Native Linux Vulkan GPU and linux-gcc are not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+Two decisions would unblock this:
+- Do you approve the placement/workload change in item 1? If yes, I'll make it and rerun the indexed, indirect, and meshlet paths on both profiles.
+- If you do not approve it, should a failing measured run close US-076 as "measured, failed"? The acceptance criteria would still not pass.
+
+I also did not append another status entry to `.ralph-tui/progress.md`, because the last 20 or so entries repeat the same blockers.

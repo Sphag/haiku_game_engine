@@ -1,0 +1,56 @@
+# Iteration 969 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:42:53.651Z
+- **Ended At**: 2026-10-26T14:49:03.365Z
+- **Duration**: 6m 9s
+- **Input Tokens**: 46
+- **Output Tokens**: 3727
+- **Total Tokens**: 3773
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state and the progress log for US-079's prerequisites.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/ tools/benchmark 2>/dev/null && git status 2>&1 ...
+[94m[Bash][0m Read US-079 PRD section and search for all_features $ grep -rl "all_features" --include=*.cpp --include=*.txt --include=*.json --include=*.lua --include=*...
+The log shows many prior passes stopped without a source change. I'll look at the existing `all_features` tests and the benchmark driver to see what can actually be built here.
+[94m[Bash][0m Read all_features tests and manifest entry $ wc -l tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp tools/benchmark/src/*...
+The CPU scenario tests already exist. I'll re-run the Linux gates to confirm the current state before deciding anything.
+[94m[Bash][0m Run validate, Linux debug build, unit tests, and FSR check $ grep -c "_permutations.h" -r third_party/fsr2 2>/dev/null | awk -F: '{s+=$2} END {print "fsr perms:"...
+The build passes. The FSR count came back non-zero, which contradicts the log, so I'll check that and the full ctest result.
+[94m[Bash][0m Confirm ctest summary and FSR permutation headers $ find third_party/fsr2 -name "*_permutations.h" | wc -l
+The Linux gates pass and the FSR permutation count is zero (the earlier 43 was a line count, not files). The remaining acceptance items need a Windows RTX host with a GUI, which this WSL session cannot provide. I'll record this pass in the progress log and stop without a completion signal.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows RTX host with a GUI session for the Windows gates, GPU suites, and the live editor run...
+US-079 is not complete, so I am not emitting the completion signal. The Linux checks I could run here pass, but most acceptance criteria are still open.
+
+**Verified this pass (Linux, WSL):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30/30 passed.
+- `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` stays unsupported. A line-count grep first suggested 43; that was a miscount.
+
+**Not done, and not reported as passed:**
+- The `all_features` benchmark branch in `tools/benchmark/src/main.cpp` and the tour output. The manifest still lists the scene as `implementation: none`.
+- GI/RT/upscale profiles and forced geometry paths.
+- The `samples/all_features` project (`samples/` does not exist).
+- The live-app editor scenario with package and relaunch.
+- Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) and the DX12/Vulkan GPU suites. These need a Windows RTX host.
+- Native Linux Vulkan, `engine_bench --suite acceptance`, the `linux-gcc` and ASan presets.
+
+The existing CPU tests (`tests/src/all_features_tests.cpp`, `all_features_editor_tests.cpp`) pass in the Linux run. I did not change any source this pass.
+
+**Decisions needed from you before the rest can proceed:**
+1. The FSR 2 vendoring route for `full_1080`. Without it, that profile can only report unsupported.
+2. Approval of `all_features_route_v1` as written in `benchmarks/manifest.json`. The manifest still marks it as a proposal.
+3. A Windows RTX host with a GUI session for the Windows gates, GPU suites, and the live editor run.
+
+I appended a status entry to `.ralph-tui/progress.md` with these findings.

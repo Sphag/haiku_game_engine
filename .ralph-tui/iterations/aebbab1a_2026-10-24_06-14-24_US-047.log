@@ -1,0 +1,43 @@
+# Iteration 107 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:14:24.224Z
+- **Ended At**: 2026-10-24T03:15:05.030Z
+- **Duration**: 40s
+- **Input Tokens**: 48
+- **Output Tokens**: 6610
+- **Total Tokens**: 6658
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing terrain code to see what US-047 already has.
+[94m[Bash][0m Read progress log and locate terrain sources $ grep -rl "terrain" --include=*.cpp --include=*.hpp --include=*.txt . | grep -v third_party | head -4...
+The log shows US-047 stuck at Partial across 27 passes, with the splat draw-path change never started. I'll read the Windows gate notes and the draw-path code before deciding how much to attempt.
+[94m[Bash][0m Read Windows gate memory and draw-path code $ cd /mnt/d/dev/haiku_game_engine && sed -n 420,480p engine/render/src/scene_renderer.cpp && sed -n 26...
+The next step is the terrain-only splat binding. Before editing the shared draw path, I'll check whether `PipelineDesc` can take a second vertex binding and how the terrain mesh carries splat weights.
+[94m[Bash][0m Inspect RHI vertex bindings and splat plumbing $ sed -n 690,740p engine/render/src/scene_renderer.cpp
+The RHI looks like it supports a single vertex binding per pipeline, which would make the "slot 2" plan from earlier passes need RHI changes in both backends. I'll confirm that in the backends before recording it.
+[94m[Bash][0m Check backend vertex binding support $ sed -n 240,285p engine/rhi/include/engine/rhi/types.hpp
+Confirmed: the RHI has only slot 0 (vertex) and slot 1 (instance). The "slot 2" plan in earlier passes would need new binding support in both DX12 (`dx12_pipeline.cpp`) and Vulkan (`vulkan_device.cpp`). I'll record that correction in the progress log so the next pass doesn't repeat it.
+[94m[Bash][0m Locate progress log sections $ tail -c 200 .ralph-tui/progress.md | od -c | tail -3
+[94m[Bash][0m Append re-check entry and pattern to progress log $ python3 - <<'EOF' p = ".ralph-tui/progress.md" s = open(p, encoding="utf-8").read() pattern = "## Co...
+US-047 is not complete, so I'm not signalling COMPLETE. The terrain splat shading is still unbuilt, and the story's acceptance needs it plus GPU and gate runs I haven't done.
+
+**What I found**
+- The CPU runtime, render bridge, and static-path GPU fixture from earlier passes are in place. I did not re-run the gates this pass, since no source changed.
+- The approved splat plan from the previous 27 passes assumed a "slot 2" vertex binding. The RHI doesn't have one. `PipelineDesc` has only slot 0 (vertex) and slot 1 (instance), and both the DX12 and Vulkan backends build exactly those two. A slot-2 splat would need new binding support in both backends.
+
+**Decision for you**
+- Option A (recommended): interleave the four splat floats into a terrain-only vertex stride on slot 0. This needs no RHI change, but it touches the opaque and shadow pipelines (the shadow pipeline must use the same stride) and `scene.hlsl`.
+- Option B: add a two-slot RHI extension in `dx12_pipeline.cpp` and `vulkan_device.cpp`.
+
+I recorded this in `.ralph-tui/progress.md`: a re-check 28 entry, plus a Codebase Patterns line on the two-slot limit. I didn't start the shared draw-path edit. Once you choose A or B, the next steps are the shader branch, the DX12 and Vulkan splat, shadow, and RT fixtures, the `engine_bench` terrain workload, and the Windows and Linux gate batches.

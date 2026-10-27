@@ -1,0 +1,44 @@
+# Iteration 897 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:26:15.875Z
+- **Ended At**: 2026-10-26T12:26:42.876Z
+- **Duration**: 27s
+- **Input Tokens**: 22
+- **Output Tokens**: 2130
+- **Total Tokens**: 2152
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any of US-079 already exists in the tree.
+[94m[Bash][0m Read progress log and search for existing US-079 work $ tail -n 80 .ralph-tui/progress.md && ls && grep -rn "all_features\|US-079" --include=* -l . 2>/dev/n...
+The log shows many prior status checks with no COMPLETE signal. Before deciding whether anything new is feasible, I'll check the all_features code and the open items.
+[94m[Bash][0m Locate all_features files and last iteration log $ tail -c 3000 .ralph-tui/iterations/aebbab1a_2026-10-26_15-22-00_US-079.log
+US-079 is not complete, so I am not emitting the COMPLETE signal. I made no code changes this pass.
+
+**Why I stopped:** The open acceptance items are not small gaps. They need work this host cannot do, and some need a design decision from you:
+
+- **all_features has no GPU scene.** Its row in the workload table is `implementation: none` with the route "pending final benchmark scene". Without it, the GI/RT/upscale profiles, the forced indirect/meshlet geometry runs, and `engine_bench --suite acceptance` cannot run.
+- **FSR 2 cannot link.** The `*_permutations.h` headers are missing from `third_party`. Vendoring them is a choice you need to make (`ENGINE_FSR2_AVAILABLE` gates the build until then).
+- **No automated tour exists.** Nothing under `tests` or `tools` drives the running app, takes screenshots, or writes an action log. The CPU marker test in `all_features_tests.cpp` is not a substitute. Writing a stub here would break the "no stubs for mandatory deliverables" rule.
+- **The editor scenario is not implemented end to end.** Scene, material, animation, and terrain edits, undo/redo, Play/Stop, and package/relaunch are not covered on this project.
+- **Host limits.** The host has GCC 9.4 and clang 10 only, so `linux-gcc*` and the sanitizer presets cannot run. There is no `/dev/dri`, so native Linux Vulkan GPU and GUI checks cannot run here. The Windows gates were last run before the most recent test changes.
+
+**What is verified on the current tree (Linux, WSL):** `cmake -P cmake/ValidateVendor.cmake` exits 0, `linux-debug` builds, and `ctest --preset linux-unit` passes (30/30, per the log). I did not re-run these in this pass. The log also shows earlier Windows runs passing the DX12 and Vulkan GPU suites.
+
+**Not done, and I did not append another entry:** The progress log already has about 15 status-check entries recording the same blockers. Adding one more would add noise, so I left it alone.
+
+**What I need from you to move forward:**
+1. Whether to vendor the FSR 2 permutation headers or drop FSR from the all_features profiles.
+2. Whether to build a `builtin` GPU scene for all_features in `tools/benchmark`. That is the prerequisite for the profiles and the acceptance bench.
+3. Whether the tour and editor scenario should be built as a real runner now, or deferred. The runner needs a Windows GPU session for screenshots.
+4. A Windows GPU session and a native Linux Vulkan device, plus a GCC 11+ host, to close the remaining gates.

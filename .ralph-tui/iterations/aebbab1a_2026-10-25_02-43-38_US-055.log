@@ -1,0 +1,38 @@
+# Iteration 394 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:43:38.190Z
+- **Ended At**: 2026-10-24T23:43:50.741Z
+- **Duration**: 12s
+- **Input Tokens**: 22
+- **Output Tokens**: 2181
+- **Total Tokens**: 2203
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-055 already exists in the tree and what the progress log says.
+[94m[Bash][0m Inspect repo layout, script module, and progress log $ tail -40 .ralph-tui/progress.md
+The progress log already has a US-055 entry marked Partial, with the `linux-gcc` gate as the only open item. I'll check whether a GCC 11+ toolchain now exists and whether sources changed since that entry.
+[94m[Bash][0m Probe GCC/Clang versions and recent source changes $ grep -n "linux-gcc" CMakePresets.json | head -5
+US-055 is not complete, so I'm not emitting the COMPLETE signal.
+
+**Status: Partial, blocked on one gate that this machine cannot run.**
+
+- **Implemented:** The Lua gameplay API is in the new `engine_script` module, built on vendored Lua 5.4.7. It covers entities, transforms, input, assets, physics queries, and events. Destroyed-entity access raises a controlled script error, and 15 headless unit cases cover stack balance, type errors, and Lua exceptions.
+- **Passing, per the last log entry (2026-10-25 US-055):**
+  - Linux: ValidateVendor, `linux-dev`, `linux-debug` build, `linux-unit` ctest, and `linux-asan` build plus `linux-sanitize` (22/22, no sanitizer reports).
+  - Windows: ValidateVendor, `win-dev`, `win-debug` build, and `win-unit`, built with MSVC `/W4 /WX`.
+- **Blocked:** The `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` gates. The only compilers here are GCC 9.4 and Clang 10, and Jolt needs GCC 11+. I re-checked `/usr/bin` and found nothing newer. The Linux/GCC CI job has to cover this gate. The story says not to report that OS as verified until its job succeeds.
+- **Unchanged this pass:** Nothing under `engine/`, `tests/`, or `cmake/` is newer than the last log entry, so I made no edits and did not re-run the gates.
+- **Not in scope for this story:** `engine_bench` (no harness until US-074). The story's acceptance criteria also list GPU, ASan, and benchmark items; the log notes these as not applicable or not run, and I did not re-check each one.
+
+To close the story, run `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` in the CI job or on a machine with GCC 11+. If they pass, the story can be marked complete.

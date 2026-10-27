@@ -1,0 +1,38 @@
+# Iteration 749 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:29:04.597Z
+- **Ended At**: 2026-10-26T02:29:21.720Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 2097
+- **Total Tokens**: 2119
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-076 already has in the tree.
+[94m[Bash][0m Inspect repo state, progress log, and existing US-076 references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -rn "render_stress\|US-076" --include=*.cpp --...
+The progress log shows US-076 blocked across many prior passes on user decisions. Before deciding anything, I'll check whether the tree has changed since the last recorded run.
+[94m[Bash][0m Check mtimes and latest US-076 progress headings $ grep -n "US-076" .ralph-tui/progress.md | head -3
+US-076 is not complete, and I did not make any changes or rerun gates in this pass. Nothing has changed since the last recorded run, so a rerun would only reproduce the same results.
+
+**What's blocked on you:**
+
+1. **Triangle floor and frame budget fail on the current placement.** `render_stress` places 312,068 of the required 2,000,000 triangles at the route start, and p99 frame time is 35–47 ms against a 16.7 ms budget. Fixing this changes the fixed benchmark contract: bump `kWorkloadVersion` (currently 1) and regenerate `benchmarks/workload_expected.json`. I won't change the contract without your approval. My recommendation is to approve the placement change, since the contract's own counts are the spec and the current generator misses them.
+2. **Whether a failing measured run closes the story.** The acceptance criteria can't pass on the current placement. Tell me whether to record the measured failure and close the story, or to hold it open until the workload is fixed.
+3. **`full_1080` is unsupported** until the vendored FSR 2 shader permutation headers exist. You need to choose a vendoring route for those.
+
+**Still not run, and not claimable as passed:**
+- Native Linux Vulkan GPU suite and benchmark (no usable Vulkan device under WSL).
+- `linux-gcc` (GCC 9.4 cannot build Jolt).
+
+Once you answer item 1, the change is small: bump the version, regenerate the expected file, rerun the eight `us076-*` benchmark combinations, and then the Windows and Linux gates. I have not appended another status-check entry to `.ralph-tui/progress.md`, since that would only repeat the same blockers.

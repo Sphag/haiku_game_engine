@@ -1,0 +1,39 @@
+# Iteration 736 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:25:14.586Z
+- **Ended At**: 2026-10-26T02:25:40.465Z
+- **Duration**: 25s
+- **Input Tokens**: 30
+- **Output Tokens**: 3527
+- **Total Tokens**: 3557
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Check progress log and existing benchmark code $ grep -rn "render_stress\|US-076" --include=*.cpp --include=*.hpp --include=*.md --include=*.json --i...
+The progress log shows 16 prior passes that each ended blocked with no rerun. Before adding another status note, I'll check whether the blocker is really a decision or a fixable bug in placement.
+[94m[Bash][0m Inspect placement code, latest runs, and contract triangle count $ grep -n -i "triangle\|2000000\|2,000,000" tasks/prd-open-world-engine.md | head -20
+The contract requires at least 2M triangles on the starting frame, and placement gives 312k. I need to see whether that gap is a placement bug or a real workload mismatch.
+[94m[Bash][0m Read instance placement code in workload generator $ sed -n 140,300p tools/benchmark/src/workload.cpp
+US-076 is not complete, and I did not make any changes or rerun anything in this pass. The 16 earlier passes all ended the same way, so I stopped there instead of adding another no-op status note to the progress log.
+
+**What is blocking it**
+
+1. **Start-frame triangle floor fails.** The contract requires at least 2,000,000 submitted triangles on the starting frame of the indexed path. The recorded runs submit 312,068. `place_instances` in `tools/benchmark/src/workload.cpp` scatters instances uniformly over the world, so few land in view at the route start. Raising the count means changing where instances are placed or where the route starts. That changes the workload digests, so `kWorkloadVersion` (currently 1) has to be bumped and `benchmarks/workload_expected.json` regenerated. The existing notes say that needs your approval, and I agree: it changes a fixed contract.
+2. **Frame budget fails.** The recorded p99 is 35–47 ms against a 16.7 ms budget. This is a measured result, not a harness bug, and no code change in this story fixes it. The eight `us076-*` runs exit 1 for this reason.
+3. **Not yet run:** `full_1080` is unsupported until the FSR 2 permutation headers exist (see the project-fsr2 memory). Native Linux Vulkan GPU runs and `linux-gcc` have not been run.
+
+**Decisions needed from you**
+
+- Approve a placement change with a `kWorkloadVersion` bump and regenerated expected digests, so the start frame meets the floor. If you approve, I'll make it and rerun the affected gates.
+- Decide whether the story closes as measured with the failing frame budget recorded, or stays open until the renderer meets it.

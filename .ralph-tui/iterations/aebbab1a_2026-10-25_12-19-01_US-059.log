@@ -1,0 +1,39 @@
+# Iteration 538 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T09:19:01.607Z
+- **Ended At**: 2026-10-25T09:19:20.180Z
+- **Duration**: 18s
+- **Input Tokens**: 18
+- **Output Tokens**: 2197
+- **Total Tokens**: 2215
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and save module status $ tail -80 .ralph-tui/progress.md 2>/dev/null | head -120
+[94m[Bash][0m Check tree changes since last progress entry and compiler versions $ g++ --version | head -1
+US-059 is not complete, so I'm not emitting the completion signal. The code and the gates I can run here all pass. One required gate, the Linux/GCC job, cannot run on this machine.
+
+**State of the tree**
+- No files under `engine`, `tests`, `cmake`, or the CMake presets have changed since the last progress entry, so the recorded results still apply.
+- The implementation is in `engine/save/` with 11 `[unit]` cases in `save_tests.cpp`. They cover component selection, stable GUIDs, format/version/CRC rejection, previous-save rotation, failed-write safety, script state, changed-cell round trips, and dirty layers.
+
+**Recorded results (from earlier passes today, not re-run in this one)**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` (no warnings under /W4 /WX), and `win-unit` 21/21 all passed.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, and `linux-unit` 22/22 all passed. The `linux-asan` build and `linux-sanitize` 22/22 also passed.
+
+**What blocks completion**
+- **`linux-gcc` preset, build, and `linux-gcc-unit`:** this needs GCC 11 or newer, because Jolt uses `__builtin_bit_cast`. The machine has only g++-9 (9.4) and clang++ 10. The apt route is closed on this image (focal has no gcc-11 or gcc-12), so this gate has to run on a machine that has GCC 11+.
+- **`engine_bench --suite acceptance`:** no benchmark target exists yet (US-074). The criterion applies only once the harness exists, so it is not a blocker for this story.
+- **Runtime save/load through a host:** that belongs to US-060, not to this story's criteria.
+
+I did not append a new progress entry. The existing notes already record these blockers, and repeating them adds nothing. The next step is a GCC 11+ run of the `linux-gcc` gate. Once that passes, the story can be closed.

@@ -1,0 +1,44 @@
+# Iteration 662 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:04:16.062Z
+- **Ended At**: 2026-10-26T02:04:34.250Z
+- **Duration**: 18s
+- **Input Tokens**: 26
+- **Output Tokens**: 2753
+- **Total Tokens**: 2779
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-076 is already partly implemented.
+[94m[Bash][0m Inspect progress log, git status, and benchmark tools $ grep -n "render_stress\|US-076" -r tools/benchmark | head -30
+[94m[Bash][0m Check for source changes since last benchmark and report statuses $ done
+[94m[Bash][0m Compare source and report modification times $ ls artifacts/bench/us076-dx12-indexed | head
+US-076 is not complete, so I'm not signalling COMPLETE. The render benchmark is built and measured, but the contract checks fail and two items need your decision.
+
+**Done and on record in `.ralph-tui/progress.md`:**
+- `render_stress` builds the table's counts from the seeded workload. `engine_workload --check` passes for all 4 scenes.
+- The indexed, indirect, and meshlet paths each have a DX12 and a Vulkan report under `artifacts/bench/us076-*`, with screenshots and submitted/visible counters.
+- The forced mesh-shader-off run falls back to indirect-indexed. It reports mesh shaders as `disabled: forced off`, not enabled.
+- Windows gates passed on the last full run: validate, win-dev, win-debug build, win-unit (29/29), GPU tests on DX12 (72) and Vulkan (73), and the release bench build.
+- Linux gates passed on the current tree: ValidateVendor, linux-dev, linux-debug build, and linux-unit (30/30).
+
+**Still open:**
+1. **Contract failures on placement.** Every indexed run shows 312,068 triangles at the route start against the 2,000,000 floor. p99 frame time is 35–47 ms against the 16.7 ms budget. The cause is that instances are spread uniformly over the 8192 m world, so the route start sees about 330 items. Fixing this changes the workload (bump `kWorkloadVersion`, regenerate `workload_expected.json`). The contract forbids reducing the workload, so I need your approval before changing placement. Without it, these runs stay as measured failures.
+2. **`full_1080` is unsupported.** FSR 2 permutation tables are missing, so only `native_1080` runs. "Both profiles" is only partly met.
+3. **Not run:** native Linux Vulkan GPU (WSL has no Vulkan device) and linux-gcc (GCC 9 cannot build Jolt).
+
+**Stale-report caveat:** six of the eight reports predate the last `render_stress.cpp` edit (04:15:43). I did not rerun them. The edit only touches the meshlet attach guard, which those paths never reach. The two `nomesh` reports postdate it.
+
+In this pass I only checked timestamps and report status. I did not rebuild, rerun any benchmark, or re-run the gates, and I did not append a progress entry, since the log already has eight identical status checks.
+
+Tell me whether to change instance placement (and bump the workload version), or to keep the contract as-is and record these as the measured result.

@@ -1,0 +1,38 @@
+# Iteration 795 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:50:22.401Z
+- **Ended At**: 2026-10-26T02:50:38.079Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1787
+- **Total Tokens**: 1809
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking what already exists for US-076 and where the progress log stands.
+[94m[Bash][0m Inspect repo state and progress log $ ls && tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src && grep -n "US-076\|render_stress"...
+The progress log has 30 prior status checks for US-076, all blocked on the same user decision. I'll check whether anything has changed since the last one before deciding what to do.
+[94m[Bash][0m Check mtimes and PRD decision line $ sed -n 715,730p tasks/prd-open-world-engine.md
+US-076 is still not complete, and I have not signaled COMPLETE. Nothing has changed since the last status check: the source, workload, and manifest mtimes are the same, and `kWorkloadVersion` is still 1. I made no edits and reran no gates this pass. I also did not append another no-op entry to `.ralph-tui/progress.md`, since the last 30 entries already record the same state.
+
+The blockers all need your decision or an environment I don't have:
+
+1. **Route-start triangle floor and frame budget (the main blocker).** At the route start, `render_stress` submits 312,068 triangles, but the acceptance criterion requires at least 2,000,000 on the indexed path. Frame time is p99 35–47 ms against a 16.7 ms budget. Fixing this means changing the fixed workload contract: the instance placement in the seeded generator, or the route-start camera pinned by SHA-256 in the manifest. Either change needs `kWorkloadVersion` bumped, `workload_expected.json` regenerated, and the manifest hash updated. PRD line 722 reserves that decision for you. Options:
+   - Approve a placement or route change, and I'll make it and rerun.
+   - Accept the failing measured run as the result, and I'll record it as failed rather than passed.
+2. **full_1080 profile.** It is unsupported until the vendored FSR 2 permutation headers exist. Choosing a vendoring route is your call.
+3. **Native Linux Vulkan GPU and linux-gcc runs.** Neither can run here: WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt. These need a native Linux machine or a newer GCC.
+
+Verified this session: `engine_workload --check benchmarks/workload_expected.json` reports the 4 scenes as matching, as in the last check. Per the progress log, the Linux debug build and `linux-unit` (30/30) passed in the most recent full run.
+
+Tell me which option to take on item 1, and I'll proceed from there.

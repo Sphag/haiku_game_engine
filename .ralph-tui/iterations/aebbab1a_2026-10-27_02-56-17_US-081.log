@@ -1,0 +1,48 @@
+# Iteration 1280 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T23:56:17.060Z
+- **Ended At**: 2026-10-26T23:56:38.186Z
+- **Duration**: 21s
+- **Input Tokens**: 36
+- **Output Tokens**: 3058
+- **Total Tokens**: 3094
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the README, and the PRD's constraints before deciding what US-081 needs.
+[94m[Bash][0m Inspect repo root and progress log tail $ tail -n 80 .ralph-tui/progress.md
+The log shows US-081 has been checked several times and held open for hardware and user decisions. Before deciding whether any work is left, I'll read the current acceptance doc and check whether the tree has changed since the last recorded gate run.
+[94m[Bash][0m Read acceptance doc, README headings, and files changed since gate run $ ls artifacts/reports/us081 | head -50
+The docs cover every acceptance-criteria area. What's left needs hardware or a user decision. I'll confirm the blockers haven't changed since the last pass.
+[94m[Bash][0m Re-check Vulkan device, compilers, FSR permutations, license $ ls LICENSE* COPYING* 2>&1 | head -2
+Nothing has changed since the last pass, so I won't re-run gates. I'll record this pass in the progress log.
+[94m[Bash][0m Append status entry to progress log $ no COMPLETE signal) - Re-checked blockers: `/dev/dri` absent, no g++-11 or clang++-14 (only GCC 9.4)...
+US-081 is not complete, so I am not emitting the COMPLETE signal. The documentation and the Windows and Linux gates that could run here are done. The rest needs hardware this machine doesn't have, or a decision only you can make.
+
+**Done and verified (from the recorded runs in `docs/acceptance.md` and `artifacts/reports/us081/`):**
+- Documentation: the README and `docs/` cover every area the story lists, including the acceptance map.
+- Windows: `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (29 of 29), `win-release`, and the DX12 and Vulkan GPU and editor suites on the RTX 5080.
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (30 of 30), the ASan/UBSan sanitize run, `linux-release`, and an offline clean-copy build.
+
+**Still open. Each one is recorded as incomplete, not passed:**
+1. **Native Linux Vulkan GPU suite.** `/dev/dri` is absent, so there is no native Linux Vulkan device. WSL cannot stand in for it.
+2. **Full acceptance benchmark.** The render, streaming, all-features, and physics acceptance scenes don't yet produce GPU timestamps, so runs report `incomplete`.
+3. **Visual editor smoke test.** Windows has a launch-only screenshot. The Linux run fails at start on WSL. Neither OS has an action-sequence smoke test.
+4. **linux-gcc.** Only GCC 9.4 is installed. The gate needs GCC 11 or newer, which Jolt requires.
+5. **FSR 2 permutations.** Zero `*_permutations.h` files are vendored. That is your choice of vendoring route.
+6. **License.** There is no LICENSE file. This is your decision.
+7. **Real sample-game package.** The editor suite builds and launches a package on both OSes, but a package from a real game has not been built.
+
+I re-checked these blockers in this pass and nothing had changed. I did not re-run any gates because no source, test, or build file changed since the last recorded runs. I appended a status entry to `.ralph-tui/progress.md`.
+
+To move forward, I need one of these from you: a native Linux machine with a Vulkan device and GCC 11+, access to the RTX 5080 for the acceptance benchmark, a decision on the FSR 2 vendoring route, and a license choice.

@@ -1,0 +1,40 @@
+# Iteration 140 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T05:52:39.827Z
+- **Ended At**: 2026-10-24T05:52:54.209Z
+- **Duration**: 14s
+- **Input Tokens**: 28
+- **Output Tokens**: 1806
+- **Total Tokens**: 1834
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the terrain memory note to see what's already done for US-047.
+[94m[Bash][0m Read progress tail, terrain memory, and repo layout $ ls
+The log shows many prior passes that each concluded US-047 is still Partial. Before I repeat that conclusion, I'll confirm the two blockers still hold on this host.
+[94m[Bash][0m Check GPU device, vulkaninfo, and engine_bench references $ grep -n "engine_bench\|US-074" tasks/prd-open-world-engine.md | head -5
+[94m[Bash][0m Search build and source for engine_bench and read US-074 $ sed -n 668,690p tasks/prd-open-world-engine.md
+US-047 is still **Partial**, and I'm not signalling COMPLETE. Nothing in the tree changed this pass, so I added no progress entry.
+
+The two open acceptance items are blocked by this host, and I re-confirmed both:
+
+1. **Native Linux Vulkan GPU run** (`engine_tests --suite gpu --backend vulkan`): `/dev/dri` is absent and `vulkaninfo` is not installed, so no Linux Vulkan device is available. This needs a native Linux host with a GPU.
+2. **Bench acceptance** (`engine_bench --suite acceptance` with the terrain workload): `engine_bench` has no CMake target, no source, and no preset under `CMakeLists.txt`, `CMakePresets.json`, `cmake/`, `engine/`, `tests/`, or `tools/`. It appears only in the PRD and progress notes. Its harness is US-074, which is not implemented.
+
+The rest is done and was verified in earlier passes:
+- CPU runtime, LOD and stitching, normals, four-layer splat, and tile-boundary, hole, and LOD fixtures.
+- Render bridge and the terrain-only 48-byte stride.
+- GPU fixtures on DX12 and Vulkan on the RTX 5080: stitched seams, shadow-map shape, and the traced terrain shadow.
+- Linux debug, unit, GCC, and gcc-unit gates, and the Windows gates.
+
+Repeating the gates would not change this status, so I stopped here. Closing US-047 needs a native Linux GPU host for the Vulkan run and the US-074 bench harness for the acceptance workload.

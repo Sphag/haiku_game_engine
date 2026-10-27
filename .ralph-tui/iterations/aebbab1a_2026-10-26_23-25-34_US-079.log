@@ -1,0 +1,43 @@
+# Iteration 1070 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:25:34.532Z
+- **Ended At**: 2026-10-26T20:25:57.806Z
+- **Duration**: 23s
+- **Input Tokens**: 22
+- **Output Tokens**: 2214
+- **Total Tokens**: 2236
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and search for all_features $ ls && tail -n 80 .ralph-tui/progress.md && grep -rl "all_features" --include=* . 2>/dev/null | grep ...
+[94m[Bash][0m Verify the remaining blockers for US-079 $ ls /dev/dri 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ (4) a runtime component catalog decision for `samples/all_features`. - Stop: no COMPLETE signal. ---...
+US-079 is not complete, so I am not emitting the COMPLETE signal.
+
+The blockers are the same as in the last several passes, and I re-checked them just now:
+
+- **No `all_features` project.** `samples/` does not exist, so there is no scene, Lua gameplay, UI, or save/load wiring for the combined scene.
+- **No automated tour, profiles, or forced geometry runs.** `benchmarks/manifest.json` still lists `all_features` as `implementation: none` (line 132). There is no runner in `tools/benchmark/src`.
+- **The route is unapproved.** `all_features_route_v1` is still a proposal, and the tour, profiles, and forced paths are defined against it.
+- **FSR 2 cannot link.** `third_party/fsr2` has no `*_permutations.h` files, so the `full_1080` profile stays unsupported unless you supply the headers or decide to drop it.
+- **No GPU or GUI session here.** `/dev/dri` is absent in WSL, so there is no native Linux Vulkan device. The Windows GPU and GUI editor run with package and relaunch needs a Windows session.
+
+What does pass: the Linux debug build, the unit suite (1032 cases), the editor suite (106 cases), and the integration suite (132 passed, 3 skipped). The integration suite includes the CPU all_features tests in `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp`. The Windows gates were recorded in earlier passes; I did not re-run them in this pass.
+
+I appended a status entry to `.ralph-tui/progress.md` and changed no source code.
+
+To unblock, I need four decisions from you:
+1. Approve `all_features_route_v1`, or tell me what to change.
+2. Supply the FSR 2 permutation headers, or confirm `full_1080` stays unsupported.
+3. Provide a Windows GPU and GUI session for the tour, profiles, forced paths, and live editor run.
+4. Decide the runtime component catalog for `samples/all_features`. The runtime catalog is empty in this build, so a scene with components is refused.

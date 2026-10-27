@@ -1,0 +1,220 @@
+# Iteration 125 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:47:17.967Z
+- **Ended At**: 2026-10-24T04:47:54.995Z
+- **Duration**: 37s
+- **Input Tokens**: 50
+- **Output Tokens**: 6110
+- **Total Tokens**: 6160
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and git status $ tail -n 120 .ralph-tui/progress.md && git status --short | head -50
+[94m[Bash][0m Read PRD US-047 section and terrain files $ wc -l engine/world/src/terrain.cpp engine/world/include/*/terrain* 2>/dev/null
+
+[91m[Error: Exit code 1
+452:### US-047: Terrain Runtime
+453-**Description:** As an open-world author, I want terrain so that I can create large landscapes.
+454-**Depends on:** US-023, US-035, US-037, US-042, US-043.
+455-**Acceptance Criteria:**
+456-- [ ] Heightfield terrain is divided into tiles and supports LOD/stitching, normals, and splat blending of four materials.
+457-- [ ] Far LOD and detailed tiles have consistent boundaries; terrain participates in depth, shadows, and RT geometry in the full profile.
+458-- [ ] A fixture verifies tile boundaries, the absence of holes, and correct LOD switching.
+459-
+460-### US-048: World Partition Data
+461-**Description:** As a world author, I want spatial partitioning so that I can store and prepare large scenes.
+462:**Depends on:** US-017, US-018, US-047.
+463-**Acceptance Criteria:**
+464-- [ ] A world is described by grid cells with stable GUIDs, bounds, asset dependencies, and a separate always-loaded layer.
+465-- [ ] The converter prepares cell manifests and distant terrain LODs; an object on a boundary has a single owner.
+466-- [ ] Verify cross-cell references, moving an object across a boundary, and saving modified cells.
+467-
+468-### US-049: Asynchronous World Streaming
+469-**Description:** As a player, I want the world to stream as I move so that transitions between locations do not stop gameplay.
+470-**Depends on:** US-006, US-024, US-048.
+471-**Acceptance Criteria:**
+472-- [ ] The streaming manager schedules prefetch/load/activate/deactivate/unload with CPU IO/decode and GPU upload budgets.
+473-- [ ] Activation occurs at safe points; verify the common cell lifecycle with a render consumer and test subscribers for future physics/script adapters.
+474-- [ ] Rapid direction changes, teleport, cancellation, and missing cells do not cause use-after-free; measure transient residency.
+475-
+476-### US-050: Large-World Coordinates
+477-**Description:** As a player, I want stability far from the origin so that the open world does not jitter.
+478-**Depends on:** US-016, US-049.
+479-**Acceptance Criteria:**
+480-- [ ] Scene/world coordinates retain sufficient precision; rendering uses camera-relative floats.
+481-- [ ] Origin rebasing is consistent with streaming and temporal history; verify the common physics-adapter event contract with a test subscriber.
+482-- [ ] A route across rebasing boundaries preserves transforms, picking, and stable scene references; actual physics queries are connected and verified in US-053.
+483-
+484-### US-051: GPU Particles
+485-**Description:** As an effects author, I want a particle system so that I can add dynamic effects to the world.
+486-**Depends on:** US-037, US-039.
+487-**Acceptance Criteria:**
+488-- [ ] GPU emit/simulate/render supports lifetime, velocity, gravity, color/size curves, and textured billboards.
+489-- [ ] Provide alpha/additive modes, depth interaction, bounds, and indirect draw; resource overflow is bounded by a budget.
+490-- [ ] A seeded fixture is reproducible within one backend; pause, reset, and emitter deletion release resources.
+491-
+492-### US-052: Jolt World and Fixed Timestep
+493-**Description:** As a game developer, I want a physics world so that I can simulate rigid bodies.
+494-**Depends on:** US-002, US-014, US-016.
+495-**Acceptance Criteria:**
+496-- [ ] A Jolt adapter creates a separate world for each runtime scene and performs fixed updates at 60 Hz with interpolated render transforms.
+497-- [ ] Static/dynamic/kinematic bodies reference stable entity handles; callbacks are published through a safe queue.
+498-- [ ] Verify pause, the catch-up limit, and world closure without depending on the renderer.
+499-
+500-### US-053: Colliders, Queries, and Terrain Physics
+501-**Description:** As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+502:**Depends on:** US-047, US-049, US-050, US-052.
+503-**Acceptance Criteria:**
+504-- [ ] Box/sphere/capsule/convex/mesh/heightfield colliders support filters, triggers, raycasts, and shape casts.
+505-- [ ] Streamed terrain/scene cells add and remove collision geometry consistently with activation; premature unloading does not cause dynamic bodies to fall through.
+506-- [ ] Hit results preserve entity identity; tests cover filters, triggers, collider replacement, and queries before/after origin rebasing.
+507-
+508-### US-054: Character and Constraints
+509-**Description:** As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+510-**Depends on:** US-011, US-053.
+511-**Acceptance Criteria:**
+512-- [ ] The character controller supports movement, slope limits, steps, jumping, and moving platforms.
+513-- [ ] Provide fixed/hinge/distance constraints with parameters and safe deletion of connected bodies.
+514-- [ ] A fixture verifies stairs, slopes, triggers, and constraints after cell unload/reload.
+515-
+516-### US-055: Engine Lua API
+517-**Description:** As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+518-**Depends on:** US-011, US-015, US-024, US-053.
+519-**Acceptance Criteria:**
+520-- [ ] Integrate Lua through in-house C API bindings for entities/components, transforms, input actions, assets, physics queries, and events.
+521-- [ ] Accessing a destroyed entity produces a controlled script error; C++ pointers are not retained as unsafe user handles.
+522-- [ ] Headless tests verify stack balance, type errors, and Lua exceptions.
+523-
+524-### US-056: Lua Lifecycle and Reload
+525-**Description:** As a game creator, I want a controlled script lifecycle so that I can run and update gameplay.
+526-**Depends on:** US-025, US-049, US-055.
+527-**Acceptance Criteria:**
+528-- [ ] Script components invoke create/start/update/fixed_update/destroy in a documented order.
+529-- [ ] Errors are isolated to the affected script instance and shown in the console; reload preserves explicitly exported state or resets it according to settings.
+530-- [ ] Repeated Play/Stop and streaming leave no subscriptions or Lua references to destroyed worlds.
+531-
+532-### US-057: Audio
+533-**Description:** As a game creator, I want audio so that I can add sound to the game world.
+534-**Depends on:** US-024, US-056.
+535-**Acceptance Criteria:**
+536-- [ ] Provide WAV/OGG import, 2D/3D sources, a listener, attenuation, looping, streamed music, and master/music/SFX buses.
+537-- [ ] Lua controls playback; pause/world unload releases voices without audio-thread access to the ECS.
+538-- [ ] Offline mixing tests verify gain/pan/lifetime; native smoke tests check the device and clear behavior when it is unavailable.
+539-
+540-### US-058: Game UI
+541-**Description:** As a game creator, I want a game interface so that I can display a HUD and menus.
+542-**Depends on:** US-011, US-034, US-046, US-056.
+--
+646:**Depends on:** US-047, US-053, US-064, US-066.
+647-**Acceptance Criteria:**
+648-- [ ] Raise/lower/smooth/flatten and four-layer splat-paint brushes provide radius, strength, and falloff.
+649-- [ ] Editing across tile boundaries reconciles heights/normals, invalidates LOD/RT geometry, and safely updates the physics collider.
+650-- [ ] A stroke is one undo command; save/reopen and subsequent cooking reproduce the result.
+651-
+652-### US-072: World Partition Editor
+653-**Description:** As a world author, I want to see cells and residency so that I can manage a large level.
+654-**Depends on:** US-049, US-063, US-071.
+655-**Acceptance Criteria:**
+656-- [ ] Provide a cell map with states, load/pin/unload controls, and camera navigation to a selected cell.
+657-- [ ] Moving objects between cells preserves GUIDs, references, and dirty state; invisible cells do not lose changes.
+658-- [ ] A debug overlay shows streaming budgets and residency; the editor camera does not activate gameplay scripts outside Play.
+659-
+660-### US-073: Game Distribution from the Editor
+661-**Description:** As a game creator, I want to build a distributable game so that I can deliver it to users.
+662-**Depends on:** US-060, US-066, US-072.
+663-**Acceptance Criteria:**
+664-- [ ] Build Game runs validation, dependency closure, cooking, and packaging with progress and cancellation.
+665-- [ ] A native Windows build produces a Windows package, and a native Linux build produces a Linux package; cross-compilation is not promised.
+666-- [ ] The package includes shaders, runtime dependencies, settings, resource packs, and notices; verify launch from a clean directory.
+667-
+668-### US-074: Benchmark Harness
+669-**Description:** As a developer, I want reproducible measurements so that I can verify the performance contract.
+670-**Depends on:** US-032, US-060.
+671-**Acceptance Criteria:**
+672-- [ ] `engine_bench` uses fixed seeds, scenes, routes, profiles, warmup, duration, and repeat counts from versioned manifests.
+673-- [ ] Reports include raw frame timings, p50/p95/p99/max, CPU/GPU passes, residency, counters, and hardware/software metadata.
+terrain.cpp
+  330 engine/world/src/terrain.cpp
+  330 total][0m
+[94m[Bash][0m Read Windows gate run notes and locate batch scripts $ ls /mnt/d/dev/haiku_game_engine/*.bat /mnt/d/dev/haiku_game_engine/tools/*.bat 2>/dev/null
+
+[91m[Error: Exit code 2
+---
+name: reference-windows-gate-runs
+description: "How to run the Windows quality gates and the real-GPU suite from WSL for this repo (cmd.exe + .bat in the user's Temp dir)"
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: a4687e22-62cc-49f2-88b8-2ac41e53e24d
+  modified: 2026-10-22T22:06:46.509Z
+---
+
+Windows gates cannot run from WSL's toolchain. They run through `cmd.exe` on the Windows host, which is the same tree at `D:\dev\haiku_game_engine`.
+
+- Write a `.bat` that calls `vcvars64.bat` (VS 18 Community), `cd /d D:\dev\haiku_game_engine`, then runs each gate and prints `name=%ERRORLEVEL%` on its own line with no redirect. Copy it to `/mnt/c/Users/bucha/AppData/Local/Temp/` and launch from WSL as `cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\<name>.bat" > result.txt 2>&1`, then read the codes from `result.txt`.
+- The `.bat` needs CRLF line endings: after writing it from WSL, run `sed -i 's/$/\r/' <file>`.
+- Do not write exit codes with `echo name=%ERRORLEVEL%>> "%RES%"`. On 2026-10-22 that line printed a blank code and wrote no file, even with CRLF. The stdout capture above worked, and it is the only method checked so far.
+- On 2026-10-23 (US-017) the `echo step=%ERRORLEVEL%` lines did not reach the stdout capture, which held only `[exited with code 0]`. Use `set RC=%ERRORLEVEL%` then `(echo rc=%RC%)> %TEMP%\rc.txt` on its own line, and read the per-step logs from Temp.
+- Run one gate batch at a time. A second `cmd.exe` during a run makes both fail on file locks.
+- The Windows host has a real NVIDIA GeForce RTX 5080, so `engine_tests --suite gpu --backend dx12` runs there and is a valid GPU report. WSL and software adapters are not.
+- Check the logs, not only exit codes: a build log can be short when the build directory is already warm.
+- On 2026-10-23 (US-033) a relaunch while the first run was still going mixed both runs in one `*_rc.txt`, and the GPU suites ran a stale `engine_tests.exe`. Before relaunching, wait until `pgrep -f <bat name>` finds nothing, and delete the result file then. A failed build does not stop the batch, so the test steps after it run an old binary: check the build log before you trust `unit=0` or `gpu=0`.
+---
+name: feedback-windows-gate-overlap
+description: "Before launching a Windows gate or GPU batch from WSL, confirm no earlier cmd.exe batch is still running; a stale batch keeps running its GPU steps after a relaunch"
+metadata:
+  node_type: memory
+  type: feedback
+  originSessionId: 30fb1424-41dc-4e24-9498-83de33d6f9dd
+  modified: 2026-10-23T19:50:41.209Z
+---
+
+On 2026-10-23 (US-038) a relaunch of the Windows gate batch started while the first batch was still in its GPU step. Two batches shared
+the Temp result files, and the first one kept running a stale `engine_tests.exe`. The fix was to terminate the matching processes and relaunch.
+
+**Why:** the first batch had reported `build=2` (a compile error) and then went on to the GPU steps with the old binary, so its numbers
+looked like results of the new code.
+
+**How to apply:**
+- Before each launch, check for the batch by its own name in the process list (`ps -eo pid,args | grep <name>.bat`). Use a name that
+  does not also appear in the command you run to check.
+- To stop leftovers, use PowerShell `Get-CimInstance Win32_Process` filtered by command line, then `Invoke-CimMethod ... Terminate`. The
+  filter string also matches the PowerShell process itself, so use a pattern that the check command does not contain.
+- A build failure does not stop the batch. Read the build log before trusting `unit=` or `gpu_*=` lines.
+- Keep one background waiter per batch, and make it wait on the batch's done file with a bounded timeout. Repeated Monitors on the same
+  file re-deliver the same result many times.
+- 2026-10-23 (US-043) it happened again: I relaunched after the done file was written, but the batch's GPU steps were still running, so
+  the link failed with LNK1168 (`engine_tests.exe` locked) and the rc file mixed both runs. Check the process list after the done file,
+  not only the done file. `tasklist /FI` fails under WSL's `cmd.exe` quoting; run `cmd.exe /c tasklist` and grep, or run a `.ps1` file.
+  Kill a stale batch with `taskkill /PID <pid> /T /F` (the `/T` takes its children), then relaunch.
+
+See [[reference-windows-gate-runs]] for the batch template.
+- 2026-10-24 (US-045): `pgrep -f "us04.*gate.bat"` matched its own bash shell, because the pattern sat in the command line, so it looked like a stale batch. Check with `ps -eo pid,args | grep <name>.bat | grep -v grep` and a name that the check command does not contain.
+reports][0m
+[94m[Bash][0m Read the RT hill fixture $ sed -n 420,520p tests/src/render_terrain_gpu_tests.cpp
+[94m[Bash][0m Compare RT fixtures and renderer traced-instance code $ grep -n "ray_traced_instances\|traced()" engine/render/src/scene_renderer.cpp | head -20
+[94m[Bash][0m Compare static RT shadow fixture setup to terrain $ sed -n 120,190p tests/src/render_terrain_gpu_tests.cpp
+[94m[Bash][0m Inspect terrain vertex shader and traced load in scene.hlsl $ grep -n "VSTerrain\|LoadTraced\|MakeVertex\|SV_Position\|splat" engine/render/shaders/scene.hlsl | h...
+[94m[Bash][0m Read traced shadow load and pixel shader call sites $ sed -n 1136,1146p engine/render/shaders/scene.hlsl
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: the same blocker as re-checks 34 to 4...
+US-047 is not complete, so I am not emitting the completion signal. I made no source changes this pass. I only appended a re-check entry to `.ralph-tui/progress.md`.
+
+**Where it stands**
+- **Done in the tree:** tile splat stride, terrain pipelines, splat shading, tile coverage/picking/depth/LOD-seam fixture, the 4-frame shadow-map check, and a CPU traced-shadow test. The last full Windows batch passed the gates and the GPU suites except the traced-shadow case.
+- **Failing:** the GPU ray-traced shadow for terrain. On DX12 and Vulkan the RT-on frame shows `darkened 0`, with no validation messages. The CPU reference on the same tile geometry does shadow the ground, so the fault is on the GPU side. The lit pass and terrain vertex stage match the static-mesh path when I read them again, so I could not find it by reading.
+- **Blocked:** `engine_bench --suite acceptance` does not exist in the tree (it is US-074), so the performance gate cannot close. That means COMPLETE cannot be reached even after the RT fix.
+- **Not run:** the Linux native Vulkan GPU suite, because this host has no usable Vulkan device.
+
+**What would move it forward**
+1. On the Windows host, read back `RtShadow` for the hill frame, or count primary-ray misses and shadow hits on the GPU. This needs a test-only accessor for the RT shadow target first. The memory notes describe the batch route.
+2. Decide whether US-074 should be pulled in ahead of this story, or whether the performance criterion is deferred. This is your call, since the PRD does not list US-074 as a prerequisite.

@@ -1,0 +1,141 @@
+# Iteration 640 Log
+
+## Metadata
+
+- **Task ID**: US-074
+- **Task Title**: Benchmark Harness
+- **Description**: As a developer, I want reproducible measurements so that I can verify the performance contract.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T22:37:59.187Z
+- **Ended At**: 2026-10-25T23:01:06.368Z
+- **Duration**: 23m 7s
+- **Input Tokens**: 362
+- **Output Tokens**: 84207
+- **Total Tokens**: 84569
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and existing bench references $ grep -rl "engine_bench" --include=*.txt --include=*.cmake --include=*.cpp --include=*.json --include...
+[94m[Bash][0m Locate benchmark requirements and tool layout $ ls artifacts
+[94m[Bash][0m Read US-074 and benchmark contract sections of PRD $ sed -n 790,930p tasks/prd-open-world-engine.md
+[94m[Bash][0m Inspect tool CMake and test layout $ ls tests/src | grep -i main
+[94m[Bash][0m Inspect runtime, CLI, and core headers $ ls engine/core/include/engine/core | head -80
+[94m[Bash][0m Read existing performance contract and clock headers $ cat tests/cli/CliContract.cmake | head -60
+[94m[Bash][0m Check json, hashing, timestamp, and test CMake helpers $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md | ...
+[94m[Bash][0m Read GPU probe helper, hash, file IO, and RHI timestamps $ grep -n "timestamp" -i engine/rhi/include/engine/rhi/*.hpp | head -5
+[94m[Bash][0m Read GPU probe code and RHI device API $ grep -n "struct Capabilities" -A25 engine/rhi/include/engine/rhi/capabilities.hpp | head -40
+[94m[Bash][0m Check hashing, device caps, and unit types $ grep -n "class\|Units\|Milliseconds" engine/core/include/engine/core/units.hpp | head -20
+[94m[Bash][0m Locate hashing helper and capability report fields $ cat engine/editor/CMakeLists.txt | grep -n "sha\|hash" -i | head
+[94m[Bash][0m Find ContentHash API and create_device declaration $ grep -rn "create_device(" engine/rhi/include | head -3
+[94m[Bash][0m Check test tags, Path API, and first-party config helper $ grep -rn "ENGINE_TEST_FIXTURE_DIR\|SKIP_UNIT" tests/src/pack_tests.cpp | head -2
+[94m[Bash][0m Check Result, Path, and suite APIs $ grep -n "to_string\|detail" engine/core/include/engine/core/path.hpp | head -3
+I have enough context to build this. Writing the versioned manifest first.
+[94m[Bash][0m Write versioned benchmark manifest $ print('ok')"
+Now the library: manifest parsing, measurement and contract evaluation, and the report and CLI.
+[94m[Bash][0m Write benchmark library headers $ }  // namespace engine::bench EOF echo done
+Headers are in place. Next, the manifest parser.
+[94m[Bash][0m Write manifest parser implementation $ }  }  // namespace engine::bench EOF echo ok
+Now measurement and the contract evaluation.
+[94m[Bash][0m Write measurement and contract evaluation $ }  }  // namespace engine::bench EOF echo ok
+Small fix: a timing failure should report as Failed even when residency is unmeasured, rather than being hidden as Incomplete.
+[94m[Bash][0m Make timing failures report as failed without residency $ ''' assert s.count(old2)==1 s=s.replace(old2,new2) open(p,'w').write(s) EOF echo ok
+[94m[Bash][0m Simplify final verdict computation $ ''' assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF echo ok
+Now the report writer, host metadata, and the CLI parser. First, a small header addition so reports echo the workload and profile contents.
+[94m[Bash][0m Write report, exit code, and host metadata code $ }  }  // namespace engine::bench EOF echo ok
+Cleaning up an unused helper and duplicate includes in report.cpp.
+[94m[Bash][0m Remove unused helper and duplicate includes $ python3 - <<'EOF' import re p='src/report.cpp' s=open(p).read() start=s.index('std::string file_safe...
+Next the CLI parser and the `engine_bench` entry point. First I'll rename the scene field to hold the whole scene definition, so the report can echo the route with the workload.
+[94m[Bash][0m Rename scene field and write CLI parser $ }  }  // namespace engine::bench EOF echo ok
+[94m[Bash][0m Tighten CLI number parsing $ ''' assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF echo ok
+Now the entry point, which orchestrates probing, runs, the report, and the exit code.
+[94m[Bash][0m Write engine_bench entry point $ } EOF echo ok
+A few things in that file need correcting: `RunRecord` has no timing fields, there's a leftover dead `if`, and `<functional>` is missing. Fixing those.
+[94m[Bash][0m Fix main timing plumbing and includes $ '''), ('#include "engine/core/path.hpp"\n#include "engine/core/file_io.hpp"\n','#include "engine/cor...
+Now the CMake wiring: the library, the executable, and the root subdirectory.
+[94m[Bash][0m Add benchmark CMake targets and root subdirectory $ print([ (t['name'],t.get('configurePreset')) for t in d['testPresets']])"
+Now the unit tests. Let me check the include style the existing tests use.
+[94m[Bash][0m Check test file includes and define style $ grep -n "ENGINE_TEST_FIXTURE_DIR" tests/CMakeLists.txt
+[94m[Bash][0m Write benchmark unit tests and wire into engine_tests $ } EOF python3 - <<'EOF' p='/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt' s=open(p).read() s=s.r...
+Two small fixes before building: the scene-name replacement length in the test is off by one, and `<iterator>` is missing.
+[94m[Bash][0m Fix test replace length and configure Linux preset $ tail -5 /tmp/cfg.log)
+[94m[Bash][0m Build engine_bench and engine_tests on Linux Debug $ tail -3 /tmp/build.log
+The known literal-decay gotcha from the codebase notes. Wrapping those literals in `std::string(...)`.
+[94m[Bash][0m Fix literal failures and rebuild bench targets $ tail -3 /tmp/build.log
+Build is clean with `-Werror`. Now running the new unit tests and the harness itself.
+[94m[Bash][0m Run unit suite and a smoke benchmark $ echo "smoke_exit=$?"
+Unit suite passes (1002 cases, including the new bench tests) and the smoke run writes a report. Now the acceptance path on this WSL host, where Vulkan has no usable device.
+[94m[Bash][0m Exercise acceptance refusal, usage errors, and smoke report $ head -3 /tmp/bench_smoke2/raw/*r1.csv
+Refusal, usage errors, and the smoke report all behave as intended. One path I haven't exercised yet is a missing workload, so I'll check that with a copied manifest.
+[94m[Bash][0m Check missing-workload and bad-manifest exit codes $ echo "bad_manifest_exit=$?"
+Both behave correctly. One cosmetic fix: the reason string prints an empty route. Then I'll tidy that and run the full Linux gates.
+[94m[Bash][0m Tidy missing-scene reason and run vendor validation and full build $ tail -2 /tmp/build_all.log
+[94m[Bash][0m Run Linux unit CTest preset $ tail -4 /tmp/ctest.log
+Linux unit CTest passes. Next, the reproduction docs, then the Windows gates.
+[94m[Bash][0m Write benchmark docs and check Windows gate scripts $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "gate" | head
+[94m[Bash][0m Read an earlier Windows gate batch for reuse $ ls /mnt/c/Users/bucha/AppData/Local/Temp/*.bat | wc -l
+No gate batch is running, so I'll stage the Windows gates with the same pattern as the earlier US-073 batch.
+[94m[Bash][0m Stage and launch Windows quality gate batch $ echo started
+The Windows batch is running in the background. While it works, I'll record the progress notes.
+[94m[Bash][0m Append US-074 progress notes and pattern $ returning Incomplete there hides a failed repeat. --- ''' open(p,'w').write(s) EOF echo ok
+[94m[Bash][0m Inspect progress file header formatting $ head -c 400 .ralph-tui/progress.md | cat -A | head -12
+[94m[Bash][0m Append US-074 progress notes to log $ ls /mnt/c/Users/bucha/AppData/Local/Temp/us074 2>/dev/null
+The Windows build is still running. I'll wait on it with a monitor rather than a foreground sleep.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Windows US-074 gate batch completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us074/summary.txt
+The Windows gate batch is still running, so I'm waiting on its completion notice. Nothing has been reported yet for the Windows results.
+
+What's done so far:
+
+- **Harness:** `engine_bench` and an `engine_benchmark` library in `tools/benchmark/`, a versioned `benchmarks/manifest.json`, and `docs/benchmarks.md`.
+- **Linux gates passed:** `ValidateVendor`, `linux-dev` configure, `linux-debug` full build with no warnings, and `ctest --preset linux-unit`. The unit suite ran 1002 cases, including 16 new bench tests.
+- **Harness behaviour checked on this WSL host:** smoke writes a report and exits 0. Acceptance with `--backend vulkan` or `dx12` reports every run `unsupported` and exits 3. A copied manifest with the calibration scene set to `none` reports `missing` and exits 3. A bad manifest exits 2.
+
+What is not done, and why the story is not complete:
+
+- **No acceptance workload exists yet.** `render_stress`, `physics_stress`, `streaming_stress`, and `all_features` are declared with their counts and routes, but they report `missing`. Their builds belong to US-075 to US-078.
+- **No acceptance run can pass yet.** GPU timestamps and residency are not collected, so any acceptance run reports `incomplete`.
+- **No Release measurement was taken.**
+- **The Linux ASan preset was not run.**
+
+Once the Windows batch finishes, I'll read its log and report the results.
+The Windows batch finished with `ctest=8`, so the unit run failed on Windows. I'll read its log before going further.
+[94m[Bash][0m Inspect Windows ctest unit log for the failure $ grep -n "error\|failed" -i unit.log | head -30
+[94m[Bash][0m Show failing assertion context in log and test source $ cd /mnt/d/dev/haiku_game_engine && sed -n 300,316p tests/src/bench_tests.cpp
+The unit failure is a Windows file-lock in my test: the `ifstream` handles were still open when `remove_all` ran. The CLI-suite failure is the same test run again through `--suite unit`. I'll close the streams before cleanup.
+[94m[Bash][0m Close file handles before removing the test folder $ ''' assert s.count(old)==1, s.count(old) open(p,'w').write(s.replace(old,new)) EOF echo ok
+Now I'll rerun the Windows build and unit gate, after confirming no earlier batch is still running.
+[94m[Bash][0m Launch Windows rebuild and unit test rerun $ echo started
+[94m[Monitor][0m Windows US-074 rerun completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us074b/summary.txt
+The first Windows batch failed the unit gate, and I've fixed the cause. The rerun is in progress and I'm waiting for it to finish.
+
+- **Cause:** my bench unit test kept its `ifstream` handles open when it removed the temp report folder. Windows won't delete an open file, so the test threw. The `engine_tests_cli_suite_unit` failure is the same test run again through `--suite unit`.
+- **Fix:** the test now closes each stream in its own scope before cleanup, and the cleanup ignores errors.
+- **Batch results before the fix:** `ValidateVendor`, `win-dev` configure, `win-debug` build, `engine_bench --suite smoke`, `engine_tests --suite gpu --backend dx12`, and `--suite gpu --backend vulkan` all exited 0.
+
+Once the rerun reports, I'll look at its unit log. If it passes, the Windows gates are verified for this change.
+[94m[Bash][0m Confirm Windows unit log and build warnings $ grep -c "warning" /mnt/c/Users/bucha/AppData/Local/Temp/us074b/build.log
+[94m[Bash][0m Check ctest pass summary line $ grep -n "tests passed\|FAILED" /mnt/c/Users/bucha/AppData/Local/Temp/us074b/unit.log | head -3
+US-074 is implemented and the Windows and Linux gates pass, but the story does not fully meet its acceptance criteria yet. No benchmark scene is built, so no acceptance run can pass.
+
+**Windows gates** (rerun after one fix; `us074b`): `win-debug` build 0 with no warnings, `ctest --preset win-unit` 0 (29 of 29). The earlier batch's failure was my test holding file handles open, which Windows refuses to delete. The earlier batch also passed `ValidateVendor`, `win-dev` configure, `engine_bench --suite smoke`, and `engine_tests --suite gpu` on dx12 and vulkan.
+
+**Linux gates**: `ValidateVendor` 0, `linux-dev` configure 0, `linux-debug` full build 0 with no warnings, `ctest --preset linux-unit` 0 (unit suite 1002 cases).
+
+**What's built**
+- `engine_bench` and an `engine_benchmark` library in `tools/benchmark/`.
+- A versioned `benchmarks/manifest.json` with the seeds, scene workloads, profiles, and the smoke and acceptance suites. The acceptance timing is fixed at 30 s warmup, 180 s, 3 repeats.
+- Reports with raw per-frame CSVs, p50/p95/p99/max, the PRD threshold checks, and host metadata, written as `report.json`.
+- Exit codes: 0 passed, 1 threshold failed, 2 usage or manifest error, 3 unsupported, missing, or incomplete.
+- 16 new unit tests, and `docs/benchmarks.md`.
+
+**What's not done**
+- **No acceptance workload exists.** `render_stress`, `physics_stress`, `streaming_stress`, and `all_features` are declared with their counts and routes, but report `missing`. Their builds belong to US-075 to US-078.
+- **No acceptance run can pass yet.** GPU timestamps and residency are not collected, so any acceptance run reports `incomplete`.
+- **No Release measurement was taken**, and the Linux ASan preset was not run.
+- **On this WSL host**, `--suite acceptance` with `--backend vulkan` or `dx12` reports every run `unsupported` and exits 3. Neither a real GPU run nor a Release run has happened here.
+
+The only implemented workload is a seeded CPU self-check (`engine_bench --suite smoke`). It validates the harness and makes no performance claim.

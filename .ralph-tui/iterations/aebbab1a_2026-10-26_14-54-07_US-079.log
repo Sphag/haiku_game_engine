@@ -1,0 +1,45 @@
+# Iteration 891 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T11:54:07.908Z
+- **Ended At**: 2026-10-26T11:59:59.927Z
+- **Duration**: 5m 52s
+- **Input Tokens**: 38
+- **Output Tokens**: 2681
+- **Total Tokens**: 2719
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state: the progress log, whether an `all_features` target already exists, and the prerequisite stories.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 6000 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | gr...
+The log shows this story has been re-checked many times with the same open items. I'll confirm the current tree still matches that before deciding anything.
+[94m[Bash][0m Check tree changes, vendor validation, and unit tests $ g++ --version | head -1
+My `ctest` invocation was wrong (I used `-L` against the build dir). Re-running with the project's own preset.
+[94m[Bash][0m Run linux-unit ctest preset $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Summarize linux-unit ctest result $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests pas...
+[94m[Bash][0m Append status entry to progress log $ linux-gcc* (GCC 9.4 only, no GCC 11+)." "- No COMPLETE signal." "---" >> .ralph-tui/progress.md && t...
+US-079 is not complete, so I am not signalling COMPLETE. The parts that can run on this WSL host pass, but the acceptance criteria that need the features this story adds, and the Windows and GCC gates, are still open.
+
+**Verified on this host (Linux, g++ 9.4):**
+- `cmake -P cmake/ValidateVendor.cmake` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 30/30.
+- No file under engine, tools, tests, benchmarks, docs, or cmake changed since the last recorded run.
+
+**Still open, and not reported as passed:**
+- **Automated tour runner.** There is no tour code under tests or tools, so feature markers and outputs are not checked automatically.
+- **`all_features` GPU scene.** It is still `implementation: none` with no route, so the GI/RT/upscale profiles and the forced indirect/meshlet paths cannot run. FSR 2 also cannot link because its `*_permutations.h` headers are missing.
+- **Editor scenario and package relaunch.** Only Build Game's verify step exists; there is no scripted scene/material/animation/terrain edit, undo/redo, Play/Stop, and relaunch run.
+- **GPU, bench, and GUI checks.** Native Linux Vulkan needs a device (`/dev/dri` is absent here). `engine_bench --suite acceptance` depends on the missing scene. GUI screenshots need a display.
+- **Windows gates.** The four Windows gates were not rerun in this session.
+- **`linux-gcc*`.** This host has only GCC 9.4, and Jolt needs GCC 11+.
+
+The next step that would close the open items is to define the `all_features` route and a built-in GPU scene in `tools/benchmark`, then run the profiles and tour on a Windows GPU session. I appended a status entry to `.ralph-tui/progress.md` recording this.

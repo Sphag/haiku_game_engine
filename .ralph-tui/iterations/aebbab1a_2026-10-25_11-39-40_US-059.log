@@ -1,0 +1,45 @@
+# Iteration 519 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:39:40.542Z
+- **Ended At**: 2026-10-25T08:42:27.476Z
+- **Duration**: 2m 46s
+- **Input Tokens**: 38
+- **Output Tokens**: 2866
+- **Total Tokens**: 2904
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and save module presence $ tail -n 60 .ralph-tui/progress.md && ls engine/save 2>/dev/null && git status 2>&1 | head -5
+[94m[Bash][0m Check compilers and changes since last progress entry $ grep -rl "engine_bench" --include=CMakeLists.txt . | head -3
+[94m[Bash][0m Look for newer GCC and re-run Linux build and unit tests $ ctest --test-dir build/linux-debug --preset linux-unit --output-on-failure --no-tests=error 2>&1 | t...
+[94m[Bash][0m Run Linux unit tests via preset $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -3
+[94m[Bash][0m Confirm Linux unit test pass summary $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Append status entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-059 (status check, still Partial) - What w...
+US-059 is not complete, so I'm not emitting the COMPLETE signal. The save implementation is in place and the gates I can run here pass. Three acceptance items are blocked by things this environment doesn't have.
+
+**What I checked this pass**
+- No source changed since the last progress entry (`find ... -newer` is empty), so the earlier Windows gate results still describe the tree.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100%, 22 of 22 passed, exit 0.
+- `cmake --build --preset linux-debug`: 0 warning or error lines.
+
+**What's blocked**
+- **`linux-gcc` gate and CI job:** Jolt needs GCC 11+. Only g++-9 and clang-10 are installed, and sudo needs a password, so I can't install a newer compiler.
+- **`engine_bench --suite acceptance`:** there is no benchmark harness yet (US-074), so the target doesn't exist.
+- **Runtime save/load through a host:** no application host exists yet (US-060), so only the library paths are tested, not a play session.
+
+**What's in place**
+- `engine/save/` (new `engine_save` target): the save format, atomic slot writes with a `.prev` copy of the last good save, and world-change capture and restore.
+- `engine/script/src/script_state.{hpp,cpp}`: Lua instance state capture and restore.
+- `tests/src/save_tests.cpp`: 12 new unit cases.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results. Nothing was committed.

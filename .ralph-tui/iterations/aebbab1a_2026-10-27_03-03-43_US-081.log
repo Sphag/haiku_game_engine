@@ -1,0 +1,48 @@
+# Iteration 1296 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:03:43.203Z
+- **Ended At**: 2026-10-27T00:04:01.570Z
+- **Duration**: 18s
+- **Input Tokens**: 18
+- **Output Tokens**: 1910
+- **Total Tokens**: 1928
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root, progress log, and README $ cat README.md 2>/dev/null | head -100
+[94m[Bash][0m Check for source changes since last gate and read open items $ grep -n -A30 -i "open items" docs/acceptance.md | head -60
+US-081 is not complete, so I am not emitting the COMPLETE signal. I did not re-run any gate: nothing under source, tests, or CMake has changed since the last recorded gate runs.
+
+**Checked this pass**
+- `find -newer artifacts/reports/us081` shows only `docs/acceptance.md`, `tasks/prd.json`, ralph-tui bookkeeping, the Windows launch screenshot, and `third_party/dxc/utils/GetCommitInfo.py`. The last one is an mtime change only; `docs/acceptance.md` records the vendor validator passing on an unchanged tree.
+- `/dev/dri` is absent, so this machine has no native Linux Vulkan device.
+
+**Already passing on the recorded runs** (`docs/acceptance.md`, release gates)
+- Vendor validation, `linux-dev`, `linux-debug`, `linux-unit`, `win-dev`, `win-debug`, `win-unit`, `win-release`, `linux-release`, and the ASan/UBSan sanitize run.
+- `engine_tests --suite gpu` on the RTX 5080 for DX12 (72 cases) and Vulkan (73 cases), with validation layers on.
+- `engine_tests --suite editor` on Windows for DX12 and Vulkan, and on Linux (CPU tests).
+- Offline clean-copy build and the editor distribution package test.
+- README and docs (architecture, capability matrix, acceptance map, schemas, vendor, benchmarks, editor, distribution) are present and their links resolve.
+
+**Still open, and why I can't close them here**
+1. **Native Linux Vulkan GPU report:** needs a Linux machine with a Vulkan device. WSL does not count.
+2. **Full acceptance benchmark:** `engine_bench --suite acceptance` needs GPU timestamps, which the acceptance scenes don't produce yet. The recorded `render_stress` p99 is over 16.7 ms.
+3. **Visual editor smoke:** Windows has a launch screenshot only. No project was opened and no action sequence ran. Linux has none.
+4. **linux-gcc:** needs GCC 11 or newer. Local GCC is 9.4, which cannot build Jolt.
+5. **FSR 2 permutations:** the vendored tree lacks the generated shader tables, so FSR cannot link. Choosing a vendoring route is your decision.
+6. **LICENSE file:** missing from the repo. This needs your decision on the license.
+7. **Package from a real sample game:** the acceptance text asks for one; the current checks use the engine's sample project.
+
+**What would close it:** a native Linux box with a Vulkan GPU, a GCC 11+ toolchain, a Windows run of the acceptance benchmark with timestamps, a visual smoke session on both OSes, and your decisions on FSR 2 vendoring and the license.
+
+I did not append another progress entry. The log already has about ten identical status passes for this story, and another would add noise without new evidence.

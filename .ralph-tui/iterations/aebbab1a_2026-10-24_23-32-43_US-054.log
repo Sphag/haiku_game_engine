@@ -1,0 +1,209 @@
+# Iteration 353 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T20:32:43.864Z
+- **Ended At**: 2026-10-24T21:34:10.237Z
+- **Duration**: 1h 1m 26s
+- **Input Tokens**: 506
+- **Output Tokens**: 199421
+- **Total Tokens**: 199927
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-054, and what already exists in the physics code.
+[94m[Bash][0m Read progress log, PRD US-054 entry, and physics dir $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-054" -A 30 tasks/prd-open-world-engin...
+The log shows US-053 is partial and there's no character controller or constraint code yet. Next I'll read the physics public API, the Jolt state, and the test layout.
+[94m[Bash][0m Inspect physics headers, CMake, tests, and Windows gate notes $ ls engine/physics/include/engine/* && wc -l engine/physics/include/engine/*/* engine/physics/src/* &...
+The public API has `raycast`, `shape_cast`, and kinematic bodies but no constraints or character code. Before designing either, I need the pimpl state, body add/remove, and the cast code in `physics_world.cpp`.
+[94m[Bash][0m List functions and structs in physics_world.cpp $ grep -n "^[a-zA-Z].*(\|^struct\|^class\|^namespace\|^}\|^    [a-zA-Z].*(.*) .*{$" engine/physics/src...
+[94m[Bash][0m Read physics_world.cpp top, filters and state struct $ sed -n 1,172p engine/physics/src/physics_world.cpp && echo ------ && sed -n 242,316p engine/physics/...
+[94m[Bash][0m Read step, shift, close, add/remove, query code $ sed -n 477,600p engine/physics/src/physics_world.cpp && echo ----- && sed -n 606,790p engine/physics...
+The cast and body paths are clear. Next I'll read the streamed-cell API and the existing physics tests so the new fixture follows their style. I also need to confirm which Jolt constraint and collide-shape headers are vendored.
+[94m[Bash][0m Read cell API, physics tests, Jolt constraint headers $ sed -n 1,109p engine/physics/include/engine/physics/collision_cells.hpp && echo ---- && sed -n 1,80p...
+The cell API, test style, and vendored Jolt constraint headers are all present. Next I'll read the PRD's relevant constraints (character, joints, physics) and the existing streamed-cell test so the fixture matches them.
+[94m[Bash][0m Grep PRD for physics constraints, read streamed test, Jolt API $ grep -n -i "character\|constraint\|joint\|physics\|non-goal\|## " tasks/prd-open-world-engine.md | h...
+The PRD lists a character controller and constraints under FR-18. I'll read its Functional Requirements and Non-Goals, and check the Jolt constraint setting names, before I write code.
+[94m[Bash][0m Read PRD requirements and Jolt constraint API names $ sed -n 732,778p tasks/prd-open-world-engine.md && sed -n 50,60p tasks/prd-open-world-engine.md && gr...
+I now have the design details I need. Before writing code I'll confirm a few Jolt names I plan to use: the constraint-space enum, body lookup, collide-shape result fields, and the `Create` signatures. I'll also read `valid_desc` and `make_shape` so a capsule query works without an entity.
+[94m[Bash][0m Check Jolt constraint, lock, and collide APIs; read validity code $ sed -n 57,62p third_party/jolt/Jolt/Physics/Constraints/Constraint.h && grep -n "TryGetBody" third_p...
+The Jolt APIs are all present. `valid_desc` accepts a capsule with no entity, so a controller can query with its own capsule shape. I'll start with the public header: constraint descriptors, a constraint handle, and the new overlap and constraint methods.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m edit: "struct PhysicsWorldDesc {
+    glm::dvec3 gravity{0..." → "enum class ConstraintKind { Fixed, Hinge, Distance..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m edit: "    // Removes and destroys the body of `entity`. ..." → "    // Removes and destroys the body of `entity`. ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m edit: "    // True when a dynamic or kinematic body's cur..." → "    // True when a dynamic or kinematic body's cur..."
+The header is updated. Next is `physics_world.cpp`: the Jolt includes, a constraint record in the state, validation and construction helpers, safe removal on body removal and close, and the add, remove, and overlap methods.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "#include <Jolt/Physics/Collision/BroadPhase/BroadP..." → "#include <Jolt/Physics/Collision/BroadPhase/BroadP..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "#include <Jolt/Physics/Collision/Shape/SphereShape..." → "#include <Jolt/Physics/Collision/Shape/SphereShape..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "    JPH::ObjectLayer object_layer = 0;
+};
+
+// Forw..." → "    JPH::ObjectLayer object_layer = 0;
+};
+
+struct ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "    std::unordered_map<ecs::EntityHandle, BodyReco..." → "    std::unordered_map<ecs::EntityHandle, BodyReco..."
+Next the pure helpers: validation of a constraint description and construction of the matching Jolt settings. They go before `run_step`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "void run_step(PhysicsState& state) {
+    for (auto..." → "// An axis and a reference axis must be non-zero a..."
+The validation uses `JPH::JPH_PI`, which is wrong: Jolt defines `JPH_PI` as a macro. I'll fix that, then add the constraint removal to `close_state` and a helper for body removal.
+[94m[Bash][0m Fix Jolt pi macro reference and confirm its definition $ sed -i 's/JPH::JPH_PI/JPH_PI/g' engine/physics/src/physics_world.cpp && grep -n "JPH_PI" engine/phys...
+The notice is from my own `sed` edit just now, so the file is as I left it. The grep found no `define JPH_PI` in the Math or Core headers, so I'll search more widely before relying on the macro.
+[94m[Bash][0m Search Jolt for the pi macro definition $ grep -rn "define JPH_PI\b" third_party/jolt/Jolt | head -3
+[94m[Bash][0m Locate Jolt JPH_PI definition $ grep -rln "JPH_PI" third_party/jolt/Jolt | head -3
+[94m[Bash][0m Check namespace of JPH_PI $ sed -n 1,12p third_party/jolt/Jolt/Math/Math.h | grep -n "namespace\|JPH_PI"
+`JPH_PI` is a global constant, so the unqualified name is correct. Now I'll wire the constraints into `close_state` and `remove_body`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "    // Removing a body may raise contact callbacks..." → "    // Joints go first: they refer to the bodies t..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "// Builds a query result for a hit on `id`." → "// Removes every joint that names `entity`, before..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "    if (state.closed || it == state.bodies.end()) ..." → "    if (state.closed || it == state.bodies.end()) ..."
+Next I'll add the public constraint methods after `body_count`, and the overlap query after `has_moving_body_in`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "std::size_t PhysicsWorld::body_count() const {
+   ..." → "std::size_t PhysicsWorld::body_count() const {
+   ..."
+`Ref` may not define `== nullptr` in this Jolt version, so I'll compare the raw pointer explicitly. Then I'll add `overlaps`.
+[94m[Bash][0m Compare constraint pointer explicitly to null $ sed -i 's/    if (joint == nullptr) {/    if (joint.GetPtr() == nullptr) {/' engine/physics/src/phys...
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "core::Status PhysicsWorld::update(double frame_sec..." → "std::vector<ecs::EntityHandle> PhysicsWorld::overl..."
+The world side is in place. Next is the character controller, a new header and source. It is query-driven: it sweeps its own capsule through `shape_cast` and never becomes a body, so it needs no changes to the simulation. I'll write the header first.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/character.hpp[0m "#pragma once
+
+// Kinematic character controller (US-054). The character is a capsule that is not a body. It moves by shape casts against the world's
+// colliders, so it neither pushes dynamic bodies n... (4226 chars)"
+The header is written. Next is the implementation: the slide and step logic, platform carry, and the ground probe.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/character.cpp[0m "#include "engine/physics/character.hpp"
+
+#include "engine/core/assert.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+namespace engine::physics {
+
+namespace {
+
+// The gap kept between the capsule and any... (9921 chars)"
+Before building I'll tidy three things. `Slide result{feet}` relies on a default member initializer, which `-Wmissing-field-initializers` can flag, so I'll value-initialise it instead. The local name `floor` could shadow `::floor` under `-Wshadow`, so I'll rename it `support`.
+[94m[Bash][0m Rename floor local and value-initialise Slide result $ /' $f && grep -n "floor\|support\|Slide result" $f
+Those are my own edits, so the file is as I left it. Next I'll register the new source with the physics library and build just that target to surface compile errors early.
+[94m[Bash][0m Register character source and build the physics library $ sed -i 's|  src/collision_cells.cpp|  src/collision_cells.cpp\n  src/character.cpp|' engine/physics/...
+Two compile errors. `JPH_PI` lives in the `JPH` namespace after all, so my earlier "fix" was wrong and I'll restore the qualified name. `GetBodyLockInterface()` returns a const reference, so I'll bind a const `BodyLockInterface&`, which `TryGetBody` accepts.
+[94m[Bash][0m Fix pi namespace and lock reference, rebuild physics $ /' $f && grep -n "JPH_PI\|locks = " $f && (timeout 900 cmake --build --preset linux-debug --target e...
+The physics library compiles cleanly under `-Werror`. Before writing the tests I need the exact `core::Result` and `core::Status` accessor names, so the assertions compile first time.
+[94m[Bash][0m Check Result and Status accessor names $ grep -n "error()\|bool ok\|value()\|has_value\|success(\|failure(" engine/core/include/engine/core/r...
+I have the accessors: `ok()`, `error()`, and `Status::code`. Now the test file. It covers each acceptance point and the cell fixture. I'll keep the expected values derived from the geometry in comments so a reader can check them.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_character_tests.cpp[0m "// The character controller and joints (US-054) on the CPU: walking, slopes, steps, jumps, moving platforms, triggers, the fixed, hinge, and
+// distance joints with safe removal, overlap queries, and ... (26600 chars)"
+The test file has three mistakes I need to fix before compiling. The `weld_to_post` helper ends in a nonsense expression. The ramp expectation carries a leftover `3.0 * 0.0`. The course climber stops at x = 8.25, exactly on the trigger's overlap boundary, so it should walk to x = 9.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_character_tests.cpp[0m edit: "// A free body welded to the course's post. The bo..." → "// Adds a free body welded to the course's post. T..."
+[94m[Bash][0m Fix ramp expectation, extend climber walk, register test source $ ++frame) {  \/\/ 6 s at 1.5 m\/s: the climber ends at x = 9, over the trigger/' $f && grep -n "tan(g...
+Both edits are in and the test source is registered. Now I'll build the test binary on Linux debug. This compiles the whole test tree, so it may take a while.
+[94m[Bash][0m Build engine_tests on Linux debug preset $ echo "BUILD_EXIT=${PIPESTATUS[0]}")
+The test binary builds. Next I'll run the unit suite and check the new cases' results.
+[94m[Bash][0m Run unit suite and collect failures $ grep -n "FAILED\|with expansion\|REQUIRE\|CHECK(" /tmp/unit_run.txt | head -60
+[94m[Bash][0m Locate the built engine_tests binary $ ls build 2>/dev/null | head
+[94m[Bash][0m Run unit suite and collect failures $ grep -n "FAILED\|with expansion" /tmp/unit_run.txt | head -60
+The new cases are running and 14 assertions fail across 6 test cases. I'll read the failure details to see which mechanisms are wrong.
+[94m[Bash][0m Read failing assertion details $ sed -n 1,125p /tmp/unit_run.txt
+The failures have three causes, and the most serious is in the character.
+
+1. **The character never moves on a flat floor.** Its feet start exactly on the floor. A horizontal sweep from zero clearance reports a contact at distance 0, the slide consumes its passes at zero travel, and the feet stay stuck. The fix is to keep the feet a skin above any surface: the controller starts a skin above its position, and the ground probe lifts the feet to a skin gap, not just lowers them.
+2. **A welded body doesn't fall after its joint is removed.** It went to sleep while held, and removing the joint doesn't wake it. Adding or removing a joint should wake the affected dynamic bodies.
+3. **The test tolerances on y are too tight.** A resting character sits a skin above the floor, so the y checks must allow 2 cm.
+
+I'll fix the controller first.
+[94m[Bash][0m Keep feet a skin above surfaces; signed ground lift $ """) open(p, "w").write(s) print("ok") EOF grep -n "kSkin" $f | head -30
+Now the joint-wake fix in `physics_world.cpp`. Adding or removing a joint wakes its dynamic bodies, and the helper skips static bodies.
+[94m[Bash][0m Wake joint bodies on add and remove; loosen y tolerance $ """) open(p, "w").write(s) print("ok") EOF sed -i 's/WithinAbs(0.0, 0.01))/WithinAbs(0.0, 0.03))/g' ...
+The y tolerance is now 2 cm. I'll add a one-line comment at the first occurrence so the reason is visible, then rebuild and rerun the unit suite.
+[94m[Bash][0m Rebuild tests and rerun unit suite $ grep -n "FAILED" -A3 /tmp/unit_run.txt | head -80
+Flat walking and jumping pass now. Three cases still fail, and two of them look like one bug. The stair climber stops at x = 1.67, just before the first riser, with its feet at 0.02. The upward ceiling sweep sees the riser face the capsule brushes at distance 0. It reads that as a ceiling, the rise drops to zero, and the step is refused. Before I change more I want to see the ledge and 60° cases frame by frame, so I'll add a temporary trace test.
+[94m[Bash][0m Add temporary trace test and rebuild to inspect ledge motion $ grep -n "frame " /tmp/trace.txt | head -50
+The trace shows the real cause. At frame 49 the capsule lands on the ledge's top edge at height 0.27, and then it sticks there. The support hit at a riser corner reports a walkable normal. `shape_cast` builds its normal from the body's surface normal at the contact point, and on a box edge that picks the top face. That is the wrong normal for a capsule touching an edge. I'll check whether Jolt's cast result carries the contact normal.
+[94m[Bash][0m Check Jolt contact normal fields for shape casts $ grep -n "A shape cast finds" -A16 tests/src/physics_query_tests.cpp | grep -n "normal"
+Jolt's cast result carries the contact normal in `mPenetrationAxis`, pointing from the moving shape into the hit body. Its negation is the outward contact normal. I'll make `shape_cast` report that normal, which is correct at edges, and have the controller treat only downward-facing surfaces as ceilings.
+[94m[Bash][0m Use contact normal for shape casts; ignore side walls as ceilings $ """ assert s.count(old) == 1 s = s.replace(old, new) open(p, "w").write(s) print("ok") EOF grep -n "...
+Both edits are in. I'll rebuild and rerun the unit suite, and check the trace again for the ledge and the steep ramp.
+[94m[Bash][0m Rebuild and rerun unit suite after normal fix $ grep -n "frame " /tmp/unit_run.txt | sed -n 1,3p
+The ledge passes now. Three things remain, and I can see the causes in the numbers.
+
+1. **The slope walk loses speed.** Projecting horizontal motion onto a 30° plane keeps only cos² = 75% of its horizontal length. A walkable hit should lift the remaining motion along the surface, so horizontal speed is kept.
+2. **The steep-face test expectation is wrong.** The capsule's rounded base meets the 60° face at x = −0.19, which is the correct contact position, so the test's −0.3 bound was never right. The character is pressed against the steep face, not standing on it. Projection also lets a steep face carry the character upward, so I'll clip upward motion on non-walkable surfaces.
+3. **The stair climber sticks at a corner, not grounded.** I'll trace it after the first two changes.
+[94m[Bash][0m Lift walk over slopes, clip steep climbs, fix wall expectation $ grep -n "FAILED" -A3 /tmp/unit_run.txt | head -60
+Walking up the slope now keeps its speed. The remaining slope error is geometry, not a bug. The capsule's rounded base touches a 30° surface off its centre, so the feet stand r(1/cos30 − 1) + skin ≈ 0.074 m above the surface beneath them. The course ramp expectation shows the same 0.074 offset, so I'll put that formula in the tests.
+
+The stairs case is a real geometry problem. A rounded base lands on a riser's top corner, where the contact normal is steep, and it only lands on the tread once its centre is within about 0.25 m of the corner. A frame moves 3 cm, so the climber stalls at the corner. I'll have a step try a half radius beyond the frame's motion. That lets the centre clear the corner, and the overshoot is bounded to about 0.18 m per riser.
+[94m[Bash][0m Step reach, slope offset expectations, stairs bounds $ }  bool contains(const std::vector<EntityHandle>& entities, EntityHandle entity) {""") open(p, "w")....
+[94m[Bash][0m Rebuild and rerun unit suite after step reach change $ grep -n "FAILED" -A3 /tmp/unit_run.txt | head -60
+All 677 unit cases pass. Next I'll remove the temporary trace test, rebuild, and confirm the suite still passes.
+[94m[Bash][0m Remove temporary trace test and rerun unit suite $ tail -2 /tmp/unit_run.txt
+The unit suite passes with the trace removed. Next are the Linux gates. I'll run them in the background, since a full build plus ASan can run long, and write everything to a log.
+[94m[Bash][0m Start Linux quality gates in background $ echo $?)" echo DONE EOF chmod +x /tmp/linux_gates.sh && nohup /tmp/linux_gates.sh > /tmp/linux_gates...
+While the Linux gates run, I'll prepare the Windows gate batch. My notes say the Windows gates run through `cmd.exe` with a `.bat` that calls `vcvars64`. First I'll check the Visual Studio path and whether another batch is already running.
+[94m[Bash][0m Check vcvars path and any running Windows gate batch $ echo "pgrep_done"
+[94m[Bash][0m Write Windows gate batch with CRLF endings and copy to Temp $ cat /tmp/linux_gates.log 2>/dev/null
+The batch is in place. I'll launch it in the background as a single run, so no second `cmd.exe` overlaps it.
+[94m[Bash][0m Launch Windows gate batch in background $ cat /tmp/linux_gates.log
+While the gates run, I'll check the PRD's quality-gate and performance sections. The story asks me to apply the PRD's constraints, so I need to confirm what they require beyond the acceptance list.
+[94m[Bash][0m Read PRD quality gates, performance contract, and project structure $ sed -n 778,808p tasks/prd-open-world-engine.md | head -40
+The PRD's performance contract depends on `engine_bench`, which US-074 has not built yet. So the benchmark part of this story can only be reported as not run. While the gates finish, I'll check how `progress.md` is laid out so I can add the reusable patterns to its Codebase Patterns section.
+[94m[Bash][0m Inspect progress.md structure and docs mentioning physics $ grep -n "^## " .ralph-tui/progress.md | head -20 && wc -l .ralph-tui/progress.md && ls docs | head -...
+[94m[Bash][0m Read physics docs and check gate progress $ tail -3 /tmp/us054_result.txt 2>/dev/null
+The gates are still running, and the Windows batch reports only the UNC working directory, which is harmless because the batch changes into `D:`. Meanwhile I'll document the new surface in `docs/physics.md`: the joints, the overlap query, the shape-cast normal, and the character controller.
+[94m[Bash][0m Document joints, queries, and character controller in physics docs $ python3 - <<'EOF' p = "docs/physics.md" s = open(p).read() marker = "## Closure" add = """## Joints ...
+The docs are updated. Both gate runs are long, so I'll wait on them with a Monitor until-loop, which the environment requires instead of a foreground sleep. First I need to load the Monitor tool's schema.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Linux gate and Windows batch completion $ cat /tmp/us054_result.txt | tail -8
+The Linux gates and the Windows batch are running in the background. A monitor will notify me when both finish, so I'll wait for that rather than poll.
+The monitor expired without an event. I'll check the state of both runs directly.
+[94m[Bash][0m Check Linux gate log and Windows batch output $ pgrep -fl "us054|cmake|ninja" | head
+Windows is green on all four gates. Linux has passed through the ASan build, and the sanitizer `ctest` is still running. Before I trust the Windows results I'll check the unit logs for actual test counts, and the Linux unit output.
+[94m[Bash][0m Read Windows and Linux unit gate logs $ tail -3 /tmp/g_validate.txt
+Both unit gates report 21 tests passing (1 unit and 20 integration on Windows; 1 unit and 21 integration on Linux). Only the Linux sanitizer run remains, so I'll wait for it to finish.
+[94m[Bash][0m Wait for sanitizer ctest to finish and report $ ls /tmp/g_sanitize.txt && grep -c "AddressSanitizer\|runtime error" /tmp/g_sanitize.txt
+[94m[Bash][0m Check sanitizer log so far $ tail -6 /tmp/g_sanitize.txt 2>/dev/null
+The sanitizer run is at test 2 of 22, with the unit test passed under ASan and UBSan. I'll wait for it to finish.
+The wait loop hit its time limit and was stopped. I'll check whether the sanitizer `ctest` is still running and what it has logged.
+[94m[Bash][0m Check whether sanitizer ctest is still running $ grep -n "Failed\|runtime error\|ERROR: AddressSanitizer" /tmp/g_sanitize.txt | head
+[94m[Bash][0m Confirm sanitizer result line $ cat /tmp/linux_gates.log | tail -2
+Every gate has now finished, and the sanitizer run passed 22 of 22 with no sanitizer reports. Last, I'll record the results in `progress.md`, with the reusable patterns at the top of the Codebase Patterns section.
+[94m[Bash][0m Append US-054 progress entry and codebase patterns $ US-074). Physics stress benchmark (US-077) not built. - Status call: US-054 stays **Partial**. Open:...
+US-054 is **Partial**, not complete. The character controller and joints are implemented and tested. Two acceptance items cannot run on this machine: the Linux/GCC gate and the acceptance benchmark.
+
+**Gates**
+
+| Gate | Result |
+|---|---|
+| Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build | pass |
+| Linux: `ctest linux-unit` | 22 of 22 |
+| Linux: `linux-asan` build, `ctest linux-sanitize` | 22 of 22, no sanitizer reports |
+| Windows (cmd.exe batch): `ValidateVendor`, `win-dev`, `win-debug` build | pass |
+| Windows: `ctest win-unit` | 21 of 21 |
+| `linux-gcc*` | not run: only GCC/G++ 9 is installed, and Jolt needs GCC 11+ |
+| `engine_bench --suite acceptance` | not run: no `engine_bench` target yet (US-074) |
+
+**What was built**
+- **Joints:** `add_constraint` / `remove_constraint` / `constraint_count` for fixed, hinge, and distance joints, with anchors and axes in body-local space. Removing a body removes its joints first, closing the world removes them all, and a stale handle matches nothing.
+- **Overlap query:** `overlaps(shape)` returns the entities a shape overlaps. Triggers are included when the filter asks for them.
+- **Shape-cast normal:** `shape_cast` now reports Jolt's contact normal rather than the body's surface normal. The surface normal picked a face at box edges, so a capsule sliding over a step edge read a wall as a floor.
+- **Character controller:** a capsule query shape, not a body. It handles walking, slope limits, step climbing, jumping, and riding moving platforms (including rotation), and it reports triggers through `overlaps`.
+- **Fixture:** a cell holds a 30° ramp with a plateau, a five-riser stair with a trigger, a 60° ramp, and a welded body. The course runs before unload, after unload, and after reload. After reload it produces the same results, and the joint is removed on unload and rebuilt on reload.
+
+**Choices I made that you may want to change**
+- A step reaches half a radius beyond the frame's motion. A rounded base can only rest on a tread once its centre is past the riser edge, and one frame's motion does not reach that. The cost is a bounded forward jump of about 0.18 m per riser.
+- The feet rest a 2 cm skin above surfaces. On a 30° slope they stand about 7 cm above the surface beneath them, because the rounded base touches off-centre. The docs record both.
+- A joint added or removed wakes its dynamic bodies. Without this, a body held asleep by a joint stayed asleep after the joint was removed.
+
+**Not done**
+- The character has no body, so it does not push dynamic bodies or get pushed by them. That is a design boundary of this controller, not an acceptance requirement.
+- The physics stress benchmark (US-077) is not built, so the performance contract is unmeasured.
+- Each character query builds its collision shape anew, which is a likely cost to measure once the benchmark exists.
+
+Files changed are listed in `progress.md` and `docs/physics.md`. I added 15 unit cases in `tests/src/physics_character_tests.cpp`. I did not create a git commit.

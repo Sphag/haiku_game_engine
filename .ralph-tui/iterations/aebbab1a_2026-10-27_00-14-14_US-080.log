@@ -1,0 +1,41 @@
+# Iteration 1133 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:14:14.223Z
+- **Ended At**: 2026-10-26T21:14:33.204Z
+- **Duration**: 18s
+- **Input Tokens**: 28
+- **Output Tokens**: 2126
+- **Total Tokens**: 2154
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current benchmark state before deciding what can actually be run here.
+[94m[Bash][0m Read progress log tail and benchmark layout $ ls benchmarks 2>/dev/null
+The log shows many prior passes all blocked on the same items. I'll check whether any of those blockers has changed before deciding whether to repeat the work.
+[94m[Bash][0m Re-check the known hardware and workload blockers $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+Nothing has changed, so I'll record this pass in the progress log and stop without a completion signal.
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 under WSL only. - No source change, build, or bench ...
+US-080 is not complete, so I am not emitting the completion signal. Nothing changed in this pass, and the blockers from earlier passes still stand.
+
+**Still blocked:**
+- **Native Linux Vulkan:** `/dev/dri` is absent, so there is no usable native Vulkan device on this WSL host. `nvidia-smi` sees the RTX 5080, but only under WSL.
+- **Reference RTX 5080 reports:** the acceptance run needs the Windows/DX12, Windows/Vulkan and native Linux/Vulkan runs on the reference machine. None exist yet, and `artifacts/bench` has no `acceptance` run.
+- **FSR 2 shader tables:** `third_party/fsr2` still has none of the eight `*_permutations.h` files per backend. Fixing this is a vendoring decision for you, so I have not picked a route.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries marked `implementation: none`, for the physics, streaming and all_features workloads.
+
+**Done this pass:** I re-checked those blockers and appended a status entry to `.ralph-tui/progress.md`. I did not run the quality gates or any benchmark, because the acceptance measurements cannot be produced without the missing pieces.
+
+**To unblock:**
+1. Run the acceptance suite on the reference computer, or give me a route to a native Linux Vulkan device.
+2. Choose how to get the FSR 2 permutation tables.
+3. Decide whether to implement the four missing workloads before acceptance.

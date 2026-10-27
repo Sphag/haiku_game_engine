@@ -1,0 +1,37 @@
+# Iteration 159 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T06:04:49.866Z
+- **Ended At**: 2026-10-24T06:05:05.467Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 2069
+- **Total Tokens**: 2091
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see how much of US-047 already exists.
+[94m[Bash][0m Read progress log and locate terrain files $ grep -rl "terrain" --include=*.cpp --include=*.hpp --include=*.hlsl --include=CMakeLists.txt engine ...
+The progress log says US-047 is Partial, with two open items. I'll confirm those blockers still hold on this host before deciding what to do.
+[94m[Bash][0m Verify GPU device and benchmark harness blockers $ ls artifacts 2>/dev/null | head
+US-047 is not complete, and I did not change any source this pass. I rechecked the two open items on this host and both still block it:
+
+- **Native Linux Vulkan GPU run:** `/dev/dri` is absent and `vulkaninfo` is not installed, so `engine_tests --suite gpu --backend vulkan` cannot run here. The acceptance criterion needs a native Linux Vulkan device, and WSL does not count.
+- **`engine_bench --suite acceptance` with a terrain workload:** there is no `engine_bench` target or source in the tree. The harness is US-074 (Benchmark Harness), and it is still `passes: false` in `tasks/prd.json`. The criterion only applies once the harness and workloads exist.
+
+The rest of the story is already in the tree and was verified in earlier passes: the CPU terrain runtime in `engine/world`, the render bridge and terrain-only stride, the DX12 and Vulkan GPU fixtures for coverage, LOD seams, depth, splat, and traced shadows, and the Windows and Linux gates. I did not re-run the gates this pass. The progress log says the last Linux gate run was re-check 55 and the Windows gate ran at the traced-shadow entry, and I have no git history to confirm the tree is unchanged since then.
+
+I did not signal `<promise>COMPLETE</promise>`, because the criteria are not met. I also did not append another "still Partial" entry to `.ralph-tui/progress.md`, since the last consolidation entry asks not to repeat these re-checks.
+
+To close the story, one of these has to happen:
+1. Run `engine_tests --suite gpu --backend vulkan` on a native Linux host with a Vulkan device.
+2. Land US-074 so `engine_bench` exists, then run the acceptance suite with the terrain workload on DX12 and Vulkan.

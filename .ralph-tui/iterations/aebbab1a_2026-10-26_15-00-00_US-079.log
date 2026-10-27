@@ -1,0 +1,65 @@
+# Iteration 892 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:00:00.975Z
+- **Ended At**: 2026-10-26T12:15:27.074Z
+- **Duration**: 15m 26s
+- **Input Tokens**: 124
+- **Output Tokens**: 8591
+- **Total Tokens**: 8715
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and whether the prerequisite stories and an `all_features` scene already exist.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ grep -ril "all_features" --exclude-dir=.git . | head -50
+The progress log shows twelve status checks with no code change, and the open items are the tour runner and the GPU profiles. I'll look at the current `all_features` code and the benchmark manifest to see whether a tour runner can be built on this host.
+[94m[Bash][0m Inspect all_features tests, manifest entry, and US-079 PRD entry $ grep -n "US-079" -A30 tasks/prd.json | head -60
+The `all_features` CPU tests and the editor scenario exist. The open items need hardware this host lacks, so the real question is whether the Windows gates can run from WSL. I'll check the Windows gate reference and whether `cmd.exe` is reachable.
+[94m[Bash][0m Read Windows gate reference and check tool availability $ ps aux | grep -i "us-gate\|cmake\|ctest" | grep -v grep | head
+Windows gates can run via `cmd.exe`. Before I start a batch, I'll look for a previous batch script to reuse and make sure none is still running.
+[94m[Bash][0m Check for running gate batches and prior gate scripts $ ls -t /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "gate\|us0\|us-\|\.bat" | head -2...
+Earlier US-079 batches left result files. I'll read them and compare their timestamps with the newest source change.
+[94m[Bash][0m Read prior US-079 gate results and check for newer source files $ find engine tools tests benchmarks docs cmake -newer /mnt/c/Users/bucha/AppData/Local/Temp/us079_gpu...
+The Windows results predate the newest test changes (`all_features_editor_tests.cpp` and `tests/CMakeLists.txt` are newer), so they don't cover the current tree. I'll read the existing batch script and rerun the Windows gates on the current tree.
+[94m[Bash][0m Read existing US-079 batch scripts and confirm none running $ pgrep -f "us079" || echo none-running
+No gate batch is running; the `pgrep` hit was my own shell command. I'll rerun the existing Windows quality-gate batch on the current tree, clearing its stale result files first, in the background.
+[94m[Bash][0m Launch Windows quality-gate batch in background $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && rm -f us079_rc.txt us079_done.txt && cmd.exe /c "C:\\Us...
+While the Windows batch runs, I'll check whether the CPU `all_features` test already covers feature markers, which would make the tour a smaller gap.
+[94m[Bash][0m List all_features test cases and check for marker/tour coverage $ grep -rn "marker\|tour" tests/src/all_features_tests.cpp | head
+The background launch returned quickly, so I'll check whether the batch actually ran and what it wrote.
+[94m[Bash][0m Check Windows gate batch progress and results $ pgrep -af "us079.bat" | grep -v pgrep | head -3
+The batch is running. I'll wait for its done marker, polling in bounded intervals.
+[94m[Bash][0m Wait for Windows gate batch to finish, up to ~9 minutes $ cat us079_rc.txt 2>/dev/null
+All four Windows gates pass on the current tree. I'll check the build and ctest logs for real results and not just exit codes, then run the GPU suites with the existing script.
+[94m[Bash][0m Check Windows build and ctest logs, then launch GPU suite batch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us079_gpu.bat" > us079_gpu_stdout.txt 2>&1 & ech...
+Windows build has zero warnings and ctest passes 29/29. Waiting for the GPU batch.
+[94m[Bash][0m Wait for GPU suite batch and read its results $ tail -3 us079_gpu_vk.log 2>/dev/null
+The GPU suites pass on Windows: DX12 72 cases and Vulkan 73 cases, with the validation layer set. I'll rerun the Linux gates on this tree too, so every gate result I report is from the current code.
+[94m[Bash][0m Run Linux validate, configure, build, and unit ctest gates $ grep "tests passed" /tmp/t.log
+All gates that can run here pass. I'll record this run in the progress log, with the open items named, and leave the story incomplete.
+[94m[Bash][0m Append US-079 gate-rerun entry to progress log $ `linux-gcc*` and `linux-asan`/`linux-sanitize` (not rerun in this pass). - No COMPLETE signal. --- E...
+I wrote one garbled sentence in that log entry ("predate nothing"). I'll fix it.
+[94m[Bash][0m Fix garbled sentence in progress log $ sed -i 's/These results predate nothing: they ran after/These results ran after/' .ralph-tui/progres...
+US-079 is not complete, so I have not signaled COMPLETE. The gates I could run now pass on the current tree. The rest of the story needs work this session did not do.
+
+**Passing on the current tree (run in this session):**
+- **Windows:** `cmake -P cmake/ValidateVendor.cmake`, `cmake --preset win-dev`, and `cmake --build --preset win-debug` pass. The build has zero warnings. `ctest --preset win-unit` passes 29/29.
+- **Windows GPU:** `engine_tests --suite gpu` passes on DX12 (72 cases) and Vulkan with the validation layer (73 cases). These runs cover the `all_features_editor_tests.cpp` change, which the earlier Windows run did not.
+- **Linux:** validate, `cmake --preset linux-dev`, and `cmake --build --preset linux-debug` pass with no warnings. `ctest --preset linux-unit` passes 30/30.
+
+**Still open (not reported as passed):**
+- **Automated tour:** the existing `all_features_tests.cpp` checks feature markers on the CPU. It is not a tour of the running app and produces no screenshots or action log.
+- **GI/RT/upscale profiles and forced geometry paths:** `all_features` has `implementation: none` in `benchmarks/manifest.json` and a route marked "pending final benchmark scene". FSR 2 cannot link because its permutation headers are missing.
+- **Acceptance bench and package relaunch:** `engine_bench --suite acceptance` cannot run on this scene. Only Build Game's own verify step runs; the published package is not launched a second time.
+- **Other gates:** GUI checks, the editor suite on Windows (`--suite editor --backend dx12`), `linux-gcc*` (host has GCC 9.4 only), and `linux-asan`/`linux-sanitize` were not run in this pass.
+
+The progress log entry is in `.ralph-tui/progress.md`. The next step that would close these items is a `builtin` GPU scene for `all_features` in `tools/benchmark`, then the profiles and tour on the Windows GPU host.

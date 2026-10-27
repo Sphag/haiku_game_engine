@@ -1,0 +1,42 @@
+# Iteration 1201 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:53:28.707Z
+- **Ended At**: 2026-10-26T21:53:43.127Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2119
+- **Total Tokens**: 2141
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress notes and existing bench artifacts $ grep -n "US-080" -A3 tasks/*.md 2>/dev/null | head -20
+[94m[Bash][0m Re-verify hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -1
+[94m[Bash][0m Append status note to progress log $ nvidia-smi sees the RTX 5080 under WSL only. - No build or bench run. US-080 is not signed off. Open...
+US-080 is not complete, so I am not emitting the COMPLETE signal. I re-checked the blockers and nothing has changed since the last status notes.
+
+**Blockers, verified in this session:**
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan acceptance run cannot happen on this host. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42).
+- **Unimplemented workloads.** `benchmarks/manifest.json` still has four entries with `implementation: "none"`. An acceptance batch would exit 3 (incomplete) until they exist.
+- **FSR 2 permutations missing.** There are 0 `*_permutations.h` files under `third_party`, so FSR cannot build. This needs a vendoring decision from you.
+- **Frame budget miss, unresolved.** The last measured Windows DX12 meshlets run (`artifacts/bench/us076-dx12-meshlets`, repeat 1, native 1080p) shows CPU frame time p99 of 42.4 ms against a 16.7 ms budget. GPU p99 is 11.5 ms and fits. The CPU hotspot is not profiled yet. Profiling needs a Release build on the RTX 5080 via `cmd.exe`, which I did not run this session.
+- **Residency not measured.** The residency accessor is not implemented, so the 12 GiB GPU / 16 GiB host peak cannot be verified.
+
+**What I did:** I appended a status note to `.ralph-tui/progress.md`. I did not build, run the gates, or run the benchmark, because an acceptance batch would only exit 3 here.
+
+**What would unblock it:**
+1. A native Linux host with `/dev/dri` for the Vulkan run.
+2. A decision on FSR 2 vendoring.
+3. Source for the four unimplemented workloads.
+4. A Release profile of `render_stress` on the RTX 5080 to find the CPU hotspot. If the budget is still missed after the fix, a contract change needs your decision. I will not change the contract on my own.
+
+Tell me which of these you want me to take first.

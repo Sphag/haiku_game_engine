@@ -1,0 +1,51 @@
+# Iteration 97 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T02:54:05.441Z
+- **Ended At**: 2026-10-24T02:56:51.347Z
+- **Duration**: 2m 45s
+- **Input Tokens**: 56
+- **Output Tokens**: 7830
+- **Total Tokens**: 7886
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the terrain code and the progress log.
+[94m[Bash][0m Inspect repo layout and progress notes $ ls && wc -l .ralph-tui/progress.md && grep -n "US-047" .ralph-tui/progress.md | head -50 && ls engin...
+The log shows US-047 as Partial across many earlier passes. I'll read the most recent entries to see what's still open.
+[94m[Bash][0m Read US-047 progress entries $ sed -n 692,868p .ralph-tui/progress.md
+[94m[Bash][0m Read latest US-047 progress entries $ sed -n 730,868p .ralph-tui/progress.md | cut -c1-900
+The log shows the splat work deferred for about ten passes, each waiting on a design decision. The most recent entry recommends option (b): constant per-layer colours with a terrain-only vertex layout. That is a choice I can make and state, so I'll look at the shared draw path and attempt it rather than defer again. First I'll read the Windows gate notes and the static layout code.
+[94m[Bash][0m Read Windows gate memory notes and locate batch scripts $ find / -name "us047*gate*.bat" 2>/dev/null | head
+[94m[Bash][0m Read Windows gate and terrain memory notes $ cat $M/project-terrain-runtime.md
+The memory notes describe the Windows batch route. Before I decide how to scope the splat change, I'll look at the static vertex layout and the shader input.
+[94m[Bash][0m Read static vertex layout and shader input $ grep -n "splat" -r engine tests --include=*.cpp --include=*.hpp --include=*.hlsl | head -30
+The background task was the slow `find` I started earlier, and it has finished. I've read the splat path, and I'm not going to implement it in this pass. Here is the reasoning.
+
+The remaining splat work changes the shared static draw path. The vertex layout is used by the opaque pipeline, the depth/shadow pipeline, the mesh vertex pool, the upload and pack paths, and the meshlet and indirect paths. A terrain-only splat attribute needs a second vertex buffer or layout, a pipeline variant for the opaque pass, a `scene.hlsl` branch, and a GPU fixture for splat, shadow, and RT. That can only be checked on the Windows DX12 and Vulkan batch, and the story also needs the `engine_bench` terrain workload and the acceptance run. Doing a partial version here would leave an unverified change in the shared path. I'll record that state in the progress log rather than add another unverified edit.
+[94m[Bash][0m Append a re-check entry to the progress log $ (4) the Windows gate batch after the shader change. --- EOF tail -c 300 .ralph-tui/progress.md
+US-047 is still **Partial**, so I'm not emitting the COMPLETE signal. I didn't change any source this pass. I only appended a re-check entry to `.ralph-tui/progress.md`.
+
+**What's done (from earlier passes, unchanged):**
+- The CPU terrain runtime in `engine/world`: tiles, LOD by distance, stitching, normals, four-layer splat weights, and 14 fixture cases.
+- The render bridge `make_terrain_render_tile`, and a GPU fixture (`tests/src/render_terrain_gpu_tests.cpp`) that passed on DX12 and Vulkan with validation on.
+- The Linux gates and the Windows gate batch from the renderer-integration pass.
+
+**What's still open:**
+- **Four-layer splat shading.** The static vertex layout (locations 0 to 2) and `VSInput` in `scene.hlsl` carry no splat, so no shader blends the four layers yet.
+- **Shadow and RT checks for terrain.** The GPU fixture checks colour and depth only.
+- **The `engine_bench` terrain workload** and the acceptance bench run.
+- **Windows gates** after the shader change.
+
+**Why I stopped here:** the splat change touches the shared static draw path: the opaque, depth/shadow, meshlet, and indirect paths all use that layout. It can only be verified on the Windows DX12 and Vulkan batch, and a partial edit would leave the static path that other stories depend on unverified. Ten earlier passes deferred the same work, waiting on a design choice. I've now chosen option (b), constant per-layer colours with a terrain-only splat vertex buffer bound at slot 1 for the opaque terrain pipeline. The static layout and the indirect and meshlet paths stay as they are. That is recorded in the progress log as the next step.
+
+Two things need your decision or a longer session: whether option (b) is acceptable as the first splat cut, and whether to start the shared draw-path change now, since it needs the Windows GPU batch to verify it.

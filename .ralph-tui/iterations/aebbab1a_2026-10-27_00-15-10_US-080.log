@@ -1,0 +1,39 @@
+# Iteration 1136 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:15:10.127Z
+- **Ended At**: 2026-10-26T21:15:25.862Z
+- **Duration**: 15s
+- **Input Tokens**: 24
+- **Output Tokens**: 2030
+- **Total Tokens**: 2054
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and check bench artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Find US-079/080 notes and performance contract $ grep -n "Performance Contract" -A30 tasks/prd-open-world-engine.md | head -n 60
+[94m[Bash][0m Re-check the known blockers on this host $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -n 1
+[94m[Bash][0m Append status entry to progress log $ see the blocker list in the final report. - Stop: US-080 cannot be signed off on this host. No COMPL...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. This host still lacks the hardware and inputs the acceptance needs, and nothing has changed since the last several status checks.
+
+**What I re-verified just now:**
+- `/dev/dri` is absent, so there is no native Linux Vulkan device. `nvidia-smi` sees the RTX 5080, but only through WSL.
+- `third_party/fsr2` has 0 `*_permutations.h` files. FSR 2 cannot link until you choose how to vendor them.
+- `benchmarks/manifest.json` still has 4 `implementation: none` entries (lines 88, 108, 122, 132).
+- `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+
+**What is needed to finish US-080:**
+1. **Reference computer runs.** The native Linux/Vulkan and Windows DX12/Vulkan acceptance reports, with three repeats of 30 s warmup and 180 s measured for each scene and profile, must come from the RTX 5080 machine. WSL and software rendering do not count.
+2. **A decision on the FSR 2 permutations.** Choose a vendoring route, or accept that FSR stays unavailable. I won't change the contract or drop the scene to make it pass.
+3. **Missing workloads.** The physics, streaming, and all_features workloads are still unimplemented in the manifest. The render_stress p99 also exceeds the 16.7 ms budget, so the measured cause needs fixing before the acceptance run can pass.
+
+I appended a status entry to `.ralph-tui/progress.md`. I did not run the Windows or Linux quality gates or any benchmark this pass. Repeating the same checks won't move these blockers, so I stopped instead of spending more turns on them.

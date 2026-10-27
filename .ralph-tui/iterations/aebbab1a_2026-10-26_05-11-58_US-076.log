@@ -1,0 +1,37 @@
+# Iteration 688 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:11:58.885Z
+- **Ended At**: 2026-10-26T02:12:15.656Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2054
+- **Total Tokens**: 2076
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Check progress log and existing render_stress code $ grep -rn "render_stress" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --include=...
+The log shows US-076 has been blocked across many passes on a decision about the workload placement. I'll confirm the current state from the recorded artifacts before deciding anything.
+[94m[Bash][0m List US-076 artifacts and summarize their status $ grep -n "kWorkloadVersion" tools/benchmark/src/*.cpp tools/benchmark/src/*.hpp engine/*/include -r 2...
+US-076 is not complete, so I did not signal COMPLETE. I made no code change and ran no benchmark or gate. The recorded state is unchanged from the last several passes.
+
+**Blocker, unchanged:**
+- **Triangle floor and frame budget fail on the current placement.** The `render_stress` scene places 312,068 triangles against the 2,000,000 floor in the contract. The p99 frame time is 35–47 ms against the 16.7 ms budget. All eight `artifacts/bench/us076-*` reports exit 1 on these two checks.
+- **The fix is a workload change, which needs your approval.** Changing placement alters the fixed benchmark contract. It means bumping `kWorkloadVersion` in `tools/benchmark/src/workload.cpp` and regenerating `benchmarks/workload_expected.json`. Earlier passes asked for this decision and got no answer.
+- **Other gaps, not started:** `full_1080` is unsupported until the FSR 2 permutation headers exist. Native Linux Vulkan GPU runs and the linux-gcc gate have not been run.
+
+**Decision needed from you:**
+1. Approve a placement change that reaches the 2,000,000-triangle floor and bump `kWorkloadVersion`? Or
+2. Close US-076 as measured, recording the failing triangle and frame-budget checks as known results?
+
+I'll take whichever you pick and then run the Windows and Linux gates. I did not append a progress entry, since it would only repeat the earlier status checks.

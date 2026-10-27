@@ -1,0 +1,42 @@
+# Iteration 727 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:22:48.431Z
+- **Ended At**: 2026-10-26T02:23:04.695Z
+- **Duration**: 16s
+- **Input Tokens**: 22
+- **Output Tokens**: 2536
+- **Total Tokens**: 2558
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and check benchmark sources $ tail -n 120 .ralph-tui/progress.md && echo ---- && grep -n "US-076" -r .ralph-tui/progress.md | head...
+[94m[Bash][0m Read US-076 section of the PRD $ grep -n "US-076" -A40 tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m List US-076 benchmark artifacts and source timestamps $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/manifest.json
+US-076 is not complete, so I'm not signalling COMPLETE. Nothing changed in this pass: no source edits, no benchmark rerun, no gate rerun. The artifacts and source timestamps match the last recorded run.
+
+**Done and recorded earlier:**
+- `render_route_v1`, the `render_stress` driver, `--path` and `--disable-mesh-shaders`, per-run counters and screenshots.
+- Eight `artifacts/bench/us076-*` reports (DX12 and Vulkan, indexed, indirect, meshlets, and meshlets with mesh shaders forced off). The forced-off runs report the fallback, and disabled features are not reported as enabled.
+- Gates on the current tree, from the last full run: Linux `ValidateVendor`, `linux-dev`, `linux-debug` build, and `linux-unit` (30/30) pass. Windows validate, `win-dev`, `win-debug`, `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72) and Vulkan (73), and the Release `engine_bench` build pass.
+
+**Blocking the story:**
+- **Frame budget and triangle floor fail.** The indexed route start submits 312,068 triangles against the manifest's 2,000,000 floor. p99 frame time is 35–47 ms against 16.7 ms. The cause is instance placement: the generator spreads 20,000 instances uniformly over 8192 m, so the route start sees about 330 items. Denser placement is a workload change. It needs `kWorkloadVersion` bumped and `workload_expected.json` regenerated, and the contract doesn't let me make that change alone.
+- **`full_1080` is unsupported** because the FSR 2 shader permutation headers are missing. Only `native_1080` runs.
+- **Not run:** native Linux Vulkan GPU, and the `linux-gcc` gate (GCC 9.4 cannot build Jolt).
+
+**Decision needed from you:**
+1. Approve a placement change (bump `kWorkloadVersion` and regenerate the expected file), or keep the contract and record the failures as the measured result.
+2. Whether a run that fails the budget should close US-076 as measured, or stay open until US-080.
+
+Once you answer, I can rerun the affected reports and the gates. I didn't add a progress entry this pass because it would only repeat the earlier status checks.

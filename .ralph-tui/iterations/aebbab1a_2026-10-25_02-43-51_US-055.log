@@ -1,0 +1,43 @@
+# Iteration 395 Log
+
+## Metadata
+
+- **Task ID**: US-055
+- **Task Title**: Engine Lua API
+- **Description**: As a game creator, I want to write gameplay in Lua so that I do not need to rebuild C++ for every change.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T23:43:51.768Z
+- **Ended At**: 2026-10-24T23:48:58.830Z
+- **Duration**: 5m 7s
+- **Input Tokens**: 26
+- **Output Tokens**: 2154
+- **Total Tokens**: 2180
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Locate repo and check progress notes for US-055 $ tail -40 .ralph-tui/progress.md
+Progress notes say US-055 is Partial: every Linux and Windows gate passed, and only `linux-gcc` is open. I'll re-run the Linux gates against the current tree and check whether a GCC 11+ toolchain has appeared.
+[94m[Bash][0m Re-run Linux gates and probe for newer GCC/Clang $ ls /usr/bin | grep -E '^(g\+\+|gcc|clang\+\+)-?[0-9]*$'
+The Linux gates pass again, and the toolchain is unchanged (only GCC 9.4 and clang 10). I'll record this pass in the progress log.
+[94m[Bash][0m Append status re-check entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` exit 0 (61 s). - Toolchain: `/usr/b...
+US-055 is still **Partial**, and I'm not signalling COMPLETE. The Lua API and its tests are in place, and every gate I can run here passes. The one open gate needs a newer compiler than this machine has.
+
+**Re-run this pass (Linux, current tree, no source changes):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (61 s)
+
+**Earlier passes, per the progress log (not re-run here):**
+- `linux-asan` build and `linux-sanitize` ctest: 22 of 22, no sanitizer reports.
+- Windows (MSVC, `/W4 /WX`): ValidateVendor, `win-dev`, `win-debug` build, and `win-unit` all pass.
+
+**Still open:**
+- `linux-gcc` gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`): the machine has only GCC 9. Jolt needs GCC 11+, so this has to run in the CI job or on a machine with a newer GCC.
+- `engine_bench --suite acceptance`: no benchmark harness exists yet (US-074), so the performance criterion can't be measured.
+
+I appended a status re-check entry to `.ralph-tui/progress.md` and made no other changes.

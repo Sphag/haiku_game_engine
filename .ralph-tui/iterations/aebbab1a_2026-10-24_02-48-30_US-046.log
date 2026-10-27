@@ -1,0 +1,397 @@
+# Iteration 39 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T23:48:30.906Z
+- **Ended At**: 2026-10-24T00:32:29.741Z
+- **Duration**: 43m 58s
+- **Input Tokens**: 892
+- **Output Tokens**: 186698
+- **Total Tokens**: 187590
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether FSR 2 is already vendored or partly integrated.
+[94m[Bash][0m Inspect progress log and FSR references $ grep -ril "fsr" --include=*.cpp --include=*.hpp --include=*.txt --include=*.cmake --include=*.json -...
+The log says US-046 is partial: the CPU contract is done, but FSR 2 is not wired into either backend. I'll read the existing upscaler code, the vendored FSR 2 layout, and the memory notes on running Windows gates.
+[94m[Bash][0m Read upscaler header, docs, vendor layout $ cat cmake/ValidateVendor.cmake | head -60
+[94m[Bash][0m List RHI and render sources, read memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+The FSR 2 source and its precompiled shader blobs are vendored, but nothing builds or calls them. Next I'll check how much of the RHI would need to expose native handles, since FSR 2's backends take a raw device and command list.
+[94m[Bash][0m Measure RHI and FSR sources; look for native handle exposure $ ls third_party/fsr2/src/ffx-fsr2-api/vk/shaders | head -3
+The RHI exposes no native device, command list, or resource handles, so FSR 2 needs a backend entry point. Before I plan the change, I'll read the FSR 2 public contract and the RHI command-list and device surface it has to plug into.
+[94m[Bash][0m Read FSR 2 public API headers $ sed -n '1,200p' ffx_fsr2_interface.h | grep -n "typedef\|FfxErrorCode\|(\*" | head -60
+[94m[Bash][0m Read FSR 2 dispatch and backend interface signatures $ grep -n "typedef struct FfxFsr2Interface" -A 20 ffx_fsr2_interface.h | head -30
+The FSR 2 backends take native resources, so the RHI needs a backend-specific upscale call. I'll read the public RHI device, command list, and texture types to see where that call belongs.
+[94m[Bash][0m Read RHI device and command list headers $ cat command_list.hpp | sed -n 1,75p
+The public API is clean, so the upscaler can sit behind a `create_upscaler` call with native details kept inside each backend. Next I'll check how the DX12 and Vulkan backends store textures and command lists, and how they bind descriptor heaps.
+[94m[Bash][0m Read DX12 device internals $ cd /mnt/d/dev/haiku_game_engine/engine/rhi/src && sed -n 1,200p dx12/dx12_device.hpp | grep -v "^\s*...
+The backends keep resources in shared objects and expose no native pointers, so the upscaler will need to reach into each backend's command list. Before reading those internals, I'll check how the RHI library is built and where the vendored FSR sources would plug in.
+[94m[Bash][0m Inspect RHI CMake and PRD FSR requirements $ grep -n "fsr\|FSR" tasks/prd-open-world-engine.md | head -40
+The PRD names FSR 2 and the profile table. I'll read the story's own section and the profile and benchmark constraints before deciding the scope.
+[94m[Bash][0m Read PRD upscaling and profile constraints $ sed -n 835,880p tasks/prd-open-world-engine.md
+The profile table fixes the scope: full profile at 1280×720, FSR 2 Quality to 1920×1080, UI composed after upscaling. Next I'll see how `SceneRenderer` sizes its targets and where the post pass and UI sit.
+[94m[Bash][0m Find profile usage and SceneRenderer interface $ grep -n "class SceneRenderer" -A60 engine/render/include/engine/render/scene_renderer.hpp | head -15...
+[94m[Bash][0m Read SceneRenderer render API and desc $ grep -n "struct SceneRendererDesc" -A40 engine/render/include/engine/render/scene_renderer.hpp | hea...
+`SceneRenderer` sizes every target from one width and height and composes the overlay in post. Adding a separate output size is a larger change, so I'll settle the RHI piece first and then decide how far the renderer wiring goes. Next I'll read how the DX12 and Vulkan command lists track state, bind heaps, and transition resources.
+[94m[Bash][0m Survey DX12 command list structure $ grep -n "^RhiStatus\|^[A-Za-z].*Command.*::" dx12/dx12_command_list.cpp | head -60
+[94m[Bash][0m Read DX12 command list state and transitions $ sed -n 100,160p dx12/dx12_command_list.cpp
+The DX12 list already tracks its bound pipeline and sets, so an upscale call can clear that state afterward. Before writing any code, I'll check three conventions FSR depends on: the depth convention, the motion-vector sign and units, and where the TAA jitter is applied.
+[94m[Bash][0m Check jitter, depth, and motion conventions $ grep -n "struct TaaFrameInput" -A12 engine/render/include/engine/render/postprocess.hpp
+Depth is standard Z (0 near, 1 far), so no inverted-depth flag. Motion vectors are in UV units with `previous = current - motion`. I need to confirm FSR's motion-vector scale and jitter signs from its own shaders.
+[94m[Bash][0m Check FSR motion scale and jitter usage $ grep -n "ffxFsr2GetJitterOffset" -A25 ffx_fsr2.cpp | head -40
+FSR divides its motion-vector scale by the motion target size, so the sign and units both matter. I'll confirm the sign in FSR's own reprojection code, then check that the Vulkan and DX12 backends can build on Linux and Windows.
+[94m[Bash][0m Confirm FSR motion vector sign convention $ grep -n "LoadInputMotionVector" -A12 shaders/ffx_fsr2_callbacks_hlsl.h | head -30
+[94m[Bash][0m Trace FSR motion vector use in reprojection $ grep -n "fUvMotionVector\|UvMotionVector" -B3 -A6 shaders/ffx_fsr2_reconstruct_dilated_velocity_and_...
+FSR reprojects with `uv + motion`, so its motion vector is `previous - current`. The engine's motion is `current - previous`, which means the FSR motion scale must be negative. Next I'll list every class that implements `Device` or `CommandList`, since adding a pure virtual to either touches all of them.
+[94m[Bash][0m Find Device/CommandList implementers and RHI types $ grep -n "enum class TextureUsage\|TextureUsage\b" engine/rhi/include/engine/rhi/types.hpp | head -3
+Six classes need the new virtuals: both backends' devices and command lists, plus the validation wrapper and its recorder. I'll read the validation wrapper's forwarding pattern and the texture-state mapping in the Vulkan command list before writing the interface.
+[94m[Bash][0m Read validation wrapper forwarding pattern $ grep -n "Recorder::dispatch\|Recorder::transition(TextureHandle\|ValidationDevice::create_fence\|Val...
+The CPU validation device can return `Unsupported` for upscaling, the same way it does for ray tracing. Now the Vulkan side: the format and usage enums, how states map to image layouts, and how the device exposes its loader functions.
+[94m[Bash][0m Read formats, usage, and Vulkan layout mapping $ grep -n "vkGetDeviceProcAddr\|vkGetInstanceProcAddr\|PFN_vkGetDeviceProcAddr\|physical_\|VkPhysicalD...
+[94m[Bash][0m Read Vulkan layout map and device loader $ sed -n 1,40p vulkan_command_list.hpp | grep -v "^$"
+I have enough of the RHI shape to plan the interface. Before writing it, I'll confirm the build can compile vendored C++ with warnings suppressed, using an existing vendor target as the pattern.
+[94m[Bash][0m Find how vendor libraries are built $ grep -rln "d3d12ma\|VulkanMemoryAllocator" --include=CMakeLists.txt . 2>/dev/null | grep -v build | ...
+[94m[Bash][0m Read root CMake and vendor target setup $ grep -n "engine_configure_first_party" -A25 cmake/*.cmake | head -50
+Vendored roots reject any file the manifest doesn't list, so the FSR build target has to live in `engine/rhi`, not under `third_party/fsr2`. I'll check the existing Linux build tree and the manifest's FSR file list before compiling anything.
+[94m[Bash][0m Check build dir and FSR manifest file list $ grep -n '"name": "linux-debug"' -A8 CMakePresets.json | head -12
+The FSR file list is complete and the Vulkan backend can be built on Linux. Next I'll read the scratch-memory and include requirements of both backends, which decide how the upscaler is constructed.
+[94m[Bash][0m Check FSR scratch size and include needs $ grep -n "^#include" vk/ffx_fsr2_vk.cpp ffx_fsr2.cpp dx12/ffx_fsr2_dx12.cpp ffx_fsr2_interface.h ffx_...
+The Vulkan backend calls `vkEnumerateDeviceExtensionProperties` directly, but the RHI loads Vulkan at run time and never links the loader. I'll check which other Vulkan entry points FSR's backend calls directly.
+[94m[Bash][0m List direct Vulkan calls in FSR backend $ grep -n "GetProcAddr\|getDeviceProcAddr\|fpGetDeviceProcAddr\|vkGetDeviceProcAddr" vk/ffx_fsr2_vk.cp...
+The backend resolves most entry points through a function table, so only a few direct calls matter. I'll confirm the extension-enumeration call sites and whether they can be avoided when the physical device is null.
+[94m[Bash][0m Find physical device and enumerate calls $ grep -n "vkEnumerate\|vkGetPhysicalDevice\|physicalDevice" vk/ffx_fsr2_vk.cpp | head -30
+The backend also calls several instance-level physical-device functions directly. I'll list every direct `vk*` call so I can see how many need shims.
+[94m[Bash][0m Count direct Vulkan calls in FSR backend $ grep -o "[^.>a-zA-Z_]vk[A-Z][A-Za-z0-9]*(" ffx_fsr2.cpp dx12/ffx_fsr2_dx12.cpp | sort | uniq -c | he...
+Only five instance-level Vulkan calls need a shim, which forwards to the RHI's own loaded function table. Before writing the Vulkan side I'll check that those functions are in the RHI's `Api` struct and what a Vulkan texture object stores (its image view and layout).
+[94m[Bash][0m Check Vulkan API table and texture object $ grep -n "struct ObjectBase" -A6 ../object_lifetime.hpp | head -12
+Vulkan textures track their own `layout`, and FSR leaves its inputs and output in the layouts the RHI already expects. I'll check the remaining FSR signatures I need (the message callback type, error codes, and the device/resource helper macros) before writing the public header.
+[94m[Bash][0m Check FSR message, error, and resource types $ grep -n "ffxFsr2ContextDestroy" -A3 ffx_fsr2.h | head -5
+I have what I need for the public contract. I'll write the RHI upscaler header first: the descriptor, the per-frame dispatch inputs, and an abstract `Upscaler` that the backends implement. The DX12 and Vulkan details stay in their own backend files.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/upscaler.hpp[0m "#pragma once
+
+// Temporal upscaling (US-046). The RHI runs FidelityFX FSR 2 on both backends behind this contract: the caller names the textures
+// and the jitter, and the backend turns them into FSR ... (3213 chars)"
+I'll check how handles report validity, since the optional inputs rely on it.
+[94m[Bash][0m Read handle and error helpers $ grep -n "fail(" error.hpp ../../../src/*.hpp 2>/dev/null | head -3
+Handles expose `valid()`, so optional inputs can be detected. Next I'll add the two pure virtuals: `Device::create_upscaler` and `CommandList::upscale`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/device.hpp[0m edit: "    // Creates a swapchain for a native window. Fa..." → "    // Creates a swapchain for a native window. Fa..."
+[94m[Bash][0m Wire upscaler header into device and command list $ ''',1) open(p,'w').write(s) EOF grep -n "upscal" device.hpp command_list.hpp
+The change notice is from my own include edit in `device.hpp`, so the file is as I intended. Next I'll give the validation device and its recorder the new virtuals. Both return `Unsupported`, the same way they handle ray tracing.
+[94m[Bash][0m Locate recorder declarations in validation device $ grep -n "ValidationDevice::create_swapchain" -A6 validation_device.cpp
+[94m[Bash][0m Add upscaler stubs to validation device $ \n',1) open(p,'w').write(s) EOF grep -n "upscale\|Upscaler" validation_device.cpp ../include/engine/...
+The validation device is done. Now the Vulkan side. I need to confirm the RHI loads `vkGetDeviceProcAddr` and to find the existing `Format` to `VkFormat` mapping that FSR needs for its resource descriptions.
+[94m[Bash][0m Check device proc addr and format mapping $ grep -n "VK_NO_PROTOTYPES" ../../CMakeLists.txt ../../../CMakeLists.txt ../../../../CMakeLists.txt 2...
+
+[91m[Error: Exit code 2
+vulkan_api.hpp:20:#define VK_NO_PROTOTYPES
+vulkan_api.hpp:196:    [[nodiscard]] PFN_vkGetInstanceProcAddr get_instance_proc_addr() const noexcept { return get_instance_proc_addr_; }
+vulkan_api.hpp:200:    PFN_vkGetInstanceProcAddr get_instance_proc_addr_ = nullptr;
+vulkan_api.hpp:204:[[nodiscard]] RhiStatus load_global_functions(Api& api, PFN_vkGetInstanceProcAddr get_proc);
+vulkan_api.hpp:207:[[nodiscard]] RhiStatus load_instance_functions(Api& api, PFN_vkGetInstanceProcAddr get_proc, VkInstance instance);
+vulkan_api.cpp:39:    const auto get = reinterpret_cast<PFN_vkGetInstanceProcAddr>(GetProcAddress(module, "vkGetInstanceProcAddr"));
+vulkan_api.cpp:48:    const auto get = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(module, "vkGetInstanceProcAddr"));
+vulkan_api.cpp:51:        return fail(RhiErrorCode::Unsupported, "create_device: the Vulkan loader does not export vkGetInstanceProcAddr");
+vulkan_api.cpp:61:Pfn lookup(PFN_vkGetInstanceProcAddr get, VkInstance instance, const char* name) {
+vulkan_api.cpp:67:RhiStatus load_global_functions(Api& api, PFN_vkGetInstanceProcAddr get_proc) {
+vulkan_common.hpp:16:[[nodiscard]] VkFormat to_vk(Format format) noexcept;
+vulkan_common.cpp:5:VkFormat to_vk(Format format) noexcept {
+7:#include "engine/rhi/error.hpp"
+16:#include <Windows.h>
+20:#define VK_NO_PROTOTYPES
+21:#include <vulkan/vulkan.h>
+23:#include <string>][0m
+`vulkan_api.hpp` defines `VK_NO_PROTOTYPES`, and the RHI's `Api` table has no `vkGetDeviceProcAddr`, which FSR needs. I'll look at how the instance table is declared and loaded so I can add it the same way as the other entries.
+[94m[Bash][0m Read Vulkan instance function table and loader $ sed -n 56,100p vulkan_api.cpp
+I now have the full picture for the Vulkan path. My plan is one `engine_rhi` library with the FSR sources compiled under suppressed warnings as system code. Shared FSR translation code goes in one file, and each backend contributes only its device and resource handling. I'll start with the shared glue.
+[94m[Bash][0m Check FSR typedefs for the glue layer $ grep -n "typedef.*FfxFsr2Context\|typedef struct FfxFsr2Context" -A10 ffx_fsr2.h | head -14
+I'll write the shared FSR glue: the context and dispatch descriptions, the input validation, and the message counter that FSR's callback feeds.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/fsr2_common.hpp[0m "#pragma once
+// FidelityFX FSR 2 glue shared by the DX12 and Vulkan upscalers (US-046). It holds what the backends have in common: the context and dispatch
+// descriptions in FSR 2's terms, the input ... (2428 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/fsr2_common.cpp[0m "#include "fsr2_common.hpp"
+
+#include <atomic>
+#include <cmath>
+#include <string>
+
+namespace engine::rhi::fsr2 {
+namespace {
+
+std::atomic<std::uint32_t> g_error_count{0};
+
+}  // namespace
+
+RhiStatus va... (4178 chars)"
+The shared glue is in place. Before writing the Vulkan upscaler, I need the Vulkan command list's private members and a representative recording function, so the new method follows the same pattern.
+[94m[Bash][0m Read Vulkan command list members and patterns $ grep -n "RhiStatus VulkanCommandList::transition(TextureHandle" -A24 vulkan_command_list.cpp | head ...
+The Vulkan list records through `data_->buffer` and `device_.api()`, and it tracks texture layouts itself. I'll confirm the remaining names I need: `DeviceRef`, `vkDeviceWaitIdle`, and the float format mappings.
+[94m[Bash][0m Check DeviceRef and format mappings $ grep -n "DeviceRef" vulkan_device.hpp | head -3
+I have all the Vulkan details. Last, I'll check the error codes and the `core::Result` helpers so the new code uses the existing conventions.
+[94m[Bash][0m Check RHI error codes and Result helpers $ grep -rn "namespace" rhi/src/vulkan/vulkan_common.hpp | head -2
+Conventions confirmed. I'll add the device entry-point lookup first, then write the Vulkan upscaler with its shim for the five direct instance calls.
+[94m[Bash][0m Add vkGetDeviceProcAddr to instance table $ cd /mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan && python3 - <<'EOF' p='vulkan_api.hpp' s=open...
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_upscaler.hpp[0m "#pragma once
+
+// FSR 2 on Vulkan (US-046). The upscaler owns one FSR 2 context and records each upscale into the caller's command buffer. The command
+// list resolves the textures and checks their sta... (2160 chars)"
+I left a stray holder type in that header. The FSR interface type is just a plain struct, so I'll include the FSR header and use the real types instead.
+[94m[Bash][0m Simplify Vulkan upscaler header types $ // heap-held: the context is large',1) open(p,'w').write(s) EOF grep -n "ffx\|Ffx\|scratch_\|interfa...
+That diff is my own edit, so the header is as intended. Now the Vulkan upscaler implementation, with the five forwarding shims that resolve FSR's direct calls through the device's loaded entry points.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_upscaler.cpp[0m "#include "vulkan/vulkan_upscaler.hpp"
+
+#include "fsr2_common.hpp"
+#include "vulkan/vulkan_common.hpp"
+
+#include "ffx_fsr2.h"
+#include "vk/ffx_fsr2_vk.h"
+
+namespace engine::rhi::vulkan {
+namespace {
+
+/... (5776 chars)"
+I put the `extern "C"` shims inside `engine::rhi::vulkan`, which gives them a namespace-scoped C++ identity. They need to be global so they match FSR's unqualified calls. I'll move the shims and their pointer to file scope.
+[94m[Bash][0m Move FSR shims to global scope $ }  // namespace  ''' s=s[:start]+new+s[end:] open(p,'w').write(s) EOF grep -n "namespace\|extern" vu...
+The shims are now at global scope. Next I'll add the per-input rules to the shared glue. The rules cover each texture's required state, usage, format, and size, so both backends check the same contract. I'll also accept the scene's R32G32 velocity target for motion, since the scene writes that format.
+[94m[Bash][0m Add per-role texture checks to FSR glue $ }  FfxFsr2ContextDescription context_description(''' s=s.replace(old,new,1) s=s.replace('#include <a...
+Those changes are my own edits. The helper in `types.hpp` is named `has_flags`, so I'll fix that call and then add the Vulkan command-list method and the device factory.
+[94m[Bash][0m Add Vulkan command list upscale method $ }  ''' s=s.replace(anchor, new+anchor,1) s=s.replace('#include "vulkan/vulkan_command_list.hpp"\n','...
+The Vulkan list method is in. Next the device factory. I'll check how `create_swapchain` is declared and where the debug-layer flag is stored, so the new factory matches.
+[94m[Bash][0m Locate swapchain factory in Vulkan device $ grep -n "RhiResult<std::unique_ptr<Swapchain>> VulkanDevice::create_swapchain" -A12 vulkan_device.cp...
+[94m[Bash][0m Add Vulkan create_upscaler to device $ } ''' s=s.replace(old,new,1) if '#include "vulkan/vulkan_upscaler.hpp"' not in s:     s=s.replace('#...
+The include landed out of alphabetical order, so I'll move it next to the other `vulkan/` includes. Then I'll add the FSR sources and the new files to `engine_rhi`, with the vendored sources compiled under suppressed warnings.
+[94m[Bash][0m Wire FSR sources into the RHI CMake target $ cd /mnt/d/dev/haiku_game_engine/engine/rhi && python3 - <<'EOF' p='src/vulkan/vulkan_device.cpp' s=o...
+The Linux side is wired. The Vulkan path can be compiled and checked on this host now, so I'll configure the Linux preset and build just `engine_rhi` before writing the DX12 side.
+[94m[Bash][0m Configure Linux preset and build RHI library $ tail -3 /tmp/us046_rhi.log
+Three things block the Vulkan build on Linux, and none of them are in my code. The FSR headers define `FFX_API` as `__declspec` here, the vendored code assumes `size_t` comes from elsewhere, and the precompiled shader file includes a generated permutations header that isn't vendored. I'll check each one.
+[94m[Bash][0m Inspect FFX_API definition and missing shader headers $ find . -name "*permutation*" | head
+The per-pass `*_permutations.h` headers are generated by FidelityFX's shader compiler and aren't in the vendored tree. The precompiled shader file depends on them, so the vendored FSR set is incomplete. I'll check whether the pinned upstream archive is reachable, and what the shader file actually needs from those headers.
+[94m[Bash][0m Inspect shader blob file dependencies and network $ echo "curl=$?"
+The upstream archive is reachable and the manifest records its SHA-256. I'll download the pinned archive into a fresh empty directory, verify the hash, and read the missing headers from it without executing anything.
+[94m[Bash][0m Download pinned FSR 2 archive and verify hash $ tar -tzf fsr2.tar.gz | grep "ffx-fsr2-api/vk/shaders/\|ffx-fsr2-api/dx12/shaders/" | grep -v "\.glsl...
+The archive download is running in the background, so I'll write the DX12 side meanwhile. First I need the DX12 device's accessors for the native device, the debug-layer flag, and the shader heap.
+[94m[Bash][0m Read DX12 device accessors $ sed -n 1,20p dx12_command_list.cpp | grep include
+The accessors I need are all public (`id()`, `native()`, `debug_layers()`, `find_texture()`, `wait_idle()`). I'll write the DX12 upscaler the same way as the Vulkan one.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_upscaler.hpp[0m "#pragma once
+
+// FSR 2 on DX12 (US-046). The upscaler owns one FSR 2 context and records each upscale into the caller's command list. The command list
+// resolves the textures and checks their states ... (2154 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_upscaler.cpp[0m "#include "dx12/dx12_upscaler.hpp"
+
+#include "fsr2_common.hpp"
+
+#include "ffx_fsr2_dx12.h"
+
+namespace engine::rhi::dx12 {
+
+Dx12Upscaler::Dx12Upscaler(Dx12Device& device, const UpscalerDesc& desc)
+    :... (3153 chars)"
+Next the DX12 device factory and the command-list method, mirroring the Vulkan versions.
+[94m[Bash][0m Find DX12 swapchain factory and includes $ grep -n "dx12_swapchain.hpp\|#include" dx12_device.cpp | head -20
+The archive download finished. I'll check the hash against the manifest and list the permutation headers in the archive.
+[94m[Bash][0m Verify archive hash and list permutation headers $ grep "ffx-fsr2-api/vk/shaders/\|ffx-fsr2-api/dx12/shaders/" list.txt | grep -v "\.glsl$" | head -80
+The download is truncated at exactly 512 KiB and the hash does not match. I'll retry with failure-on-error and retries, in the background.
+[94m[Bash][0m Re-download pinned FSR 2 archive with retries $ sha256sum fsr2.tar.gz
+While that downloads, I'll add the DX12 command-list method and device factory, mirroring the Vulkan ones.
+[94m[Bash][0m Add DX12 upscale method and device factory $ grep -n "debug_layers_" dx12_device.hpp | head -2
+The retry finished, so I'll verify the hash and inspect the archive's permutation headers.
+[94m[Bash][0m Verify archive hash and list permutation headers $ grep "ffx-fsr2-api/vk/shaders/\|ffx-fsr2-api/dx12/shaders/" list.txt | head -80
+The archive hash matches, but the permutation headers are not in the upstream archive either. Upstream generates them with FidelityFX's shader compiler at build time, and that tool is not vendored. I'll search this machine for a copy of the generated files or the compiler before deciding how to proceed.
+[94m[Bash][0m Search for generated FSR shader permutation files $ cd /mnt/d/dev/haiku_game_engine/third_party/fsr2/src/ffx-fsr2-api/vk/shaders && sed -n 1,80p ffx_fsr...
+A copy of the vendored tree from an earlier story also lacks the generated files, so there is no local source for them. I'll check whether the upstream archive ships the FidelityFX shader compiler itself under `tools/sc`, since that would regenerate them exactly.
+[94m[Bash][0m Check archive for shader compiler tool $ grep -i "\.exe\|\.dll" list.txt | head
+The upstream archive does ship `tools/sc/FidelityFX_SC.exe`, which generates the permutation headers. The manifest deliberately does not vendor that tool, though, so generating the headers from it would be a policy decision, not a routine fix. Before deciding, I need the tree in a state that still builds. I'll gate the FSR-dependent code behind a build-time check: FSR compiles only when its generated headers are present, and otherwise `create_upscaler` returns `Unsupported`.
+[94m[Bash][0m Gate FSR build on vendored permutation headers $ grep -n "ENGINE_FSR2" CMakeLists.txt | head -30
+The sentinel check uses one header, which is too weak, and I left an unused variable in. I'll rewrite the gate to check all eight per-pass permutation headers for both backends.
+[94m[Bash][0m Make FSR availability check cover all passes $ python3 - <<'EOF' p='CMakeLists.txt' s=open(p).read() old=s[s.index('set(ENGINE_FSR2_ROOT'):s.index(...
+The CMake gate is in place. Next I'll put the matching guards into the code: the backend includes and the bodies of `create_upscaler` and `upscale`. The shared FSR header also gets a fallback definition for the flag, plus `<cstddef>` before the FSR includes.
+[94m[Bash][0m Guard FSR-dependent code on the build flag $ #endif ''')]) print("ok") EOF
+All FSR-dependent bodies are now behind the flag. I'll reconfigure and rebuild `engine_rhi` on Linux to check the non-FSR path compiles.
+[94m[Bash][0m Reconfigure and build RHI library on Linux $ tail -3 /tmp/us046_rhi.log
+The RHI library builds clean under the first-party `-Werror` policy. Since the device and command-list interfaces changed, every target must still compile. I'll start the full Linux debug build in the background and keep working.
+[94m[Bash][0m Start full Linux debug build in background $ echo "build_exit=$?" >> /tmp/us046_full_build.log' > /dev/null 2>&1 & echo started
+While the build runs, I'll check whether the vendored FSR sources that don't depend on the missing headers compile on Linux. That tells the user exactly what remains blocked.
+[94m[Bash][0m Syntax-check vendored FSR sources on Linux $ done
+Two more portability problems show up in the vendored FSR sources on Linux: `_countof` (an MSVC macro) and `std::wstring_convert`. Those need either compile shims or recorded local patches, so they belong in the decision too. Next I'll add a CPU unit test for the new RHI contract, which needs the existing RHI test conventions first.
+[94m[Bash][0m Find RHI test conventions $ sed -n 1,40p "$f"
+[94m[Bash][0m Read contract test helpers and CMake test list $ sed -n 30,50p CMakeLists.txt
+I'll make the input checks public and testable. They are pure RHI rules that need no FSR, so they belong in `upscaler.hpp` with their own source file, and the FSR glue keeps only the FSR-specific descriptions. I'll move them and update the callers.
+[94m[Bash][0m Move upscale input checks to the public RHI API $ \n\n}  // namespace\n\n',1) s=s.replace('#include <atomic>\n#include <cmath>\n#include <cstddef>\n#i...
+That notice is my own edit to the public header. Two callers still spell the old `fsr2::UpscaleRole` type in the lambda signature, so I'll fix those and rebuild the RHI.
+[94m[Bash][0m Fix remaining upscale role references $ tail -2 /tmp/us046_full_build.log
+The FSR-independent checks now live in the public RHI API. I'll write a CPU unit test for them, covering each rule, plus a check that the CPU reference device refuses upscales with `Unsupported`.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/rhi_upscaler_tests.cpp[0m "// The upscale contract of the RHI (US-046). The dispatch and texture rules are checked on the CPU, so they run on every operating system.
+// The CPU reference device runs no FSR 2 upscale: it reports... (7795 chars)"
+The test is written. I'll add the missing `<cstdint>` include, register the file in the test CMake list, and check the full build, which was still running on the earlier tree.
+[94m[Bash][0m Register RHI upscaler tests and check build progress $ tail -2 /tmp/us046_full_build.log
+The full build finished with exit 0, but it started before the refactor and the new test. I'll rebuild incrementally, check for warnings, and run the Linux unit tests.
+[94m[Bash][0m Rebuild Linux debug after refactor $ tail -2 /tmp/us046_build2.log
+[94m[Bash][0m Run Linux unit tests via ctest $ ls build/linux-dev/tests/Debug 2>/dev/null | head -3
+The Linux unit suite passes: 581 cases, including the three new ones, and `ctest` exits 0. The MSVC build is stricter (`/W4 /WX`), and the gated `upscale` bodies leave the `upscaler` parameter unused there. I'll mark it used, and reformat the one-line `if` returns in the Vulkan version to match the DX12 style.
+[94m[Bash][0m Fix unused parameters and reformat list returns $ grep -c "warning:" /tmp/us046_build3.log)
+
+[91m[Error: Exit code 1
+vulkan/vulkan_command_list.cpp:670:    (void)upscaler;
+dx12/dx12_command_list.cpp:551:    (void)upscaler;
+7
+build=0
+0][0m
+The build is clean with no warnings. Next the Windows side: the MSVC build can't be checked from WSL, so I'll run the Windows gates through the batch method in my notes. First I'll check for a leftover batch from an earlier run and look at its template.
+[94m[Bash][0m Check running gate batches and read template $ cat "$f" 2>/dev/null | tr -d '\r' | head -40
+No batch is running, and the template is clear. I'll write a new batch for this story's gates (validate, configure, Windows build, unit tests, and both GPU suites), using the same result-file convention. Then I'll start it in the background.
+[94m[Write][0m [95m/mnt/c/Users/bucha/AppData/Local/Temp/us046a_gate.bat[0m "@echo off
+set T=C:\Users\bucha\AppData\Local\Temp
+if exist %T%\us046a_rc.txt del %T%\us046a_rc.txt
+if exist %T%\us046a_done.txt del %T%\us046a_done.txt
+call "C:\Program Files\Microsoft Visual Studio\1... (1175 chars)"
+[94m[Bash][0m Launch Windows gate batch in background $ echo started
+The Windows batch is running against the current source tree, so I'll avoid editing C++ until it finishes. Meanwhile I'll record the FSR 2 finding in project memory, since it isn't derivable from the code and will matter to the next story.
+[94m[Write][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-fsr2-permutations-missing.md[0m "---
+name: project-fsr2-permutations-missing
+description: The vendored FSR 2 tree lacks the generated *_permutations.h files its precompiled shader tables need; the upstream archive lacks them too, and... (2282 chars)"
+[94m[Bash][0m Index new memory and check Windows progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+- [Vulkan Linux environment](reference-vulkan-linux-environment.md) — WSL has no usable Vulkan device; validation layer built out of tree in /tmp/vvl
+- [Vulkan validation layer on Windows](reference-vulkan-validation-layer-windows.md) — the Windows Vulkan gate needs the pinned 1.4.363 layer built at D:\dev\vvl_build; building it in-tree dirties vendored files
+- [Windows gate batch overlap](feedback-windows-gate-overlap.md) — check for a running us-gate batch before relaunching; stale batches keep running GPU steps
+- [Windows gate batch overlap](feedback-windows-gate-overlap.md) — check for a running us-gate batch before relaunching; stale batches keep running GPU steps
+- [FSR 2 permutations missing](project-fsr2-permutations-missing.md) — vendored FSR 2 lacks the generated shader tables; FSR cannot link until the user picks a vendoring route
+100% tests passed, 0 tests failed out of 22][0m
+The memory is saved and indexed. The "22 tests" line in the earlier output is from the Linux `ctest` run, and it passed. While the Windows gates run, I'll rewrite `docs/upscaling.md` to describe the RHI contract and the blocker accurately.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/upscaling.md[0m "# Temporal upscaling (US-046)
+
+The full profile renders the scene at a fixed 1280×720 and upscales to the 1920×1080 output with FSR 2 Quality. The native profile
+renders at 1920×1080 with TAA and no u... (6947 chars)"
+One sentence in that doc claims the sources compile on Windows, which I haven't verified, since they aren't built here. I'll reword it to say only what is known.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/upscaling.md[0m edit: "compile on Windows with MSVC, which upstream targe..." → "target MSVC, and this tree has not compiled them w..."
+Now I'll check the Windows batch progress.
+[94m[Bash][0m Check Windows gate progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us046a | tr '\n' ' '
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt ls /mnt/c/Users/bucha/AppData/Local/Temp/ grep us046a tr '\n' ' '. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Windows gate progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us046a | tr '\n' ' '
+Validation passed, and configure is running. I'll wait on the batch's done file in the background, bounded to about 50 minutes, so the run is tracked rather than polled.
+[94m[Bash][0m Wait for Windows gate batch to finish $ echo "--- done=$(ls /mnt/c/Users/bucha/AppData/Local/Temp/us046a_done.txt 2>/dev/null)"
+While the Windows batch runs, I'll start the Linux GCC configure, build, and unit tests in the background. The GCC preset compiles the first-party code with a different `-Werror` set, so it's a separate check.
+[94m[Bash][0m Start Linux GCC configure, build, and unit tests $ echo "ctest=$?" >> /tmp/us046_gcc_unit.log' >/dev/null 2>&1 & echo started
+[94m[Bash][0m Check GCC build and Windows gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 1500 followed by: tail -2 /tmp/us046_gcc_cfg.log tail -2 /tmp/us046_gcc_build.log tail -2 /tmp/us046_gcc_unit.log cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check GCC build and Windows gate progress $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt 2>/dev/null
+The Windows build failed with exit 2, so I'll read its compile errors first.
+[94m[Bash][0m Read Windows build errors $ grep -c "warning C" us046a_3.log
+[94m[Bash][0m Inspect the failing header line $ cd /mnt/d/dev/haiku_game_engine/engine/rhi/src && sed -n 28,36p fsr2_common.hpp
+The cause is `interface`, which the Windows SDK defines as a macro (`#define interface struct`). I'll rename that parameter in the shared glue and rerun the Windows batch.
+[94m[Bash][0m Rename FSR parameter that clashes with Windows macro $ tail -2 /tmp/us046_gcc_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+fsr2_common.hpp:34:[[nodiscard]] FfxFsr2ContextDescription context_description(const UpscalerDesc& desc, bool debug_checks, const FfxFsr2Interface& callbacks,
+fsr2_common.cpp:13:FfxFsr2ContextDescription context_description(const UpscalerDesc& desc, bool debug_checks, const FfxFsr2Interface& callbacks,
+fsr2_common.cpp:22:    context.callbacks = callbacks;
+dx12/dx12_upscaler.cpp:26:        return fail(RhiErrorCode::Unsupported, "create_upscaler: FSR 2 cannot use this DX12 device (interface error)");
+vulkan/vulkan_upscaler.cpp:80:        return fail(RhiErrorCode::Unsupported, "create_upscaler: FSR 2 cannot use this Vulkan device (interface error)");
+[6/7] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_upscaler_tests.cpp.o
+[7/7] Linking CXX executable tests/Debug/engine_tests][0m
+The rename is done. The Windows batch is still running the unit and GPU steps against the stale binary, which the notes say to avoid, so I'll stop it first and then check the GCC build.
+[94m[Bash][0m List Windows processes from the gate batch $ cat /tmp/us046_gcc_cfg.log | tail -1
+A `ctest` and an `engine_tests` run are still active from the stale batch. I'll find the batch's `cmd.exe` by its command line, then kill that process tree.
+[94m[Bash][0m Find the stale gate batch process $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\bucha\AppData\Local\Temp\us046_fin...
+[94m[Bash][0m Terminate stale gate batch and its children $ tail -2 /tmp/us046_gcc_unit.log 2>/dev/null
+
+[91m[Error: Exit code 1
+SUCCESS: The process with PID 4968 (child process of PID 47596) has been terminated.
+SUCCESS: The process with PID 34444 (child process of PID 47596) has been terminated.
+SUCCESS: The process with PID 47596 (child process of PID 34752) has been terminated.
+remaining-check-done
+[6/7] Building CXX object tests/CMakeFiles/engine_tests.dir/Debug/src/render_upscaler_tests.cpp.o
+[7/7] Linking CXX executable tests/Debug/engine_tests][0m
+The stale batch is terminated. I'll check whether the Linux GCC build is still running, then relaunch the Windows batch on the fixed source with fresh result files.
+[94m[Bash][0m Relaunch Windows gate batch on fixed tree $ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\bucha\AppData\Local\Temp\us046_fin...
+The Windows batch is running again on the fixed tree. I'll track it with a background waiter on its done file, and let the GCC build finish alongside it.
+[94m[Bash][0m Wait for relaunched Windows gate batch $ echo "--- done=$(ls /mnt/c/Users/bucha/AppData/Local/Temp/us046a_done.txt 2>/dev/null)"
+While the batch runs, I'll wait for the GCC build to finish before reading its log.
+[94m[Bash][0m Wait for GCC build and unit tests $ tail -3 /tmp/us046_gcc_unit.log
+The GCC preset is clean: configure, build with no warnings, and unit tests all exit 0. Now I'll wait for the Windows batch.
+[94m[Bash][0m Check Windows gate progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us046a | tr '\n' ' '
+Windows validate, configure, build, and unit all exit 0, and the GPU steps are running now. I'll check the Windows build log for compiler warnings while the GPU suites finish.
+[94m[Bash][0m Check Windows build log for warnings $ tail -3 us046a_4.log | tr -d '\r'
+The MSVC build has no warnings or errors. I'll wait for the two GPU suites to finish.
+[94m[Bash][0m Wait for GPU suites in Windows batch $ echo "--- done=$(ls /mnt/c/Users/bucha/AppData/Local/Temp/us046a_done.txt 2>/dev/null)"
+While the GPU suites run, I'll wait for the completion notice rather than polling.
+[94m[Bash][0m Check interim Windows gate results $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt
+[94m[Monitor][0m Wait for Windows GPU suites to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt
+The batch is still running, so I'll wait for its notification before writing the progress entry.
+[94m[Bash][0m Block until Windows gate batch completes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us046a_rc.txt
+The Windows gates all exit 0. Before I record that, I'll confirm the GPU logs show the suites actually ran, not an empty pass.
+[94m[Bash][0m Confirm GPU suite results on Windows $ tr -d '\r' < us046a_6.log | grep -ic "validation\|error"
+Both GPU suites pass, and their counts match the previous story exactly, as expected since this change adds no GPU tests. The Vulkan log has one line matching "validation" or "error", so I'll check that it's a benign message.
+[94m[Bash][0m Inspect the single validation-related log line $ tr -d '\r' < us046a_5.log | grep -ic "validation error\|error:"
+That line is just the GPU report announcing the validation layers are on, so it's benign. Next I'll check that `docs/build.md`'s US-046 row doesn't overstate the status, then write the progress entry.
+[94m[Bash][0m Check build doc and progress file headers $ grep -n "^## Codebase Patterns" .ralph-tui/progress.md
+The `docs/build.md` US-046 row still describes the old state. I'll update it to match what's now verified.
+[94m[Bash][0m Update US-046 row in build doc $ these do not exercise an upscale. Linux clang and GCC: `ValidateVendor`, debug builds with 0 warning...
+Now the progress log: I'll add the reusable patterns to the top section and append this iteration's entry at the end, stating the status as partial and blocked.
+[94m[Bash][0m Record US-046 progress and learnings $ grep -n "Vulkan backend of FSR 2" .ralph-tui/progress.md | head -2
+The script stopped at its first assertion, so nothing was written. The header's exact whitespace differs from what I assumed, so I'll look at the file's first lines.
+[94m[Bash][0m Inspect progress file header whitespace $ head -8 .ralph-tui/progress.md | cat -A | cut -c1-100
+[94m[Bash][0m Add reusable patterns to progress log $ FSR's `FfxFsr2Interface` parameters are called `callbacks` in `fsr2_common`. - An RHI upscale keeps ...
+The patterns are in. Now I'll append the iteration entry, using a quoted heredoc so the backticks and dollar signs stay literal.
+[94m[Bash][0m Append US-046 iteration entry to progress log $ grep -c "US-046" .ralph-tui/progress.md
+The progress entry is in. One gap: the rename of `interface` landed after the Linux clang and GCC builds had started, so those results may predate the final tree. I'll rebuild and retest both Linux presets on the final sources before reporting them.
+[94m[Bash][0m Rebuild and retest Linux presets on final tree $ done
+[94m[Bash][0m Check final Linux verification status $ done
+
+[91m[Error: Exit code 1
+== /tmp/us046_final_clang.log
+[0/7] Performing build step for 'engine_dxc_host'
+== /tmp/us046_final_clang_unit.log
+== /tmp/us046_final_gcc.log
+== /tmp/us046_final_gcc_unit.log][0m
+The clang build has started a step that rebuilds the pinned DXC host toolchain, which could take a while. I'll wait for the background job to report.
+[94m[Bash][0m Block until final Linux verification completes $ done
+
+[91m[Error: Exit code 1
+== /tmp/us046_final_clang.log
+build=0
+0
+== /tmp/us046_final_clang_unit.log
+ctest=0
+0
+== /tmp/us046_final_gcc.log
+build=0
+0
+== /tmp/us046_final_gcc_unit.log
+ctest=0
+0][0m
+US-046 is partly done and blocked. I have not signalled COMPLETE, because FSR 2 cannot build from the vendored tree, so neither backend runs an upscale.
+
+**The blocker:** FSR 2's precompiled shader tables (`vk/shaders/ffx_fsr2_shaders_vk.cpp` and the DX12 equivalent) include eight `*_permutations.h` files per backend. Those headers are not in `third_party/fsr2`, and they are not in the pinned upstream archive either. FidelityFX's shader compiler generates them, and the archive ships that compiler as `tools/sc/FidelityFX_SC.exe`, but the manifest deliberately doesn't vendor prebuilt tools. The vendored FSR sources also need Linux fixes (`_countof`, `std::wstring_convert`). I did not stub the headers, because that would hide the failure until pipeline creation.
+
+**Decision for you:**
+1. Run the archive's `FidelityFX_SC.exe` once on Windows and vendor its hash-pinned outputs. This is exact upstream output but needs a documented exception to the no-prebuilt-tools rule. My recommendation.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This keeps the policy intact but is more work, and the bytes differ from upstream.
+
+**What is done:**
+- RHI upscaler contract: `create_upscaler` and `CommandList::upscale`, with public input checks (`engine/rhi/include/engine/rhi/upscaler.hpp`).
+- DX12 and Vulkan backends, compiled only when all permutation headers exist (`ENGINE_FSR2_AVAILABLE` in `engine/rhi/CMakeLists.txt`). Without them both return `Unsupported`.
+- Three CPU unit tests (`tests/src/rhi_upscaler_tests.cpp`).
+- Docs: `docs/upscaling.md`, the US-046 row in `docs/build.md`, and a progress entry in `.ralph-tui/progress.md`. A project memory records the blocker.
+
+**Gates, on the final tree:**
+- Windows (RTX 5080): `ValidateVendor`, `win-dev`, `win-debug`, `win-unit`, `gpu dx12` (65 cases) and `gpu vulkan` (66 cases) all exit 0 with no MSVC warnings. These suites run no upscale, so they only show the RHI change didn't regress either backend.
+- Linux clang and GCC: `ValidateVendor`, both debug builds with 0 warnings, and both unit ctests exit 0.
+- Not run: the ASan and sanitize presets, the native Linux Vulkan GPU suite (no device here), and `engine_bench`.
+
+**Not done:**
+- `SceneRenderer` does not switch to the profile sizes or compose the UI after upscaling.
+- There is no reactive mask.
+- No GPU test runs an upscale.
+
+Tomorrow's first step, once you choose a route: vendor the permutation headers, fix the two Linux portability issues, then wire the full-profile path and add a GPU upscale test on both backends.

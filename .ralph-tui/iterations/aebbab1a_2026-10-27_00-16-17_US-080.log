@@ -1,0 +1,44 @@
+# Iteration 1140 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:16:17.526Z
+- **Ended At**: 2026-10-26T21:16:36.717Z
+- **Duration**: 19s
+- **Input Tokens**: 32
+- **Output Tokens**: 2582
+- **Total Tokens**: 2614
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness and the performance contract.
+[94m[Bash][0m Read progress log tail and check bench artifacts $ git status 2>&1 | head -3
+The log shows 42 prior status checks, each ending "cannot be signed off on this host." Before I add another one, I'll re-check the blockers in one pass.
+[94m[Bash][0m Re-check GPU, FSR, manifest, and bench artifact blockers $ ls artifacts/bench/us078-soak-linux-debug 2>/dev/null | head
+[94m[Bash][0m Identify the four unimplemented manifest entries $ done
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL only. - No source change, ...
+US-080 is not complete, so I have not emitted the COMPLETE signal. Nothing in the acceptance criteria can be verified from this WSL host, and I made no code changes or bench runs in this pass.
+
+I re-checked the blockers:
+
+- **No native Linux GPU device:** `/dev/dri` is absent. The RTX 5080 (driver 617.42) is visible only through WSL's `nvidia-smi`, which does not satisfy the native Linux/Vulkan report requirement.
+- **Windows reports not produced:** there is no `acceptance` run under `artifacts/bench`. The only GPU bench artifacts are the earlier US-076, US-077 and US-078 runs.
+- **Four workloads are unimplemented:** `benchmarks/manifest.json` has four entries marked `implementation: none` (lines 88, 108, 122, 132). These are the physics action route, the streaming route, and the teleport and render-route entries. The acceptance suite cannot run without them.
+- **FSR 2 cannot link:** `third_party/fsr2` has 0 `*_permutations.h` files. Vendoring that generated output is a route decision for you, not something I should choose silently.
+- **Samples are missing:** the `samples/` directory is absent.
+
+Completing this story needs three things from you:
+
+1. Access to the RTX 5080 reference computer, so the Windows/DX12, Windows/Vulkan and native Linux/Vulkan acceptance runs with three repeats can be produced.
+2. A decision on the FSR 2 permutations route.
+3. Implementation of the four unimplemented workloads.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these results.

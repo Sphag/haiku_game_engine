@@ -1,0 +1,55 @@
+# Iteration 1236 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:50:22.681Z
+- **Ended At**: 2026-10-26T22:56:53.902Z
+- **Duration**: 6m 31s
+- **Input Tokens**: 76
+- **Output Tokens**: 6212
+- **Total Tokens**: 6288
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the existing docs, and the progress log.
+[94m[Bash][0m Inspect repo root, docs, and progress log $ tail -n 60 .ralph-tui/progress.md
+[94m[Bash][0m Read README and check benchmark and cmake dirs $ ls cmake
+The docs and most gates were already done in earlier passes. The log lists `win-release`, the offline clean-copy build, and the package smoke tests as feasible but not yet run. I'll check the Windows gate notes for how to run it from WSL.
+[94m[Bash][0m Read Windows gate memory notes and acceptance open items $ grep -n "release\|offline\|package" docs/acceptance.md | head -40
+The `win-release` build can run through the Windows batch path from my notes. I'll confirm the preset exists and that no earlier batch is still running before I launch it.
+[94m[Bash][0m Check win-release preset, build dirs, and running batches $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep -i "us081\|gate" | head
+[94m[Bash][0m Run Windows win-release build through cmd.exe batch $ tail -n 3 /mnt/d/dev/haiku_game_engine/build/us081_win_release.log
+The Windows release build passed (596 of 596 steps, exit 0). Next I'll try the offline clean-copy check that the README points to.
+[94m[Bash][0m Read the offline verification script $ sed -n 1,60p tools/ci/offline_verify.sh
+This script rebuilds in place. To meet the "clean repository copy" requirement, I'll copy the tree without `build/` and `artifacts/` into an empty directory and run it there.
+[94m[Bash][0m Run offline build and unit tests in a clean copy $ tail -n 15 /tmp/us081_offline.log
+The offline clean-copy build and all 30 unit tests pass with networking disabled. Next is the standalone package smoke test, so I'll check how distribution is described.
+[94m[Bash][0m Read distribution doc and tools directory $ ls tools
+The distribution integration test already launches a package from a clean folder, but that is not the same as a separate smoke run. I'll record the results in `docs/acceptance.md`, starting with the gate table.
+[94m[Bash][0m Read release gate table in acceptance doc $ sed -n 100,140p docs/acceptance.md
+[94m[Bash][0m Update acceptance doc and append progress entry $ linux-unit 30 of 30. - Package smoke: not run as a separate smoke. The distribution integration test...
+[94m[Bash][0m Remove unverified warnings-as-errors claim from doc $ sed -i 's/MSVC Release, warnings as errors) |/MSVC Release) |/' docs/acceptance.md && grep -n "win-r...
+US-081 is not complete. I've run every remaining gate I could run on this machine, and the story still needs hardware this machine doesn't have, so I have not emitted the COMPLETE signal.
+
+**Passed this pass:**
+- **Windows `cmake --build --preset win-release`:** exit 0, 596 of 596 steps. Run through a cmd.exe batch on the Windows host.
+- **Offline build from a clean copy:** I copied the tree without `build/`, `artifacts/`, and `.ralph-tui/` into `/tmp/us081_clean`, then ran `tools/ci/offline_verify.sh` inside a network namespace that has only loopback. Validate, `linux-dev`, `linux-debug`, and `linux-unit` (30 of 30) all passed, and outbound TCP was refused.
+
+**Not run, or not complete:**
+- **Standalone package smoke test on a clean directory:** not run as a separate smoke. The distribution integration test launches a package from an empty folder and passed in the unit run. A package built from a real sample project on each OS is still open.
+- **Still open, needing hardware or decisions:** the RTX 5080 GPU suites (DX12 and Vulkan on Windows), native Linux Vulkan, the full acceptance benchmark, and the editor visual smoke tests. Also open: `linux-gcc` (needs GCC 11+), FSR 2's generated shader tables, and a LICENSE file, which is your call.
+
+**Files changed:**
+- `docs/acceptance.md`: the gate table and open items now record the results above.
+- `.ralph-tui/progress.md`: appended a US-081 entry.
+- `build/us081_win_release.log`: the Windows release build log.
+
+I did not change any source code or the README. The README already had the required sections from earlier passes.

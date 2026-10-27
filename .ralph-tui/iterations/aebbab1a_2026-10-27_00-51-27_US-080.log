@@ -1,0 +1,43 @@
+# Iteration 1195 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:51:27.009Z
+- **Ended At**: 2026-10-26T21:51:42.467Z
+- **Duration**: 15s
+- **Input Tokens**: 28
+- **Output Tokens**: 2385
+- **Total Tokens**: 2413
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tooling.
+[94m[Bash][0m Check progress log and benchmark files $ grep -n "US-079" .ralph-tui/progress.md | head -5
+The log shows this story has been blocked across many prior runs. I'll re-check the three blockers (native Linux GPU device, unimplemented workloads, FSR 2 tables) before deciding whether anything has changed.
+[94m[Bash][0m Re-check blockers: GPU device, manifest, FSR tables $ find . -newer .ralph-tui/progress.md -path ./build -prune -o -type f -print 2>/dev/null | grep -v '^...
+The three blockers are unchanged, so there is nothing new to build or measure. I'll record this check in the progress log, as earlier runs did.
+[94m[Bash][0m Append status check entry to progress log $ benchmarks/manifest.json still has four `implementation: "none"` entries (lines 88, 108, 122, 132). ...
+US-080 is not complete, so I am not emitting the COMPLETE signal. The blockers are the same as in the last several runs, and I did not run any builds or benchmarks this time.
+
+**What is blocking sign-off:**
+- **No native Linux GPU device.** `/dev/dri` is absent, so native Linux/Vulkan cannot be measured here. WSL sees the RTX 5080 only through `nvidia-smi`, which does not satisfy the acceptance criteria.
+- **Unimplemented workloads.** `benchmarks/manifest.json` still marks four entries `implementation: "none"` (lines 88, 108, 122, 132). `all_features` has no source. `render_stress`, `physics_stress` and `streaming_stress` have source, but the manifest does not wire them up and `main.cpp` refuses the physics and streaming visual paths. An acceptance batch would exit 3 (incomplete) against these.
+- **FSR 2 tables missing.** There are zero `*_permutations.h` files under `third_party`, so FSR 2 cannot link. This needs a vendoring decision from you.
+- **Frame budget.** If a budget is exceeded on the RTX 5080, the fix or the contract change needs your decision.
+
+**What I checked:** the three blockers above are unchanged from the last check. I appended a status entry to `.ralph-tui/progress.md` recording this.
+
+**What the user needs to do:**
+1. Decide the FSR 2 vendoring route.
+2. Decide whether to have the four unimplemented workloads wired up in a follow-up run.
+3. Provide access to the RTX 5080 reference machine for the native Linux Vulkan run and the Windows DX12/Vulkan 3×180 s batches.
+
+I did not run the Windows or Linux quality gates in this pass. The most recent passing results are in the progress log entries from earlier runs, and I have not re-verified them here.

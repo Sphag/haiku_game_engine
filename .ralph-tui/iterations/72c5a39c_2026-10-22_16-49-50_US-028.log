@@ -1,0 +1,71 @@
+# Iteration 32 Log
+
+## Metadata
+
+- **Task ID**: US-028
+- **Task Title**: Vulkan Device and Presentation
+- **Description**: As a user of both operating systems, I want Vulkan output so that I can use a shared alternative backend.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-22T13:49:50.680Z
+- **Ended At**: 2026-10-22T13:55:48.241Z
+- **Duration**: 5m 57s
+- **Input Tokens**: 124
+- **Output Tokens**: 10759
+- **Total Tokens**: 10883
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start with the progress log, the PRD, and the current repo state.
+[94m[Bash][0m List repo root and progress file size $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -5
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+The log is long. I'll jump to the most recent entries and look for the RHI, Vulkan, and US-026/027 history.
+[94m[Bash][0m Find recent progress log section headers $ grep -n "^## " .ralph-tui/progress.md | tail -40 && echo ---- && grep -n "US-02[5-9]" .ralph-tui/pro...
+[94m[Bash][0m Inspect engine, tests, and RHI directory layout $ ls tasks docs
+Now the RHI and US-028 entries, which describe what is already done and what remains open.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m
+US-028 is mostly built. The open items are the native Linux GPU report, which needs hardware this WSL host lacks, and surface-loss recovery, which has never been exercised. I'll check the story's PRD entry and the two memory references before running gates.
+[94m[Bash][0m Read US-028 PRD entry and memory references $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The PRD entry is truncated. I'll check the story's `passes` flag and read the Vulkan swapchain's recovery paths, since surface loss is the one criterion the log says was never exercised.
+[94m[Bash][0m Check US-028 passes flag and swapchain recovery paths $ grep -n "SURFACE_LOST\|OUT_OF_DATE\|SUBOPTIMAL\|surface_lost\|rebuild" engine/rhi/src/vulkan/vulkan_...
+Recovery paths exist. I'll read the rebuild, acquire, and present code to check them.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/vulkan/vulkan_swapchain.cpp[0m
+The recovery logic reads correctly: out-of-date and suboptimal results rebuild, and surface loss drops and rebuilds the surface without leaking or touching the device state. Nothing deterministic can trigger it here, so that stays unexercised. Now I'll run the Linux gates and find the previous Windows gate batch.
+[94m[Bash][0m Start Linux gates in background and list Windows temp dir $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | head -30
+[94m[Bash][0m Show previous Windows gate batch and its output $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us028_run.out | tail -30
+The previous Windows batch can be reused as is. I'll wait for the Linux run to finish before starting it, so the two builds don't contend.
+[94m[Bash][0m Wait for Linux gates to finish and show results $ tail -4 /tmp/us028/linux_ctest.log
+
+[91m[Error: Exit code 1
+validate=0
+ugrep: warning: /tmp/us028/linux_build.log: No such file or directory
+tail: cannot open '/tmp/us028/linux_ctest.log' for reading: No such file or directory][0m
+[94m[Bash][0m Check Linux configure progress $ ps aux | grep -c "[c]make"
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: cat /tmp/us028/linux_codes.txt echo --- tail -5 /tmp/us028/linux_configure.log ps aux grep -c "[c]make". To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux configure progress without sleeping $ ps aux | grep "[c]make" | head -3
+The Linux configure is still running. I'll wait on it with a bounded poll.
+[94m[Bash][0m Poll until Linux gate chain finishes $ cat /tmp/us028/linux_codes.txt
+[94m[Bash][0m Check Linux results then run Windows gate batch $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us028/summary.txt
+Linux and Windows gates all exit 0, including both Windows GPU suites. I'll confirm the Windows logs have no warnings and that the GPU runs used real validation layers and the RTX adapter.
+[94m[Bash][0m Check Windows build warnings and GPU suite reports $ grep -ci "validation error\|VUID" $D/gpu_vulkan.log
+Windows is clean: zero `warning C`, 21/21 unit tests, both GPU suites passing on the RTX 5080 with validation on, and no validation errors in the Vulkan log. Last, I'll rerun the Linux Vulkan GPU probe so the native-Linux status is current.
+[94m[Bash][0m Run Linux Vulkan GPU probe and check DRI node $ ls /dev/dri 2>&1 | head -2
+The Linux probe still reports `unsupported` (exit 3), as expected on this host. I'll log this pass in the progress file and leave `US-028` at `passes: false`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "  - The Linux ctest run takes about 33 s, past the..." → "  - The Linux ctest run takes about 33 s, past the..."
+US-028 is not complete, so I have not signalled completion. Its `passes` flag stays `false`.
+
+**What is still open:** the native Linux GPU clear/readback report with validation layers. This WSL host has no Vulkan 1.2 hardware adapter (`/dev/dri` is absent, and lavapipe lacks timeline semaphores). The probe exits 3, `unsupported`, which is not a pass. Closing this needs a real Linux machine with a Vulkan 1.2 GPU.
+
+**What this pass verified (no source changed):**
+- **Linux/Clang:** `ValidateVendor`, `linux-dev`, `linux-debug` build with 0 warnings, and `linux-unit` at 22/22 all exit 0.
+- **Windows/MSVC:** `ValidateVendor`, `win-dev`, `win-debug` build with 0 `warning C`, and `win-unit` at 21/21 all exit 0.
+- **Windows GPU, RTX 5080, validation on:** `--suite gpu --backend dx12` passes (8 cases), and `--suite gpu --backend vulkan` passes (9 cases) with no validation errors in the log.
+- **Linux/GCC and ASan:** not re-run this pass. No source has changed since they last passed, per the earlier log entry.
+
+**Swapchain review:** I read the out-of-date, suboptimal, resize, and surface-loss paths in `engine/rhi/src/vulkan/vulkan_swapchain.cpp`, and they look correct. Surface loss is still unexercised on both OS, because nothing deterministic can trigger it.
+
+I appended a sixth-pass entry to `.ralph-tui/progress.md`. I did not create a commit.

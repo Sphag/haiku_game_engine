@@ -1,0 +1,40 @@
+# Iteration 237 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T14:43:32.592Z
+- **Ended At**: 2026-10-24T14:46:47.285Z
+- **Duration**: 3m 14s
+- **Input Tokens**: 26
+- **Output Tokens**: 2348
+- **Total Tokens**: 2374
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the current state of the physics code and the progress log before deciding what's left for US-052.
+[94m[Bash][0m Inspect physics module, progress log, and Jolt memory $ ls engine/physics/ && tail -n 80 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-d-dev...
+The log shows US-052 has been Partial across several passes. The open items are the `linux-gcc` gate and the acceptance benchmark. I'll re-run the runnable Linux gates to confirm the tree still passes, and check whether a GCC 11+ compiler is now available.
+[94m[Bash][0m Re-run validate, Linux debug build, and unit tests $ tail -n 4 /tmp/ctest.log)
+[94m[Bash][0m Append re-verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/p...
+US-052 is still **Partial**, so I'm not emitting the COMPLETE signal. The Jolt adapter and its tests are in place and pass on Linux clang. Two acceptance items can't be closed in this environment.
+
+**Re-verified this pass (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: exit 0 (unit 1, integration 21).
+
+I did not change any source. The only edit is a new entry appended to `.ralph-tui/progress.md`.
+
+**Still open:**
+- **`linux-gcc` gate:** the local toolchain has only g++-9 and gcc-9, and Jolt needs GCC 11+ for `__builtin_bit_cast`. There is no `/opt` compiler. Closing this needs a GCC 11+ environment or the CI job.
+- **Acceptance benchmark:** `engine_bench` does not exist in the tree yet (it is tracked as US-074), so `engine_bench --suite acceptance` cannot run.
+
+The Windows gates and the ASan/UBSan run were recorded in earlier passes. I did not re-run them this time, so they still rest on those earlier records.

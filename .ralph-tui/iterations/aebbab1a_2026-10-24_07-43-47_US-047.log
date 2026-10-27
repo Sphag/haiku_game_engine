@@ -1,0 +1,69 @@
+# Iteration 122 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T04:43:47.437Z
+- **Ended At**: 2026-10-24T04:45:39.359Z
+- **Duration**: 1m 51s
+- **Input Tokens**: 152
+- **Output Tokens**: 19981
+- **Total Tokens**: 20133
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code to see what US-047 already has.
+[94m[Bash][0m Read progress log and locate terrain sources $ tail -n 150 .ralph-tui/progress.md && ls && grep -rn "terrain" --include=*.cpp --include=*.hpp --inc...
+[94m[Bash][0m Find US-047 entries and terrain memory note $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-terrain-runtime.md
+The log shows US-047 has been "Partial" for many passes. The open GPU item is the RT terrain shadow, which fails with `darkened 0` on both backends. I'll check the Windows-run route in memory and the RT terrain test.
+[94m[Bash][0m Read Windows run memory and check for running batches $ ps aux | grep -i "us-gate\|us047\|cmd.exe" | grep -v grep | head
+[94m[Bash][0m Locate RT shadow fixture code $ grep -n "hill\|RtShadow\|render_hill\|darkened" tests/src/render_terrain_gpu_tests.cpp | head -60
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/render_terrain_gpu_tests.cpp[0m
+The traced-shadow test uses `low_sun(false)`, so the RT shadow may be gated on the light's shadow flag. I'll check how the RT shadow is gated and how the fixture defines the sun.
+[94m[Bash][0m Read fixture lights and camera helpers $ grep -n "low_sun\|top_down_camera\|sun()" -A12 tests/src/render_terrain_gpu_tests.cpp | sed -n 1,80p...
+[94m[Bash][0m Trace RT shadow gating in renderer $ grep -n "casts_shadow\|ray_traced_active\|shadow_distance\|RtShadow\|rt_shadow" engine/render/src/sc...
+[94m[Bash][0m Inspect RT shadow frame setup and gating $ grep -n "ray_traced_\s*=\|ray_traced_active\|bool traced\|ray_traced_instances" engine/render/src/sc...
+[94m[Bash][0m Read RT prepare sun selection and instance count $ sed -n 1725,1740p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read RT enablement and prepare start $ sed -n 1580,1625p engine/render/src/scene_renderer.cpp
+The CPU reference passes on this geometry, so the GPU shadow pass is the suspect. I'll read the GPU shadow entry in `rt_effects.hlsl` and the static-mesh stride to compare with the terrain path.
+[94m[Bash][0m Inspect RT shadow shader and vertex strides $ grep -n "kStaticVertexStride\|kTerrainVertexStride\|vertex_stride" engine/render/src/*.cpp engine/re...
+[94m[Bash][0m Read RT shadow trace and sun-blocked logic $ sed -n 128,160p engine/render/shaders/rt_effects.hlsl
+The shadow shader is generic, so a terrain-only fault would sit in the BLAS inputs. I'll compare the static and terrain vertex layouts, the triangle build, and the BLAS build.
+[94m[Bash][0m Compare strides, RT triangles, and BLAS build $ sed -n 1795,1850p engine/render/src/scene_renderer.cpp
+The BLAS build reads `gpu.vertices` through the same usage path as static meshes. I'll check whether the terrain upload goes through that usage path, since a missing `ShaderResource` flag would fail silently.
+[94m[Bash][0m Read geometry upload and buffer usage $ sed -n 2960,2995p engine/render/src/scene_renderer.cpp
+The upload path matches static meshes. The last memory note also flagged the instance mask default, which is cheap to check.
+[94m[Bash][0m Check TopLevelInstance mask default and builder $ grep -n "make_top_level_instance" -A22 engine/render/src/rt_effects.cpp | head -40
+The mask default is fine, so the static reasoning is exhausted. The remaining question needs a GPU run. I'll look at the existing Windows batch template so I can run one bounded diagnostic instead of another read-through.
+[94m[Bash][0m Find latest US-047 Windows batch template $ cat "$f" 2>/dev/null | tr -d '\r'
+The last batch is already on disk. Before running anything new, I'll read its DX12 and Vulkan GPU logs for debug-layer messages about the RT path.
+[94m[Bash][0m Read latest DX12 and Vulkan GPU logs $ cat us047f_rc.txt
+Both counters are zero, which means the traced frame matches the untraced one everywhere. That points at either the RT shadow texture or the lit pass. I'll check whether the renderer has a debug view that exposes the traced shadow directly, which would separate the two.
+[94m[Bash][0m Find lighting debug views and their use $ grep -n "LightingView::" engine/render/src/scene_renderer.cpp | head -30
+No traced-shadow view exists. One candidate I haven't checked: the fixture's sun uses `casts_shadow = false`, so the lit pass may skip the traced term if it is tied to a shadow-map flag. I'll check how `scene.hlsl` applies `LoadTraced`.
+[94m[Bash][0m Locate traced shadow reads in scene shader $ grep -n "LoadTraced\|RtShadow\|traced" engine/render/shaders/scene.hlsl | head -30
+[94m[Bash][0m Read traced shadow application in lighting $ sed -n 630,675p engine/render/shaders/scene.hlsl
+The lit pass applies the traced term regardless of `casts_shadow`, so that's ruled out. The remaining cheap check is the primary-ray basis. If `right` is wrong for a top-down camera, primary rays miss and the shadow defaults to lit.
+[94m[Bash][0m Check ray basis vectors in RT params $ grep -rn "glm::vec3 Camera::\|forward() const\|right() const" engine/render/include engine/render/sr...
+Lines 251-252 build the basis from `forward` and world up. A straight-down camera makes that cross product zero, which would produce NaN rays. I'll read that code.
+[94m[Bash][0m Read RT basis and reference ray setup $ sed -n 90,104p engine/render/src/rt_effects.cpp
+I've now ruled out the remaining cheap causes by reading code: the instance mask, the lit-pass gating on `casts_shadow`, and the primary-ray basis for a top-down camera. None of them explains `darkened 0`, and the cause still needs a Windows readback. I won't edit source without a verified fix, so I'll record this pass in the progress log as the workflow requires.
+[94m[Bash][0m Append re-check entry to progress log $ (3) no native Linux Vulkan device on this host. - Why no edit: every remaining cause sits in the GPU...
+US-047 is not complete, so I'm not emitting the completion signal. This pass changed no source and ran no gates. I only read the Windows logs from the last batch and the RT code, and appended a re-check entry to `.ralph-tui/progress.md`.
+
+**Blocking items**
+1. **RT terrain shadow does not darken the ground.** The traced-shadow fixture (`tests/src/render_terrain_gpu_tests.cpp:511-517`) fails on DX12 and Vulkan with `darkened 0, brightened 0`. The debug layers report no errors, so the GPU runs cleanly but produces no traced shadow. This is an acceptance failure: terrain must participate in RT shadows. The CPU reference darkens the same geometry, so the fault is on the GPU side. I ruled out three causes by reading the code. The lit pass applies the traced term regardless of `casts_shadow`. The instance mask defaults to 0xFF. The primary-ray basis for the top-down camera is non-degenerate. None of these explains the result. The next step needs the Windows host: read back `RtShadow` for the hill frame, or count primary-ray misses and shadow hits on the GPU side.
+2. **`engine_bench --suite acceptance` does not exist.** `tools/` has no benchmark target, so the performance contract cannot run. This belongs to US-074, which is not a prerequisite of this story. The acceptance criterion depends on that harness, so I'm reporting it as blocked, not passed.
+
+**Not verified in this pass**
+- Windows and Linux gates were not re-run because no source changed. The last recorded results are from the batch on 2026-10-24: all four Windows gates passed, and DX12 and Vulkan passed every GPU case except the traced-shadow case.
+- No native Linux Vulkan device is available on this host, so the Linux GPU suite is not run.
+
+I haven't made a code change for the RT shadow, since any fix would be a guess without the GPU readback.

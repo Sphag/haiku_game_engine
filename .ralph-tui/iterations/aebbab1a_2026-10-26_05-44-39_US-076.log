@@ -1,0 +1,45 @@
+# Iteration 787 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:44:39.949Z
+- **Ended At**: 2026-10-26T02:44:51.744Z
+- **Duration**: 11s
+- **Input Tokens**: 14
+- **Output Tokens**: 1878
+- **Total Tokens**: 1892
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark tool.
+[94m[Bash][0m Check progress log, benchmark tool files, and git status $ git status --short 2>/dev/null | head -30
+US-076 is still blocked on a decision only you can make, so I have not signaled completion. I checked the tree and made no changes in this pass.
+
+**What is blocked**
+
+1. **Route-start triangle floor.** The contract (PRD line 875) requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The current route start submits 312,068. The start pose comes from the manifest camera route, which is pinned by SHA-256, and the instance placement comes from the seeded generator, whose digests are pinned. Fixing it means changing a fixed contract: either a placement change (bump `kWorkloadVersion`, regenerate `workload_expected.json`, update the manifest hash) or accepting the failing measured run as the result. PRD line 722 reserves this for a user decision, so I did not make it.
+   - Measured frame time is p99 35–47 ms against a 16.7 ms budget at that placement, which is also part of the same decision.
+2. **`full_1080` profile.** It is unsupported until the vendored FSR 2 permutation headers exist. The vendoring route is your choice.
+3. **Native Linux Vulkan GPU and `linux-gcc` runs.** Not run here. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Verified state (last checked in this pass)**
+
+- Source and manifest mtimes are unchanged since the previous check: `render_stress.cpp`, `workload.cpp`, `workload_expected.json`, and `manifest.json`. `kWorkloadVersion` is still 1.
+- `engine_workload --check benchmarks/workload_expected.json` reports 4 scenes matching.
+- `linux-debug` builds and `ctest --preset linux-unit` passes 30/30 (from the previous check; not rerun here).
+
+**What I need from you**
+
+Pick one for the route-start triangle floor:
+- **(a)** approve a placement or route change, which I'll make by bumping `kWorkloadVersion`, regenerating the expected file, and updating the manifest hash;
+- **(b)** accept the failing measured run as the US-076 result and record the gap.
+
+Also tell me how to handle `full_1080` (vendor FSR 2 permutations, or mark it unsupported for this story). The Linux Vulkan and `linux-gcc` runs need a native Linux machine with a Vulkan device.

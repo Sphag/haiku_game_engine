@@ -1,0 +1,49 @@
+# Iteration 1066 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:19:31.788Z
+- **Ended At**: 2026-10-26T20:19:55.846Z
+- **Duration**: 24s
+- **Input Tokens**: 28
+- **Output Tokens**: 3301
+- **Total Tokens**: 3329
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and the current state of `all_features` and the prerequisite stories.
+[94m[Bash][0m Inspect repo root, progress log, and all_features references $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*...
+The progress log shows US-079 blocked for many passes on decisions only the user can make. I'll re-check whether any of those blockers have changed before deciding what to do.
+[94m[Bash][0m Re-check blockers: samples, FSR permutations, manifest, runner $ g++ --version | head -1
+Nothing has changed since the last pass, so I'm not going to start new work on this story. I'll log the status check in the progress file, as the earlier passes did.
+[94m[Bash][0m Append status-check entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, so I am not emitting the COMPLETE signal. Nothing in the repo has changed since the last pass, and the blockers that stop this story are still open.
+
+**What exists now**
+- `all_features` workload from the table, plus CPU tests for it, in `tests/src/all_features_tests.cpp`.
+- An editor scenario test for scene, material, animation, and terrain edits, undo/redo, Play/Stop, and a Build Game verify step, in `tests/src/all_features_editor_tests.cpp`.
+- The last recorded Linux results still stand: `ctest --preset linux-unit` 30/30, and `engine_tests --suite integration` 131 passed, 4 skipped. The Windows gates were last run in an earlier pass.
+
+**What is still open, and why I stopped**
+- **Route not approved.** `all_features_route_v1` is still a proposal in `benchmarks/manifest.json`. The tour, profiles, and forced geometry paths are defined against it, so I did not build them on an unapproved route.
+- **FSR 2 permutation headers missing.** `third_party/fsr2` has none, so `full_1080` stays unsupported and the GI/RT/upscale profile for it cannot run.
+- **No GPU scene.** `all_features` is `implementation: none` in the manifest, and no runner exists in `tools/benchmark`. `engine_bench --suite acceptance` therefore cannot run it.
+- **No tour runner.** Nothing under `tests/` or `tools/` produces screenshots or an action log.
+- **No Windows GPU/GUI session here.** `/dev/dri` is absent and the host has only g++ 9.4, so the GPU tour, live editor run, package relaunch, and `linux-gcc*`/sanitizer presets cannot be verified in this environment.
+- **Runtime component catalog undecided.** `samples/` does not exist, and the runtime refuses scenes with components.
+
+**What I need from you**
+1. Approve `all_features_route_v1` (or amend it).
+2. Vendor the FSR 2 permutation headers, or confirm that `full_1080` stays unsupported.
+3. Decide the runtime component catalog for `samples/all_features`.
+4. Run the tour, profiles, and editor scenario on a Windows GPU session. I can prepare the scripts for that run.
+
+I appended a status-check entry to `.ralph-tui/progress.md` recording these blockers and the unchanged results. I made no source changes and ran no builds in this pass.

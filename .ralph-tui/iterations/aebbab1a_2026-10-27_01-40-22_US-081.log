@@ -1,0 +1,50 @@
+# Iteration 1233 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:40:22.403Z
+- **Ended At**: 2026-10-26T22:42:45.658Z
+- **Duration**: 2m 23s
+- **Input Tokens**: 56
+- **Output Tokens**: 3749
+- **Total Tokens**: 3805
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the repo state, the progress log, and the PRD's constraints.
+[94m[Bash][0m Inspect repo root, progress log, and README $ wc -l README.md 2>/dev/null
+[94m[Bash][0m Read US-080/081 PRD entries and list directories $ git status 2>&1 | head -3
+Prior passes already wrote the docs and ran the feasible gates. I'll confirm the current state: the open items in `docs/acceptance.md`, whether a license file exists, and whether the Linux gates still pass on this tree.
+[94m[Bash][0m Check acceptance open items, license file, and vendor validation $ (cmake -P cmake/ValidateVendor.cmake 2>&1 | tail -3)
+The GPU, editor, and benchmark items need the RTX 5080 and a native Linux GPU, which this machine lacks. The Linux sanitizer gate is feasible here, so I'll try it.
+[94m[Bash][0m Start linux-asan configure, build, and sanitizer tests in background $ echo "ctest=$?" >> /tmp/asan_ctest.log) & echo started
+[94m[Bash][0m Check sanitizer presets and configure log $ cat /tmp/asan_cfg.log | tail -5
+[94m[Bash][0m Show sanitizer configure, build, and ctest results $ tail -15 /tmp/asan_ctest.log
+The sanitizer gate passed: ASan/UBSan build succeeded and `linux-sanitize` ran 30 of 30. I'll record that in the acceptance checklist.
+[94m[Bash][0m Show the sanitizer row in acceptance doc $ sed -n 108p docs/acceptance.md && sed -n 4,6p docs/acceptance.md | cut -c1-200
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| `cmake --preset linux-asan`, `cmake --build --pr..." → "| `cmake --preset linux-asan`, `cmake --build --pr..."
+[94m[Bash][0m Append progress entry for the sanitizer gate run $ it does not need GPU hardware, so run it before calling the Linux CPU gates complete. --- EOF echo o...
+US-081 is not complete, so I am not emitting the COMPLETE signal. The docs and most feasible gates were already in place from earlier passes. This pass added one more verified gate.
+
+**Verified in this pass**
+- `cmake -P cmake/ValidateVendor.cmake` passed (26 dependencies, 8542 files).
+- `linux-asan` configure and build passed, and `ctest --preset linux-sanitize` passed 30 of 30 with AddressSanitizer and UBSan on the CPU tests. I changed the row in `docs/acceptance.md` from "not run" to passed.
+- I appended a progress entry to `.ralph-tui/progress.md`.
+
+**Still open, and not runnable on this machine**
+- GPU suites on the RTX 5080: `engine_tests --suite gpu` for DX12 and Vulkan on Windows, and Vulkan on native Linux. This WSL machine has no `/dev/dri`, so there is no native Linux Vulkan device.
+- The full `engine_bench --suite acceptance` run, which US-080 also requires. Only the US-080 readback-off runs exist in `artifacts/bench`.
+- Editor suite and visual smoke tests with screenshots on both operating systems.
+- `linux-gcc`, which needs GCC 11 or newer. The local GCC 9.4 cannot build Jolt.
+- `win-release`, the clean-copy offline build, and the clean-directory package smoke tests. These are feasible but were not run in this pass.
+
+**Needs your decision**
+- The repo has no LICENSE or NOTICE file. Choosing the project's license is your call, so I did not add one.

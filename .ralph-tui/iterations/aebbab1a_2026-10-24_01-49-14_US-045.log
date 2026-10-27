@@ -1,0 +1,221 @@
+# Iteration 37 Log
+
+## Metadata
+
+- **Task ID**: US-045
+- **Task Title**: Denoising and Volumetrics
+- **Description**: As a player, I want stable RT effects and volumetric light so that the full profile is usable for gameplay.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-23T22:49:14.184Z
+- **Ended At**: 2026-10-23T23:35:03.895Z
+- **Duration**: 45m 49s
+- **Input Tokens**: 660
+- **Output Tokens**: 154502
+- **Total Tokens**: 155162
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo.
+[94m[Bash][0m Inspect repo root, progress log, and US-045 PRD section $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-045" -A40 tasks/prd-open-world-engine.m...
+The progress log marks US-045 as Partial: both passes exist and are tested, but `SceneRenderer` doesn't run them, so the frame shows no effect. I'll look at the renderer and both pass headers to see how to wire them in.
+[94m[Bash][0m Read denoiser and volumetric fog headers and list render files $ wc -l engine/render/src/scene_renderer.cpp engine/render/include/engine/render/*.hpp | tail -40 && c...
+The two passes are standalone. Next I'll find how `SceneRenderer` already wires the RT shadow and reflection targets, since the denoiser and fog should hook in there.
+[94m[Bash][0m Grep SceneRenderer header for RT and graph wiring $ grep -n "rt_\|RtEffects\|reflected_\|dynamic_gi\|DynamicGi\|post_\|add_pass\|graph\.\|struct \|class...
+[94m[Bash][0m Read RT settings and SceneRenderer private members $ sed -n 176,260p engine/render/include/engine/render/scene_renderer.hpp && sed -n 500,617p engine/ren...
+The denoiser and fog need to sit inside the frame's graph. I'll read `render()` and the RT pass prep to see the existing ordering and where inputs come from.
+[94m[Bash][0m Map SceneRenderer functions and pass registrations $ grep -n "^[a-zA-Z].*SceneRenderer::\|add_pass\|rt_effects_\|dynamic_gi_->\|reflected_\|\.add(\|GpuTi...
+[94m[Bash][0m Read render() scene, reflection, and readback passes $ sed -n 2900,3110p engine/render/src/scene_renderer.cpp
+The RT pass runs before the scene pass, so this frame's depth, normal, and velocity don't exist yet when the denoiser would need them. I'll check whether the RT pass already has the primary hit and camera data to produce its own geometry inputs.
+[94m[Bash][0m Read RtEffects header $ wc -l engine/render/shaders/rt_effects.hlsl engine/render/src/rt_effects.cpp
+The RT pass doesn't output depth, normal, or velocity yet, so the denoiser can't read them this frame. Before choosing a design, I'll check the Windows-gate memory notes, since the gates need that path.
+[94m[Bash][0m Read memory notes on Windows gate runs $ ls /mnt/d/dev/haiku_game_engine/build | head
+The memory notes give the Windows batch method. The shape of the work is now clear: the RT pass has to emit this frame's depth, normal, and motion, then the denoisers and fog go into the graph. Next I'll read the RT shader's primary-hit path and the existing velocity convention.
+[94m[Bash][0m Read the RT effects compute shader $ cat engine/render/shaders/rt_effects.hlsl
+The primary hit gives position and normal, so the RT shader can emit this frame's depth, normal, and motion analytically from the current and previous camera. Next I'll check the depth convention, render-graph timing, and where `SceneShaders` is populated.
+[94m[Bash][0m Check graph timing, SceneShaders users, shader build lists, depth output $ grep -n "depth_values\|DepthValue" engine/render/shaders/scene.hlsl | head
+The graph already reports per-pass GPU timings, which covers the "separate GPU passes" criterion. Next I'll read the scene pass outputs and the RT scene test, since the test will need the same setup.
+[94m[Bash][0m Inspect scene outputs, RT tests, and shader build list in tests $ sed -n 200,240p tests/CMakeLists.txt
+I'll read the scene shader's depth output and where the lit pass reads the RT targets, since the fog needs the same depth convention.
+[94m[Bash][0m Read scene lighting reads and depth output $ grep -n "depth\b\|\.depth\|linear" engine/render/shaders/scene.hlsl | sed -n 1,20p
+The scene's depth target holds NDC depth, not linear depth, so the fog apply step needs a conversion. Before designing it, I'll read `prepare_ray_traced`, which builds the RT frame and shows how the sun and camera are sourced.
+[94m[Bash][0m Read RT frame preparation and output binding $ sed -n 1279,1446p engine/render/src/scene_renderer.cpp
+The traced scene is camera-relative, so the previous camera for motion is the previous world position minus the current one. I'll check the camera projection convention and light types, which the fog needs.
+[94m[Bash][0m Read camera, light, and snapshot light APIs $ grep -n "lights()\|class FrameSnapshot" engine/render/include/engine/render/frame_snapshot.hpp
+The camera uses `perspectiveRH_ZO`, so linear depth is `n*f / (f - ndc*(f-n))`, and the fog apply can convert it. I have enough of the design to pick the work plan. Before I write code, I need the denoiser's parity and descriptor conventions, plus where the RT outputs are bound.
+[94m[Bash][0m Read denoiser record path and RT output binding call sites $ wc -l engine/render/src/denoiser.cpp engine/render/src/volumetric_fog.cpp engine/render/shaders/deno...
+The denoiser writes its next output into `value_[1 - parity_]`, and descriptors are read at GPU time. So the RT output bindings can be written before submit using a `pending_output()`. Next I'll read the fog pass implementation, since the apply pass will follow its pattern.
+[94m[Bash][0m Read volumetric fog GPU pass implementation $ sed -n 1,30p engine/render/src/volumetric_fog.cpp && grep -n "^[A-Za-z].*(" engine/render/src/volume...
+The fog pass shape is clear. For the apply step, I need the parameter layout in the HLSL header and the CPU `apply_fog` so the GPU version matches it.
+[94m[Bash][0m Read fog shader layout, integrate, and CPU apply_fog $ sed -n 1,60p engine/render/shaders/volumetric_fog.hlsl && sed -n 150,262p engine/render/shaders/volu...
+The fog apply can follow the reflection pass's graph pattern: declared texture accesses, with the integrated buffer managed by the fog class. One open question is whether the denoiser's output alpha is the age, since the lit shader uses reflection alpha as a hit mask. I'll check the denoise shader's output and the RT texture creation.
+[94m[Bash][0m Read denoise shader $ sed -n 1,141p engine/render/shaders/denoise.hlsl | grep -v "^$" | head -150
+The shader keeps the signal's own alpha and stores the age in the normal's w, so the reflection alpha stays a valid hit mask after denoising. The header comment that says `a = age` is wrong and I'll fix it. Next I'll read the RT pass's create, descriptor, and parameter code, since it needs three new outputs and previous-camera parameters.
+[94m[Bash][0m Map RT effects source structure $ grep -n "^[A-Za-z].*(\|kParam\|bindings\|DescriptorBindingDesc\|texture_desc\|create_texture\|usage\...
+[94m[Bash][0m Read RT effects create, record, and release $ sed -n 475,678p engine/render/src/rt_effects.cpp && sed -n 86,100p engine/render/src/rt_effects.cpp ...
+The RT pass already transitions all its outputs together, so adding the three geometry targets is a small extension. Before I write code I need four facts: the background clear value (it affects depth), the fog grid usage flags, how the reflection shader treats the depth target, and the denoiser's alpha convention.
+[94m[Bash][0m Check background clear, usages, reflection depth, denoiser alpha, frame validation $ sed -n 252,287p engine/render/src/rt_effects.cpp
+Those facts settle the design. The scene clears `depth_values` to 0, so the fog apply must treat 0 as "no geometry" and send it to the far plane. The denoiser header's `a = age` note is wrong, so I'll fix it. Now I'll make the RT pass edits, starting with the header.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/rt_effects.hpp[0m edit: "//   reflection  rgb = the reflected surface's dir..." → "//   reflection  rgb = the reflected surface's dir..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/rt_effects.hpp[0m edit: "inline constexpr std::uint32_t kRtParameterBytes =..." → "inline constexpr std::uint32_t kRtParameterBytes =..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/rt_effects.hpp[0m edit: "    float bias = 0.01f;                  // meters..." → "    float bias = 0.01f;                  // meters..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/rt_effects.hpp[0m edit: "    [[nodiscard]] rhi::TextureHandle reflection() ..." → "    [[nodiscard]] rhi::TextureHandle reflection() ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/render/include/engine/render/rt_effects.hpp[0m edit: "    rhi::TextureHandle shadow_;
+    rhi::TextureHa..." → "    rhi::TextureHandle shadow_;
+    rhi::TextureHa..."
+Now the RT pass source: parameter offsets, packing of the previous camera, validation, the three new descriptors and textures, and the transitions and release.
+[94m[Bash][0m Apply RT effects source edits for geometry outputs $ grep -n "outputs_state_" engine/render/src/rt_effects.cpp
+The C++ side of the RT pass is in place. Next the HLSL: the new registers, previous-camera offsets, and the geometry writes for both the hit and miss paths.
+[94m[Bash][0m Add geometry outputs to the RT compute shader $ """) open(p,'w').write(s) print('ok') EOF
+The harness flagged that the shader changed on disk after my last read. I wrote it via Python just now, so I'll confirm the file has my edits and nothing else changed.
+[94m[Bash][0m Verify RT shader edits are present on disk $ ls -la --time-style=full-iso engine/render/shaders/rt_effects.hlsl
+The RT shader edits are on disk, and the file was not otherwise changed. Next the denoiser: fix the header's alpha note, and add `next_output()` so the scene can bind the output the frame will write.
+[94m[Bash][0m Update denoiser header and read its CPU reference $ grep -n "struct DenoiseHistory" -B2 -A3 engine/render/include/engine/render/denoiser.hpp
+The denoiser's CPU and GPU paths agree, and the header now matches. Next is the fog header: camera depth range in `FogFrame`, the apply pass API, and the new `create` shader argument.
+[94m[Bash][0m Extend volumetric fog header with apply pass API $ """) open(p,'w').write(s) print('ok') EOF
+I left a stray comment line in the header, and I'll remove it. The `integrated_once_` flag is needed so `apply()` can require a prior `integrate()`.
+[94m[Bash][0m Remove stray header comment and read fog parameter packing $ sed -n 176,212p engine/render/src/volumetric_fog.cpp
+The parameter block has room for the camera range at offsets 736 and 740, which is inside the 768-byte block. Now I'll write the fog source: the packing, the apply layout and pipeline, the apply recording, and release.
+[94m[Bash][0m Implement fog apply pass in volumetric_fog.cpp $ """) open(p,'w').write(s) print('ok') EOF sed -n 105,125p engine/render/src/volumetric_fog.cpp
+I'll add the camera-range check to `validate_fog`, then write the HLSL apply entry and its layout comments.
+[94m[Bash][0m Add fog apply entry to volumetric_fog.hlsl and validation $ grep -n "kParamCameraNear\|kParamLights\b" engine/render/shaders/volumetric_fog.hlsl | head
+`sample` is a reserved HLSL keyword, so the new local needs a different name. I'll rename it and then check the file's constants block.
+[94m[Bash][0m Rename reserved HLSL identifier and locate fog test callers $ grep -n "volumetric\|VolumetricFog::create\|VolumetricFog>" tests/src/*.cpp | head
+The existing fog GPU tests call `create` with two shaders and need the apply entry too. Before I change them, I'll check how the tests load shaders and where `SceneShaders` is populated, so the new fields get wired everywhere.
+[94m[Bash][0m Find SceneShaders population sites and shader loader $ grep -rn "SceneShaders" --include=*.cpp --include=*.hpp -l . | grep -v build/ | head
+The tests load shaders by name from the build's shader directory, so the new entries follow the same pattern. Next I'll read the ray-traced settings, build, and resize code, which the denoiser and fog need to follow.
+[94m[Bash][0m Read RT settings, build, and resize code $ sed -n 1169,1266p engine/render/src/scene_renderer.cpp && sed -n 3331,3395p engine/render/src/scene_...
+The resize path recreates the RT pass, so the denoisers and fog must be rebuilt there too, and the fog apply must be rebound after the targets change. I'll check the order of `build_targets` and `build` in `create`.
+[94m[Bash][0m Read SceneRenderer create, build_targets, and build order $ sed -n 511,602p engine/render/src/scene_renderer.cpp && sed -n 720,760p engine/render/src/scene_rend...
+Build order works for the new pieces: `build_targets` runs before `build_ray_traced`, so the fogged target exists before the fog is built. I'll check the reflection descriptor writes, where the frame's history is committed, and the depth-values usage, since the fog apply reads depth.
+[94m[Bash][0m Locate reflection set writes, history commit, and prepare call $ sed -n 2061,2075p engine/render/src/scene_renderer.cpp
+I have the full picture now. Here's the plan I'm committing to:
+
+- **Denoisers:** one per RT target (shadow, reflection), running as their own graph passes right after the RT pass. The scene binds each denoiser's `next_output()` every frame.
+- **Fog:** inject and integrate before the scene pass, apply after it, reading the scene's depth. The reflection and post passes read the fogged color when fog is on.
+- **Resets:** a camera cut (translation or turn past a threshold) or a sun or point-light change resets the histories. This replaces the "light_changed has no caller" gap.
+
+I'll write the header changes first.
+[94m[Bash][0m Read scene renderer includes, public API, and release paths $ sed -n 40,60p engine/render/include/engine/render/scene_renderer.hpp && sed -n 336,352p engine/rende...
+I have the release paths. Now I'll make the `scene_renderer.hpp` edits: the new settings and shader slots, the private helpers, and the members.
+[94m[Bash][0m Extend scene_renderer.hpp with US-045 settings and members $ // world positions of the fog's point lights, in the order they were given ''') open(p,'w').write(s)...
+The header is in place. Two things remain before the `.cpp` edits: `<optional>` needs including, and I need the exact text at `build()`'s start, where the flags get set. I'll also confirm `release()` calls `destroy_ray_traced`, and look at the reflection and post lines I'm changing.
+[94m[Bash][0m Check release wiring, render camera refs, and build start $ grep -n "const Camera& camera\|Camera camera\|auto& camera" engine/render/src/scene_renderer.cpp | h...
+I have everything for the `.cpp` side. I'll apply the scene renderer edits in one scripted pass, with each replacement asserted to match exactly once.
+[94m[Bash][0m Apply scene renderer US-045 wiring edits $ """) open(p,'w').write(s) print("patched") PYEOF python3 /tmp/us045_scene.py
+The `.cpp` wiring is in. The header declaration for `update_denoise_and_fog` still has the old signature, so I'll fix it and then add the remaining includes and the `SceneShaders` fields the tests will use.
+[94m[Bash][0m Fix update signature and check cpp includes $ sed -n 1,12p engine/render/src/scene_renderer.cpp | grep include
+Next, the test side: a CMake entry for the fog apply shader, the dependency list, and the three existing fog test call sites that need the third shader.
+[94m[Bash][0m Add fog apply shader to tests CMake and callers $ cat CMakePresets.json | grep -n '"name"' | head -40
+Now I'll build on Linux to catch compile errors early. The full build may take a while, so I'll run it in the background and log the output.
+[94m[Bash][0m Configure and build Linux debug preset $ tail -5 /tmp/us045_build.log
+[94m[Bash][0m Extract compile errors from build log $ grep -n "error\|FAILED" /tmp/us045_build.log | head -30
+The first error is the HLSL reserved-word trap from the codebase notes: `point` can't be a parameter name. I'll rename it and rebuild.
+[94m[Bash][0m Rename HLSL reserved identifier and rebuild $ grep -n "error\|FAILED\|warning:" /tmp/us045_build.log | head -30
+The full Linux debug build passes with no warnings, including both DXIL and SPIR-V shader compiles. Next I'll run the Linux unit suite, then look at how the existing RT scene GPU tests are structured so I can add coverage for the new passes.
+[94m[Bash][0m Run Linux unit test suite and list RT test cases $ grep -n "TEST_CASE" tests/src/render_rt_scene_gpu_tests.cpp
+The Linux unit suite passes (`ctest` exit 0). Before adding tests, I'll look at the RT scene harness so the new GPU cases reuse its setup.
+[94m[Bash][0m Read RT scene GPU test harness and a sample case $ sed -n 300,412p tests/src/render_rt_scene_gpu_tests.cpp
+The harness builds the scene from `make_renderer` and `scene_shaders`. To test that the new effects run as separate graph passes, I need pass timings from the renderer. I'll check what `PassTiming` holds and how the existing tests supply post-process shaders.
+[94m[Bash][0m Inspect PassTiming, post shader setup, and report exposure $ grep -n "ExecutionReport last\|gpu_timings\|last_report" engine/render/include/engine/render/scene_r...
+`PassTiming` carries a name, a CPU time, and an optional GPU time, which is enough for the test. I'll expose the last frame's passes through a `frame_passes()` accessor. Before I write the CPU tests, I'll read the existing RT parameter-layout test and the post-shader setup to match their style.
+[94m[Bash][0m Read RT layout test, post shader helper, and graph execute sites $ grep -n "const RhiResult<ExecutionReport> executed = execute\|if (const RhiResult<ExecutionReport> e...
+I'll add the `frame_passes()` accessor, store the report at the frame's graph execute, and then write the tests. The execute site is anchored by the post-pass comment that follows it.
+[94m[Bash][0m Expose per-frame graph pass timings from SceneRenderer $ // the last render()'s graph passes (frame_passes()) """) open(p,'w').write(s) print('ok') EOF
+Now the CPU tests. I need the helper names in the volumetric test file first, so I'll check its includes and read helpers.
+[94m[Bash][0m Read volumetric test helpers and parameter test $ grep -n "rt_view\|kRtSize" tests/src/render_rt_fixture.hpp | head -4
+[94m[Bash][0m Add CPU unit tests for fog depth and RT previous camera $ grep -n "validate_frame" engine/render/include/engine/render/rt_effects.hpp
+The RT test file now has a duplicate `using` line from my edit, and the fog file may have one too. I'll remove the duplicates, then rebuild and run the unit tests to check the new cases.
+[94m[Bash][0m Remove duplicate using declarations in test files $ grep -n "^using engine::render::pack_fog_parameters\|^using engine::render::validate_fog\|catch_appr...
+`render_rt_tests.cpp` uses `Catch::Approx` without including its header, so I'll add that include. Then I'll rebuild and run the unit suite.
+[94m[Bash][0m Rebuild and run Linux unit tests with new CPU cases $ grep -n "tests passed\|Failed\|FAILED" /tmp/us045_ctest.log | head
+[94m[Bash][0m Inspect the failing RT layout assertion $ sed -n 320,330p tests/src/render_rt_tests.cpp
+The failure is in my test, but it exposes an ambiguity in the header. I wrote that `RtFrame`'s defaults equal the current camera, and they don't: the forward default is -Z. The renderer always sets the previous camera explicitly, so I'll fix the header comment and make the test copy the current camera first.
+[94m[Bash][0m Fix RT previous-camera doc and test, rerun unit tests $ grep -n "test cases:\|assertions:" /tmp/us045_ctest.log | head -4
+[94m[Bash][0m Show the remaining failing assertion and header state $ grep -n "previous camera\|kRtParameterBytes" engine/render/include/engine/render/rt_effects.hpp | he...
+The remaining failure is another test bug: offset 160 holds `forward.x`, and `forward.z` is at 168. I'll correct the assertion.
+[94m[Bash][0m Fix forward-offset assertion and rerun unit tests $ grep -n "test cases:" /tmp/us045_ctest.log | head -2
+The Linux unit suite passes (`ctest` exit 0). Next are the GPU cases for Windows: a scene with denoise and fog enabled, checks that the new passes appear in the frame's graph in the right order, and a visible fog change. I'll check the harness helpers' exact signatures before writing them.
+[94m[Bash][0m Read harness struct and helper signatures in scene GPU tests $ grep -n "^#include" tests/src/render_rt_scene_gpu_tests.cpp
+Now I'll write the GPU case: the harness gets denoise and fog options, `scene_shaders` loads the new entries, and the new test checks the pass list, the pass order, and that fog changes the frame.
+[94m[Bash][0m Add GPU test for denoiser and fog passes $ grep -n "include <string>\|include <cstddef>" tests/src/render_rt_scene_gpu_tests.cpp
+The new test refers to `RayTracedSettings` and `SceneRenderer`, so I'll confirm the file's `using` declarations cover them. Then I'll build the test binary on Linux to catch compile errors before the Windows run.
+[94m[Bash][0m Check using declarations in scene GPU tests $ grep -n "^using" tests/src/render_rt_scene_gpu_tests.cpp | head -30
+[94m[Bash][0m Rebuild Linux tests including GPU test sources $ grep -n "error\|warning:" /tmp/us045_build.log | head -10
+The Linux build of the GPU test sources is clean too. Before starting the Windows gate, I'll look for the previous US-045 batch file in the Temp directory so I can reuse its template and exact commands.
+[94m[Bash][0m Find previous Windows gate batch files in Temp $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/ 2>/dev/null | grep -i "us04\|gate\|rc" | tail -20
+[94m[Bash][0m Read previous US-045 gate batch and its results $ ps -eo pid,args | grep "us04.*gate.bat" | grep -v grep | head -3
+The previous batch is a good template. I'll write a `us045d` batch from it with the same gates and CRLF line endings, check that no other gate batch is running, and launch it in the background.
+[94m[Bash][0m Create and launch the us045d Windows gate batch $ cat us045d_rc.txt 2>/dev/null
+The Windows batch is running in the background. Meanwhile I'll update the design doc. First I'll read the current `docs/denoise-volumetrics.md` so the update matches what's really wired now.
+[94m[Bash][0m Read existing US-045 design doc and build doc row $ grep -n "US-045" docs/build.md
+The doc's "Limits" section is now wrong: the passes are wired in and `light_changed` has a caller. I'll rewrite the affected parts: the pieces table, a new wiring section, the reset policy, the limits, and the verification list.
+[94m[Bash][0m Update US-045 design doc for renderer wiring $ the fog at density 0.1 moves the frame's total light by more than 3% from density 0. - CPU tests: th...
+One limit bullet contradicts itself. I'll reword it to say what's actually verified.
+[94m[Bash][0m Reword the denoiser limit bullet in the doc $ the denoiser's output is checked against its CPU reference over a sequence (`render_denoise_gpu_test...
+While the Windows batch runs, I'll start the remaining Linux gates in the background: ValidateVendor, the GCC configure, build, and unit suite, then the ASan and sanitizer presets.
+[94m[Bash][0m Start remaining Linux gates in background $ nohup bash /tmp/us045_linux_gates.sh > /dev/null 2>&1 & echo started
+While the gates run, I'll load the Monitor tool so I can wait on the Windows batch's done file without polling blindly.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m Signal when the us045d Windows gate batch finishes $ echo "WIN_BATCH_DONE"
+The Windows gate batch and the remaining Linux gates are running in the background. I'm waiting on their completion signals before I record the results.
+The Windows batch launcher has exited, so I'll read its result file.
+[94m[Bash][0m Read Windows batch and Linux gate result codes $ cat /tmp/us045L_rc.txt 2>/dev/null
+Both GPU suites failed on Windows (`gpu_dx12=1`, `gpu_vulkan=1`), so I'll read the logs to find which cases failed.
+[94m[Bash][0m Extract failing GPU checks from DX12 log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && tr -d '\r' < us045d_5.log | grep -n "FAILED\|with expan...
+[94m[Bash][0m Show failing assertion details and nearby test code $ sed -n 76,84p tests/src/render_rt_gpu_tests.cpp
+The DX12 failure is one error across every RT test: `write_texture: the texture format has no unordered access view`. The new RT geometry targets use `R32Float` and `R32G32Float`, so I'll check the RHI's UAV format table.
+[94m[Bash][0m Locate the UAV format check in the RHI $ grep -rn "UnorderedAccess\|uav" engine/rhi/src/dx12/*.cpp | grep -i "format" | head -5
+[94m[Bash][0m Read the DX12 UAV-allowed format list $ sed -n 50,80p engine/rhi/src/dx12/dx12_descriptors.cpp
+The root cause is in the RHI's UAV policy: `R32G32Float` is excluded because D3D12 has no typed UAV for it, so the motion target fails at `write_texture`. I'll check the Vulkan log before choosing the fix, since its failures may differ.
+[94m[Bash][0m Summarize Vulkan failures and denoiser motion format use $ cd /mnt/d/dev/haiku_game_engine && grep -n "R32G32\|Motion\|motion" engine/render/src/denoiser.cpp |...
+The Vulkan failure is a second, separate bug: `render()` builds its own `depth_values_usage` and I only updated the copy in `build_targets`, so the fog apply's depth import lacks `ShaderResource`. I'll fix that, and move the motion target to `R16G16B16A16Float` (UAV-allowed on both backends; the denoiser and RT shader read only `.xy`). Then I'll check the denoiser header's motion-format comment.
+[94m[Bash][0m Switch motion target to RGBA16F and fix render depth usage $ grep -rn "R32G32\|R32G32Float\|motion" engine/render/include/engine/render/denoiser.hpp engine/rende...
+`denoise.hlsl` line 114 now reads a `float4` into a `float2` expression, so I'll make the `.xy` explicit and update the denoiser header's motion-format comment. Then I'll rebuild on Linux to catch shader and C++ errors before the next Windows run.
+[94m[Bash][0m Make denoiser motion read xy and rebuild Linux debug $ grep -n "error\|warning:" /tmp/us045_build.log | head
+The Linux debug build passes with the new motion format. Before relaunching Windows, I'll check that the background Linux gate chain has finished, so the two builds don't overlap, and that no earlier batch is still running.
+[94m[Bash][0m Check Linux gate progress and rerun linux-unit tests $ echo "ctest=$?"
+The Linux unit suite passes. The background chain's GCC steps passed, but they may predate my last edit, so I'll rerun them afterwards. Nothing else is using the Windows gate, so I'll relaunch it as `us045e`.
+[94m[Bash][0m Relaunch Windows gate batch us045e after fixes $ cat us045e_rc.txt 2>/dev/null
+[94m[Monitor][0m Signal when the us045e Windows gate batch finishes $ echo "WIN_BATCH_E_DONE"
+The fixed Windows batch (`us045e`) is running. I'm waiting for its done signal, and I'll record the results when it arrives.
+All Windows gates pass on the fixed tree. I'll pull the case and assertion counts and check the build log for warnings, then look at the Linux chain.
+[94m[Bash][0m Collect Windows gate counts, warning counts, and Linux chain status $ tail -3 /tmp/us045L_sanitize.log 2>/dev/null
+The Windows gates are clean: `win-unit` 21/21, DX12 GPU 65 cases, Vulkan GPU 66 cases, and zero warning or error lines. The Linux chain started before my last shader edit, so I'll rerun its GCC build and unit suite and the sanitizer suite against the current tree.
+[94m[Bash][0m Rerun Linux GCC and sanitizer gates on the final tree $ echo "validate=$?"
+Every gate passes on the final tree. I'll record the result in the progress log and the build table: a Codebase Patterns entry for the UAV-format trap, and the US-045 entry.
+[94m[Bash][0m Record US-045 results in progress log and build table $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() pattern="""- DX12 typed UAVs have a fi...
+US-045 is implemented and wired into the renderer, and every Windows and Linux gate I could run passes on the final tree. I'm not claiming the benchmark numbers or the native Linux Vulkan GPU suite.
+
+**What changed**
+- **Denoiser:** the RT pass now writes this frame's primary-hit depth, normal, and motion. Two denoisers (shadow, reflection) run as graph passes right after it, and the scene's lighting binds their outputs.
+- **Fog:** inject and integrate run before the scene pass, and a new apply pass runs after it. It reads the scene's depth and writes a fogged color that the reflection and post passes use. Fog requires the post pass.
+- **Resets:** a camera cut (over 5 m or 30° in a frame), a sun turn over 0.5°, or a point light moving over 1 mm discards the history. This closes the old gap where `light_changed` had no caller.
+- **Measurement:** `SceneRenderer::frame_passes()` returns the last frame's pass names and timings, so each effect shows up as its own pass.
+
+**Choices I made**
+- The motion target is RGBA16F rather than R32G32F, because D3D12 rejects a typed UAV in R32G32Float.
+- The fog takes point lights only, with no shadows for local lights. Spot lights are excluded. The sun's shadow is traced.
+- Motion follows the camera only. A moving traced instance is not motion-compensated, so its history is rejected only where depth or normal disagree.
+
+**Gate results (final tree)**
+- Windows, RTX 5080, debug and validation layers: `ValidateVendor`, `win-dev`, and `win-debug` pass with zero `warning C`/`error C`. `win-unit` is 21/21. `gpu dx12` is 65 cases and `gpu vulkan` is 66 cases, all passing.
+- Linux clang: `ValidateVendor`, `linux-debug` (no warnings), and `linux-unit` pass.
+- Linux gcc: `linux-gcc-debug` (no warnings) and `linux-gcc-unit` pass.
+- Linux sanitizers: `linux-asan` build and `linux-sanitize` pass.
+
+**Not run or not claimed**
+- `engine_bench --suite acceptance`: US-074 isn't built, so there are no frame-time numbers.
+- Native Linux Vulkan GPU suite: this host has no usable device.
+- GUI check and GitHub CI: not run (not pushed).
+
+**Failures along the way**
+- The first Windows batch failed every RT test because of the R32G32 UAV problem above. The Vulkan fog test also failed because `render()` had its own copy of the depth usage without the fog flag.
+- Both are fixed and the final batch is green. The fixes are recorded in `.ralph-tui/progress.md` with the new Codebase Patterns entry.
+
+The design write-up is in `docs/denoise-volumetrics.md`, and the US-045 row in `docs/build.md` is updated.
+
+<promise>COMPLETE</promise>

@@ -1,0 +1,36 @@
+# Iteration 181 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T10:40:55.415Z
+- **Ended At**: 2026-10-24T10:41:09.404Z
+- **Duration**: 13s
+- **Input Tokens**: 22
+- **Output Tokens**: 1598
+- **Total Tokens**: 1620
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics work against the acceptance criteria.
+[94m[Bash][0m Inspect progress log, physics dir, and saved status $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md
+The log shows US-052 has been re-verified several times and left Partial. Before deciding anything, I'll check whether the GCC 11 blocker has changed.
+[94m[Bash][0m Check available compilers and recently changed physics files $ cd /mnt/d/dev/haiku_game_engine && find engine/physics tests/src/physics_world_tests.cpp -newer .ral...
+US-052 is not complete, so I'm not emitting the COMPLETE signal.
+
+**Where it stands:** The Jolt adapter is implemented in `engine/physics/`, with 13 unit cases in `tests/src/physics_world_tests.cpp`. The Windows gates (ValidateVendor, win-dev, win-debug, win-unit) and the Linux clang gates (ValidateVendor, linux-dev, linux-debug, linux-unit, plus linux-asan and linux-sanitize) passed on this source, according to the earlier log entries. I didn't re-run them in this pass.
+
+**What is still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. The only GCC here is 9.4, which cannot compile this Jolt revision (`__builtin_bit_cast` is missing). I rechecked today and nothing has changed: no GCC 11+, no conda, micromamba, or docker, and sudo needs a password. This gate needs a GCC 11+ environment.
+- **`engine_bench --suite acceptance`:** there is no benchmark harness yet (US-074), so this can't run.
+
+**Source state:** No file under `engine/physics/` or the physics test file has changed since the last logged entry. I didn't add another progress entry, because the last several re-verifications recorded the same result and a further one would add nothing.
+
+To close the story, run the `linux-gcc` gates in a GCC 11+ environment and build the benchmark harness, then re-run the gates.

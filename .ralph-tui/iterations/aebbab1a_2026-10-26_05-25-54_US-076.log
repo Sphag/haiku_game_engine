@@ -1,0 +1,41 @@
+# Iteration 738 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:25:54.607Z
+- **Ended At**: 2026-10-26T02:26:07.545Z
+- **Duration**: 12s
+- **Input Tokens**: 20
+- **Output Tokens**: 1775
+- **Total Tokens**: 1795
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists.
+[94m[Bash][0m Check progress log and existing benchmark code $ grep -n "US-076" -r --include=*.md --include=*.cpp --include=*.txt --include=*.json . 2>/dev/null | ...
+[94m[Bash][0m Check file timestamps and latest benchmark artifacts $ grep -n "^## .*US-076" .ralph-tui/progress.md | head -3
+US-076 is not complete, and I did not make any changes in this pass. I stopped without the completion signal because the acceptance criteria cannot pass on the current workload placement, and fixing that needs your decision.
+
+**State (verified by timestamps; nothing changed since the last recorded run):**
+- `render_stress.cpp` was last edited at 04:15, and all eight `us076-*` benchmark artifacts (dx12 and vulkan × indexed, indirect, meshlets, meshlets-nomesh) postdate it.
+- The four indexed/indirect/meshlet paths and the forced mesh-shader-disabled fallback have been run on both backends. Each run still exits 1.
+
+**What blocks completion:**
+1. **Triangle floor and frame budget fail.** Instance placement yields 312,068 of the 2,000,000 triangles the contract requires at route start. p99 frame time is 35–47 ms against the 16.7 ms budget. Fixing this changes the seeded workload, so it needs `kWorkloadVersion` bumped (currently 1) and `benchmarks/workload_expected.json` regenerated. The contract reserves that for an intended change, so I have not made it.
+2. **`full_1080` profile is unsupported** until the vendored FSR 2 permutation headers exist (see the FSR 2 project memory). This is a vendoring decision for you.
+3. **Not run:** the native Linux Vulkan GPU run and the `linux-gcc` gate. This WSL session has no usable Vulkan device, and the Windows gates need the Windows host.
+
+**Decisions I need from you:**
+- Approve the placement change (bump `kWorkloadVersion` and regenerate the expected file), or tell me to keep the current workload.
+- Decide whether a run that fails the contract should close US-076 as "measured, failing", or stay open until the placement is fixed.
+- Choose a route for the FSR 2 permutation headers, or accept `full_1080` as unsupported for this story.
+
+Once you answer, I can make the approved change, rerun the benchmarks, and run the Linux gates here. The Windows gates and native Linux Vulkan still need a run on the matching hosts.

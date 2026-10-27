@@ -1,0 +1,35 @@
+# Iteration 714 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:18:57.798Z
+- **Ended At**: 2026-10-26T02:19:10.490Z
+- **Duration**: 12s
+- **Input Tokens**: 22
+- **Output Tokens**: 1660
+- **Total Tokens**: 1682
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether the render stress benchmark already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tool $ git status 2>&1 | head -3
+The progress log shows this story has been blocked on a user decision for many passes. I'll confirm the recorded state still matches the tree before reporting.
+[94m[Bash][0m Check source and artifact timestamps against the log $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/workload_expected.json && ls -t art...
+US-076 is not complete, and I did not signal COMPLETE. Nothing changed in this pass: the source and artifacts match the last recorded state, so I did not rerun the gates or the benchmarks.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` scene places 312,068 of the 2,000,000 triangles the contract requires. Frame time is p99 35–47 ms against a 16.7 ms budget. Fixing this changes the workload, so it needs `kWorkloadVersion` bumped and `benchmarks/workload_expected.json` regenerated. Should I make that change, or should the story close as measured with the failing result?
+2. **`full_1080` is unsupported** until the vendored FSR 2 permutation headers exist. That is a separate vendoring route you need to pick.
+3. **Native Linux Vulkan GPU and `linux-gcc` have not run.** This WSL environment has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**Done and recorded:** the eight `artifacts/bench/us076-*` runs (DX12 and Vulkan, indexed, indirect, meshlets, and meshlets with mesh shaders forced off) exist. Each exits 1 on the frame budget and triangle floor. The forced-off fallback runs are the newest, which covers the fallback criterion.
+
+Once you decide on the placement change and the FSR route, I can make the workload fix and rerun the affected benchmarks and Windows and Linux gates.

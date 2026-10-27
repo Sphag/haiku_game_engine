@@ -1,0 +1,226 @@
+# Iteration 20 Log
+
+## Metadata
+
+- **Task ID**: US-036
+- **Task Title**: Playback and Skinning
+- **Description**: As a character author, I want animated meshes so that I can bring the scene to life.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T05:57:06.583Z
+- **Ended At**: 2026-10-23T06:43:03.718Z
+- **Duration**: 45m 57s
+- **Input Tokens**: 740
+- **Output Tokens**: 219966
+- **Total Tokens**: 220706
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the progress log, the PRD, and the existing code for US-036's prerequisites.
+[94m[Bash][0m List repo root and read progress tail $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && tail -c 6000 .ralph-tui/pro...
+The log shows US-034 and US-035 are done. Next I'll read the PRD's US-036 entry and the constraints it lists.
+[94m[Bash][0m Search PRD for animation/skinning requirements and list layout $ ls docs
+[94m[Bash][0m Read PRD US-022 and US-036 sections and constraints $ sed -n 800,880p tasks/prd-open-world-engine.md
+US-036 depends on US-022 (skeleton and clip import). I need to confirm that is actually implemented, and see what skinning or animation code already exists.
+[94m[Bash][0m Check story status and find existing animation code $ grep -ril "skeleton\|skin\|animation\|clip" engine tests tools --include=*.hpp --include=*.cpp --inc...
+US-022 is marked passed. I'll check what it actually delivered: skeleton and clip types in the converter and runtime assets.
+[94m[Bash][0m Inspect model importer for skeleton/clip support $ grep -rln -i "skeleton\|AnimationClip\|bone" engine tools tests docs | head -30
+The importer comments say skinning "is not imported (US-022)", which contradicts `passes: true`. I'll check the progress log for what US-022 claims.
+[94m[Bash][0m Find progress entries for US-020 to US-034 and read codebase patterns $ sed -n 1,60p .ralph-tui/progress.md
+US-022's log has no entry, and the importer says skinning is not imported. That means US-036's prerequisite is only partly built. Before I decide scope, I'll measure the render and model-format code I'd have to extend.
+[94m[Bash][0m Measure render module and read mesh header and model docs $ cat docs/model-import.md | head -80
+The model importer skips skins and animations, so US-022's import half is absent from the tree. I'll note that and check it against the story's scope. Next I'll read the scene renderer and frame snapshot, since GPU skinning and motion vectors must plug into them.
+[94m[Bash][0m Read frame snapshot and scene renderer headers $ cat engine/render/include/engine/render/scene_renderer.hpp
+The renderer has a fixed frame-buffer layout, four pipelines, and a shadow pass, so skinning and motion vectors touch many places. I'll read the vertex-input and binding model in the RHI and the scene vertex shader before choosing a design.
+[94m[Bash][0m Survey RHI types for vertex input and bindings $ grep -n "struct\|Vertex\|vertex" engine/rhi/include/engine/rhi/types.hpp | head -120
+[94m[Bash][0m Read RHI descriptor and pipeline descriptors $ sed -n 196,300p engine/rhi/include/engine/rhi/types.hpp
+The RHI has one vertex-buffer slot and no 4-channel float or 2-channel half format, so the new vertex data needs some RHI work. Next I'll look at how the renderer builds its pipelines and the shader's frame layout.
+[94m[Bash][0m Map scene_renderer.cpp functions and pipeline creation $ grep -n "^[A-Za-z].*(\|pipelines_\[\|create_pipeline\|kFrame\|set_layouts\|vertex_attributes\|vertex...
+[94m[Bash][0m Read scene renderer pipeline and layout build $ sed -n 280,430p engine/render/src/scene_renderer.cpp
+The pipeline table, frame layout, and vertex format are all hard-coded, so this is a cross-cutting change. Next I'll look at how the shader reads the frame buffer and where the vertex stage is.
+[94m[Bash][0m Survey scene.hlsl declarations and entry points $ grep -n "ByteAddress\|StructuredBuffer\|cbuffer\|register\|struct \|VSMain\|VSShadow\|PSMain\|PSBlen...
+[94m[Bash][0m Read scene.hlsl vertex and pixel stages $ sed -n 460,643p engine/render/shaders/scene.hlsl
+The shader reads everything through `ByteAddressBuffer` at fixed offsets, which makes a palette region easy to add. Before I commit to the format changes, I'll find every place a format enum value is mapped.
+[94m[Bash][0m Find all format enum mapping sites $ grep -rn "R32G32Float" engine/render/src/scene_renderer.cpp | head
+Vertex formats are whitelisted in three places. I'll check how color target formats are validated, since the velocity target needs one.
+[94m[Bash][0m Read format helpers, pipeline rules, and backend format maps $ sed -n 60,75p engine/rhi/src/dx12/dx12_descriptors.cpp
+The format checks are spread over the RHI, so new vertex and color formats are feasible. Before settling the frame layout, I need the camera model and the code that packs and draws items.
+[94m[Bash][0m Read camera API, frame packing, slot and draw helpers $ sed -n 577,625p engine/render/src/scene_renderer.cpp
+Next, the `render()` body, which batches items into draws and builds the passes.
+[94m[Bash][0m Read render() first half $ sed -n 943,1120p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read render() middle section $ sed -n 1120,1300p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read render() graph and draw recording $ sed -n 1300,1420p engine/render/src/scene_renderer.cpp
+[94m[Bash][0m Read render() pass recording and readback $ sed -n 1420,1610p engine/render/src/scene_renderer.cpp
+I now have the full render path. Two details remain: how the shader's transform helpers read matrices, and how meshes are uploaded. I'll read those and the existing GPU test setup.
+[94m[Bash][0m Read shader transform helpers and mesh upload $ sed -n 693,768p engine/render/src/scene_renderer.cpp
+The mesh graph import also hard-codes `kVertexStride`, so it needs a per-mesh stride. Next I'll look at the GPU test fixtures and the test CMake so the new tests match the existing ones.
+[94m[Bash][0m Read scene GPU test fixture and first GPU test $ sed -n 1,80p tests/src/render_scene_gpu_tests.cpp
+[94m[Bash][0m Read GPU test device setup and shader loading $ grep -n "SHADER\|shader\|load_shader\|compile" tests/src/render_scene_gpu_tests.cpp | head -30
+The existing GPU tests fill `SceneShaders` by hand, so new skinned entries should be optional to keep them compiling. I'll check how the test CMake compiles the scene shaders.
+[94m[Bash][0m Find shader compile entries in tests CMake $ grep -rn "scene_vertex\|scene_pixel" --include=*.txt --include=*.cmake --include=*.cpp --include=*.p...
+The skinned path needs its own shader entries, and the CPU reference rasterizer must match it. I'll read the reference rasterizer and the scene graph's transform API before designing the snapshot changes.
+[94m[Bash][0m Read reference rasterizer and scene graph transform API $ grep -n "world\|Transform" engine/scene/include/engine/scene/scene_graph.hpp | head -20
+[94m[Bash][0m Read frame snapshot extraction implementation $ sed -n 1,126p engine/render/src/frame_snapshot.cpp
+I have enough of the design to start. Before writing code I'll check the remaining touch points: the top-level CMake subdirectories, the scene image struct, mesh validation, and the RHI color-format predicates.
+[94m[Bash][0m Check CMake layout, scene image, and RHI format predicates $ cat engine/core/CMakeLists.txt | head -30
+[94m[Bash][0m Find RHI format predicates for color targets $ grep -n "^bool\|^[a-z].*(.*) {" engine/rhi/src/dx12/dx12_common.cpp | head -20
+Velocity can reuse `R32G32Float` as a color target, since both backends already map that format. Only the 4-channel float vertex format and the `R32Uint` vertex attribute need RHI changes. I'll make those now.
+[94m[Bash][0m Add RHI vertex formats and update validation $ """) p='engine/rhi/include/engine/rhi/pipeline_rules.hpp' edit(p, """// each attribute has a format ...
+The RHI accepts the new vertex formats now. Next is the animation library: skeleton, clips, sampling, blending, root motion, and bounds. I'll write it as a new CPU-only module with no render dependency.
+[94m[Bash][0m Create engine_animation library headers $ }  // namespace engine::animation EOF echo done
+I used a nonexistent `MeshBoundsSphere` type in the skinning header. I'll replace it with a local sphere struct, then write the implementations.
+[94m[Bash][0m Fix bounds type in skinning header $ // A sphere that contains every skinned vertex""") s=s.replace("MeshBoundsSphere animated_bounds","B...
+Now the implementations. The main design point is root motion. The root joint's track is read as cumulative (not wrapped at the loop seam), so the pose and the entity's displacement reconstruct the authored root exactly. I'll expose the per-joint sampler from `clip.hpp` so both paths share it.
+[94m[Bash][0m Write skeleton and clip implementations $ }  }  // namespace engine::animation EOF echo ok
+I spotted a copy in `sample_joint` that would copy a key vector on every call. I'll fix that and the missing includes, then write the playback and skinning sources.
+[94m[Bash][0m Write playback and skinning implementations $ }  }  // namespace engine::animation EOF echo ok
+The animation library is written. Next the render side, starting with mesh skin data: optional joint and weight arrays with validation, plus a helper for the bone count a mesh needs.
+[94m[Bash][0m Read mesh validation implementation $ grep -n "validate_mesh" -A30 engine/render/src/mesh.cpp | head -50
+[94m[Bash][0m Add skin data to render mesh $ }  std::optional<std::string> validate_mesh(const MeshData& mesh) {""",1) open(p,'w').write(s) print...
+The first pattern started mid-line, so the assert stopped the script before anything was written. I'll rerun with the corrected match.
+[94m[Bash][0m Add skin data fields and validation to mesh $ }  std::optional<std::string> validate_mesh(const MeshData& mesh) {""") print("ok") EOF
+Next the frame snapshot: skin palettes and previous-frame data on renderables and items, plus the extraction logic.
+[94m[Bash][0m Add skin and motion data to frame snapshot $ """) print("ok") EOF
+The harness reports that `frame_snapshot.hpp` changed on disk. My own edit touched it, so I'll confirm the file still has the fields I wrote.
+[94m[Bash][0m Verify snapshot header edits are present $ grep -n "SkinPose\|previous_world\|previous_model\|palettes_\|bone_count" engine/render/include/engi...
+The snapshot edits are intact. Next I'll add a shared `MotionHistory` type, a velocity field on `SceneImage`, and rewrite the reference rasterizer to skin vertices and compute motion vectors with perspective-correct interpolation, matching the GPU.
+[94m[Bash][0m Rewrite reference rasterizer with skinning and motion $ }  }  // namespace engine::render EOF sed -i 's/#include <algorithm>\n#include <cmath>\n\nnamespace ...
+The reference rasterizer now poses skinned vertices and computes motion vectors. The renderer is the largest change. Before editing it I'll check how `release()` destroys pipelines and how the tests call the reference rasterizer, since the signature changed.
+[94m[Bash][0m Inspect release path and reference rasterizer callers $ grep -rn "kFrameItemStride\|kFrameItemsOffset\|kFrameCameraOffset\|frame_bytes" tests engine tools -...
+I have the render-side picture. The shader changes come first, because the record layout is defined there. I'll update the vertex stages, add the skinned entry points and the velocity output, and move the record constants into named values.
+[94m[Bash][0m Update scene shader for skinning and motion vectors $ }""") print("ok") EOF grep -n "144\|256 +" engine/render/shaders/scene.hlsl | head
+Shader done. Next the renderer header: the new layout constants, skinned shader slots, pipeline indices, the velocity target, and the per-slot byte capacity.
+[94m[Bash][0m Update scene renderer header for skinning and velocity $ // Bounds and CPU copies of every uploaded mesh, in upload order. Extraction and the reference raste...
+The header edits are in. Now the renderer source, which is the largest edit. I'll check `destroy_into` and the includes first, since a skinned pipeline may be null when the skinned shaders are absent.
+[94m[Bash][0m Check includes and destroy helper in renderer source $ sed -n 183,205p engine/render/src/scene_renderer.cpp
+`destroy_into` skips invalid handles, so null skinned pipelines are safe. Now I'll replace the frame packing and vertex packing helpers.
+[94m[Bash][0m Update frame and vertex packing helpers $ }""") print("ok") EOF
+The packing helpers are in. Next is `build()`: the ten pipelines, the velocity target, and its readback buffer.
+[94m[Bash][0m Rewrite pipeline setup in build for skinned variants $ }  """ s = open(p).read() s = s[:start] + new_block + s[end:] open(p,'w').write(s) print("ok") EOF g...
+The shadow branch sets a "skinned" prefix that the common code adds again. I'll remove the duplicate, then move on to `ensure_slot`, `upload_mesh`, `set_mesh_bounds`, and the release path.
+[94m[Bash][0m Update slot growth, mesh upload, bounds, and release $ """) print("ok") EOF grep -n "rhi::fail<\|template.*fail\|RhiStatus fail\|fail(" engine/rhi/include/...
+The skinned validation hooks are in place. Next is `render()`, which needs the most edits: item validation, the palette-aware shadow key, the frame-camera plumbing, pipeline selection, and the velocity target in the graph and readback.
+[94m[Bash][0m Update render() item validation, shadows, and draw batching $ }     } """) print("ok") EOF
+The draw batching is updated. Next are the graph-level changes: per-slot byte sizes, per-mesh vertex stride, the velocity import and readback, and the final history update.
+[94m[Bash][0m Wire velocity target through graph and readback $ """) print("ok") EOF grep -n "frame_bytes\|kVertexStride\|capacity\b" engine/render/src/scene_render...
+The velocity target is wired through the graph. Existing tests call the four-argument `rasterize_reference`, so I'll keep that overload as a same-frame history and add the five-argument form. Then I'll register the skinned shader entries and the new test sources.
+[94m[Bash][0m Register skinned shader entries and overload reference rasterizer $ sed -n 56,76p tests/CMakeLists.txt
+Next I'll register the new library with the top-level build and link it into the test target, then configure and compile the libraries to catch errors before writing tests.
+[94m[Bash][0m Configure linux-dev preset with new library $ tail -5 /tmp/configure.log)
+[94m[Bash][0m Build animation and render libraries in debug $ tail -3 /tmp/build_libs.log
+The libraries compile cleanly with the warnings-as-errors flags. Before writing tests, I'll check the tag conventions the existing GPU and unit tests use, so the new files are picked up by the same suites.
+[94m[Bash][0m Check test tag conventions and GPU test options $ sed -n 200,260p tests/src/render_scene_gpu_tests.cpp | head -60
+I'll write the CPU animation tests first. They cover validation, reference poses, loop seams, playback, root motion reconstruction, blending, and animated bounds.
+[94m[Bash][0m Write CPU animation unit tests $ } EOF echo written
+Before compiling I re-derived several expected values by hand and found four mistakes in the test file: the non-looping mid-sample values, the reverse-playback time, the seam slope bound, and a missing include. I'll correct them now.
+[94m[Bash][0m Correct expected values in animation tests $ """) print("ok") EOF
+The animation expectations are corrected. Next are the render-side CPU tests: mesh validation, snapshot palettes and previous transforms, and a reference check that skinning matches static transforms exactly, including motion vectors.
+[94m[Bash][0m Check light struct and scene test graph setup $ grep -n "create(\|Transform" tests/src/render_scene_tests.cpp | head -5
+[94m[Bash][0m Write CPU skinning and motion vector tests $ } EOF echo ok
+The CPU tests are written. Now the GPU suite: a skinned mesh with a two-bone blend, a palette that moves between frames, a shadow-casting sun to exercise the skinned shadow pipeline, and comparison of the GPU pick IDs, depth, and velocity against the CPU reference on DX12 and Vulkan.
+[94m[Bash][0m Write GPU skinning test and register test sources $ } EOF python3 - <<'EOF' def edit(path, old, new, count=1):     s = open(path).read()     assert s.co...
+Two checks in the GPU test assume motion that frame 1 doesn't have, and a fixed pixel I computed lands outside the box. I'll make the motion check depend on the frame and drop the pixel probe, then build the test target.
+[94m[Bash][0m Build engine_tests target on Linux debug $ tail -3 /tmp/build_tests.log
+The test build is running in the background. While it runs I'll write the design doc for the new animation and skinning paths, including the limits.
+[94m[Bash][0m Write animation design doc while build runs $ tail -2 /tmp/build_tests.log
+[94m[Bash][0m Wait for test build and show errors $ grep -E "error|warning:" /tmp/build_tests.log | head -40
+
+[91m[Error: <tool_use_error>Blocked: sleep 90 followed by: tail -3 /tmp/build_tests.log grep -E "error|warning:" /tmp/build_tests.log head -40. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Show build log tail and any errors $ grep -E "error|warning:" /tmp/build_tests.log | head -40
+[94m[Bash][0m Wait for test build to finish and show errors $ grep -E "error|warning:" /tmp/build_tests.log | head -40
+The test target built with exit code 0. I'll run the CPU unit suite to exercise the new tests.
+[94m[Bash][0m Run CPU unit suite and collect failures $ grep -n "FAILED\|with expansion" -A4 /tmp/unit.log | head -120
+The search returned a stale ASan binary, not the one I just built. I'll rerun against the linux-debug binary and confirm the new test cases are included.
+[94m[Bash][0m Run linux-debug unit suite and list new tests $ build/linux-debug/tests/Debug/engine_tests --list-tests 2>/dev/null | grep -i "skin\|animation\|play...
+[94m[Bash][0m Locate freshly built test binary and presets $ cat CMakePresets.json | grep -n '"name"' | head -30
+The debug build preset writes to `build/linux-dev`. I'll run the unit suite from there.
+[94m[Bash][0m Run unit suite from linux-dev debug binary $ build/linux-dev/tests/Debug/engine_tests --suite unit --list-tests 2>/dev/null | grep -ci "skin\|ani...
+One CPU check fails: the seam-continuity step is 5.2 mm where I predicted at most 3.5 mm. I'll replicate the sampler in Python to find where the largest step occurs before deciding whether the code or the bound is wrong.
+[94m[Bash][0m Replicate sampler in Python to find largest step $ for i in range(1,4001):     cur=sample(i*step)     d=abs(cur-prev)     if d>worst[0]: worst=(d,i)   ...
+The sampler is right. The bug is in my test: `glm::vec3(1.0f)` builds (1, 1, 1), not (1, 0, 0), so the test's translation moves in three axes. The observed 0.005197 is exactly 0.003·√3. I'll correct the keys to x-only.
+[94m[Bash][0m Fix x-only key values in seam test $ """) p='tests/src/animation_tests.cpp' s=open(p).read() print(s.count("glm::vec3(1.0f))"), s.count("...
+The remaining `vec3(1.0f)` uses are scales and an intentionally unsorted key, so they are correct. I'll rebuild the test binary in the background and then rerun the unit suite.
+[94m[Bash][0m Rebuild tests and rerun unit suite on Linux $ tail -2 /tmp/unit.log
+All 475 unit cases pass on Linux, including the new animation and skinning tests. Next are the Windows gates, which the memory notes say run from WSL through `cmd.exe` and a batch file. I'll read that reference first.
+[94m[Bash][0m Read Windows gate run memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The notes say to reuse the earlier batch pattern: `vcvars64`, one log per step, and return codes written to a file. I'll look for the batch from the last run in the Temp folder so the new one matches it.
+[94m[Bash][0m Find previous Windows gate batch file to reuse $ cat "$f" 2>/dev/null | tr -d '\r' | head -60
+I'll reuse that batch pattern under a US-036 name, with the same steps plus both GPU suites, and run it in the background.
+[94m[Bash][0m Write and launch Windows gate batch for US-036 $ echo launched
+The launch printed "other gate running", but that check may have matched its own shell command line. I'll confirm no other batch is actually running.
+[94m[Bash][0m Check for running gate batches and their logs $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/us036_* 2>/dev/null | head
+Only this batch is running. While it works I'll check the docs for stale statements about the old 144-byte record and the four-target pass, since those are now wrong.
+[94m[Bash][0m Find stale frame-layout references in docs $ grep -n "US-035\|US-034" docs/build.md | head -5
+Two docs describe the old layout: `scene-rendering.md` has a frame-layout table and `materials.md` has the 144-byte record. I'll read the relevant section and update both.
+[94m[Bash][0m Read frame layout section of scene rendering doc $ sed -n 28,50p docs/scene-rendering.md
+[94m[Bash][0m Update frame layout docs for 208-byte records $ python3 - <<'EOF' def edit(path, old, new, count=1):     s = open(path).read()     assert s.count(ol...
+The docs now match the layout. I'll check how far the Windows gate has progressed.
+[94m[Bash][0m Check Windows gate progress $ cat /tmp/us036_result.txt 2>/dev/null | tail -3
+ValidateVendor passed, and configure is running. I'll wait in short polls, since the win-debug build is the long step.
+[94m[Bash][0m Poll Windows gate result file $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us036_rc.txt 2>/dev/null
+Configure, build, and unit all passed, but the DX12 GPU suite returned 1. I'll read its log before anything else.
+[94m[Bash][0m Inspect DX12 GPU failure log $ tail -5 us036_5.log
+[94m[Bash][0m Show failing assertions in DX12 log $ grep -n "^[A-Za-z].*\(DX12\|Vulkan\)" us036_5.log | head
+Only the first-frame zero-motion check fails on DX12, at 144 pixels. The compared values are equal up to float rounding: the previous-frame path runs through the same math as the current path, but the compiler may fuse those operations differently. I'll confirm the magnitude once the Vulkan result comes in.
+[94m[Bash][0m Wait for Vulkan GPU result and show failures $ grep -n "FAILED" -A3 /mnt/c/Users/bucha/AppData/Local/Temp/us036_6.log | head -30
+Both backends fail the same 144 first-frame pixels, and every other GPU check passes, including the motion-vector comparison against the CPU reference on frame 2. That points to float residue rather than a logic error. I'll replace the exact-zero check with a 1e-5 tolerance and report the largest value, so the size of the residue is visible in the log.
+[94m[Bash][0m Tighten first-frame check and prepare rerun batch $ echo ready
+The process count shows two matches for the earlier batch, so I'll confirm that nothing is still running before I start the rerun.
+[94m[Bash][0m Confirm no gate batch is still running $ ps -eo pid,args | grep "[g]ates.bat" | wc -l
+Nothing is running, so I'll launch the rerun of the full gate set.
+[94m[Bash][0m Launch Windows gate rerun $ echo launched
+While the rerun goes, I'll poll for its result.
+[94m[Bash][0m Poll rerun gate result $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us036b_rc.txt 2>/dev/null
+[94m[Bash][0m Continue polling rerun gate result $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us036b_rc.txt 2>/dev/null
+All six Windows steps passed. I'll pull the summary lines and the warning count from the logs, so the report quotes measured numbers.
+[94m[Bash][0m Extract Windows gate summary numbers from logs $ cat us036b_vc.log | head -2
+Windows is green: ValidateVendor, `win-dev`, `win-debug` with 0 MSVC warnings, `win-unit` 21/21, DX12 GPU suite 32 cases, and Vulkan GPU suite 33 cases, all passing with the new cases counted. Next are the Linux gates. I'll run them as one background script so the long builds don't block.
+[94m[Bash][0m Start Linux gate sequence in background $ grep -n '"name": "linux-gcc"\|"name": "linux-asan"' -A6 CMakePresets.json | grep -i "binaryDir\|conf...
+The Linux gates are running. While they go, I'll look at the end of the build-verification table in `docs/build.md`, where the US-036 row will go.
+[94m[Bash][0m Inspect verification table layout in build doc $ sed -n 188,200p docs/build.md | cut -c1-200
+I'll poll the Linux gate file until the first builds finish.
+[94m[Bash][0m Poll Linux gate progress $ cat /tmp/lg_rc.txt
+That notification is for an old wait loop that had already finished its work. The Linux gate sequence is still running, so I'll keep polling it.
+[94m[Bash][0m Continue polling Linux gate progress $ cat /tmp/lg_rc.txt
+[94m[Bash][0m Keep polling Linux debug build $ tail -1 /tmp/lg_build.log
+[94m[Bash][0m Poll Linux unit and GCC build results $ grep "tests passed\|tests failed" /tmp/lg_unit.log | head -3
+[94m[Bash][0m Poll GCC build and unit results $ grep -c "warning:" /tmp/lg_gcc_build.log 2>/dev/null
+[94m[Bash][0m Continue polling GCC build $ grep -c "warning:" /tmp/lg_gcc_build.log 2>/dev/null
+[94m[Bash][0m Poll ASan build and sanitize results $ grep "tests passed" /tmp/lg_gcc_unit.log | head -2
+[94m[Bash][0m Continue polling ASan build and sanitize $ cat /tmp/lg_rc.txt | tail -4
+[94m[Bash][0m Keep polling ASan build $ cat /tmp/lg_rc.txt | tail -4
+[94m[Bash][0m Poll sanitize test completion $ grep "tests passed\|tests failed" /tmp/lg_sanitize.log 2>/dev/null | head -2
+Every Linux gate passed: vendor validation, `linux-dev`, `linux-debug` build, `linux-unit` 22/22, the GCC build and unit run, and the ASan/UBSan build and `linux-sanitize` run. I'll check the sanitizer and compiler logs for hidden warnings or runtime errors before recording the results.
+[94m[Bash][0m Check warnings and sanitizer findings in logs $ grep -h "tests passed" /tmp/lg_unit.log /tmp/lg_gcc_unit.log /tmp/lg_sanitize.log
+Warnings and sanitizer findings are all zero. I'll record the results in `docs/build.md`, next to the US-035 row.
+[94m[Bash][0m Add US-036 verification row to build docs $ `--suite gpu --backend vulkan` 33 cases, 1249 assertions, all pass. Linux clang `ValidateVendor`, `l...
+Next, the progress log and `prd.json`. I'll look at the US-036 entry in `prd.json` before editing it, so only that flag changes.
+[94m[Bash][0m Locate US-036 entry in prd.json $ grep -n '"passes": false' tasks/prd.json | head -2
+Line 1176 holds the `passes` flag for US-036. I'll set it, then append the progress entry and the reusable patterns the work produced.
+[94m[Bash][0m Set US-036 passes flag and append progress log $ new vertex formats R32G32B32A32Float and R32Uint), `CMakeLists.txt` (`add_subdirectory(engine/animat...
+The progress entry is appended. One sentence in `docs/animation.md` overstates the root-track behavior: only the extracted components are read non-periodically, while the others keep their periodic value. I'll correct it.
+[94m[Bash][0m Correct root-track sentence in animation doc $ python3 - <<'EOF' def edit(path, old, new, count=1):     s = open(path).read()     assert s.count(ol...
+US-036 is implemented and the required gates pass on Windows and Linux, with two gaps called out below. The US-022 importer gap needs your decision.
+
+**What was built**
+- **Animation library (`engine/animation/`, CPU only):** skeletons with validated inverse bind matrices, clips with looping and non-looping sampling, a loop-seam that stays continuous, a player with speed and loop counting, two-clip blends, root motion, and animated bounds sampled across the clip.
+- **Root motion:** translation axes and yaw are selectable. The entity's displacement plus the extracted pose rebuilds the authored root exactly, and a test checks it.
+- **GPU skinning:** a 52-byte skinned vertex, five skinned pipelines, and palettes in the frame buffer. A skinned item with no pose draws the bind pose.
+- **Motion vectors:** an R32G32Float velocity target in UV units, so DX12 and Vulkan agree. It uses current and previous palettes, node transforms, and the previous camera.
+- **Reference rasterizer:** it now skins and computes motion vectors, so the GPU results are checked against the CPU path.
+- **Docs and progress:** `docs/animation.md` (new), the layout docs, the `docs/build.md` row, and the progress log.
+
+**Verification**
+- **Windows:** `ValidateVendor`, `win-dev`, and `win-debug` (0 MSVC warnings) pass. `win-unit` is 21/21. The DX12 GPU suite is 32 cases and the Vulkan GPU suite is 33 cases, all passing on the RTX 5080 with debug layers.
+- **Linux:** `ValidateVendor`, `linux-dev`, and `linux-debug` (0 warnings) pass, along with `linux-unit` 22/22. `linux-gcc`, `linux-gcc-debug` (0 warnings), and `linux-gcc-unit` 22/22 pass. `linux-asan` (0 warnings) and `linux-sanitize` 22/22 pass with no sanitizer reports.
+- **Not run:** the native Linux Vulkan GPU suite, because this WSL host has no usable Vulkan device. `engine_bench` was not run because no benchmark harness exists yet (US-074). No GUI check was run because no window exists yet. All of these are recorded as not-run.
+- **Fixed during verification:** the first Windows run failed a zero-motion check on 144 pixels on both backends. The values are float residue, so the check now uses a 1e-5 tolerance. The motion-vector comparison against the CPU reference on the moving frame passed on both backends.
+
+**Decisions for you**
+- **US-022 is not actually done.** `tasks/prd.json` marks it passing, but the Assimp importer still reports skins and clips as unsupported, and it has no progress entry. US-036 is built without import, so its fixtures are clips defined in code, not glTF or FBX files. Import needs its own story or a fix to US-022.
+- **I set US-036 `passes: true`,** following the US-035 precedent that records the not-run Linux Vulkan GPU suite. If you want the native Linux Vulkan run before the story counts as done, revert that flag.
+- **Scope limits:** no clip events, no blend tree or state machine (US-069), and normals are blended from the palettes' 3x3, which is exact for rigid joints and uniform scale only. Bounds are sampled and padded 5%, not proven between samples. Palettes hold up to 256 joints.
+- **Git and CI:** the directory is not a git repository, so I made no commit. The results above are local runs only, not CI.

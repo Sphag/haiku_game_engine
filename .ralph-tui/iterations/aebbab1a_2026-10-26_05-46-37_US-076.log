@@ -1,0 +1,43 @@
+# Iteration 794 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:46:37.817Z
+- **Ended At**: 2026-10-26T02:50:21.355Z
+- **Duration**: 3m 43s
+- **Input Tokens**: 24
+- **Output Tokens**: 2128
+- **Total Tokens**: 2152
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and prior progress notes $ cd /mnt/d/dev/haiku_game_engine 2>/dev/null && pwd && ls && tail -n 60 .ralph-tui/progress.md && ls ...
+[94m[Bash][0m Rebuild, run linux unit tests, and check workload digests $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp tools/benchmark/src/workload.cpp benchmarks/wo...
+[94m[Bash][0m Confirm unit test pass count and locate workload tool $ find build -name 'engine_workload*' -type f | head -3
+US-076 is not complete. I verified the current state and did not change any source, workload, or manifest files, because the remaining blockers need your decision.
+
+**Verified this pass**
+- `linux-debug` builds.
+- `ctest --preset linux-unit` passes 30/30.
+- The benchmark sources, `workload_expected.json`, and the manifest are unchanged since the last status check.
+
+**Blocked on you**
+1. **Triangle floor at the start frame.** The contract (PRD line 875) requires at least 2,000,000 submitted triangles on the indexed path at the start frame. The pinned camera route starts at 312,068. Closing that gap means changing a fixed contract: either the route start (manifest SHA-256 changes) or the seeded placement (`kWorkloadVersion` bump, regenerate `workload_expected.json`). The PRD reserves that call for you. Alternatively, accept the measured run as failing and record it.
+2. **Frame budget.** Same PRD section reserves this for a separate user decision.
+3. **full_1080 profile.** Unsupported until the vendored FSR 2 permutation headers exist, so this profile cannot run here.
+
+**Not run**
+- Native Linux Vulkan GPU suite and `engine_bench --suite acceptance` on both backends. Acceptance numbers need your decision on item 1 first.
+- The `linux-gcc` job. Jolt does not build with the local GCC 9.4.
+- The Windows gates (`win-dev`, `win-debug`, `win-unit`, `ValidateVendor`) were not re-run in this pass.
+- The screenshot and submitted/visible counter runs for each path and profile, and the disabled-mesh-shader fallback check, depend on the route decision in item 1.
+
+To move forward, tell me which way to resolve the triangle floor (change the route start, change placement with a version bump, or accept the failing result) and whether to skip full_1080 until FSR 2 lands. I'll then run the remaining gates and the GPU runs.

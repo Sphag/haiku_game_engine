@@ -1,0 +1,34 @@
+# Iteration 1209 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:55:44.964Z
+- **Ended At**: 2026-10-26T21:55:59.292Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 2032
+- **Total Tokens**: 2054
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log tail and bench artifacts $ grep -n "US-080" -A3 tasks/prd-open-world-engine.md | head -20
+[94m[Bash][0m Re-check hardware and workload blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ RTX 5080 (driver 617.42) visible under WSL only. - No build or bench run: an acceptance batch would ...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. I re-checked the blockers and made no code or build changes this run.
+
+**Still blocking sign-off:**
+- **Native Linux Vulkan:** `/dev/dri` is absent in this WSL environment, so there is no native Linux Vulkan device to run the acceptance suite on.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has four entries with `implementation: "none"`. Any acceptance run would exit 3 (incomplete) until they exist.
+- **FSR 2 shader tables:** the vendored tree has 0 of the generated `*_permutations.h` files, so the FSR backends cannot build. This needs a vendoring decision from you.
+- **Performance budget:** the earlier `render_stress` run on the RTX 5080 measured CPU p99 at 42.4 ms against a 16.7 ms budget. The cause is not yet identified; it needs a Release profile run via cmd.exe. The contract cannot be relaxed to pass, so if the budget stays exceeded after profiling, the call is yours.
+- **Acceptance artifacts:** `artifacts/bench` has no acceptance-suite run, so there are no three-repeat raw reports for any combination.
+
+**What I did:** I confirmed those facts above and appended a status entry to `.ralph-tui/progress.md`. The previous entries show about 90 unattended checks reaching the same conclusion, so I'd suggest not rescheduling this loop until you decide the open items: a native Linux Vulkan host, the FSR 2 route, the four workload sources, and whether the frame budget stands. Once those are settled, the next concrete step is profiling `render_stress` on the RTX 5080.

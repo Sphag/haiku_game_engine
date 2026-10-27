@@ -1,0 +1,115 @@
+# Iteration 21 Log
+
+## Metadata
+
+- **Task ID**: US-040
+- **Task Title**: Native-Profile GI and Reflections
+- **Description**: As a player, I want indirect lighting without heavy RT so that I can use the native profile.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T17:13:20.955Z
+- **Ended At**: 2026-10-23T17:28:00.997Z
+- **Duration**: 14m 40s
+- **Input Tokens**: 220
+- **Output Tokens**: 22052
+- **Total Tokens**: 22272
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any GI/probe work already exists.
+[94m[Bash][0m Inspect repo layout and progress log $ ls && wc -l .ralph-tui/progress.md && grep -n "US-040\|US-039\|US-019" .ralph-tui/progress.md | head...
+US-040 already has three prior entries. I'll read them to see where it stands.
+[94m[Bash][0m Read US-040 progress entries $ sed -n 240,299p .ralph-tui/progress.md
+The story is at "Partial" after three passes. Open items are: the runtime doesn't load a cooked `gi_probes` asset, alpha-blended surfaces get no reflections, and the outdoor fixture and asan/sanitizer runs are missing. Next I'll read the Windows gate procedure in memory and check the current runtime loading path.
+[94m[Bash][0m Read gate memory notes and locate GI runtime hooks $ pgrep -af "us0|gate" | head
+The remaining gaps need a runtime asset load path. I'll check the `gi` API and what the runtime asset layer offers before deciding how much is feasible in this pass.
+[94m[Bash][0m Inspect GI probe API and asset loading surface $ sed -n 1,40p docs/gi-probes.md
+The docs list what's left. I'll read that section and check how the runtime loads other cooked payloads.
+[94m[Bash][0m Read GI scope section and asset loader API $ grep -n "class\|struct\|^[a-zA-Z].*(" engine/assets/include/engine/assets/cooked_container.hpp | hea...
+The biggest open item is the runtime reading a cooked `gi_probes` asset from the registry. I'll check whether the registry already has a read path I can reuse.
+[94m[Bash][0m Inspect asset registry API and its consumers $ grep -n "\"gi_probes\"\|type_name\|asset_type" tests/src/render_gi_gpu_tests.cpp | head
+The registry only stores records; nothing reads payloads. I'll look at the cooked container API to see whether a payload read path exists.
+[94m[Bash][0m Read cooked container API and CMake links $ grep -n "engine_gi\|engine_assets" tests/CMakeLists.txt | head
+The cooked container reader already exists, so I can add a CPU-only loader: find the cooked file for a source record, unwrap the container, and deserialize the volume. I'll read `AssetRecord` and the existing test style first.
+[94m[Bash][0m Read AssetRecord, gi test style, cooked path convention $ grep -rn "cooked\b\|\.cooked" engine/assets/src/asset_project.cpp tools/asset_converter/src/converte...
+[94m[Bash][0m Read converter cooked path and test helpers $ grep -n "cooked\|Path\|temp" tests/src/render_gi_gpu_tests.cpp | head -5
+I have what I need for the loader design. I'll confirm the `Path` and `Guid` APIs before writing it.
+[94m[Bash][0m Read Path, Guid, PathError APIs $ grep -n "importer\b" tests/src/assets_registry_tests.cpp | head -3
+The loader needs a `Result` error constructor. I'll check how `probes.cpp` builds errors, then write the header and source.
+[94m[Bash][0m Check Result constructors and includes $ sed -n 1,12p engine/assets/src/cooked_container.cpp | grep include
+I'll write the loader header and source, then wire them into CMake.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/include/engine/gi/cooked_volume.hpp[0m "#pragma once
+
+// The runtime side of the gi_probes payload (US-040). The converter writes "<output>/<guid>.cooked" for each gi_probes asset: the cooked
+// container (engine/assets/cooked_container.hpp... (1415 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/gi/src/cooked_volume.cpp[0m "#include "engine/gi/cooked_volume.hpp"
+
+#include "engine/assets/cooked_container.hpp"
+
+#include <string>
+#include <string_view>
+
+namespace engine::gi {
+
+using core::Result;
+
+Result<GiVolume, std::stri... (1612 chars)"
+Next I'll confirm how `failure` is brought into scope in `probes.cpp`, then update the CMake file.
+[94m[Bash][0m Check failure() namespace in result header $ grep -n "^namespace\|failure(" engine/core/include/engine/core/result.hpp | head -5
+[94m[Bash][0m Add loader source and assets link to gi CMake $ grep -n "gi_probe_tests\|render_gi" tests/CMakeLists.txt
+The change on disk is my own Python edit, so it's expected. Next I'll look at the registry test's `make_record` helper so the new test builds records the same way.
+[94m[Bash][0m Read registry test helper and gi importer test $ sed -n 255,300p tests/src/gi_probe_tests.cpp
+I'll add a registry round-trip test: import a scene, wrap the payload in a cooked container, register the asset, then load it through the new API and check the failure cases.
+[94m[Bash][0m Add registry load test for the cooked GI volume $ } ''' open(p,'w').write(s) EOF grep -n "ContentHash" engine/assets/include/engine/assets/content_has...
+The orphan case is actually "registered but never cooked", so I'll rename it to match. I'll also add the `content_hash.hpp` include, then build Linux debug.
+[94m[Bash][0m Build Linux debug preset and report warnings $ echo BUILD_RC=${PIPESTATUS[0]})
+The Linux debug build finished with no warnings. Next I'll run the unit suite and check the new test case.
+[94m[Bash][0m Run Linux unit tests and locate test binary $ find build -name engine_tests -type f 2>/dev/null | head -3
+[94m[Bash][0m Run the new cooked-volume test and full unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -3
+All 511 unit cases pass, including the new one. Next I'll run the GCC gate, since it builds with warnings as errors.
+[94m[Bash][0m Build and test the Linux GCC preset $ timeout 900 ctest --preset linux-gcc-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests...
+The GCC gate passes with zero warnings. Next are the Windows gates. I'll check for a running batch, then look at the previous batch file as a template.
+[94m[Bash][0m Look for previous Windows gate batch and temp files $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+The `us040c` batch finished (its done file exists), and this template works. I'll copy it as `us040d` with CRLF endings and launch it in the background.
+[94m[Bash][0m Create and launch the Windows gate batch for US-040 $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us040d_gate.bat" > $T/us040d_result.txt 2>&1 & e...
+While the Windows batch runs, I'll update the GI doc to describe the loader and narrow the "not done" list.
+[94m[Bash][0m Locate doc sections and build.md row $ grep -n "^## " docs/gi-probes.md
+[94m[Bash][0m Document the runtime loader and check Windows batch progress $ cat $T/us040d_rc.txt 2>/dev/null
+
+[91m[Error: Exit code 1
+docs/build.md:1
+docs/gi-probes.md:2][0m
+The docs are updated. The Windows batch hasn't written its result file yet, so I'll wait on its done file with a bounded poll.
+[94m[Bash][0m Wait for Windows gate batch to finish, bounded $ ls $T/us040d_done.txt 2>/dev/null
+All six Windows gate codes are 0. Before I trust them, I'll check the logs for compiler warnings, test counts, and whether the binary is newer than the sources.
+[94m[Bash][0m Verify Windows logs: warnings, counts, binary freshness $ ls -lt --time-style=+%F_%T engine/gi/src/cooked_volume.cpp tests/src/gi_probe_tests.cpp | head -2
+[94m[Bash][0m Confirm Windows unit summary and build success $ grep -c "cooked_volume" $T/us040d_3.log
+The Windows unit suite passes 21/21, and the build has no `warning C` or `error C` lines. I'll append the progress entry and record what this pass did and didn't cover.
+[94m[Bash][0m Append US-040 progress entry $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-23 - US-040 (runtime loader) - What was implemente...
+US-040 is still **Partial**, so I have not emitted the completion signal. This pass closed one of the open gaps and re-ran the gates.
+
+**What changed**
+- **Runtime loader:** `load_gi_volume(registry, output_dir, source_path)` in `engine/gi/include/engine/gi/cooked_volume.hpp` finds the registered `gi_probes` asset, reads `<output>/<guid>.cooked`, unwraps the container, and deserializes the volume. Each failure returns a reason: no record, wrong importer, missing or uncooked file, bad container, or unsupported format version. `decode_cooked_volume` does the same for bytes already in memory.
+- **Build:** `engine_gi` now links `engine_assets` for the container reader.
+- **Test:** a registry round-trip case in `tests/src/gi_probe_tests.cpp` covers a successful load and each failure path.
+- **Docs:** `docs/gi-probes.md` has a new runtime-loading section and an updated scope list. The US-040 row in `docs/build.md` is updated.
+- **Progress log:** `.ralph-tui/progress.md` has a new US-040 entry.
+
+**Gates (current tree)**
+- Windows, RTX 5080 (batch `us040d`): `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` (21/21) pass with no `warning C` or `error C`. `gpu dx12` passes with 47 cases and `gpu vulkan` passes with 48 cases, with validation layers on and `software=no`.
+- Linux clang: `linux-debug` has zero warnings and `linux-unit` passes 22/22. The unit suite has 511 cases, all passing.
+- Linux gcc: `linux-gcc-debug` has zero warnings and `linux-gcc-unit` passes 22/22.
+
+**Not run**
+- `linux-asan`/`linux-sanitize`: the loader does file reads and pure decoding, which isn't in the listed memory/ECS/jobs/streaming/Lua/physics categories. I judged it not required, but that is a judgment call.
+- Native Linux Vulkan GPU suite: no usable device on this WSL host.
+- `engine_bench --suite acceptance`: the bench target doesn't exist until US-074.
+- GUI check and GitHub CI.
+
+**Still open before this story can be marked complete**
+- No game startup path calls `load_gi_volume`, so a shipped scene doesn't get its probes from converter output yet.
+- Alpha-blended surfaces get no SSR reflections.
+- Off-screen mirror images fall back to the environment.

@@ -1,0 +1,53 @@
+# Iteration 1297 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:04:02.616Z
+- **Ended At**: 2026-10-27T00:10:13.564Z
+- **Duration**: 6m 10s
+- **Input Tokens**: 42
+- **Output Tokens**: 3627
+- **Total Tokens**: 3669
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current docs, the progress log, and which release gates can run from this WSL environment.
+[94m[Bash][0m Inspect repo root, progress log, and docs $ wc -l README.md 2>/dev/null
+The progress log shows several earlier passes that ended without sign-off. I'll check whether anything changed since the last recorded gate before deciding what to run.
+[94m[Bash][0m Check changes since last recorded gate and environment $ grep -n -i 'open\|pending\|not \|blocked' docs/acceptance.md | head -40
+The Windows gate logs are from 02:20 and the Linux gates are not yet re-verified on this tree. The Linux gates can run here, so I'll run them now rather than repeat the earlier status pass.
+[94m[Bash][0m Run vendor validation and linux-dev configure $ tail -3 /tmp/us081-dev.log
+[94m[Bash][0m Build linux-debug preset $ tail -4 /tmp/us081-build.log
+[94m[Bash][0m Run linux-unit CTest preset $ tail -6 /tmp/us081-ctest.log
+The Linux gates pass on this tree. I'll record the result in the progress log, with the open items unchanged.
+[94m[Bash][0m Append US-081 status entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` passed (unit 1 test, integration 29...
+US-081 is not complete, so I am not emitting the COMPLETE signal. The Linux quality gates pass on the current tree. The remaining acceptance items need hardware and decisions that this WSL environment cannot supply.
+
+**Passed in this run (WSL, Linux):**
+- `cmake -P cmake/ValidateVendor.cmake`: 26 dependencies, 8542 files.
+- `cmake --preset linux-dev`: configured and generated.
+- `cmake --build --preset linux-debug`: passed.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: passed (unit 1 test, integration 29 tests).
+
+**Not run or blocked:**
+- **Native Linux Vulkan GPU report and editor visual smoke:** `/dev/dri` is absent, so there is no native Linux Vulkan device.
+- **`linux-gcc`:** the local GCC is 9.4, and Jolt needs GCC 11 or newer.
+- **`linux-release` and `win-release`:** not built in this run.
+- **`linux-asan` and `linux-sanitize`:** not run.
+- **Full acceptance benchmark:** not run to completion on DX12 or Vulkan. The acceptance scenes do not yet produce GPU timestamps.
+- **RTX 5080 GPU reports:** these need the reference machine.
+- **Visual editor smoke:** Windows only has a launch screenshot. The full action sequence is still open.
+- **LICENSE file:** this is your decision.
+- **FSR 2 permutations:** the vendored tables are missing; picking a vendoring route is your decision.
+
+The Windows gate logs from 02:20 are in `artifacts/reports/us081/`. I did not re-run them.
+
+I appended this status to `.ralph-tui/progress.md`. `docs/acceptance.md` is unchanged and still lists these open items. US-081 needs your decisions on the LICENSE and FSR 2 items, and the RTX 5080 reports, before it can be signed off.

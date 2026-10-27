@@ -1,0 +1,38 @@
+# Iteration 1204 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:54:15.356Z
+- **Ended At**: 2026-10-26T21:54:27.985Z
+- **Duration**: 12s
+- **Input Tokens**: 18
+- **Output Tokens**: 1709
+- **Total Tokens**: 1727
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Check progress log and bench artifacts $ git status 2>&1 | head -3
+[94m[Bash][0m Re-check hardware and workload blockers $ ls artifacts/bench | grep -i acc | head -3
+US-080 is not complete, and I have not signalled COMPLETE. I re-checked the blockers and nothing has changed since the last status entries in `.ralph-tui/progress.md`:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent, so the native Linux/Vulkan run on the RTX 5080 cannot happen from this WSL host. The RTX 5080 is visible only through WSL (`nvidia-smi`).
+- **FSR 2 is not buildable.** There are 0 `*_permutations.h` files under `third_party`. Vendoring the generated shader tables is a decision for you.
+- **Four workloads are unimplemented.** `benchmarks/manifest.json` still has four entries with `implementation: "none"`. An acceptance run would exit 3 (incomplete), so it would not be a pass.
+- **A frame budget is already missed.** The us076 meshlets DX12 run (`artifacts/bench/us076-dx12-meshlets/report.json`) measured CPU p99 42.4 ms against the 16.7 ms budget. The GPU side fits at p99 11.5 ms, so the miss is on the CPU. The next concrete step is a Release profile of `render_stress` on the RTX 5080 through cmd.exe, which I have not run. Under the contract, a budget miss must be fixed, not the contract changed, unless you decide otherwise.
+
+No acceptance-suite run exists in `artifacts/bench`, and no raw three-repeat reports exist for any combination. I did not run the quality gates or a bench in this turn. I also did not append another status entry to the progress log, since the last 15 or so entries repeat this same state.
+
+To move forward, I need one of these from you:
+1. Access to a native Linux host with an RTX 5080 and `/dev/dri`, or a decision to sign off without the Linux/Vulkan report.
+2. A decision on FSR 2 vendoring: obtain the generated permutation headers, or drop FSR from the acceptance scope.
+3. Direction on the four `implementation: "none"` workloads: implement them, or exclude them from acceptance.
+
+Separately, I can profile the `render_stress` CPU frame on the Windows side now (cmd.exe, Release build, timed sections around extract, render, and fence waits). That addresses the one blocker I can work on without you.

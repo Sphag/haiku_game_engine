@@ -1,0 +1,45 @@
+# Iteration 176 Log
+
+## Metadata
+
+- **Task ID**: US-051
+- **Task Title**: GPU Particles
+- **Description**: As an effects author, I want a particle system so that I can add dynamic effects to the world.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-24T09:53:05.165Z
+- **Ended At**: 2026-10-24T09:58:58.860Z
+- **Duration**: 5m 53s
+- **Input Tokens**: 30
+- **Output Tokens**: 2666
+- **Total Tokens**: 2696
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check the existing US-051 state first, since memory notes say much of it is already done.
+[94m[Bash][0m Inspect repo layout and US-051 progress notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-gpu-particles.md
+The notes say US-051 is implemented and only two items remain open: the `engine_bench` run (no harness exists) and the native Linux Vulkan GPU run (no device in WSL). I'll re-check the Linux gates on the current tree rather than rely on the notes alone.
+[94m[Bash][0m Re-run Linux gates and check for bench target $ grep -rl "engine_bench" --include=CMakeLists.txt . 2>/dev/null | grep -v build | head
+[94m[Bash][0m Confirm ctest totals and bench status $ grep -n "US-074" tasks/*.md | head -3
+[94m[Bash][0m Append verification entry to progress log $ native Linux Vulkan GPU suite (no device in WSL). - Status call: US-051 stays **Partial**. Open: the...
+US-051 (GPU particles) is implemented, but I can't mark it complete. Two acceptance items can't run in this environment, so the status stays **Partial**. I did not sign off with `<promise>COMPLETE</promise>`.
+
+**Re-verified on Linux (clang, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files).
+- `cmake --preset linux-dev`: configured.
+- `cmake --build --preset linux-debug`: exit 0, no warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22/22 passed (1 unit, 21 integration).
+
+**Carried forward from earlier passes on the same source (not re-run here):**
+- Windows: ValidateVendor, `win-dev`, `win-debug`, and `win-unit` passed.
+- GPU: `engine_tests --suite gpu` passed on DX12 (71 cases) and Vulkan (72 cases) on Windows.
+- Linux GCC and ASan/UBSan (`linux-asan` build, `linux-sanitize` 22/22) passed.
+
+**Still open:**
+- **`engine_bench --suite acceptance`:** there is no `engine_bench` target in the tree. The benchmark harness is US-074, which is not built yet. The performance contract can't be checked until it exists.
+- **Native Linux Vulkan GPU suite:** WSL has no Vulkan device, so `engine_tests --suite gpu --backend vulkan` can't run here. The acceptance criteria require a native Linux report.
+
+I appended a progress entry to `.ralph-tui/progress.md` for this pass. I changed no source files.

@@ -1,0 +1,46 @@
+# Iteration 1190 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:50:03.151Z
+- **Ended At**: 2026-10-26T21:50:18.147Z
+- **Duration**: 14s
+- **Input Tokens**: 28
+- **Output Tokens**: 2328
+- **Total Tokens**: 2356
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness and gates.
+[94m[Bash][0m Read progress tail and benchmark dirs $ ls benchmarks 2>/dev/null
+The log shows this story has been stopped on the same blockers for many iterations. I'll re-check those blockers directly before deciding whether anything has changed.
+[94m[Bash][0m Re-check GPU device, manifest stubs, FSR tables $ ls artifacts/bench | grep -i acc | head
+The blockers are unchanged. I'll record this check in the progress log and stop without a completion signal.
+[94m[Bash][0m Append status entry to progress log $ no acceptance-suite run in artifacts/bench. nvidia-smi sees the RTX 5080 (driver 617.42) under WSL o...
+US-080 is not complete, so I am not signalling COMPLETE. The acceptance run cannot happen on this host, and the blockers from earlier iterations are unchanged.
+
+**What's blocking it (re-checked just now):**
+- **No native Linux Vulkan GPU.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL (`nvidia-smi`, driver 617.42), which does not satisfy the native Linux/Vulkan requirement.
+- **FSR 2 is not buildable.** There are 0 `*_permutations.h` files in the vendored tree, so the FSR 2 backends stay unavailable.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` still marks them `implementation: "none"` (lines 88, 108, 122, 132), and there is no `all_features` source. A 3×180 s acceptance batch would exit 3 (incomplete) rather than produce a valid pass.
+- **No acceptance run exists.** `artifacts/bench` has only partial us076/us077/us078 runs and no acceptance-suite output.
+
+**What I did not do:** I did not run any build, gate, or benchmark. Running them now would produce incomplete results, and I did not want to report a pass the contract does not allow.
+
+**Gates from earlier iterations:** The log records the Linux gates (`ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit`) and the Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) as passing on the current tree. I re-ran none of them in this iteration, so those results are carried forward from the log.
+
+**What is needed to finish:**
+1. Access to the RTX 5080 reference machine for the native Linux Vulkan runs.
+2. A decision on the FSR 2 vendoring route (the generated permutation tables are missing).
+3. Implementation of the four unimplemented workloads, including `all_features`.
+4. A user decision if any frame budget is exceeded. The contract may not be relaxed to pass, so the fix would be a measured change, or a separate decision to change the contract.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this check.

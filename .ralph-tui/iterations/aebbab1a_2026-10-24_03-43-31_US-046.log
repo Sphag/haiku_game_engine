@@ -1,0 +1,42 @@
+# Iteration 57 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:43:31.328Z
+- **Ended At**: 2026-10-24T00:43:52.607Z
+- **Duration**: 21s
+- **Input Tokens**: 36
+- **Output Tokens**: 2853
+- **Total Tokens**: 2889
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the upscaler code.
+[94m[Bash][0m Inspect progress log and repo state $ wc -l .ralph-tui/progress.md && grep -n "US-04[5-6]" .ralph-tui/progress.md | head -50 && ls && git ...
+Earlier runs logged US-046 as blocked on FSR 2 vendoring. I'll read the blocker note and the latest log entries before deciding what to do.
+[94m[Bash][0m Read blocker log entries and FSR vendoring state $ find third_party -iname "*permutation*" | head
+The blocker is still the same. Before I decide anything, I'll confirm the vendored tree is unchanged and that the upscaler still has no working path.
+[94m[Bash][0m Confirm FSR 2 vendoring blocker is unchanged $ grep -n "ENGINE_FSR2_AVAILABLE" engine/rhi/CMakeLists.txt | head -3
+Nothing has changed since the last re-check. I'll log this pass in the progress file and stop, since the remaining work needs your decision.
+[94m[Bash][0m Append re-check entry to progress log $ or (2) regenerate the blobs with the engine's pinned DXC through a first-party generator. --- EOF ta...
+US-046 is not complete, so I am not signalling COMPLETE. It is blocked on a vendoring decision that only you can make.
+
+**What's blocked:** FSR 2 needs eight generated `*_permutations.h` headers per backend. These hold the shader bytes and permutation tables. The vendored tree and the pinned upstream archive both lack them, so FSR 2 cannot build, and both backends return `Unsupported` for upscale. I checked again this pass and nothing has changed.
+
+**Decision needed (pick one):**
+1. Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its hash-pinned outputs. This needs a documented exception to the no-prebuilt-tools rule.
+2. Regenerate the blobs with the engine's pinned DXC through a first-party generator. This is more work and produces different bytes.
+
+**What's done and verified:** the CPU contract (profile resolutions, FSR jitter phases, benchmark policy, history reset), the RHI upscaler contract, and both backend FSR 2 wrappers. Linux clang and GCC gates passed on the last full run. The Windows gates and GPU suites passed on the earlier batch, which covered the RHI contract and the wrappers, but not an upscale.
+
+**Not done, and waiting on the same decision:** the reactive mask, the `SceneRenderer` switch to 1280×720 for the full profile, UI composition after upscaling, and any GPU test that runs an upscale. I left the renderer alone on purpose. Switching to 720p without a working upscaler would ship an unupscaled image.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. Tell me which route to take and I'll continue from there.

@@ -1,0 +1,128 @@
+# Iteration 307 Log
+
+## Metadata
+
+- **Task ID**: US-053
+- **Task Title**: Colliders, Queries, and Terrain Physics
+- **Description**: As a game creator, I want collisions and spatial queries so that objects can interact with the world.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T17:59:15.321Z
+- **Ended At**: 2026-10-24T18:20:24.155Z
+- **Duration**: 21m 8s
+- **Input Tokens**: 282
+- **Output Tokens**: 38859
+- **Total Tokens**: 39141
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the physics code.
+[94m[Bash][0m Read progress log and list physics sources $ git status 2>&1 | head -5
+The log says US-053 is Partial. The open work is the terrain-to-heightfield feed and wiring `CollisionCells` into streaming. I'll read the current physics code and the terrain and streaming modules.
+[94m[Bash][0m Read collision cell and physics headers $ cat engine/physics/include/engine/physics/collision_cells.hpp && cat engine/physics/src/collision_ce...
+[94m[Bash][0m Read physics world header $ cat engine/physics/include/engine/physics/physics_world.hpp | head -400
+The physics side has no terrain source yet. Next I'll check the terrain tile API and the streaming API to see where a heightfield feed would connect.
+[94m[Bash][0m Read terrain header API $ ls engine/world/include/engine/world/ && grep -n "struct\|class\|sample\|height\|grid\|origin\|std::...
+[94m[Bash][0m Read streaming API and find physics consumers $ grep -rln "CollisionCells\|PhysicsWorld" --include=*.cpp --include=*.hpp --include=*.txt . | grep -v...
+The remaining gap is a terrain-to-heightfield feed plus a streaming subscriber. I'll check what a streamed `WorldCell` carries, and how the terrain and physics tests are built.
+[94m[Bash][0m Inspect WorldCell, world CMake, and test setup $ sed -n 1,60p tests/src/physics_query_tests.cpp
+`WorldCell` holds no terrain, so the terrain feed is a tile-to-heightfield builder. I'll read the terrain tile layout and the existing heightfield code to get the grid convention right.
+[94m[Bash][0m Read terrain layout, heightfield code, and Windows gate notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md
+The heightfield convention is body-centred with absolute heights, so a tile body sits at its centre with `y = 0`. Before writing code I need the `WorldDesc`/`CellBounds` fields and how the existing tests create entities.
+[94m[Bash][0m Read partition descriptors and test entity helpers $ ls tests/src | grep -i "terrain\|streaming\|partition"
+I have the types. Now the test-file conventions: how `ecs` is declared and how a cell test is tagged.
+[94m[Bash][0m Check test case tags and cell unload test style $ sed -n '/unload/,/^}/p' tests/src/physics_query_tests.cpp | head -60
+I have what I need. The plan, kept within the existing `CollisionCells` contract:
+
+1. `terrain_tile_cell`: one tile becomes a static heightfield body centred on its footprint.
+2. `cancel_unload`: a cell that reactivates while its unload is pending keeps its bodies. Without this, the deferred unload would remove bodies from an active cell.
+3. `CollisionCellStreamer`: a `CellSubscriber` that loads on activation and requests unload on deactivation.
+
+Starting with the header.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/collision_cells.hpp[0m edit: "#include "engine/core/result.hpp"
+#include "engine..." → "#include "engine/core/result.hpp"
+#include "engine..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/collision_cells.hpp[0m edit: "    bool unload(std::uint64_t id);
+
+    // Complet..." → "    bool unload(std::uint64_t id);
+
+    // Cancels..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/collision_cells.hpp[0m edit: "    std::map<std::uint64_t, Cell> cells_;  // orde..." → "    std::map<std::uint64_t, Cell> cells_;  // orde..."
+Now the implementation: the cancel, the terrain tile cell, and the streamer subscriber.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/collision_cells.cpp[0m edit: "void CollisionCells::update() {" → "bool CollisionCells::cancel_unload(std::uint64_t i..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/collision_cells.cpp[0m edit: "    return !world_->has_moving_body_in(min, max);
+..." → "    return !world_->has_moving_body_in(min, max);
+..."
+Now the tests. I need the names of the flat-terrain factory and the test `add` helper, and the existing sphere signature.
+[94m[Bash][0m Find flat terrain factory and test helpers $ tail -5 tests/src/physics_query_tests.cpp
+[94m[Bash][0m Append terrain and streamer test cases to query tests $ grep -n "sample_index" engine/world/include/engine/world/terrain.hpp
+The "outside" comment promises a second refusal case I did not write. I'll make the comment match what the test checks.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/physics_query_tests.cpp[0m edit: "    // A tile past the last column is refused, and..." → "    // A tile past the last column is refused."
+Next, a Linux debug build to check that it compiles with warnings as errors.
+[94m[Bash][0m Build Linux debug preset $ echo "exit=${PIPESTATUS[0]}"
+[94m[Bash][0m Run physics unit tests on the Linux binary $ $B "*terrain tile*" 2>&1 | tail -3
+The binary I found is the ASan build, and `engine_tests` takes `--suite`, not a tag. I'll run the unit suite from the debug build.
+[94m[Bash][0m Run unit suite on the Linux debug binary $ echo "exit=$?"
+[94m[Bash][0m Locate debug engine_tests and run unit suite $ tail -6 /tmp/unit.log
+The `linux-debug` build directory isn't under `build/`. I'll read the preset to find where it writes.
+[94m[Bash][0m Find preset binary directories and fresh test binary $ find / -name engine_tests -type f -newer engine/physics/src/collision_cells.cpp 2>/dev/null | head
+[94m[Bash][0m Read preset binary directories $ grep -n 'binaryDir' CMakePresets.json | head -20
+The configure preset writes to `build/<name>`, so `linux-debug` builds into `build/linux-dev`. I'll find the binary there and run the unit suite.
+[94m[Bash][0m Run unit suite on the linux-dev test binary $ tail -6 /tmp/unit.log
+
+[91m[Error: Exit code 144][0m
+Exit 144 came from my own `pkill -f "find /"`, which matched the shell running the command. I'll rerun without it.
+[94m[Bash][0m Run unit suite on the linux-dev test binary $ tail -6 /tmp/unit.log
+All 662 unit cases pass (659 before plus the 3 new ones). Next, the Windows gates. I'll look for a batch file from an earlier run to reuse its vcvars path.
+[94m[Bash][0m Look for an earlier Windows gate batch file $ [ -n "$f" ] && cat "$f" | tr -d '\r' | head -40
+An earlier `us053_gate.bat` does exactly these four gates. I'll confirm no batch is already running, clear the old results, and launch it in the background.
+[94m[Bash][0m Launch the Windows gate batch in background $ echo started
+While Windows runs, I'll run the Linux unit ctest and the Linux validation gate. Both are read-only with respect to the source.
+[94m[Bash][0m Run vendor validation and Linux unit ctest $ tail -4 /tmp/linux_unit.log
+Vendor validation and Linux unit ctest pass. The change touches physics, so the sanitizer gate applies. I'll build the ASan preset and run its sanitize ctest.
+[94m[Bash][0m Configure and build the ASan preset $ grep -c "error:" /tmp/asan_build.log
+[94m[Bash][0m Run sanitizer ctest preset and count sanitizer reports $ grep -ci "runtime error\|AddressSanitizer" /tmp/asan_ctest.log
+ASan/UBSan ctest passes 22 of 22, with no sanitizer reports. Now I'll wait for the Windows batch to finish.
+[94m[Bash][0m Wait for Windows gate results file $ pgrep -fa us053 | grep -v pgrep | head -2
+The Windows unit ctest reports `unit=8`, so eight failures. I'll read the log.
+[94m[Bash][0m Inspect Windows ctest failures $ tail -15 $T/us053_ctest.log
+[94m[Bash][0m Read the failing CLI help test output $ sed -n 1,30p $T/us053_ctest.log | tr -d '\r' | cut -c1-300
+The CLI help test got empty stdout from `engine_tests.exe --help`. The progress log says the same gate passed 21 of 21 on this tree before my change, so this looks environmental. I'll rerun that one test on Windows to check.
+[94m[Bash][0m Rerun the CLI help ctest on Windows $ tr -d '\r' < $T/us053_help_out.txt | head -3
+The help test passes on rerun, so the first failure was transient. To make the gate result clean I'll rerun the full `win-unit` ctest in one pass.
+[94m[Bash][0m Rerun full Windows unit ctest preset $ tr -d '\r' < $T/us053_unit2.log | grep "tests passed"
+[94m[Bash][0m Inspect repeated Windows CLI help failure $ tr -d '\r' < $T/us053_unit2.log | grep -n "Failed\|expected output\|stdout" -A3 | head -30
+The failing help test changed (`-h` this time), so the failure is intermittent and not tied to one test. The CLI contract script will show how stdout is captured.
+[94m[Bash][0m Read CLI contract script and help output source $ grep -rn "Usage: engine_tests" tests/src/*.cpp | head -3
+`execute_process` captures stdout through a pipe. The exit code matched and the text did not, so the help text is probably lost in a buffer. I'll check how the test main writes and exits.
+[94m[Bash][0m Find how the test binary prints help and exits $ grep -rn "print_usage\|usage_text" tests/*.cpp tests/src/*main* 2>/dev/null | head -5
+[94m[Bash][0m Read main help-path code $ sed -n 50,75p tests/src/main.cpp
+The help path is a plain `return` from `main`, so buffering alone should not lose output. The failure moves between the two help tests from run to run, which points at a flake rather than a fixed defect. I'll run the full `win-unit` preset once more to see whether it reproduces.
+[94m[Bash][0m Rerun full Windows unit ctest again $ tr -d '\r' < $T/us053_unit2.log | grep "tests passed\|Failed"
+The full `win-unit` preset now passes 21 of 21. Across three full runs, the CLI help test failed twice and passed once, and it passes when run alone. I'll record that as a flake rather than a fix.
+
+Next, I'll quickly reconfirm the `linux-dev` preset, then update the progress log and the physics memory note.
+[94m[Bash][0m Verify linux-dev preset and append progress entry $ GCC 11+ or CI needed). `engine_bench --suite acceptance` (no `engine_bench` target, US-074). No CI r...
+The progress log is updated. Last, I'll update the physics project memory so the next session starts from the current status.
+[94m[Bash][0m Read existing physics project memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md
+[94m[Bash][0m Update physics project memory for US-053 status $ `win-unit` is flaky on the CLI help capture (`engine_tests_cli_help` / `_short` returned empty stdou...
+US-053 is still **Partial**, so I did not emit the completion signal. What is left is the `linux-gcc` gate, which this machine cannot run, and the acceptance benchmark, which needs US-074.
+
+**Done in this pass**
+- **Terrain collision:** `terrain_tile_cell` builds one static heightfield per US-047 tile. The body is centred on the tile, and the heights are absolute.
+- **Streamed cells:** `CollisionCellStreamer` is a `CellSubscriber`. It loads a cell's bodies on activation and requests the unload on deactivation.
+- **Reactivation:** `cancel_unload` keeps the bodies when a cell reactivates while its unload is still pending. Without it, the deferred unload would remove bodies from an active cell.
+- **Tests:** three new cases in `tests/src/physics_query_tests.cpp`. They cover a ray hitting a tile at the plane height, an outside tile being refused, streamed load and unload, and refused bodies being counted.
+
+I read "streamed terrain cells" as tile cells loaded by the caller, because `WorldCell` carries objects, not terrain. Terrain is not streamed by tile yet.
+
+**Gates**
+- Linux: vendor validation, `linux-dev`, `linux-debug`, and `linux-unit` all pass (22 of 22). `engine_tests --suite unit` runs 662 cases, up from 659.
+- Linux ASan/UBSan: `linux-asan` build and `linux-sanitize` pass 22 of 22, with no sanitizer reports.
+- Windows: vendor validation, `win-dev`, and `win-debug` pass. `win-unit` ran three times. It passed 21 of 21 on the third run, but failed on the first two. Each time, one of the CLI help tests (`engine_tests_cli_help` or `_short`) got empty stdout with exit 0. Each failing test passes when run alone. I did not fix it, and I think it is a flake in the help output path, not in the physics code.
+- Not run: `linux-gcc*` (local GCC 9.4 cannot build Jolt, which needs GCC 11+) and `engine_bench` (no target until US-074).
+
+I updated `.ralph-tui/progress.md` with a US-053 entry, a codebase pattern, and the flake note. I also updated the physics project memory.

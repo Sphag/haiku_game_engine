@@ -1,0 +1,127 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: US-010
+- **Task Title**: In-House Linux Input
+- **Description**: As a player, I want Linux input through the same API so that game controls remain consistent.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T18:04:06.492Z
+- **Ended At**: 2026-10-22T18:13:27.409Z
+- **Duration**: 9m 20s
+- **Input Tokens**: 240
+- **Output Tokens**: 27106
+- **Total Tokens**: 27346
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by reading the PRD and the progress log, then check what the input layer already contains.
+[94m[Bash][0m List repo root and progress files $ ls -la && ls .ralph-tui && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status...
+[94m[Bash][0m Read progress log, list sources, presets $ cat .ralph-tui/progress.md && find engine tests tools cmake docs -type f | grep -v build | head -300...
+The progress log says the US-009 and US-010 input code already exists. My job is to verify it against the acceptance criteria and fill any gaps. I'll read the story spec, the input docs, and the Windows gate notes.
+[94m[Bash][0m Read PRD story refs, input docs, memory notes $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-vulkan-linux-environmen...
+The docs MCP tools are unrelated to this story, so I won't use them. Next I'll read the US-010 spec in the PRD and the existing build verification table.
+[94m[Bash][0m Read US-010 PRD section and build verification table $ wc -l docs/build.md
+US-010 has a verification row from an earlier pass, so this iteration is about re-running the gates and confirming the criteria still hold. I'll start with the Linux gates, using the presets from the story.
+[94m[Bash][0m Run Linux vendor validation, configure, and build $ tail -3 /tmp/us010_build.log
+[94m[Bash][0m Run Linux unit and integration tests $ ls /dev/input 2>&1
+
+[91m[Error: Exit code 2
+ctest_exit=0
+14/22 Test #14: engine_converter_cli_missing_project .............   Passed    0.02 sec
+      Start 15: engine_converter_cli_cook_needs_output
+15/22 Test #15: engine_converter_cli_cook_needs_output ...........   Passed    0.02 sec
+      Start 16: engine_converter_cli_validate_fixture
+16/22 Test #16: engine_converter_cli_validate_fixture ............   Passed    0.06 sec
+      Start 17: engine_converter_cli_cook_fixture
+17/22 Test #17: engine_converter_cli_cook_fixture ................   Passed    0.07 sec
+      Start 18: engine_converter_cli_watch_needs_output
+18/22 Test #18: engine_converter_cli_watch_needs_output ..........   Passed    0.02 sec
+      Start 19: engine_converter_cli_watch_bounded_passes
+19/22 Test #19: engine_converter_cli_watch_bounded_passes ........   Passed    0.10 sec
+      Start 20: engine_converter_cli_missing_project_directory
+20/22 Test #20: engine_converter_cli_missing_project_directory ...   Passed    0.02 sec
+      Start 21: engine_shader_fixture_outputs
+21/22 Test #21: engine_shader_fixture_outputs ....................   Passed    0.02 sec
+      Start 22: engine_shader_diagnostic_path_and_line
+22/22 Test #22: engine_shader_diagnostic_path_and_line ...........   Passed    0.10 sec
+
+100% tests passed, 0 tests failed out of 22
+
+Label Time Summary:
+integration    =  16.16 sec*proc (21 tests)
+unit           =   2.36 sec*proc (1 test)
+
+Total Test time (real) =  18.63 sec
+DISPLAY=:0
+ls: cannot access '/dev/input': No such file or directory][0m
+All 22 Linux tests passed. The "Exit code 2" came from `ls /dev/input` at the end, which is expected because this WSL box has no `/dev/input`. Next I'll check whether the input tests ran or skipped.
+[94m[Bash][0m List CTest results and build dir $ 
+[94m[Bash][0m Run input-related CTest cases verbosely $ ctest -R "input|replay|evdev|x11" -V 2>&1 | grep -E "SKIP|skip|PASSED|FAILED|passed|failed|Test #|Pa...
+[94m[Bash][0m Check engine_tests options and list input tests $ ./tests/Debug/engine_tests --suite all --list-tests 2>&1 | grep -i "input\|replay\|evdev\|x11\|gamep...
+[94m[Bash][0m Run full CPU suites and summarize results $ ./tests/Debug/engine_tests --suite unit 2>&1 | tail -4
+The three skips need a look. I'll find which cases they are and confirm they are the X11 focus cases the progress log describes.
+[94m[Bash][0m Show skipped integration test details $ ./tests/Debug/engine_tests --suite integration 2>&1 | grep -B3 -A3 -i "skip" | head -60
+The three skips are the window-manager focus cases that the progress log and build doc already describe, so they are environment limits and not failures. Next I'll confirm the no-third-party-library rule and warnings-as-errors in the build.
+[94m[Bash][0m Check for third-party input libs, dlopen, and -Werror $ ls .github/workflows 2>/dev/null
+The code meets the no-third-party-library rule, and the first-party targets use `-Werror` / `/WX`. Next I'll start the Linux GCC gate in the background and look for the Windows gate batch from an earlier run.
+[94m[Bash][0m Start Linux GCC gates in background; find old bat $ echo "gcc_chain_exit=$?" > /tmp/us010_gcc_done.txt) > /dev/null 2>&1 & ls -t /mnt/c/Users/bucha/AppD...
+[94m[Bash][0m View previous Windows gate batch file $ cat -A /mnt/c/Users/bucha/AppData/Local/Temp/us009_gates.bat | head -40 | sed 's/\^M\$$/ [CRLF]/' | ...
+I'll write the US-010 Windows gate batch from that template, with CRLF endings as the memory note requires, and launch it.
+[94m[Bash][0m Write and run Windows gate batch for US-010 $ cat $T/us010_result.txt
+[94m[Bash][0m Inspect Windows gate results and logs $ tail -8 $T/us010_ctest.log
+The Windows log shows validation passing, configure passing, and 21/21 CTest passing. But the result file only contains `DONE`, so the exit-code lines are missing, and the build log's last lines stop at step 13. I need to check both before I trust this run.
+[94m[Bash][0m Inspect build log end and result file bytes $ od -c $T/us010_result.txt | head -5
+The build log stops at step 13 of 62 with no `FAILED` line, and none of the `name=%ERRORLEVEL%` lines reached the result file. So the batch did not record a trustworthy build result, and I can't count the Windows build as passed. I'll rerun the batch and check the exit codes directly.
+[94m[Bash][0m Rerun Windows gate batch and read exit codes $ cat $T/us010_wrapper.log | tr -d '\r' | tail -5
+The wrapper log shows `validate=` with the exit code empty, which is the failure mode the memory note describes. I'll check the line endings on both the old working batch and my new one.
+[94m[Bash][0m Compare line endings of working and new bat $ done
+My file uses CRLF, the same as the working one, so line endings are not the cause. I'll test the exit-code expansion with a tiny batch file before rerunning the gates.
+[94m[Bash][0m Test ERRORLEVEL capture in a small batch $ cat $T/ectest.txt
+[94m[Bash][0m Show ectest batch and probe ERRORLEVEL echo $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\ectest2.bat"
+The plain `echo` expands ERRORLEVEL correctly, but the redirected `echo` does not. I'll test whether capturing the code into a variable on its own line, then writing that variable, avoids the problem.
+[94m[Bash][0m Test captured ERRORLEVEL via variable $ cat $T/ectest3.txt
+Still blank, so the problem is in something this test file does differently from the one that worked. I'll vary one thing at a time to find it.
+[94m[Bash][0m Isolate ERRORLEVEL echo failure in batch $ cat $T/ectest4.txt $T/ectest5.txt 2>&1
+Plain `echo` expands ERRORLEVEL correctly. The failing case is any `echo` line that carries a `>>` redirect. So I'll print the gate results to stdout with no redirect, and have WSL capture stdout into a file.
+[94m[Bash][0m Verify stdout capture of ERRORLEVEL works $ tr -d '\r' < $T/ectest7.out
+That works. I'll rewrite the gate batch to print each step's exit code to stdout and rerun it.
+[94m[Bash][0m Run Windows gate batch with stdout exit codes $ wc -l $T/us010_*.log
+All four Windows gates exit 0. The build log is only 8 lines, which is a warm rebuild, so I'll check its contents and the CTest summary.
+[94m[Bash][0m Summarize Windows build and CTest logs; check GCC chain $ cat /tmp/us010_gcc_done.txt 2>/dev/null
+The Windows build exits 0, and `win-unit` passes 21/21. The build was warm, so it printed no compiler warnings. The Linux GCC chain also finished with exit 0. Next I'll check the 27 configure-time warning lines and the GCC CTest result.
+[94m[Bash][0m Check configure warnings and GCC test results $ grep -c -i "warning:" /tmp/us010_build.log
+The configure warnings all come from vendored assimp's CMake files, which the policy excludes, and the GCC build has zero warnings. Everything I ran passes. Next I'll update the US-010 row in `docs/build.md` with this run's results, so the recorded evidence matches what I just ran.
+[94m[Bash][0m Read verification table header and US rows $ sed -n 158,172p docs/build.md | cut -c1-400
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/build.md[0m edit: "benchmarks (no harness; input is not measured) |" → "benchmarks (no harness; input is not measured). Re..."
+Next I'll correct the Windows gate tip in the progress log. Its redirected-echo recipe is the form that produced blank exit codes in my runs. Then I'll append the US-010 entry.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "- Windows gates from WSL: write the `.bat` with CR..." → "- Windows gates from WSL: write the `.bat` with CR..."
+I left a doubled word in that edit. Fixing it now.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/.ralph-tui/progress.md[0m edit: "Print each step's code with a plain plain line, `e..." → "Print each step's code with a plain line, `echo na..."
+[94m[Bash][0m Append US-010 entry to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-22 - US-010 - Re-verified the in-house Linux input...
+The log changed on disk outside my edits. The added lines look like the same content, and I'll check that my Codebase Patterns fix is still present. I'll also update the Windows gate memory, which still recommends the redirect form that just failed.
+[94m[Bash][0m Confirm progress log edits are present $ grep -c "## 20" .ralph-tui/progress.md
+[94m[Edit][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m edit: "- Write a `.bat` that calls `vcvars64.bat` (VS 18 ..." → "- Write a `.bat` that calls `vcvars64.bat` (VS 18 ..."
+US-010 was already implemented from an earlier iteration. This pass re-verified it against the story's gates and found no gaps that needed code changes, so I changed no source.
+
+**Gate results (no source changed this pass):**
+- **Linux clang:** `ValidateVendor`, `linux-dev`, `linux-debug` (no first-party warnings), and `linux-unit` 22/22 all pass.
+- **Linux GCC:** `linux-gcc`, `linux-gcc-debug` (no warnings), and `linux-gcc-unit` 22/22 pass.
+- **Windows MSVC:** `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` 21/21 all exit 0. The debug build was a warm rebuild, so it printed no compiler warnings.
+- **Full CPU run on Linux:** 101 cases, 98 pass, 3 skip. The skips are window-manager focus and minimize cases, plus the X11 focus-loss input case, because the window manager did not give focus back. They are not input failures.
+- **Not run:** the `linux-asan` gate, since input is not on the story's list of sanitizer-gated areas (the earlier pass did run it). The GitHub CI jobs have not been pushed, and the native GUI and screenshot check is not run because no application window exists yet.
+
+**Coverage gaps:** this WSL host has no `/dev/input`, so evdev hotplug, the permission-denied diagnostic, and a real gamepad were not exercised. The pure-logic tests for those paths do run and pass.
+
+**Changes made:**
+- `docs/build.md`: the US-010 row now records this run's results and the skips.
+- `.ralph-tui/progress.md`: appended the US-010 entry and corrected the Windows gate tip.
+- The Windows gate memory note: the redirected `echo name=%ERRORLEVEL%>> "%RES%"` form printed blank codes and wrote no file, so I replaced it with stdout capture.
+
+I've marked the story complete on the basis of the gates above. The GUI, GitHub CI, and physical-device checks remain not-run, as the story permits.
+
+<promise>COMPLETE</promise>

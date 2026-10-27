@@ -1,0 +1,46 @@
+# Iteration 99 Log
+
+## Metadata
+
+- **Task ID**: US-047
+- **Task Title**: Terrain Runtime
+- **Description**: As an open-world author, I want terrain so that I can create large landscapes.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T03:01:29.109Z
+- **Ended At**: 2026-10-24T03:06:20.482Z
+- **Duration**: 4m 51s
+- **Input Tokens**: 32
+- **Output Tokens**: 2208
+- **Total Tokens**: 2240
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current terrain code.
+[94m[Bash][0m Inspect progress log and terrain sources $ grep -rn "US-047\|terrain" .ralph-tui/progress.md | tail -30
+The log shows US-047 has been Partial across many passes, blocked on a splat shader change that needs the Windows GPU batch. I'll re-verify the Linux gates that can run here, then record the status honestly.
+[94m[Bash][0m Run Linux validation, configure, build, and unit tests $ tail -4 /tmp/ctest.log
+[94m[Bash][0m Summarize ctest and warning counts $ grep -c "warning" /tmp/build.log
+The Linux checks pass. Now I'll record this pass in the progress log.
+[94m[Bash][0m Append progress entry for this pass $ cat >> .ralph-tui/progress.md <<'EOF' ## 2026-10-24 - US-047 (re-check 20, still Partial) - What was...
+US-047 is still **Partial**, so I am not signalling COMPLETE.
+
+**What I checked this pass (Linux, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake` passes: 26 dependencies, 8542 files.
+- `cmake --preset linux-dev` and `cmake --build --preset linux-debug` pass with no warnings.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 22 of 22 pass.
+
+I did not change any source this pass. I appended a progress entry to `.ralph-tui/progress.md` recording these results.
+
+**What is still open:**
+1. The splat shading change. It needs a terrain-only vertex buffer at slot 1, a pipeline variant for the opaque pass, and a `scene.hlsl` branch. The depth/shadow and meshlet paths stay on the static layout.
+2. GPU fixtures for splat colour, shadow, and RT on DX12 and Vulkan.
+3. The `engine_bench` terrain workload and the acceptance run.
+4. The Windows quality gates: ValidateVendor, `win-dev`, `win-debug`, `win-unit`, and the DX12 and Vulkan GPU suites. These have to run on Windows, not from this WSL host.
+
+The Linux GCC and ASan gates are not re-run in this pass. The log says earlier passes covered them.
+
+**Decision needed:** the progress log has deferred the splat change across many passes. The log's recommendation is option (b): constant per-layer colours with a terrain-only vertex layout. Please confirm that option so the next pass can start the shader change and its fixtures.

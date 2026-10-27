@@ -1,0 +1,158 @@
+# Iteration 12 Log
+
+## Metadata
+
+- **Task ID**: US-013
+- **Task Title**: ECS Storage and Queries
+- **Description**: As a developer, I want in-house component pools and queries so that I can process data without an external ECS.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T06:11:10.370Z
+- **Ended At**: 2026-10-22T06:27:21.126Z
+- **Duration**: 16m 10s
+- **Input Tokens**: 244
+- **Output Tokens**: 61542
+- **Total Tokens**: 61786
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, progress log, and PRD $ ls -la && cat .ralph-tui/progress.md | head -300 && ls tasks && wc -l tasks/prd-open-world-engine.md
+[94m[Bash][0m Locate US-013 in PRD and list engine/tests layout $ ls tasks && wc -l tasks/* .ralph-tui/progress.md && grep -n "US-013\|US-012\|US-011" tasks/prd-open-...
+[94m[Bash][0m Read PRD header, US-012/013 sections, and ECS/test build files $ cat tests/CMakeLists.txt | head -150
+[94m[Bash][0m Read existing ECS handle/world code and its tests $ cat engine/ecs/include/engine/ecs/entity.hpp engine/ecs/include/engine/ecs/world.hpp engine/ecs/src/...
+[94m[Bash][0m Grep PRD for ECS, non-goals, benchmark contract; read progress tail $ grep -n -i "ecs\|sparse\|non-goal\|technical consid\|engine_bench\|benchmark\|acceptance" tasks/prd-...
+[94m[Bash][0m Check toolchain, prd.json entry, and core Result API $ grep -rn "ENGINE_TEST\|engine_bench" CMakePresets.json | head
+[94m[Bash][0m Inspect prd.json US-013 entry, docs, and Catch2 matcher support $ grep -rn "define CATCH_VERSION\|CATCH_VERSION_MAJOR" third_party/catch2 | head -3
+Context is clear: US-012 gave me `World` and `EntityHandle`. I'll add a sparse-set pool and a `Registry` that owns the world and pools, then tests, then the gates.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/sparse_set.hpp[0m "#pragma once
+
+#include "engine/ecs/entity.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <utility>
+#include <vector>
+
+namespace engine::ecs {
+
+// Pool of one component type. A ... (4922 chars)"
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/registry.hpp[0m "#pragma once
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/sparse_set.hpp"
+#include "engine/ecs/world.hpp"
+
+#include "engine/core/guid.hpp"
+#include "engine/core/result.hpp"
+
+#include <algori... (5890 chars)"
+I referenced `detail::Pool` without defining it and left in a stray friend declaration. Rewriting the header with the `detail` block in place.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/registry.hpp[0m "#pragma once
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/sparse_set.hpp"
+#include "engine/ecs/world.hpp"
+
+#include "engine/core/guid.hpp"
+#include "engine/core/result.hpp"
+
+#include <algori... (7141 chars)"
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/registry.hpp[0m edit: "                const bool in_all = std::all_of(po..." → "                const bool in_all = std::all_of(po..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/ecs/include/engine/ecs/registry.hpp[0m edit: "    Registry(Registry&&) noexcept = default;
+    R..." → "    Registry(Registry&&) = default;
+    Registry& ..."
+Now the tests. Catch2 3.x has `UnorderedEquals`, so membership comparisons stay order-free.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m "// Component pools, registry, and queries (US-013). CPU-only; these run on every operating system.
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/registry.hpp"
+#include "engine/ecs/sparse_set.... (16386 chars)"
+Before building, I'm checking the test expectations by hand. Three need fixing: the empty-pool case still has a `Health` on `with_all`, the foreign-access test expects 1 `Health` where the scene has 2, and the bulk test has a dead `expected` path plus a meaningless matcher line.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m edit: "    // A component type whose pool exists but has ..." → "    // A component type whose pool exists but has ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m edit: "    CHECK(scene.registry.add<Health>(foreign, 1) =..." → "    CHECK(scene.registry.add<Health>(foreign, 1) =..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m edit: "    std::vector<EntityHandle> entities;
+    std::v..." → "    std::vector<EntityHandle> entities;
+    entiti..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m edit: "    Handle* handle = set.get(EntityHandle{i, 1, 1}..." → "    Handle* item = set.get(EntityHandle{i, 1, 1});..."
+
+[91m[Error: <tool_use_error>String to replace not found in file.
+String:     Handle* handle = set.get(EntityHandle{i, 1, 1});
+        REQUIRE(handle != nullptr);
+        REQUIRE(handle->value != nullptr);
+        CHECK(*handle->value == static_cast<int>(i));</tool_use_error>][0m
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m edit: "        const Handle* handle = set.get(EntityHandl..." → "        const Handle* item = set.get(EntityHandle{..."
+Next, wire the test source into the test target and tidy the ECS CMake comment, then build on Linux.
+[94m[Bash][0m Register new test source and configure Linux dev preset $ (time cmake --preset linux-dev) 2>&1 | tail -5
+[94m[Bash][0m Build Linux debug preset and capture diagnostics $ tail -3 /tmp/us013_linux_debug.log
+Three compile problems: macro argument splitting on commas inside `CHECK_THAT`, aggregate parenthesised init (not available on this GCC 9 stdlib / C++20 mode), and `CHECK_THAT` apparently not declared. Checking the vendored Catch2 macro before fixing.
+[94m[Bash][0m Locate CHECK_THAT macro definition in vendored Catch2 $ grep -n "CHECK_THAT" tests/src/*.cpp | head -3
+`CHECK_THAT` lives in `catch_matchers.hpp`. I'll add that include, hoist every comma-bearing matcher call into a local, and give the test structs constructors.
+[94m[Bash][0m Show CHECK_THAT call sites needing rewrite $ sed -n 455,470p tests/src/ecs_storage_tests.cpp
+Wrapping both macro arguments in parentheses keeps the template and brace commas from splitting the macro. I'll apply that across the call sites with a targeted script.
+[94m[Bash][0m Parenthesize CHECK_THAT arguments to survive macro splitting $ m+=1     new=[]     for a in args:         a2=a.strip()         new.append('('+a2+')')     sep=',\n ...
+My script broke the file: it split on commas inside template argument lists. I'll rewrite the test file in full, using locals so no macro argument contains a comma.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/ecs_storage_tests.cpp[0m "// Component pools, registry, and queries (US-013). CPU-only; these run on every operating system.
+
+#include "engine/ecs/entity.hpp"
+#include "engine/ecs/registry.hpp"
+#include "engine/ecs/sparse_set.... (17206 chars)"
+[94m[Bash][0m Rebuild Linux debug preset after test fixes $ tail -3 /tmp/us013_linux_debug.log
+[94m[Bash][0m Run Linux unit ctest preset and suite count $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -4
+Linux/Clang debug build is clean with `-Werror`, and the unit suite passes at 196 cases (175 before plus 21 new). Now the GCC and ASan/UBSan chains, run sequentially to avoid overlapping configures.
+[94m[Bash][0m Run ValidateVendor, GCC configure, build, and unit tests $ grep -n "error:\|warning:" /tmp/us013_gcc.log | head
+[94m[Bash][0m Run ASan/UBSan configure, build, and sanitizer CTest $ grep -n "runtime error\|AddressSanitizer\|LeakSanitizer" /tmp/us013_asan.log | head
+The sanitizer run has one failure, in the integration suite. Checking whether it's my change or the known X11 timing issue.
+[94m[Bash][0m Inspect sanitizer integration failure details $ grep -n -B3 -A12 "FAILED\|failed\|REQUIRE\|CHECK(" /tmp/us013_asan.log | grep -v "^--$" | head -80
+The failure is in the X11 keyboard-focus test (`platform_x11_input_tests.cpp`), which the progress log already flags as timing-sensitive on XWayland. ECS code isn't involved, but I'll rerun to confirm it's flaky rather than something I caused.
+[94m[Bash][0m Rerun sanitizer CTest five times and check for sanitizer reports $ ./build/linux-asan/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+Under ASan/UBSan the unit suite passes all 196 cases with no sanitizer reports. The integration failure reproduced once in five runs and is the known X11 flake, so it's recorded, not hidden. Now the Windows gates; I'll reuse the `.bat` approach from the progress log.
+[94m[Bash][0m Find existing Windows gate scripts and MSVC cache details $ grep -n "CMAKE_LINKER\|CMAKE_CXX_COMPILER:" /mnt/d/dev/haiku_game_engine/build/win-dev/CMakeCache.tx...
+[94m[Bash][0m Run Windows gates via generated batch file with MSVC env $ tail -5 /tmp/us013_win.log
+Windows gates all exit 0. Confirming the MSVC build actually compiled the new test file and the unit count matches Linux.
+[94m[Bash][0m Check MSVC warnings and run Windows unit suite count $ cat > /mnt/c/Windows/Temp/us013_unit.bat <<'EOF' @echo off cd /d D:\dev\haiku_game_engine build\win-...
+Windows built with zero `warning C` and compiled `ecs_storage_tests.cpp`; its unit count (198) is the Linux count plus two Win32-only cases. Last checks: whether a benchmark harness exists, then docs, the PRD status flag, and the progress log.
+[94m[Bash][0m Check for benchmark harness, docs, and PRD pass flags $ grep -n '"id": "US-012"' -A40 tasks/prd.json | grep -n "passes\|notes" | head -3
+No `engine_bench` target exists in the source tree (only mentions in logs), so the benchmark acceptance step is not runnable yet, as the story allows. Writing the ECS doc, flipping US-013 to passing, and updating the progress log.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/docs/ecs.md[0m "# ECS Storage and Queries
+
+In-house entity-component storage in `engine_ecs` (`engine/ecs/`). No external ECS library is used.
+
+## Pieces
+
+- `EntityHandle` (`entity.hpp`): index, generation, and world... (2148 chars)"
+[94m[Bash][0m Set US-013 passes flag in prd.json and verify JSON $ print([x['passes'] for x in d.get('userStories',d.get('stories',[])) if x['id']=='US-013'] if isinst...
+[94m[Bash][0m Append US-013 entry and codebase patterns to progress log $ GitHub CI (not pushed). - **Learnings:**   - A comma inside a template argument list splits a Catch ...
+Two bullets I just wrote overstate things: parentheses do protect macro arguments (my earlier failure came from a broken script, not the macro), and the `%ERRORLEVEL%` note wasn't something I observed. Correcting both.
+[94m[Bash][0m Correct two progress log bullets to match what was verified $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p,encoding='utf-8').read() old1="- Catch macros ...
+US-013 is implemented and the required gates pass on Windows/MSVC and Linux/Clang and GCC. Linux ASan/UBSan passes except for one X11 integration failure that I think is an existing flake, not an ECS problem.
+
+**What's in place**
+- `engine/ecs/include/engine/ecs/sparse_set.hpp`: `SparseSet<T>`, a sparse-set pool with `emplace`, `remove`, `get`, `contains`, `clear`, `size`, and `entities`. Entries keep the full handle, so a stale handle at a reused slot is never a member. The pool is move-only.
+- `engine/ecs/include/engine/ecs/registry.hpp`: `Registry` owns a `World` and one pool per component type. `destroy` removes every component of the entity before releasing its slot. `query<Ts...>()` returns the intersection of the listed types.
+- `tests/src/ecs_storage_tests.cpp`: 21 `[unit]` cases covering add/get/remove, stale handles, swap-removal, alignment (`alignas(64)`) across growth, move-only components, destructor counts, foreign handles, query intersections, empty queries, bulk churn, and registry moves. Query checks compare membership, not order.
+- `docs/ecs.md` documents the behavior. `tasks/prd.json` marks US-013 as passing, and `.ralph-tui/progress.md` has the log entry and new patterns.
+
+**Gate results**
+- Windows/MSVC: `ValidateVendor`, `win-dev`, `win-debug` build (0 `warning C`), and `win-unit` all exit 0. Unit suite: 198 cases pass.
+- Linux/Clang: `ValidateVendor`, `linux-dev`, `linux-debug` build (0 warnings), and `linux-unit` all pass. Unit suite: 196 cases pass.
+- Linux/GCC: `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` all pass.
+- Linux ASan/UBSan: `linux-asan` builds. The unit suite passes all 196 cases with no sanitizer reports.
+
+**Not verified**
+- `linux-sanitize` failed once in the integration suite, in `platform_x11_input_tests.cpp` (key A press/release, focus-dependent). Four of five reruns passed. The progress log already notes this XWayland timing flake, and the failure is outside ECS code. The unit suite is clean under sanitizers.
+- `engine_bench --suite acceptance` was not run. There is no benchmark target in the tree yet, and the story allows this until the harness exists.
+- Not run: native X11 session, GUI checks, Release presets, and GitHub CI (not pushed).
+
+**Choices I made**
+- `Registry` owns the `World`, so component operations can check handle validity.
+- `query<>()`, a type that was never added, and a type with no members all return an empty result. An empty type list does not mean "all entities."
+- Adding a component over a stale entry at the same slot replaces that entry.
+- Components must be move-constructible and move-assignable. Copying is not supported.
+
+I did not create any git commits.
+
+<promise>COMPLETE</promise>

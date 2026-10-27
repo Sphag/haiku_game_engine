@@ -1,0 +1,40 @@
+# Iteration 514 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-25T07:47:41.076Z
+- **Ended At**: 2026-10-25T07:47:53.995Z
+- **Duration**: 12s
+- **Input Tokens**: 22
+- **Output Tokens**: 1941
+- **Total Tokens**: 1963
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log, since US-058 may already be partly implemented.
+[94m[Bash][0m Inspect repo layout and UI module state $ grep -n "US-058" .ralph-tui/progress.md | head
+The progress log already records several passes at this story, all ending Partial. I'll read the latest entry and check whether the tree has changed since.
+[94m[Bash][0m Read latest progress entry and check for tree changes $ ls /usr/bin | grep -E '^g\+\+-1[1-9]$|^g\+\+-[0-9]+$'
+US-058 is still **Partial**, and I'm not emitting `<promise>COMPLETE</promise>`. I made no source changes this pass.
+
+**Why it's not done**
+- **`linux-gcc` gate and CI job:** Jolt needs GCC 11+, and only g++-9 (9.4) is installed here. `sudo` needs a password, so I can't install a newer compiler. This needs a machine with GCC 11+ or a CI run.
+- **Overlay composition on a GPU:** the DX12 GPU suite covers `set_overlay` after tone mapping and passes. The Vulkan GPU run is not on native Linux, because WSL has no usable Vulkan device. That needs a native Linux machine.
+- **Running-application UI check with screenshots:** nothing calls `set_overlay` yet, because there is no application host. The standalone runtime is US-060/US-061, so this can't be done until those exist.
+
+**What is verified (from the progress log, tree unchanged since)**
+- Windows: `ValidateVendor`, `win-dev`, `win-debug` build, and `win-unit` (21/21) all pass, along with the DX12 GPU suite (71 cases) and the Vulkan GPU suite on Windows (72 cases).
+- Linux: `linux-debug` builds with no warnings, and `linux-unit` passes 22/22.
+- The layout fixtures cover 640×360 through 2560×1080 with UI scale.
+
+I didn't rerun the gates this pass. The last recorded runs match the current tree (no files newer than the progress log). One open question from the log: Windows `win-unit` reports 21 tests and Linux reports 22. That hasn't been investigated.
+
+**What would close it:** a GCC 11+ toolchain for the `linux-gcc` gate, a native Linux Vulkan GPU run, and an application host that calls `set_overlay` so the screenshot check can run.

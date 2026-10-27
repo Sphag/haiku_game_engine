@@ -1,0 +1,41 @@
+# Iteration 522 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T08:46:53.707Z
+- **Ended At**: 2026-10-25T08:49:36.195Z
+- **Duration**: 2m 42s
+- **Input Tokens**: 32
+- **Output Tokens**: 2516
+- **Total Tokens**: 2548
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing save code, since the codebase notes already describe US-059 work.
+[94m[Bash][0m Inspect save module and progress log $ grep -n "US-059" .ralph-tui/progress.md | head
+The log says US-059 has been Partial for several rounds, blocked on a GCC 11+ compiler and the benchmark harness. I'll check whether that has changed and re-run the local gates.
+[94m[Bash][0m Check toolchains, rebuild, and run unit tests $ grep -rl "engine_bench" CMakeLists.txt tests bench 2>/dev/null | head -3
+[94m[Bash][0m Rerun unit tests and summarize results $ ls artifacts 2>/dev/null | head
+[94m[Bash][0m Append re-check entry to progress log $ `ctest --preset linux-unit --output-on-failure --no-tests=error` 100%, 22 of 22 (exit 0). - Toolchai...
+US-059 is still **Partial**, so I am not emitting the completion signal. The save code is in place and the Linux checks I could run pass, but three acceptance items are blocked outside this tree.
+
+**Verified this run (Linux, current tree, no source changes):**
+- `cmake --build --preset linux-debug`: 0 warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100%, 22 of 22 passed, exit 0.
+
+**Still open, and why I can't close them here:**
+- **`linux-gcc` gate and CI job:** Jolt needs GCC 11+. Only g++ 9.4 and clang++ 10 are installed, and I have no sudo to install a newer compiler.
+- **`engine_bench --suite acceptance`:** there is no `engine_bench` target. The benchmark harness is US-074, which is not in this tree.
+- **Runtime save/load through a host:** nothing in `engine/runtime` drives a save in a running game yet. That needs the standalone host (US-060).
+
+The Windows gates were recorded as passing in the progress log, but I did not re-run them in this session.
+
+I appended a re-check entry to `.ralph-tui/progress.md`. No code changed. The story should be picked up again once a GCC 11+ toolchain is available, US-074 lands, and US-060 provides a host.

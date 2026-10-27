@@ -1,0 +1,39 @@
+# Iteration 895 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:21:38.615Z
+- **Ended At**: 2026-10-26T12:21:59.271Z
+- **Duration**: 20s
+- **Input Tokens**: 22
+- **Output Tokens**: 2113
+- **Total Tokens**: 2135
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD, and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect repo layout, progress log, and existing all_features references $ ls && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && grep -rn "all_features" --inclu...
+The progress log already holds 13 status-check entries with no code change, so I'll check whether anything has changed since the last one before deciding what to do.
+[94m[Bash][0m Check for source changes since last US-079 log and scene status $ grep -rn "implementation" benchmarks/*.json 2>/dev/null | grep -i all_features | head -3
+US-079 is not complete, and I made no code changes in this pass. Nothing under `engine`, `tools`, `tests`, `benchmarks`, `docs`, or `cmake` is newer than the last US-079 log (15:15), so the gate results already recorded still describe this tree. I did not re-run the gates.
+
+**What exists:** the CPU `all_features` scene with its integration and editor tests. Linux `ctest --preset linux-unit` passes 30/30, `cmake -P cmake/ValidateVendor.cmake` exits 0, and the Windows gates (`win-dev`, `win-debug`, `win-unit`, and the DX12 and Vulkan GPU suites) passed in the 14:xx gate run.
+
+**What is still open, and not claimed as passed:**
+- **Tour runner:** there is no automated tour with screenshots and an action log. The CPU marker test is not a tour over the running app.
+- **GI/RT/upscale profiles and forced indirect/meshlet paths:** `all_features` has `implementation: none` and no GPU scene. FSR 2 cannot link because `third_party` lacks its `*_permutations.h` headers.
+- **Package relaunch:** only Build Game's own verify step runs.
+- **`engine_bench --suite acceptance`:** blocked by the missing GPU scene.
+- **GUI checks, native Linux Vulkan GPU, and `linux-gcc*`:** this host has only GCC 9.4 and clang 10, no `/dev/dri`, and no native Linux Vulkan device.
+
+**What would close it:** a `builtin` GPU scene and route for `all_features` in `tools/benchmark`, the FSR 2 permutation headers or a decision to vendor them, a tour runner, and a Windows GPU session plus a native Linux GPU and GCC 11+ host for the remaining gates.
+
+I did not append a 14th identical status entry to `.ralph-tui/progress.md`, and I am not emitting the COMPLETE signal.

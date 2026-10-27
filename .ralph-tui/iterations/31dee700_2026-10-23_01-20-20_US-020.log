@@ -1,0 +1,95 @@
+# Iteration 9 Log
+
+## Metadata
+
+- **Task ID**: US-020
+- **Task Title**: Model Import
+- **Description**: As a scene author, I want to import common model formats so that I can use existing assets.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-22T22:20:20.540Z
+- **Ended At**: 2026-10-22T22:32:57.337Z
+- **Duration**: 12m 36s
+- **Input Tokens**: 134
+- **Output Tokens**: 10883
+- **Total Tokens**: 11017
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll check whether US-020 is already implemented, starting with the progress log and the importer code.
+[94m[Bash][0m Read progress log and locate importer sources $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -ril "assimp" --include=*.cpp --include=*.hpp...
+The progress log ends at US-018 and has no US-019 or US-020 entry. The grep found `tests/src/converter_model_tests.cpp`, so I'll look for the importer sources, fixtures, and the build-doc row.
+[94m[Bash][0m Search repo for importer, fixtures, and US-020 records $ ls tests/fixtures 2>/dev/null | head -50
+The importer exists: `model_importer.cpp`, `docs/model-import.md`, and a converter test. There is no US-020 row in `docs/build.md` yet, so I need to verify the code and run the gates myself. Next I'll read the importer and its tests.
+[94m[Bash][0m Inspect importer docs, fixtures, and build wiring $ wc -l tools/asset_converter/src/model_importer.cpp tools/asset_converter/src/importer.cpp tests/src/...
+The implementation and docs look complete. Before running gates, I'll read the Windows gate-run reference and the progress file's Codebase Patterns section.
+[94m[Bash][0m Read Windows gate reference and progress patterns $ ls build | head
+I'll run the Linux clang gates first, one step at a time, with output captured to a log.
+[94m[Bash][0m Run Linux clang validate, configure, build, unit tests $ tail -5 /tmp/us020_unit.log) 2>&1
+Linux clang configure, build, and unit ctest pass. The summary shows only one `unit`-labeled test, so I'll check which tests ran and whether the model importer tests are among them.
+[94m[Bash][0m Summarize ctest results and model-related test entries $ grep -n -i "model\|converter" /tmp/us020_unit.log | head
+All 22 Linux clang unit-gate tests pass. Next I'll confirm the model importer tests carry the `[unit]` or `[integration]` tags the suite selects on, and run them directly.
+[94m[Bash][0m List model importer test cases and locate test binary $ find build/linux-debug -name engine_tests -type f | head -2
+[94m[Bash][0m Run engine_tests unit and integration suites $ "$B/engine_tests" --suite unit 2>&1 | tail -3
+The Linux clang unit suite passes 375 of 375. The integration suite has 4 skips, which the progress log attributes to X11 focus cases. I'll confirm the model integration tests are not among the skips, then run the GCC and ASan gates.
+[94m[Bash][0m Run Linux GCC and ASan/UBSan gates $ grep -c "runtime error\|AddressSanitizer" /tmp/us020_san.log) 2>&1
+
+[91m[Error: Exit code 1
+----
+gcc_cfg=0
+gcc_build=0
+gcc_unit=0
+unit           =   2.44 sec*proc (1 test)
+
+Total Test time (real) =  19.32 sec
+asan_cfg=0
+asan_build=0
+sanitize=0
+unit           =   3.35 sec*proc (1 test)
+
+Total Test time (real) =  21.76 sec
+0][0m
+The GCC and ASan gates pass. The `Exit code 1` came from my first grep, which found no matches. I'll redo the skip check without it and check sanitizer output.
+[94m[Bash][0m Check skipped tests and sanitizer report counts $ grep "tests passed\|failed" /tmp/us020_san.log | tail -2
+The Linux side is done: clang and GCC gates pass, and the ASan/UBSan run reports nothing. Now the Windows gates. I'll reuse a `.bat` from an earlier run as the template so I get the vcvars path right.
+[94m[Bash][0m Find a previous Windows gate batch file to reuse $ [ -n "$f" ] && cat "$f" | tr -d '\r'
+[94m[Bash][0m Read previous full Windows gate batch $ cd /mnt/c/Users/bucha/AppData/Local/Temp && tr -d '\r' < us018_gates.bat | head -40
+I'll write the same four-step batch for US-020, with CRLF line endings, and run it through `cmd.exe`.
+[94m[Bash][0m Run Windows validate, configure, build, unit gates $ done
+All four Windows steps return 0. I'll check the logs to make sure the build actually compiled the importer and that the tests ran, rather than trusting exit codes alone.
+[94m[Bash][0m Check Windows build and test logs for warnings and coverage $ grep -i "model_importer" us020_build.log | wc -l
+The Windows build log is only 11 lines, which the progress notes flag as a warm build. I'll run a dry run to confirm nothing is out of date, so the passing tests are against current binaries.
+[94m[Bash][0m Dry-run Windows build to confirm binaries are current $ tr -d '\r' < us020_dry.log | tail -8
+The dry run shows only the DXC subproject, so `engine_tests` and `asset_converter` are current. Last, I'll check whether `engine_bench` exists yet (the benchmark gate depends on it), and look at the `docs/build.md` row format so I can record this story.
+[94m[Bash][0m Check bench target and build.md row format $ sed -n 1,12p docs/build.md | cut -c1-300
+The US-020 row is missing from `docs/build.md`, and the progress log has no entry for it. I'll add both, placing the row directly after US-018.
+[94m[Bash][0m Add US-020 build row and progress log entry $ `ninja -n engine_tests asset_converter` shows only the DXC stamp steps), `win-unit` 21/21. The tests...
+US-020 (model import) is already implemented in the tree, and all the gates I could run pass on Windows MSVC and Linux Clang/GCC, plus Linux ASan/UBSan. I made no source changes. The work was done in an earlier pass without a progress entry or build row, so I verified it and recorded it.
+
+**What exists:**
+- An Assimp adapter, `tools/asset_converter/src/model_importer.cpp`, imports glTF/GLB, FBX, and OBJ.
+- The payload format is in `model_format.cpp`.
+- Fixtures are in `tests/fixtures/models/`. There are glTF and GLB, two FBX variants (centimeters Y-up, meters Z-up), and OBJ.
+- Tests are in `tests/src/converter_model_tests.cpp`, and `docs/model-import.md` documents the conventions and unsupported-data reporting.
+
+**Gate results:**
+- Linux Clang: `ValidateVendor`, `linux-dev`, `linux-debug` (0 warnings), and `linux-unit` pass (22/22). `engine_tests --suite unit` passes 375/375.
+- Linux GCC: `linux-gcc`, `linux-gcc-debug` (0 warnings), and `linux-gcc-unit` pass.
+- Linux ASan/UBSan: `linux-asan` and `linux-sanitize` pass with no sanitizer reports.
+- Windows MSVC: `ValidateVendor`, `win-dev`, `win-debug` (0 warning lines), and `win-unit` pass (21/21). A dry run confirmed `engine_tests` and `asset_converter` are current.
+- The integration suite has 4 skips, all X11 focus cases that the progress log already attributes to XWayland.
+
+**Not run or not applicable:**
+- GitHub CI: not run, since nothing is pushed.
+- GPU suites: not run, since the importer has no GPU path.
+- `engine_bench --suite acceptance`: not applicable, since no bench target exists yet.
+- GUI check: not run, since there is no editor window yet.
+
+**Records added:**
+- A US-020 row in `docs/build.md`, placed after US-018.
+- A US-020 entry in `.ralph-tui/progress.md`.
+
+<promise>COMPLETE</promise>

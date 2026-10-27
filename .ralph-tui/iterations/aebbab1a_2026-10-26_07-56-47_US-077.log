@@ -1,0 +1,342 @@
+# Iteration 827 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T04:56:47.636Z
+- **Ended At**: 2026-10-26T05:52:10.576Z
+- **Duration**: 55m 22s
+- **Input Tokens**: 900
+- **Output Tokens**: 119440
+- **Total Tokens**: 120340
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-077, and what already exists for the benchmark and physics code.
+[94m[Bash][0m Read progress log, PRD US-077, and benchmark/physics layout $ tail -n 120 .ralph-tui/progress.md && grep -n "US-077" -A 40 tasks/prd-open-world-engine.md | head -...
+The log tail is all US-076 status entries. Next I'll check how the workload generator and benchmark CLI handle scenes, and whether `physics_stress` exists yet.
+[94m[Bash][0m Find physics_stress references and benchmark layout $ grep -n "physics" -i tasks/prd-open-world-engine.md | sed -n 1,80p
+The `physics_stress` table is already in the manifest and the generator, so the job is to build the scene runner on top of the Jolt adapter. Next I'll read the physics workload entries, the physics API, and the existing benchmark reporting.
+[94m[Bash][0m Read physics scene manifest and workload physics code $ grep -n "physics" -i -A12 docs/physics.md | sed -n 1,200p | grep -n "Benchmark" -A25 | head -60
+[94m[Bash][0m Read physics workload generator and benchmark contract doc $ grep -n "Benchmark contract" -A30 docs/physics.md
+The generator and contract are clear. Now I need the physics world's public API (bodies, joints, characters, queries, stepping) to drive the scene.
+[94m[Bash][0m List physics world public API declarations $ ls engine/physics/include/engine/physics/ && grep -n "^\s*\(\[\[nodiscard\]\]\s*\)\?[A-Za-z:<>_,\* &...
+[94m[Bash][0m Read physics world header types and character header $ cat engine/physics/include/engine/physics/character.hpp | sed -n 1,200p | grep -v "^$" | head -120
+The adapter exposes no active/sleeping counts, no force or velocity call, and the workload digests are built without the values the runner would need. Before deciding the design I'll read the benchmark harness dispatch, the manifest types, and the adapter's `stats()`.
+[94m[Bash][0m Read benchmark manifest API, main dispatch, and physics stats impl $ grep -n "stats()\|PhysicsStats\|GetNumActive\|worker_threads\|JobSystem\|Activate" engine/physics/sr...
+Next: how `main.cpp` dispatches scenes and how `render_stress` plugs in, plus the adapter's body-lookup and `stats()` code.
+[94m[Bash][0m Read scene dispatch, render_stress interface, physics stats and wake code $ sed -n 640,670p engine/physics/src/physics_world.cpp
+The dispatch is clear: a scene with a workload gets its own branch, and `RunRecord` carries free-form counters. I still need the acceptance suite's run list, the `RunRecord` shape, how the physics unit tests create entities, and how `generate_workload` gets its recipe.
+[94m[Bash][0m Inspect manifest suites, RunRecord, physics test entity setup, workload recipe $ sed -n 36,110p tools/benchmark/src/workload.cpp | grep -v "^$" | head -90
+The manifest already names `physics_headless` and `physics_visual` profiles, so the scene plugs into the existing acceptance suite. I'll check those profile definitions and how the existing physics tests create entities.
+[94m[Bash][0m Read physics profiles and physics test entity setup $ grep -n "stats\|PhysicsStats" tests/*/*physics* 2>/dev/null | head -5
+[94m[Bash][0m Read physics world test setup and bench test wiring $ grep -n "physics" tests/CMakeLists.txt | head
+`engine_tests` already links `engine_benchmark` and `engine_physics`, so the runner and its tests can share one library. I'll read the generator's entry point, the digest helper, and the world constants before I change anything.
+[94m[Bash][0m Read generator entry, constants, and physics query signatures $ grep -n "summarize\|struct FrameTimes" -A2 tools/benchmark/include/engine/benchmark/*.hpp | head -12
+The shape-cast and raycast signatures fit a fixed query schedule. Last, I'll read `move_kinematic` as the template for a new velocity call, plus the class's private state pointer, so the adapter additions match its existing style.
+[94m[Bash][0m Read kinematic move and body-count code paths $ sed -n 192,200p engine/physics/include/engine/physics/physics_world.hpp
+I have enough to design this. The plan:
+
+- **Adapter** (`engine/physics`): add `set_linear_velocity` (wakes a body) and `active_body_count`, so reports can split active from sleeping.
+- **Generator** (`workload.cpp`): return the physics spec as data, so the runner builds the same bodies the digest covers. The digest stays byte-identical, so `workload_expected.json` does not change.
+- **Runner** (`physics_stress.cpp` in `engine_benchmark`): drive the fixed schedule in simulation time, count queries and events, and check for NaN and out-of-bounds bodies and lost steps.
+- **Wiring**: `engine_bench` branch for `physics_headless`, unit tests, and docs.
+
+Before editing I'll confirm the Jolt method names, the `detail` helper overloads, and how the manifest treats `implementation`.
+[94m[Bash][0m Confirm Jolt API, helper overloads, and manifest implementation field $ grep -n "physics" -i docs/benchmarks.md | head
+The manifest's `implementation` field only accepts `builtin` or `none`, so `physics_stress` stays a `none` scene dispatched by name, the same way `render_stress` is. Now the adapter edits: the header first.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m edit: "    bool move_kinematic(ecs::EntityHandle entity, ..." → "    bool move_kinematic(ecs::EntityHandle entity, ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/include/engine/physics/physics_world.hpp[0m edit: "    // Rigid bodies that are awake (dynamic and ki..." → "    // Rigid bodies that are awake (dynamic and ki..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/physics/src/physics_world.cpp[0m edit: "core::Result<ecs::EntityHandle, PhysicsError> Phys..." → "bool PhysicsWorld::set_linear_velocity(ecs::Entity..."
+Adapter edits are in. Next, the generator: I'll move the physics values into a spec struct and digest that struct. First the header declarations.
+[94m[Bash][0m Locate workload header declarations and includes $ grep -n "^#include" tools/benchmark/src/workload.cpp
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/workload.hpp[0m edit: "[[nodiscard]] core::Result<Workload, std::string> ..." → "[[nodiscard]] core::Result<Workload, std::string> ..."
+Now `workload.cpp`: `build_physics` returns the spec, a separate digest function walks it in the original byte order, and `generate_workload` uses both.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "// Dynamic bodies and static boxes around the cent..." → "// Dynamic bodies and static boxes around the cent..."
+The rng draw order is unchanged (x, z, then height, then halves and mass), so the digest should be byte-identical. Next I'll wire `generate_workload` to the new functions and add `generate_physics_spec`.
+[94m[Bash][0m Wire generator to the physics spec and digest $ }  core::Result<RenderContent, std::string> generate_render_content(const SceneDef& scene) {''' asse...
+The file changed on disk since I last read it. I'll check the current state of the physics parts rather than assume my edit still matches.
+[94m[Bash][0m Verify current physics wiring after external change $ ls -la --time-style=full-iso tools/benchmark/src/workload.cpp
+My edits are intact in the current file; the external change is elsewhere in it. Before writing the runner I need the exact `RunStatus` and `core::Status` names, plus the `EntityHandle` constructors and `Result::value()` semantics.
+[94m[Bash][0m Check status, result, entity, and report type names $ grep -n "struct Check\|struct Summary" -A6 tools/benchmark/include/engine/benchmark/*.hpp | head -20
+[94m[Bash][0m Read RunStatus values and core Status type $ grep -n "Status" engine/physics/include/engine/physics/physics_world.hpp | head -3
+[94m[Bash][0m Read core::Status definition $ sed -n 12,40p engine/core/include/engine/core/status.hpp
+I have the names I need. Writing the runner header first: the scene summary, the fixed action sequence constants, the pure failure rule, and the `RunRecord` entry point.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/physics_stress.hpp[0m "#pragma once
+
+// physics_stress (US-077): the headless physics benchmark. It builds the table's dynamic bodies, static colliders, constraints, and
+// physics characters from the seeded workload (gener... (5169 chars)"
+The header is written. Now the runner implementation: the fixed schedule, the per-frame checks, the failure rule, and the `RunRecord` fill. I'm also fixing the header's parameter name so it doesn't shadow the `run` function.
+[94m[Bash][0m Rename run_physics_stress parameter in header $ ') s=s.replace('// Measures physics_stress once and fills `run` (status','// Measures physics_stress...
+The header changed on disk again, which may be another editor. I'll read it in full so the implementation matches its current declarations.
+[94m[Read][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/physics_stress.hpp[0m
+The header matches what I intended. Now the implementation file.
+The implementation is written, but I can already see two problems. The local variable `ecs` shadows the `ecs::` namespace used later in the same function, and `std::min`/`std::max` need `<algorithm>`. Fixing both.
+[94m[Bash][0m Fix variable shadowing and missing includes $ ',1) assert 'ecs.create' not in s open(p,'w').write(s) EOF grep -n "entities\|#include" tools/benchm...
+Those edits are in place. The file-change notices keep coming, so I'll re-read anything I touch from here on. Next, CMake: add the runner to the benchmark library and link the physics and ECS targets.
+[94m[Bash][0m Add physics runner to benchmark CMake target $ grep -n "physics_stress\|engine_physics" tools/benchmark/CMakeLists.txt
+Now the `engine_bench` dispatch. The headless profile runs; the visual profile reports `missing` because the render path for physics doesn't exist. I'm anchoring the edit on the `render_stress` branch, after re-reading the current file.
+[94m[Bash][0m Locate includes and render branch in main.cpp $ grep -n "#include\|if (def.scene == \"render_stress\")" tools/benchmark/src/main.cpp | head -20
+[94m[Bash][0m Add physics_stress dispatch to engine_bench $ } ''' s=s.replace(anchor,branch+anchor,1) open(p,'w').write(s) EOF grep -n "physics_stress" tools/be...
+Next the manifest: the route entry says "pending US-077". I'll replace that with the defined sequence text, editing only that string so the rest of the file's formatting stays as is.
+[94m[Bash][0m Record physics action sequence in manifest route $ print('ok')"
+The manifest parses. Now a Linux build to catch compile errors early. I'll configure with the `linux-dev` preset and build `linux-debug`.
+[94m[Bash][0m Configure linux-dev and build linux-debug $ grep -n "error\|warning:" /tmp/us077_build.log | head -40
+The Linux debug build succeeds with no warnings. The digest refactor is the riskiest change, so I'll check it first: the expected-file check must still match every component.
+[94m[Bash][0m Verify workload digests still match expected file $ echo "exit $?"
+[94m[Bash][0m Run workload check using the built binary $ echo "exit ${PIPESTATUS[0]}"
+The workload check still reports all 4 scenes matching, so the digest refactor is byte-identical. Next, tests. I'll look at the existing benchmark test file's conventions first so the new tests match them.
+[94m[Bash][0m Read benchmark test conventions and registration $ grep -n "bench_" tests/CMakeLists.txt
+I'll write the new benchmark physics tests. They use the real table for the scene counts and a short run, and they check the lost-timestep path with an oversized frame. The failure rule is tested directly on synthetic results.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/bench_physics_tests.cpp[0m "// The physics benchmark (US-077): the physics_stress scene builds the table's bodies, constraints, and characters from the seeded workload,
+// follows its fixed action sequence, and reports active an... (8837 chars)"
+Before registering the file I'm trimming three things: a test that only re-checks a manifest flag (padding), a tautological bound, and a missing `<utility>` include. The `active_min + sleeping_max == 2000` identity is exact, since sleeping is defined as dynamic minus active, so I'll assert it as equality.
+[94m[Bash][0m Trim physics tests and register test source $ python3 - <<'EOF' p='/mnt/d/dev/haiku_game_engine/tests/CMakeLists.txt' s=open(p).read() old='  src/...
+The adapter's new calls need their own test next to the existing physics world tests. The check is that a body settles to sleep, a velocity wakes it, and static, missing, or NaN targets are refused.
+[94m[Bash][0m Add adapter test for velocity wake and active count $ } ''' open(p,'w').write(s+'\n') EOF grep -n "#include <limits>" tests/src/physics_world_tests.cpp
+Now I'll rebuild and run the unit suite, which covers both the new benchmark tests and the adapter test.
+[94m[Bash][0m Rebuild linux-debug with new tests $ echo $T
+The build passes. The binary search picked up a stale `linux-gcc` tree, so I'll run the real preset test target, `linux-unit`, instead of a hand-picked binary.
+[94m[Bash][0m Run linux-unit ctest preset $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -n 40
+All 30 ctest cases pass. The `unit` label covers one ctest entry that runs the whole unit suite, so I'll run the suite directly to confirm the new cases are included and passing.
+[94m[Bash][0m Run engine unit suite and confirm new cases ran $ timeout 900 $T --suite unit -s 2>&1 | grep -i "physics benchmark\|velocity wakes" | head -20
+All 1027 unit cases pass. To be sure the new cases are among them, I'll list the test names and grep for them.
+[94m[Bash][0m List unit test names to confirm new cases exist $ timeout 300 $T --suite unit --list-tests 2>&1 | tail -n 2
+The CLI doesn't pass name listing through to Catch2, so I'll verify differently: confirm the new test object was compiled into the binary.
+[94m[Bash][0m Confirm new test object is compiled into engine_tests $ strings build/linux-dev/tests/Debug/engine_tests | grep -c "Physics benchmark: a lost timestep fails...
+The new test object is in the binary, so the unit suite covers the new cases. Next are the Linux gates the story names: `ValidateVendor`, and the ASan/UBSan preset because this change touches physics. I'll start the ASan build in the background and read the Windows gate notes meanwhile.
+[94m[Bash][0m Validate vendor manifest and start ASan build in background $ echo "asan done $?" > /tmp/us077_asan_status.txt) > /dev/null 2>&1 & echo started
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md[0m
+The Windows gate notes say the Windows host reads this same tree, so the changes are visible there without copying. Those gates need the batch approach and can't run until the ASan build finishes. Meanwhile I'll update the docs that describe the physics benchmark as pending.
+[94m[Bash][0m Read benchmark and physics doc sections to update $ sed -n 60,70p docs/physics.md
+[94m[Bash][0m Update physics and benchmark docs for the headless run $ tail -n 2 /tmp/us077_asan_build.log 2>/dev/null
+
+[91m[Error: Exit code 1
+ok][0m
+The doc edits went through; the non-zero exit came from the final status `cat` finding no file yet, because the ASan build is still running. I'll check its progress.
+[94m[Bash][0m Poll ASan build status $ tail -n 2 /tmp/us077_asan_build.log 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /tmp/us077_asan_status.txt echo "still building" tail -n 2 /tmp/us077_asan_build.log. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait for ASan build to finish $ tail -n 3 /tmp/us077_asan_build.log
+The monitor is armed. While the ASan build runs I'll check whether `engine_bench` can run just the physics scene. A full acceptance run is many hours of GPU time, and the physics headless run is the only part of this story that can be measured on the Windows GPU host.
+[94m[Bash][0m Check engine_bench CLI options for scene filtering $ grep -n "scene" tools/benchmark/src/cli.cpp | head -5
+There's no scene filter, but without `--path` the render runs stop before measuring, and the streaming, all-features, and visual physics runs report `missing` without running. So an acceptance run on Windows DX12 reduces to about 3 × 210 s of physics headless. I'll check the Windows presets for a Release configuration while ASan finishes.
+[94m[Bash][0m List Windows configure, build, and test presets $ python3 -c " import json p=json.load(open('CMakePresets.json')) for c in p['configurePresets']:     ...
+[94m[Monitor][0m Wait for ASan build to finish $ cat /tmp/us077_asan_status.txt 2>/dev/null || echo "not done"
+While that runs, I'll look for the Windows batch scripts from earlier runs, so I reuse the proven `vcvars64` path instead of guessing it.
+[94m[Bash][0m Find a previous Windows gate batch for the vcvars path $ [ -n "$f" ] && head -n 12 "$f" | tr -d '\r'
+[94m[Bash][0m Read full previous Windows gate and bench batch scripts $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076_bench.bat | tr -d '\r' | head -30
+I have the proven pattern. Before launching a Windows batch I'll confirm no earlier gate batch is still running, since the memory notes say overlapping batches fail on file locks.
+[94m[Bash][0m Check for running Windows gate processes $ cat /tmp/us077_asan_status.txt 2>/dev/null || echo "asan still running"
+Nothing from a previous batch is running. I'll write the Windows batch with CRLF endings: the story's gate set, the Release `engine_bench`, a DX12 acceptance run (only the physics headless run executes), and the GPU suite for DX12 and Vulkan.
+[94m[Bash][0m Write Windows gate batch and copy it to the Windows Temp dir $ cat /tmp/us077_asan_status.txt 2>/dev/null || echo "asan running"
+The batch is in place. I'll launch it in the background; the monitor will tell me when it finishes.
+[94m[Bash][0m Launch Windows gate batch in background $ cd /tmp/us077win && nohup cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us077.bat" > /tmp/us07...
+[94m[Monitor][0m Wait for Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch not done"
+Both background jobs are running. While they finish I'll prepare the progress log entry, starting with the top of `progress.md` where the Codebase Patterns section lives.
+[94m[Bash][0m Locate Codebase Patterns section in progress log $ sed -n 1,4p .ralph-tui/progress.md | cut -c1-200
+[94m[Monitor][0m Wait for ASan build to finish $ tail -n 3 /tmp/us077_asan_build.log
+Both jobs are running under monitors. I'll wait for their completion events rather than poll.
+[94m[Monitor][0m Wait for ASan build status file $ echo "still running after 40 min"
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check ASan and Windows batch progress $ tail -n 1 /tmp/us077_asan_build.log
+
+[91m[Error: Exit code 1
+asan running
+win batch running
+tail: cannot open '/tmp/us077_asan_build.log' for reading: No such file or directory][0m
+The ASan build log doesn't exist, which means that job may never have started. I'll check its configure log and running processes.
+[94m[Bash][0m Inspect ASan job state and running cmake processes $ tail -n 5 /tmp/us077_asan_cfg.log 2>/dev/null
+The ASan configure has been running for minutes with an empty log. I'll stop it and rerun the configure in the foreground with a timeout to see where it blocks.
+[94m[Bash][0m Rerun ASan configure in foreground with timeout $ echo "exit ${PIPESTATUS[0]}"
+
+[91m[Error: Exit code 144][0m
+Exit 144 means my `pkill` pattern also matched the shell running the command, so it killed itself. Rerunning the configure without the kill.
+[94m[Bash][0m Kill stuck ASan configure and rerun it in foreground $ echo "exit ${PIPESTATUS[0]}"
+The ASan configure succeeds now. I'll start its build in the background and wait on a monitor.
+[94m[Bash][0m Start ASan build in background $ echo "asan build $?" > /tmp/us077_asan_status.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for ASan build and Windows batch completion $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+[94m[Monitor][0m Wait for Windows batch progress markers $ echo "END: $last"
+Both monitors are armed. I'll wait for the results before writing the progress entry.
+[94m[ScheduleWakeup][0m
+
+[91m[Error: `noop` is required when `stop` is not true.][0m
+Windows so far: vendor validation, configure, and the debug build all exit 0. The unit tests and benchmark are still running.
+[94m[Monitor][0m Wait for ASan build status $ echo "asan still running"
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check combined progress of both builds $ tail -n 1 /tmp/us077_asan_build.log
+The ASan build is stuck on an external-project step named `engine_dxc_host`, which looks like a compiler toolchain build. I'll check whether it's actively compiling and why the preset needs it when `linux-dev` didn't.
+[94m[Bash][0m Inspect ASan build activity and DXC cache settings $ grep -n "DXC\|dxc" build/linux-dev/CMakeCache.txt | head -6
+The ASan preset is compiling the pinned DXC toolchain from source, a large LLVM-based build. I'll check whether the `linux-dev` tree already has one I could reuse, and how long this build has been running.
+[94m[Bash][0m Check existing DXC host build and build elapsed time $ ps -o etime= -p 22868
+The `linux-dev` tree already has a built DXC, but the ASan preset builds its own copy as a separate host-tools step, and that's about 21 minutes in. It's legitimate work the preset requires, so I'll let it finish rather than redirect the toolchain.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch markers and ASan progress $ ls /mnt/c/Users/bucha/AppData/Local/Temp/us077_*.log 2>/dev/null | head -20
+Windows unit tests passed (`unit=0`). I'll check the ctest log for the test count, since the memory notes warn that exit codes alone aren't enough.
+[94m[Bash][0m Read Windows ctest and build logs for counts and warnings $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us077_build.log | tail -n 3
+[94m[Bash][0m Confirm Windows ctest pass line and zero MSVC warnings $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us077_build.log | grep -ci "warning C"
+Windows: ctest passes 29 of 29, and the debug build has zero MSVC warnings. The GPU suites, the Release benchmark build, and the acceptance physics run are still pending, along with the ASan build. I'll keep waiting.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check combined progress of Windows batch and ASan build $ date
+The GPU suite is still running on Windows, and the ASan build is at 67 of 191 steps. I'll wait for the monitors to report.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check progress of Windows batch and ASan build $ }
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch and ASan build progress $ ls -la /mnt/c/Users/bucha/AppData/Local/Temp/us077_gpu_dx12.log | awk '{print $5, $6, $7, $8}'
+The GPU DX12 log hasn't changed since its first lines, which is suspicious. I'll look at its content and whether the test process is still alive on Windows.
+[94m[Bash][0m Inspect GPU suite log and whether its process is alive $ date
+The process listing returns nothing even for `cmd.exe`, so it can't confirm the test is alive. The file timestamps show this run has only been going a few minutes; my wakeup clock and the sandbox clock disagree. The monitors will report completion, so I'll keep waiting rather than poll.
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch and ASan status $ date
+Status for now:
+
+- **Linux:** vendor validation, `linux-dev` configure, `linux-debug` build, and `linux-unit` (30/30) all pass. The unit suite (1027 cases) passes, including the new ones.
+- **Windows:** vendor validation, configure, debug build (zero MSVC warnings), and `win-unit` (29/29) pass.
+- **Still running:** the Windows GPU suites, the Release benchmark build, the acceptance physics run, and the Linux ASan build (compiling its own DXC toolchain, step 89 of 191).
+
+I'm waiting on those background jobs. Monitors are armed on both, and I'll write the progress entry once the results are in.
+[94m[Monitor][0m Wait for ASan build status file $ echo "asan still running"
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch and ASan build status $ date
+[94m[Monitor][0m Wait for Windows batch completion marker $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_rc.txt | tr '\n' ' '
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch and ASan build status $ date
+Nothing new since the last check: the ASan build is at 107 of 191 and the Windows batch is still in its GPU steps. Both monitors are armed and will notify me when each finishes, so I'll pause here until then.
+
+**Status so far (US-077 — not complete yet):**
+
+Done and verified:
+- **Physics adapter:** `set_linear_velocity` and `active_body_count` added, with a unit test.
+- **Workload generator:** physics content now comes back as data (`generate_physics_spec`). The digest is unchanged: `engine_workload --check` still reports 4 of 4 scenes matching.
+- **Runner:** `physics_stress` headless run in `tools/benchmark`. It follows a fixed action sequence and reports active and sleeping bodies, steps, queries, catch-up events, and events. It fails on lost timesteps, NaN transforms, and out-of-bounds bodies.
+- **Wiring:** `engine_bench` dispatch, the manifest route text, and the docs.
+- **Linux:** `ValidateVendor`, `linux-dev` configure, `linux-debug` build, and `linux-unit` (30/30) pass. The full unit suite runs 1027 cases with 0 failures.
+- **Windows:** `ValidateVendor`, `win-dev` configure, `win-debug` build (zero MSVC warnings), and `win-unit` (29/29) pass.
+
+Still running or pending:
+- Windows `engine_tests --suite gpu` for DX12 and Vulkan, the Release `engine_bench` build, and the DX12 acceptance run (this executes only the physics headless run, about 3 × 210 s).
+- Linux `linux-asan` build (its own DXC toolchain build is in progress) and `linux-sanitize` tests.
+- Not run: `linux-gcc` (GCC 9.4 cannot build Jolt, so this needs the CI job), and the `physics_visual` profile, which reports `missing` because the physics render path doesn't exist yet.
+[94m[Monitor][0m Wait for ASan build status to be written $ echo "asan still running"
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check Windows batch and ASan build status $ date
+The ASan build is moving (117 of 191) and the Windows GPU step is still in progress. I'm ending this turn here. The background monitors will re-invoke me when the ASan build or the Windows batch finishes, and I'll write the progress entry and the final report then.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+The ASan build is at 172 of 191. I'll re-arm a watch on both jobs.
+[94m[Monitor][0m Wait for ASan build and Windows batch to finish $ echo "windows: $(cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_rc.txt 2>/dev/null | tr '\n' ' ') $...
+The ASan build is at 172 of 191 and the Windows batch is still in its GPU steps. The new watch reports when both finish, so I'll wait for that before writing the progress entry.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+[94m[Monitor][0m Wait for ASan build and Windows batch to finish $ echo "windows: $(cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_rc.txt 2>/dev/null | tr '\n' ' ') $...
+The ASan build is at 189 of 191 and the Windows batch is still running its GPU steps. I'm waiting on the new watch for both to finish.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+Both jobs show the same progress as the last check. I'll re-arm the watch with a longer window.
+[94m[Monitor][0m Wait for ASan build and Windows batch to finish $ echo "windows: $(cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_rc.txt 2>/dev/null | tr '\n' ' ') $...
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+Still in progress: the ASan build is on its last few compile steps, and the Windows GPU suite hasn't reported yet. I'll keep waiting for the completion notices.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+The ASan build has sat at 189 of 191 across several checks. I'll see whether its compiler process is still doing work.
+[94m[Bash][0m Inspect running compiler processes and memory $ free -g | head -2
+The build is in its final link steps, so it's moving. I'll re-arm the watch for the status file.
+[94m[Monitor][0m Wait for ASan build status file $ echo "asan still running"
+The ASan build is linking its last binaries, and the Windows GPU suite is still running. I'll wait for both before writing the progress entry.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+Both jobs are still running: the ASan build is on its last link, and the Windows GPU suite hasn't reported. I'll record this pass in the progress log now, so the work is written down even if the remaining gates don't finish in this session.
+[94m[Bash][0m Append US-077 progress entry and codebase pattern $ CI job), `physics_visual` (no visual physics path). - Status call: US-077 stays open until the pendi...
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+US-077 is not finished. The code and the Linux and Windows unit gates pass, but the GPU suites, the acceptance physics run, and the Linux ASan/sanitize gates are still running. I have not written the COMPLETE signal.
+
+**What is implemented**
+- **`physics_stress` scene** (`tools/benchmark/src/physics_stress.cpp`): builds the table's 2000 dynamic bodies, 200 static colliders (plus a ground box), 100 constraints, and 20 characters from the seeded workload. It then runs 60 Hz simulated frames along a fixed action sequence: velocity kicks, character walks and jumps, 1000 raycasts/s, and 100 shape casts/s.
+- **Reports:** active and sleeping body counts, simulation steps, catch-up events, lost timesteps, query counts and hits, interactions, and contact/activation events.
+- **Failure checks:** lost timesteps, Jolt or character step errors, NaN transforms, and bodies or characters outside the reference bounds (400 m horizontally, −50 m to 400 m in height). Each check has a unit test.
+- **Physics adapter:** `set_linear_velocity` (wakes a body) and `active_body_count`.
+- **Generator:** physics content is returned as data, and the digest is computed from it. `engine_workload --check` still matches all 4 scenes, so the expected file did not change.
+- **Wiring:** `engine_bench` runs the `physics_headless` profile. `physics_visual` reports `missing`, because there is no visual physics path in this build. The manifest route text and `docs/physics.md` and `docs/benchmarks.md` are updated.
+
+**Gate results**
+| Gate | Result |
+|---|---|
+| Linux `ValidateVendor`, `linux-dev`, `linux-debug` build | Pass (no warnings) |
+| Linux `linux-unit` | 30/30 |
+| Engine unit suite (1027 cases, includes the new ones) | Pass |
+| Windows `ValidateVendor`, `win-dev`, `win-debug` build | Pass (0 MSVC warnings) |
+| Windows `win-unit` | 29/29 |
+
+**Still pending**
+- Windows `engine_tests --suite gpu` for DX12 and Vulkan. It has not reported yet.
+- Windows Release `engine_bench` and `--suite acceptance --backend dx12`. This runs only the physics headless scene, about 3 × 210 s. No performance numbers exist yet.
+- `linux-asan` build. The preset is compiling its own DXC toolchain, and it is at its last link step. `ctest --preset linux-sanitize` has not run.
+- `linux-gcc`: not run. Local GCC 9.4 cannot build Jolt, so this needs the CI job.
+- `physics_visual`: not implemented.
+
+The progress log has a US-077 entry marking these items pending. I'll update it and give the final result once the Windows batch and the ASan build finish.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+Windows GPU DX12 passed (`gpu_dx12=0`), and Vulkan is next. The ASan link has stayed on `game_editor` for a long time, so I'll check whether its linker is still alive.
+[94m[Bash][0m Check whether ASan link process is alive $ ps -eo pid,etime,pcpu,rss,args | grep -E "/usr/bin/ld|clang" | grep -v grep | cut -c1-120 | head -5
+The ASan linker for `engine_tests` is still working (about 2 GB resident), so the build is progressing. I'll keep waiting for the batch and the ASan status.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+US-077 is still open. Since the last update, the Windows DX12 GPU suite passed (`gpu_dx12=0`). The Windows Vulkan GPU suite, the Release benchmark build, and the DX12 acceptance physics run are still in the batch. The ASan build is still linking `engine_tests`, so `linux-sanitize` hasn't run.
+
+Passing so far: Linux vendor validation, `linux-dev` configure, `linux-debug` build, `linux-unit` (30/30), and the full engine unit suite (1027 cases). Windows vendor validation, `win-dev` configure, `win-debug` build (no MSVC warnings), `win-unit` (29/29), and `gpu_dx12`.
+
+Not run: `linux-gcc` (GCC 9.4 can't build Jolt; needs the CI job) and the `physics_visual` profile (no visual physics path).
+
+I'll record the DX12 GPU result in the progress log and give the final verdict once the batch and the ASan build report. No COMPLETE signal yet.
+[94m[Bash][0m Check ASan build and Windows batch status $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us077_done.txt 2>/dev/null || echo "batch running"
+US-077 is still open, and the Windows batch and ASan build are both still running. Nothing has changed since my last check: the Windows Vulkan GPU suite and the Release benchmark steps have not reported, and the ASan build is still linking.
+
+Results so far are as in my previous update. The Windows DX12 GPU suite passed. Still pending are the Windows Vulkan GPU suite, the Release `engine_bench` build, the DX12 acceptance physics run, the `linux-asan` build, and `linux-sanitize`. `linux-gcc` cannot run here, and `physics_visual` is not implemented.
+
+I'll write the final result when the batch and the ASan build finish. No COMPLETE signal until then.
+The ASan build finished with exit 0. Next I'll run the sanitize test preset.
+[94m[Bash][0m Run linux-sanitize ctest preset $ grep -E "tests passed|tests failed|Failed|\*\*\*" /tmp/us077_sanitize.log | head -20
+Everything is in. Linux `linux-sanitize` passed 30 of 30. Windows passed every step through the Release build, and the DX12 acceptance run exited 3, which means incomplete. I'll check the benchmark log to see whether the physics run was measured.
+[94m[Bash][0m Read Windows acceptance benchmark log $ tr -d '\r' < /mnt/c/Users/bucha/AppData/Local/Temp/us077_bench_dx12.log | head -60
+The physics headless scene passed all three repeats in Release on DX12. I'll pull its counters and frame-time summary from the report.
+[94m[Bash][0m Extract physics headless counters from the report $ python3 -c " import json,sys r=json.load(open('$R')) runs=[x for x in r['runs'] if x['scene']=='phys...
+All 2000 bodies stayed awake through the run, so the kick schedule kept them active. I'll grab the frame-time summary before recording the result.
+[94m[Bash][0m Extract physics headless frame-time summary $ break print([k for k in r['runs'][0].keys()]) " 2>&1 | head -20
+I have the results I need, so I'll update the progress log: the pending items are now resolved, and the two remaining gaps are stated explicitly.
+[94m[Bash][0m Record final gate results in progress log $ reports missing). - Status call: the story's scene, report, and detection criteria are met and verif...
+US-077 is implemented and verified on Linux and Windows, but I have not emitted the COMPLETE signal. Two items are open: the Linux/GCC CI job can't run here, and the `physics_visual` profile isn't implemented.
+
+**What's in place**
+- **`physics_stress` scene** (`tools/benchmark/src/physics_stress.cpp`): builds the table's 2000 dynamic bodies, 200 static colliders (plus a ground box), 100 constraints, and 20 characters. It runs 60 Hz simulated frames along a fixed action sequence: velocity kicks, character walks and jumps, 1000 raycasts/s, 100 shape casts/s.
+- **Reports** distinguish active and sleeping bodies, and count steps, catch-up events, lost timesteps, queries, and contact/activation events.
+- **Failure detection** covers lost timesteps, NaN transforms, and bodies or characters outside the reference bounds. Each check has a unit test.
+- **Adapter** (`engine/physics`): `set_linear_velocity` and `active_body_count`.
+- **Generator** (`workload.cpp`): physics content is now returned as data, and the digest is computed from it. `engine_workload --check` still matches all 4 scenes.
+- **Wiring:** `engine_bench` runs the `physics_headless` profile. The manifest route text, `docs/physics.md`, and `docs/benchmarks.md` are updated.
+
+**Verification**
+| Gate | Result |
+|---|---|
+| Linux vendor validation, `linux-dev`, `linux-debug`, `linux-unit` | Pass (30/30) |
+| Engine unit suite (1027 cases) | Pass |
+| Linux `linux-asan` build and `linux-sanitize` | Pass (30/30) |
+| Windows vendor validation, `win-dev`, `win-debug` (no MSVC warnings), `win-unit` | Pass (29/29) |
+| Windows `engine_tests --suite gpu` DX12 and Vulkan | Pass |
+| Windows Release `engine_bench` build | Pass |
+| Windows acceptance DX12, physics headless, 3 repeats | Pass |
+
+The DX12 acceptance run exits 3 (incomplete) because the other scenes are still missing. The physics headless run itself was measured in Release on DX12, and its three repeats all passed:
+- 10,800 measured frames, 12,600 simulation steps, no lost timesteps, no NaN transforms, no out-of-bounds samples.
+- All 2000 dynamic bodies stayed awake on every frame, so the kicks kept the scene active.
+- Frame CPU time: p50 1.23 ms, p99 1.66 ms. This is a diagnostic figure only; the headless profile has no frame-time contract.
+
+**Open items**
+- **Linux/GCC:** the `linux-gcc` preset needs GCC 11+, and this machine has GCC 9.4, which can't build Jolt. The CI job has to verify it.
+- **`physics_visual`:** the visual physics run needs the render path, which isn't implemented. It reports `missing`.
+
+The progress log has an entry for this pass with the results above.
+[94m[Bash][0m Check whether a GCC 11+ compiler is now available $ ls /usr/bin | grep -E "^(g\+\+|gcc)-1[1-9]$" || echo "no GCC 11+ installed"
+No change: the Linux/GCC gate is still blocked on a GCC 11+ install, which needs root or the CI job, and the `physics_visual` profile would be new work the user hasn't asked for, so I'm stopping the loop.
+[94m[ScheduleWakeup][0m
+The autonomous loop is stopped. US-077 stays open for two reasons: the `linux-gcc` gate needs GCC 11+ (root install or the CI job), and the `physics_visual` profile is not implemented. Neither can move without you, so there's nothing for me to act on until you decide.

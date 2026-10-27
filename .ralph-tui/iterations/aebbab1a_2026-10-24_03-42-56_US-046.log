@@ -1,0 +1,39 @@
+# Iteration 55 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:42:56.332Z
+- **Ended At**: 2026-10-24T00:43:14.186Z
+- **Duration**: 17s
+- **Input Tokens**: 24
+- **Output Tokens**: 2250
+- **Total Tokens**: 2274
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress notes, since the memory file says FSR 2 cannot link yet.
+[94m[Bash][0m Inspect repo root and progress notes $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-046\|US-045" .ralph-tui/progress.md | head ...
+[94m[Bash][0m Locate FSR-related files and gating $ find . -iname "*fsr*" -not -path "./build*" | head -50
+The notes show US-046 has been blocked on the same FSR 2 decision for several iterations. I'll check whether anything has changed since the last re-check before I report.
+[94m[Bash][0m Check whether FSR 2 permutation headers now exist $ sed -n 1,40p docs/upscaling.md | head -60
+US-046 is still blocked, and I did not signal COMPLETE.
+
+**Blocker:** `third_party/fsr2` has no generated `*_permutations.h` shader tables. I checked again: 0 files exist, and nothing under `engine`, `tests`, `cmake`, `docs`, `tools`, or `third_party` has changed since the last progress entry. `ENGINE_FSR2_AVAILABLE` stays off, so both backends still return `Unsupported` from `create_upscaler`.
+
+Without FSR 2 running, the story's core deliverables can't be done honestly. These are the upscale dispatch on both backends, the full profile switch to 1280×720, UI composition after upscaling, and the GPU and gate checks that exercise upscaling. Switching the profile without a working upscaler would ship an unupscaled 720p image.
+
+**Decision needed from you**, on how to get the tables into the tree:
+1. **Vendor the pre-built outputs** of the archive's `tools/sc/FidelityFX_SC.exe`, with hashes pinned. This needs a documented exception to the no-prebuilt-tools rule.
+2. **Regenerate the blobs** with the engine's pinned DXC through a first-party generator. This keeps to the rule, but it means reproducing the permutation logic that FidelityFX_SC normally handles, which is a substantial piece of work.
+
+Once you pick one, I can start on it. Option 1 is the faster route to a working FSR 2. Option 2 is more work but needs no exception.
+
+**Already in place and tested:** the CPU contract (`upscaler.hpp`/`.cpp` and `render_upscaler_tests.cpp`), the RHI upscaler contract with validation and unit tests, and `docs/upscaling.md`. The Linux and Windows gates passed for those earlier changes, per the progress log. I did not re-run them in this pass, since nothing has changed.

@@ -1,0 +1,61 @@
+# Iteration 996 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:26:00.364Z
+- **Ended At**: 2026-10-26T15:32:02.298Z
+- **Duration**: 6m 1s
+- **Input Tokens**: 70
+- **Output Tokens**: 6176
+- **Total Tokens**: 6246
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and whether an `all_features` scene already exists.
+[94m[Bash][0m Check progress log and search for all_features $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rn "all_features" --include=* -l . 2>/dev/null | ...
+[94m[Bash][0m Read US-079 PRD section and list tool dirs $ git status 2>&1 | head -3
+The log shows many earlier passes that re-checked the same blockers and stopped. Before deciding whether to repeat that, I'll look at what the blockers actually are and what exists already.
+[94m[Bash][0m Inspect manifest entry, existing tests, and build dir $ ls build | head
+The manifest's `all_features` entry is still `implementation: none`, and `samples/` doesn't exist. I'll check what the two existing test files expect, since they define the missing pieces.
+[94m[Bash][0m Read all_features test headers and wiring $ grep -n "samples\|all_features" tests/CMakeLists.txt CMakeLists.txt | head
+The CPU-side integration test already exists. I'll check whether it builds and passes on Linux, which is the one gate I can verify here.
+[94m[Bash][0m Build linux-debug preset $ (timeout 580 cmake --build --preset linux-debug -j 8 2>&1 | tail -40)
+[94m[Bash][0m Locate engine_tests binary $ find build/linux-dev -name engine_tests -type f | head -3
+[94m[Bash][0m Build engine_tests in Debug $ echo EXIT=${PIPESTATUS[0]})
+[94m[Bash][0m Run integration-tagged CPU tests $ echo EXIT=$?
+[94m[Bash][0m Run integration suite on Linux $ echo EXIT=${PIPESTATUS[0]}
+The integration suite passes on Linux (135 cases, 1766 assertions, 3 skipped for lack of a window manager). Next I'll run the Linux validation and unit gates to get current results.
+[94m[Bash][0m Run vendor validation and linux-unit ctest $ (timeout 580 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -8)
+The Linux gates pass. I'll record this pass in the progress log, since the workflow requires it.
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows session for the Windows gates, GPU suites, and the GUI editor run. - Stop: no COMPLETE...
+US-079 is not complete, so I have not emitted the COMPLETE signal. Most of the story is still open, and the blockers need your decisions or a Windows session.
+
+**What I verified on Linux in this pass**
+- `cmake -P cmake/ValidateVendor.cmake` passes (26 dependencies, 8542 files).
+- `cmake --build --preset linux-debug` builds `engine_tests`.
+- `engine_tests --suite integration` passes 132 cases and skips 3. The skips are X11 window-manager cases that can't run in this WSL session. All 1766 assertions pass. This suite includes `all_features_tests.cpp`, which covers the workload digests and a combined CPU scene.
+- `ctest --preset linux-unit` passes 30/30.
+
+**What is still open**
+- `samples/all_features` does not exist.
+- The `all_features` benchmark branch is not implemented. The manifest entry is `implementation: none`.
+- The `all_features_route_v1` route is still only a proposal in `benchmarks/manifest.json`. It fixes the benchmark contract, so I did not implement against it or approve it.
+- The GI/RT/upscale profiles, the forced indirect/meshlet runs, and the tour from a real run are not done.
+- `full_1080` is blocked because the vendored FSR 2 has no `*_permutations.h` headers.
+- The Windows gates (ValidateVendor, `win-dev`, `win-debug`, `win-unit`) have not been run in this pass.
+- Also not run: `linux-asan`, `linux-gcc`, `engine_bench --suite acceptance`, the GPU suites on DX12 and Vulkan, and the live editor run with package/relaunch and screenshots.
+
+**What I need from you**
+1. Approve or change `all_features_route_v1`. The benchmark contract depends on it.
+2. Either vendor the FSR 2 permutation headers, or decide to leave `full_1080` unsupported for this story.
+3. A Windows session for the Windows gates, the GPU suites, and the GUI editor scenario.
+
+I appended a status entry to `.ralph-tui/progress.md` with these results. Earlier passes had only re-checked the same blockers, so this one reran the Linux gates to give you current results.

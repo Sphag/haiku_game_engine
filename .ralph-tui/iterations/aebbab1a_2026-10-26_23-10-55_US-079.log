@@ -1,0 +1,40 @@
+# Iteration 1059 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T20:10:55.735Z
+- **Ended At**: 2026-10-26T20:11:21.752Z
+- **Duration**: 26s
+- **Input Tokens**: 28
+- **Output Tokens**: 3371
+- **Total Tokens**: 3399
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo, the progress log, and whether any US-079 work already exists.
+[94m[Bash][0m Inspect repo state, progress log, and existing all_features refs $ ls && echo --- && tail -c 6000 .ralph-tui/progress.md && echo --- && grep -ril "all_features" --incl...
+The progress log shows this story has been re-checked for about 125 passes with no COMPLETE signal, each one citing the same blockers. Before deciding whether to repeat that, I'll confirm those blockers still hold.
+[94m[Bash][0m Verify blocker state: samples, FSR2 headers, manifest, tests $ ls artifacts | head
+The blockers are still in place. I'll record this pass in the progress log, the same way the earlier passes did.
+[94m[Bash][0m Append status entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, and I'm not signalling COMPLETE. I made no source changes this pass. The blockers from earlier passes still hold, and most of the story depends on them.
+
+**Blockers, re-checked this pass:**
+1. **Missing `samples/all_features` project.** There is no `samples/` directory. The runtime component catalog is empty in this build, so a scene with components is refused. Someone needs to decide how that scene should be built.
+2. **Route approval.** `benchmarks/manifest.json` still lists `all_features` as `implementation: none`. Its route, `all_features_route_v1`, is a proposal that needs your approval. There is no all_features runner in `tools/benchmark/src`.
+3. **FSR 2 permutation headers.** `third_party/fsr2` has no `*_permutations.h`, so `full_1080` cannot run. The route marks it unsupported, which is the existing policy. A decision to keep that policy would let the story proceed.
+4. **Windows GPU and GUI session.** The tour, profiles, and the live editor run with package and relaunch need a Windows machine with a GPU and a display. I can't provide that from WSL.
+
+**Verified earlier, not re-run this pass:** the last Linux integration run passed 132 cases with 3 skipped (X11 focus and similar), including the two all_features integration cases in `tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp`. The `linux-unit` preset finds no all_features cases because they are tagged `[integration]`.
+
+**Recorded in the log:** I appended a status entry to `.ralph-tui/progress.md` covering this check and the four open items.
+
+**To move forward I need:** approval of the route (item 2), a decision on FSR 2 (item 3), a decision on the component catalog (item 4), and a Windows GPU/GUI session for the GPU and editor checks (item 1). With those, I can build the sample project, the benchmark runner, and the tour and editor scenario. Until then, the Windows gates, GPU suites, and editor scenario stay unverified.

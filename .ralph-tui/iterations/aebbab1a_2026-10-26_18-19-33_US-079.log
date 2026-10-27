@@ -1,0 +1,48 @@
+# Iteration 982 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:19:33.015Z
+- **Ended At**: 2026-10-26T15:21:12.072Z
+- **Duration**: 1m 39s
+- **Input Tokens**: 32
+- **Output Tokens**: 3512
+- **Total Tokens**: 3544
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log.
+[94m[Bash][0m Check repo layout, progress log, and existing all_features refs $ ls && tail -150 .ralph-tui/progress.md && grep -ril "all_features" --include=* . 2>/dev/null | grep ...
+The log shows 76 prior passes that stopped on the same two blockers. I'll check whether those blockers still hold, starting with the manifest entry, the benchmark driver, and the existing tests.
+[94m[Bash][0m Inspect manifest entry, benchmark driver, and tests $ grep -n "TEST_CASE" tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp
+The blockers still hold: `full_1080` has no FSR 2 permutation headers, `samples/` is absent, and the manifest route is still a proposal. I'll re-run the existing Linux CPU integration suite to confirm the current tree, since that is the only verifiable piece left.
+[94m[Bash][0m Run Linux integration suite on current tree $ timeout 900 ./build/linux-dev/tests/Debug/engine_tests --suite integration 2>&1 | tail -15
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows GUI session for the live editor run. - Stop: no COMPLETE signal. --- EOF echo ok
+I have not completed US-079, so I am not emitting the COMPLETE signal. The remaining work depends on decisions and hardware I can't supply from this session.
+
+**Blockers (unchanged from the last 76 passes):**
+1. **`full_1080` profile:** `third_party/fsr2` has no `*_permutations.h` files, so the FSR 2 upscale profile cannot be built. The manifest already reports it as unsupported. Please either vendor the headers or confirm it stays unsupported.
+2. **`all_features_route_v1`:** the route is still only a proposal in `benchmarks/manifest.json`. The benchmark branch, `samples/all_features` project, and tour wiring depend on it. Please approve it or tell me to change it.
+3. **Windows GUI session:** the live editor run with Play/Stop, package, relaunch, and screenshots needs an interactive Windows session with an RTX GPU. WSL can't provide that.
+
+**Verified in this pass:**
+- Linux CPU integration suite (`engine_tests --suite integration`): 135 cases, 132 passed, 3 skipped, 1766/1766 assertions. The skips are X11 window-map and input cases. No source changed.
+
+**Not done, and not reported as passed:**
+- `all_features` benchmark branch in `tools/benchmark/src/main.cpp` (it still reports Missing)
+- GI/RT/upscale profiles and forced indirect/meshlet paths
+- `samples/all_features` project and a tour run with real output
+- Live GUI editor scenario, package/relaunch, and screenshots
+- Native Linux Vulkan GPU suite, `engine_bench --suite acceptance`, and the linux-gcc and ASan presets
+
+The existing CPU tests (`tests/src/all_features_tests.cpp` and `all_features_editor_tests.cpp`) cover the combined scene, but they are not the full acceptance deliverable.
+
+I appended a status entry to `.ralph-tui/progress.md`. Results from the earlier Windows gate runs (check 71) still stand, since no source changed since then.

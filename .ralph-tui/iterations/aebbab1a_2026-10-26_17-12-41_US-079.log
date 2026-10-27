@@ -1,0 +1,53 @@
+# Iteration 947 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:12:41.468Z
+- **Ended At**: 2026-10-26T14:15:26.984Z
+- **Duration**: 2m 45s
+- **Input Tokens**: 48
+- **Output Tokens**: 3897
+- **Total Tokens**: 3945
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the story: the progress log, whether an `all_features` scene already exists, and what the prerequisites left behind.
+[94m[Bash][0m Inspect progress log and search for all_features $ ls && tail -c 4000 .ralph-tui/progress.md && grep -ril "all_features" --exclude-dir=.git . | head -5...
+The progress log shows this story has been re-checked about 50 times without completing. Before deciding whether anything is actionable, I'll read the existing all_features tests and the manifest entry.
+[94m[Bash][0m Read all_features tests and manifest entry $ wc -l tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp && head -60 tests/src...
+The CPU-side `all_features` tests already exist (292 and 248 lines), so the story is further along than the log's "absent" entries suggest. I'll build and run the Linux suite to see what actually passes now.
+[94m[Bash][0m Build Linux debug and run unit tests $ echo BUILD_EXIT=$?) && (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -...
+Linux debug builds, and all 30 tests in `linux-unit` pass. Next I'll confirm the `all_features` cases are among them and check the `implementation: none` flag in the manifest.
+[94m[Bash][0m Find all_features test cases and run them $ grep -rn "all_features" tools/benchmark/src | head -5
+The CPU integration cases are in the passing 29. I'll run the CPU editor suite once, since the editor scenario test lives there, then record this pass in the progress log.
+[94m[Bash][0m Run CPU editor suite $ echo EXIT=$?
+[94m[Bash][0m Append status entry to progress log $ (2) approval of `all_features_route_v1`. - Stop: no COMPLETE signal. --- EOF echo done
+US-079 is not complete, so I am not signalling COMPLETE. This pass verified the existing CPU work on Linux and found the rest blocked.
+
+**Verified on Linux, this pass:**
+- `cmake --build --preset linux-debug` exits 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 30/30 (29 integration, 1 unit). This includes the two `all_features` CPU integration cases: the workload digests, and a combined run of gameplay, audio, animation, UI, save, and a material graph that records every marker.
+- `engine_tests --suite editor` (CPU) passes all 106 test cases, 1569 assertions. The editor scenario case in `all_features_editor_tests.cpp` is covered only by this CPU run, not by a live app.
+
+**Not done, and not reported as passed:**
+- The `samples/all_features/` project does not exist, so there is no tour runner and no feature-marker output check against a real run.
+- The GI/RT/upscale profiles and the forced indirect/meshlet paths are missing. `full_1080` stays unsupported because `third_party/fsr2` has no `*_permutations.h`.
+- The live-app editor run (edits, undo/redo, Play/Stop, package/relaunch) and the GUI checks have not run.
+- The Windows quality gates have not run in this pass.
+- `engine_tests --suite gpu` on DX12 and Vulkan has not run.
+- `engine_bench --suite acceptance` has not run; the manifest still lists `all_features` as `implementation: none`.
+- `linux-gcc*` and the ASan preset have not run. This machine has no GCC 11+.
+
+**Decisions needed from you before this can finish:**
+1. The FSR 2 vendoring route for `full_1080`.
+2. Approval of the `all_features_route_v1` definition in `benchmarks/manifest.json`.
+
+I appended this pass to `.ralph-tui/progress.md`. No source files changed.

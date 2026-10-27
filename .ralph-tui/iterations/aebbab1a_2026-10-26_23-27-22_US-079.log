@@ -1,0 +1,43 @@
+# Iteration 1075 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-26T20:27:22.108Z
+- **Ended At**: 2026-10-26T20:27:37.342Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1932
+- **Total Tokens**: 1954
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo.
+[94m[Bash][0m Inspect progress log and repo layout $ ls -d */ | head -50
+The log shows this story has repeatedly stopped on the same blockers. I'll re-check them directly before deciding whether anything is actionable.
+[94m[Bash][0m Re-check the recorded blockers $ grep -rl "all_features" tools/benchmark/src | head
+US-079 is not complete, and I have not signalled `<promise>COMPLETE</promise>`. I re-checked the blockers the progress log records, and each one still holds. I made no source changes this pass.
+
+**What I verified:**
+- `samples/` does not exist, so there is no `all_features` project or scene.
+- `third_party/fsr2` has 0 `*_permutations.h` files. `ENGINE_FSR2_AVAILABLE` stays off, so the `full_1080` profile can only be reported as unsupported.
+- `benchmarks/manifest.json` still has `all_features` with `implementation: "none"` (line 132). Its route, `all_features_route_v1`, is still a proposal (line 152).
+- `/dev/dri` is absent, so there is no native Linux Vulkan GPU in this WSL environment.
+- No `all_features` runner exists in `tools/benchmark/src`.
+
+The progress log also records CPU results from the last Linux pass: `engine_tests --suite unit` passed 1032 cases, `--suite editor` passed 106, and `--suite integration` passed 132 with 3 skipped. Those results predate this check, and I did not rerun them.
+
+**What is needed from you before the story can move:**
+1. Approve `all_features_route_v1` as the benchmark route, or give a different one.
+2. Vendor the FSR 2 permutation headers, or confirm that `full_1080` stays reported as unsupported.
+3. Decide the runtime component catalog for `samples/all_features`. The catalog is empty in this build, so a scene with components is refused.
+4. Provide a Windows session with a GPU and a GUI. The tour, the profiles, the forced geometry paths, and the live editor run with package and relaunch all need it. The Windows gates (`ValidateVendor`, `win-dev`, `win-debug` build, `win-unit` tests) also have to be run there.
+
+Once those decisions are made, the sample project, the tour, and the editor scenario are the next pieces of work. I did not append another identical status entry to `.ralph-tui/progress.md`, since the last one already records these blockers.

@@ -1,0 +1,41 @@
+# Iteration 1216 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:57:36.910Z
+- **Ended At**: 2026-10-26T21:57:50.070Z
+- **Duration**: 13s
+- **Input Tokens**: 20
+- **Output Tokens**: 1832
+- **Total Tokens**: 1852
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the benchmark tooling, and the current state of the repo.
+[94m[Bash][0m Read progress log tail and benchmark layout $ git status 2>&1 | head -3
+[94m[Bash][0m Verify current hardware and manifest blockers $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+US-080 is not complete, so I'm not signalling COMPLETE. The blockers from the progress log still hold, and I confirmed them just now.
+
+**Still blocked:**
+- **Native Linux Vulkan:** `/dev/dri` is absent, so there is no native Linux Vulkan device. The RTX 5080 is visible only under WSL, which the story says does not count.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has 4 entries with `implementation: "none"`. An acceptance run would exit 3 (incomplete) while they stand.
+- **FSR 2:** no `*_permutations.h` files exist under `third_party`, so FSR cannot be built. Vendoring it needs your decision on the route.
+- **Frame budget:** the `render_stress` CPU hotspot (us076 meshlets, CPU p99 42.4 ms against a 16.7 ms budget) needs a Release profile on the RTX 5080 via cmd.exe. If the budget stays exceeded after fixing the measured cause, changing the contract needs your decision.
+
+**What I did not do:** I ran no builds, quality gates, or benchmarks this session. The acceptance batch cannot produce a valid report on this machine. I also did not add another "status check" entry to `.ralph-tui/progress.md`, since about 100 of them already record the same facts.
+
+**What would unblock it:**
+1. A native Linux host with a Vulkan device (`/dev/dri`) for the Linux/Vulkan runs.
+2. A decision on FSR 2: vendor the generated permutation headers, or exclude FSR from the acceptance scope.
+3. Sources or a plan for the four `implementation: "none"` workloads.
+4. Either a Release profile of the meshlets CPU hotspot on the RTX 5080, or your decision on the budget.
+
+Once those are settled, the next step is the Windows gates and the RTX 5080 acceptance batch, followed by the Linux runs.

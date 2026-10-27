@@ -1,0 +1,45 @@
+# Iteration 193 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T12:10:56.900Z
+- **Ended At**: 2026-10-24T12:15:57.066Z
+- **Duration**: 5m 0s
+- **Input Tokens**: 46
+- **Output Tokens**: 3862
+- **Total Tokens**: 3908
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-052 is already in the tree, since the codebase notes and memory say the Jolt adapter exists.
+[94m[Bash][0m Inspect physics module and progress log $ ls /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/
+[94m[Read][0m [95m/home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md[0m
+The memory and progress log both say US-052 is implemented and was verified on Windows and Linux clang, with the `linux-gcc` gate blocked by the local compiler. I'll check whether that has changed (a GCC 11+ compiler now present, or source edits since the last entry) and re-run the Linux gates that can run here.
+[94m[Bash][0m Check toolchains and rerun Linux gates $ tail -n 3 /tmp/ctest.log)
+[94m[Bash][0m Read background gate output so far $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/a1e23537-38f1-430d-bf63-d8f5fee8feef/tasks/b15ggyu...
+[94m[Bash][0m Wait for background gates to finish and summarize $ tail -n 4 /tmp/ctest.log
+[94m[Bash][0m Confirm ctest pass count and warnings $ grep -E 'Warnings|warning' /tmp/build.log | head -3
+Linux gates pass on the current tree. I'll record this pass in the progress log, as the workflow requires.
+[94m[Bash][0m Append re-verification entry to progress log $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs a GCC 11+ enviro...
+US-052 is not complete, so I am not emitting the COMPLETE signal. The Jolt adapter was already in the tree, and I re-verified it this pass without changing any source.
+
+**Passing on Linux (clang 10, current tree):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0
+- `cmake --preset linux-dev`: exit 0
+- `cmake --build --preset linux-debug`: exit 0, zero warning or error lines
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22/22 (1 unit, 21 integration)
+
+**Still open:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** blocked. Jolt needs GCC 11+ (`__builtin_bit_cast`), and the machine has only `g++-9`. There is no conda, micromamba, or docker, and `sudo` needs a password. I did not run these gates, so they are unverified.
+- **`engine_bench --suite acceptance`:** not run. There is no benchmark harness yet; that belongs to US-074.
+- **Windows gates:** not re-run in this pass. The source has not changed since the earlier Windows run recorded in the progress log, and I found no file newer than that entry. Re-running them would take the Windows GPU or build batch path from WSL.
+
+I appended a re-verification entry to `.ralph-tui/progress.md`. No git commit was made.

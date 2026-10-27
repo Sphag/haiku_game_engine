@@ -1,0 +1,37 @@
+# Iteration 739 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:26:08.587Z
+- **Ended At**: 2026-10-26T02:26:29.428Z
+- **Duration**: 20s
+- **Input Tokens**: 20
+- **Output Tokens**: 2971
+- **Total Tokens**: 2991
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect progress log and PRD entry for US-076 $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-076" -A3 tasks/prd-open-world-engine.md | h...
+[94m[Bash][0m List benchmark tool files and stress references $ grep -rn "render_stress\|stress" --include=*.cpp --include=*.hpp --include=*.txt --include=*.json --...
+[94m[Bash][0m Check mtimes, PRD story text, and placement code $ stat -c '%y %n' tools/benchmark/src/render_stress.cpp benchmarks/workload_expected.json benchmarks/m...
+US-076 is not complete, and I did not change anything or rerun the benchmark or gates this pass. The source (`render_stress.cpp`, 04:15:43) and the workload and manifest files are unchanged since the last recorded runs, so those results still describe the tree.
+
+**What is stuck (needs your decision):**
+
+1. **Triangle floor and frame budget fail on placement.** `render_stress` submits 312,068 triangles at the route start, but the contract in `benchmarks/manifest.json` requires `min_submitted_triangles_indexed_start_frame: 2000000`. Frame time is p99 35–47 ms against the 16.7 ms budget. The fix is in the scene content (instance placement, mesh triangle density, or camera route), and it would change the seeded workload. That means bumping `kWorkloadVersion` (currently 1) and regenerating `benchmarks/workload_expected.json`. I have not made that change because it alters a fixed benchmark contract. Approve it, or tell me to keep the contract and accept a failing measured run.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so `ENGINE_FSR2_AVAILABLE` stays off. This needs a vendoring route picked by you.
+3. **Native Linux Vulkan GPU and `linux-gcc` were not run.** This is an environment gap, not a code problem. Local GCC 9.4 cannot build Jolt, and WSL has no usable Vulkan device.
+
+**What is not blocked:** the mesh-shader fallback and the per-path counters are implemented and recorded, and the eight `artifacts/bench/us076-*` reports exist. The Windows and Linux quality gates were run in earlier passes, and nothing since has invalidated them.
+
+**Recommendation:** approve the placement fix for item 1, since the story cannot honestly pass while the scene misses its own contract. Then decide item 2. If you would rather close US-076 as measured, say so and I will record the failing floor and budget as the result instead of changing the workload.
+
+I have not appended another no-op status entry to `.ralph-tui/progress.md`, and I am not emitting the COMPLETE signal.

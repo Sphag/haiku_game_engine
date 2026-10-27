@@ -1,0 +1,53 @@
+# Iteration 1008 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:48:20.462Z
+- **Ended At**: 2026-10-26T15:50:39.643Z
+- **Duration**: 2m 19s
+- **Input Tokens**: 56
+- **Output Tokens**: 4548
+- **Total Tokens**: 4604
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any `all_features` work already exists.
+[94m[Bash][0m Check progress log and search for all_features $ ls
+The progress log shows this story has been re-checked many times with the same blockers. I'll verify those blockers are still true before deciding whether anything is actionable.
+[94m[Bash][0m Verify blocker state for US-079 $ grep -rl "all_features" tools engine tests 2>/dev/null | head
+There are `all_features` test files in `tests/src` that the progress log doesn't mention. I'll check what they cover.
+[94m[Bash][0m Inspect all_features test files $ grep -n "TEST_CASE" tests/src/all_features_*.cpp | head -30
+Substantial CPU tests exist that the log never recorded. I'll check whether they build and pass on Linux.
+[94m[Bash][0m Build Linux debug preset $ timeout 590000 cmake --build --preset linux-debug 2>&1 | tail -15
+[94m[Bash][0m Build engine tests and check for errors $ find build/linux-dev -name engine_tests -type f | head -2
+[94m[Bash][0m Run all_features CPU tests on Linux $ timeout 300000 build/linux-dev/tests/Debug/engine_tests --list-tests "[integration]" 2>/dev/null | g...
+[94m[Bash][0m Run integration and editor CPU suites on Linux $ timeout 500000 build/linux-dev/tests/Debug/engine_tests --suite editor 2>&1 | tail -5
+The CPU suites pass on Linux, including the `all_features` integration tests. I'll record that in the progress log, since the existing entries don't mention these tests.
+[94m[Bash][0m Append verification entry to progress log $ (3) a Windows GUI session for the tour, GI/RT/upscale profiles, forced geometry paths, and the live ...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. The CPU test layer is in place and passes on Linux, but the scene, the GPU and GUI checks, and the benchmark contract are still open.
+
+**Verified this pass (Linux):**
+- `cmake --build --preset linux-debug` returns rc 0 with no errors or warnings.
+- `engine_tests --suite integration`: 135 cases, 131 passed, 4 skipped, 1766/1766 assertions. This includes the `all_features` integration tests in `tests/src/all_features_tests.cpp`.
+- `engine_tests --suite editor`: 106 cases, all passed. This includes `tests/src/all_features_editor_tests.cpp`.
+
+The earlier progress entries never mentioned these two test files. I appended a status entry to `.ralph-tui/progress.md` that records them.
+
+**Still open:**
+- **`samples/all_features` does not exist.** The combined scene is not built, so the tour, the editor scenario run, and the Play/package/relaunch flow cannot run on it yet.
+- **Benchmark contract not approved.** `benchmarks/manifest.json` has `all_features` as `implementation: none`. Its route, `all_features_route_v1`, is still a proposal (line 152). It fixes the benchmark contract, so it needs your approval before I implement it.
+- **FSR 2 permutation headers are missing.** `third_party/fsr2` has none, so the `full_1080` profile is unsupported. Either vendor the headers or decide to leave that profile unsupported.
+- **Not run:** GI/RT/upscale profiles, forced geometry paths, the linux-asan clean run, linux-gcc, `engine_bench` acceptance, the DX12/Vulkan GPU suites, and the live GUI editor run with screenshots. These need a Windows GUI session and the GPU hardware.
+
+**Needed from you:**
+1. Approve `all_features_route_v1`, or give the changes you want.
+2. Vendor the FSR 2 permutation headers, or confirm `full_1080` stays unsupported.
+3. Run a Windows GUI session for the tour, the GPU profiles, and the live editor run.

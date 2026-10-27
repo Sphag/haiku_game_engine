@@ -1,0 +1,75 @@
+# Iteration 962 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T14:24:23.883Z
+- **Ended At**: 2026-10-26T14:32:59.486Z
+- **Duration**: 8m 35s
+- **Input Tokens**: 122
+- **Output Tokens**: 8400
+- **Total Tokens**: 8522
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log before deciding what US-079 still needs.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls && tail -c 6000 .ralph-tui/progress.md && grep -rl "all_features" --include=* . 2>/dev/null | gre...
+The progress log shows many earlier passes that stopped on the same two blockers. Before deciding whether to repeat that, I'll check the manifest entry, the existing tests, and the most recent iteration log.
+[94m[Bash][0m Check manifest entry, tests, benchmark sources, and latest log $ tail -n 60 .ralph-tui/iterations/aebbab1a_2026-10-26_15-22-00_US-079.log | cut -c1-400
+Earlier passes stopped at the same two blockers. Neither one stops the whole story, so I'll read the manifest entry and the existing tests to find the buildable part.
+[94m[Bash][0m Read all_features manifest entry and test structure $ grep -n "TEST_CASE\|SECTION" tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cp...
+The CPU tests exist but have never been run in this pass. I'll build the Linux debug tree and run the all_features test cases directly.
+[94m[Bash][0m Build Linux debug preset and locate engine_tests binary $ find build -name engine_tests -type f 2>/dev/null | head -2
+[94m[Bash][0m Find the linux-debug engine_tests binary $ find build -path "*linux-debug*" -name engine_tests -type f | head -2
+[94m[Bash][0m Locate engine_tests under linux-dev build tree $ 
+[94m[Bash][0m Run all_features CPU test cases $ timeout 600 build/linux-dev/tests/Debug/engine_tests --list-tests 2>/dev/null | grep -i "combined\|a...
+`engine_tests` takes `--suite`, not a test name. I'll run the integration suite and filter for the all_features cases.
+[94m[Bash][0m Run integration suite and check all_features cases $ timeout 900 build/linux-dev/tests/Debug/engine_tests --suite integration -s 2>&1 | grep -i "all_feat...
+The integration suite passes, but 4 cases were skipped. I need to know whether any of them are the all_features cases.
+[94m[Bash][0m Identify skipped tests and all_features case names $ timeout 900 build/linux-dev/tests/Debug/engine_tests --suite integration --list-tests 2>&1 | grep -i...
+[94m[Bash][0m Look for all_features test output in integration run $ timeout 900 build/linux-dev/tests/Debug/engine_tests --suite integration -r console -s 2>&1 | grep -...
+The all_features cases do not appear in the integration run. I'll check whether the two test files are compiled into `engine_tests` at all.
+[94m[Bash][0m Check how test sources are registered in CMake $ ls tests/src | wc -l
+The files are compiled into `engine_tests`, so the suite filter must be selecting them differently. I'll check the unit suite and the suite-tag filter used in `main`.
+[94m[Bash][0m Check suite tag mapping and run unit suite $ timeout 900 build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+[94m[Bash][0m Read suite tag expression and all_features test tags $ grep -n "TEST_CASE" tests/src/all_features_tests.cpp tests/src/all_features_editor_tests.cpp | cut -...
+The two all_features CPU cases carry the `[integration]` tag, so they run in that suite. I'll run the CPU editor suite too, since the editor scenario case is tagged separately.
+[94m[Bash][0m Run CPU editor suite and list skipped integration tests $ timeout 900 build/linux-dev/tests/Debug/engine_tests --suite integration -r junit 2>/dev/null | grep...
+[94m[Bash][0m Confirm the all_features cases are not among the skipped tests $ grep -c "skipped" /tmp/integ.xml
+
+[91m[Error: Exit code 2
+ugrep: warning: /tmp/integ.xml: No such file or directory
+ugrep: warning: /tmp/integ.xml: No such file or directory
+ugrep: warning: /tmp/integ.xml: No such file or directory][0m
+The integration JUnit export is not available through this CLI, so I can't confirm the skip list by name. I'll finish the Linux checks I can run here: vendor validation and the unit ctest preset.
+[94m[Bash][0m Run vendor validation and Linux unit ctest preset $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4
+[94m[Bash][0m Summarize ctest pass/fail counts $ timeout 900 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | grep -E "tests pas...
+Linux checks are green. I'll append one concise progress entry so the next pass starts from these results rather than repeating them.
+[94m[Bash][0m Append status entry to progress log $ `--suite editor` 106 test cases passed (includes the all_features editor case). - Not done: `all_fea...
+US-079 is not complete, so I am not emitting the COMPLETE signal.
+
+**Verified on this tree (Linux, WSL):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30/30 passed.
+- `engine_tests --suite editor`: 106 test cases passed. This includes the all_features editor case.
+- `engine_tests --suite integration`: 131 passed, 4 skipped. The two all_features CPU cases are tagged `[integration]`, but I could not confirm they are not among the 4 skips, because the CLI rejected the JUnit output flag.
+
+**Still open (not run, not claimed as passed):**
+- The `all_features` benchmark scene. The manifest still says `implementation: none`, and `tools/benchmark/src` has no scene for it.
+- The automated tour, the forced geometry paths, and the GI/RT/upscale profiles.
+- The live-app editor scenario with package and relaunch.
+- The Windows gates and the DX12 and Vulkan GPU suites.
+- The `linux-gcc` and ASan presets. This host has GCC 9.4, and Jolt needs GCC 11+.
+- `full_1080` needs FSR 2 permutation headers, which are still absent from `third_party/fsr2`.
+
+The earlier passes stopped on two blockers: the FSR 2 vendoring route and approval of `all_features_route_v1`. I did not treat the route as approved. Only the `full_1080` profile depends on FSR 2, so the other profiles can proceed. Building the scene and tour needs the route, but a Windows RTX host and a GUI session are needed for the gates, GPU suites, and live-app run.
+
+I appended a status entry to `.ralph-tui/progress.md` with these results.

@@ -1,0 +1,43 @@
+# Iteration 1017 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:02:35.384Z
+- **Ended At**: 2026-10-26T16:02:57.281Z
+- **Duration**: 21s
+- **Input Tokens**: 28
+- **Output Tokens**: 2853
+- **Total Tokens**: 2881
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD constraints for US-079, and whether `all_features` already exists.
+[94m[Bash][0m Check progress log and existing all_features references $ grep -rn "all_features" --include=*.txt --include=*.cmake --include=*.json --include=*.cpp --include...
+[94m[Bash][0m Read US-079 PRD section and benchmark layout $ ls benchmarks 2>/dev/null
+The log shows US-079 has been re-checked many times with no source change, and the blockers have not moved. I'll confirm the tree is unchanged since the last gate run, then record this pass.
+[94m[Bash][0m Recheck samples dir, FSR2 headers, manifest, and newer files $ find engine tools tests benchmarks docs cmake -newer tests/src/all_features_editor_tests.cpp -type f...
+[94m[Bash][0m Append status entry to progress log $ (3) a Windows GUI session for the tour and the live editor run with package/relaunch. - Stop: no COM...
+US-079 is not complete, and I did not emit the COMPLETE signal. Nothing new was built or tested in this pass.
+
+**What exists:**
+- The `all_features` workload comes from the table, and `all_features_tests.cpp` checks it against `benchmarks/workload_expected.json`.
+- `all_features_editor_tests.cpp` covers scene, material, animation, and terrain edits with undo/redo, Play/Stop, and a Build Game verify step, each as a separate CPU test.
+- The last recorded gate runs are Linux (check 94) and Windows (check 97). Both passed, with 29 Windows unit tests and the Linux unit and integration labels.
+
+**What is still open, and why I can't close it from here:**
+1. **The `all_features` scene and route are not defined.** `benchmarks/manifest.json` still has `implementation: none`, and `all_features_route_v1` is a proposal. It fixes the benchmark contract, so it needs your approval.
+2. **`full_1080` cannot link.** `third_party/fsr2` has no `*_permutations.h` files, so the GI/RT/upscale profiles and the `full_1080` profile cannot run. You either vendor the headers or decide to leave that profile unsupported.
+3. **The tour, package relaunch, and GUI checks need a Windows GUI session.** The screenshots, action log, and live editor run with package and relaunch cannot be produced in this WSL environment.
+4. **Not run:** `engine_bench --suite acceptance`, the native Linux Vulkan GPU suite, the `linux-gcc*` presets (the host has GCC 9.4 only), and the sanitizer presets.
+
+`benchmarks/manifest.json` is newer than the last editor test file. I did not inspect what changed, so the recorded gate results may not describe the current manifest.
+
+I appended a status entry to `.ralph-tui/progress.md` recording these points.

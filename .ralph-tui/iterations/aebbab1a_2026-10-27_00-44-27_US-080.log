@@ -1,0 +1,70 @@
+# Iteration 1189 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:44:27.663Z
+- **Ended At**: 2026-10-26T21:50:02.096Z
+- **Duration**: 5m 34s
+- **Input Tokens**: 116
+- **Output Tokens**: 7351
+- **Total Tokens**: 7467
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-080 depends on in the repo.
+[94m[Bash][0m Read progress log tail and list artifacts $ ls artifacts/bench 2>/dev/null | head -50
+[94m[Bash][0m Find US-079/080 notes and performance contract $ grep -n -i "performance contract" -A30 tasks/prd-open-world-engine.md | head -80
+The log shows 80 prior status checks that each stopped at the same blockers. Before stopping again, I'll check whether those blockers are still real.
+[94m[Bash][0m Check manifest workload status and GPU devices $ nvidia-smi --query-gpu=name,driver_version --format=csv 2>&1 | head -3
+[94m[Bash][0m Show manifest entries with unimplemented workloads $ sed -n 78,140p benchmarks/manifest.json
+[94m[Bash][0m Check benchmark sources for remaining scenes $ grep -n "US-07[89]" .ralph-tui/progress.md | head -5
+Three of the four unimplemented scenes have source files but the manifest still marks them `none`, and `all_features` has no source at all. Those are real blockers. The Windows quality gates are runnable from WSL, so I'll check the saved procedure for them.
+[94m[Bash][0m Read Windows gate run procedure from memory $ ls /mnt/d/dev/haiku_game_engine/build 2>/dev/null | head
+I'll run the four Windows gates as a batch, after confirming no earlier batch is still running.
+[94m[Bash][0m Check for stale batches and write Windows gate batch $ echo written
+The Temp directory already holds earlier US-080 batch files. I'll check the vcvars path that the earlier batch used, since I guessed it.
+[94m[Bash][0m Check earlier batch vcvars path and prior results $ cat us080_rc.txt | tr -d '\r'
+The vcvars path matches. A prior batch from Oct 26 passed all four gates, but I'll rerun them against the current tree. No batch is running, so I'll launch it in the background.
+[94m[Bash][0m Launch Windows gate batch in background $ echo started
+While the batch runs, I'll check whether the manifest's `none` markers are stale, meaning the scenes are wired in code but not in the manifest.
+[94m[Bash][0m Check how benchmark main wires scenes $ wc -l tools/benchmark/src/*.cpp | tail -1
+The launch wrapper returned at once, so I'll check the batch's result file to see whether the gates actually ran.
+[94m[Bash][0m Poll Windows gate batch results $ ps -eo pid,args | grep "us080_gate.bat" | grep -v grep | head -2
+[94m[Bash][0m Wait for Windows unit test step to finish $ cat us080_gate_done.txt 2>/dev/null
+[94m[Bash][0m Check Windows gate results after wait $ cat us080_gate_done.txt 2>/dev/null
+All four Windows gates exit 0. I'll confirm the ctest log actually ran the tests rather than an empty set.
+[94m[Bash][0m Check ctest summary and build error count $ tr -d '\r' < us080_build.log | grep -ci "error"
+The Windows gates pass with real tests. I'll record this run in the progress log, then stop, since the performance acceptance is still blocked.
+[94m[Bash][0m Append US-080 status entry to progress log $ 0 FSR 2 `*_permutations.h`. - Stop: no COMPLETE signal. Remaining: wire `all_features`, decide the F...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. The Windows quality gates pass on the current tree, but the performance acceptance cannot run yet.
+
+**Passing now**
+- Windows gates, run through `cmd.exe` in one batch, all exit 0:
+  - `cmake -P cmake/ValidateVendor.cmake`
+  - `cmake --preset win-dev`
+  - `cmake --build --preset win-debug` (no error lines in the log)
+  - `ctest --preset win-unit --output-on-failure --no-tests=error` (28 integration tests, 1 unit test)
+- The Linux gates passed on this host in the previous status check. I did not rerun them this session.
+
+**Blocking the rest of US-080**
+- **`all_features` has no implementation.** There is no source file for it, and the manifest marks it `none`.
+- **Three scenes are marked `none` in the manifest but have source.** `render_stress`, `physics_stress`, and `streaming_stress` are still `none`. `tools/benchmark/src/main.cpp` also refuses the physics and streaming visual paths, so those scenes cannot produce a valid acceptance run yet.
+- **No native Linux Vulkan device.** `/dev/dri` is absent under WSL, so the native Linux/Vulkan reports need the RTX 5080 reference machine.
+- **FSR 2 is not built.** The vendored tree has 0 `*_permutations.h` files. Vendoring that is a decision for you.
+- **No acceptance reports exist.** `artifacts/bench` holds only partial runs, not the 3 × 180 s batches the contract requires.
+
+**Decisions I need from you**
+1. Whether to implement `all_features` and wire the three `none` scenes, or narrow the contract. I won't reduce the workload or settings to get a pass.
+2. The FSR 2 vendoring route.
+3. Who runs the native Linux Vulkan and Windows acceptance batches on the RTX 5080. They take hours and need that machine.
+
+I appended the status and the Windows gate results to `.ralph-tui/progress.md`. No commits were made.
+That background task was the wait I started earlier to watch the Windows gate batch. The batch had already finished and I read its results before writing the progress entry, so nothing changes. The Windows gates stand as I reported: vendor, configure, build, and `win-unit` all exit 0. US-080 is still not complete. The performance acceptance is blocked by the unimplemented `all_features` scene, the three scenes the manifest still marks `none`, the missing native Linux Vulkan device, and the unvendored FSR 2 permutations. I need your decisions on those before the RTX 5080 acceptance batches can run.

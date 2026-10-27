@@ -1,0 +1,39 @@
+# Iteration 792 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:45:57.123Z
+- **Ended At**: 2026-10-26T02:46:11.622Z
+- **Duration**: 14s
+- **Input Tokens**: 22
+- **Output Tokens**: 1880
+- **Total Tokens**: 1902
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress notes and US-076 PRD section $ tail -n 80 .ralph-tui/progress.md && ls tools/benchmark/src && grep -n "US-076" -A3 tasks/prd-open-w...
+[94m[Bash][0m Check mtimes of benchmark sources and latest artifacts $ ls -t artifacts/bench 2>/dev/null | head -3
+[94m[Bash][0m Append status entry to progress log $ native Linux Vulkan GPU and linux-gcc not run. - No COMPLETE signal. --- EOF tail -n 3 .ralph-tui/pr...
+US-076 is still blocked on your decisions, so I'm not signalling COMPLETE. Nothing in the tree changed in this pass, and I did not rerun the gates.
+
+**What's blocking it:**
+
+1. **Route-start triangle floor and frame budget.** The acceptance contract needs at least 2,000,000 submitted triangles on the indexed path at the start frame. The current placement gives 312,068. Frame times are p99 35–47 ms against a 16.7 ms budget. Fixing this means changing the fixed workload: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and update the manifest's pinned route hash. PRD line 722 reserves this for your decision. Your options are:
+   - approve the placement change, or
+   - accept the failing measured run as the result.
+2. **full_1080 profile.** It is unsupported until the vendored FSR 2 permutation headers exist. Choosing how to vendor them is your call.
+3. **Native Linux Vulkan GPU run and linux-gcc gate.** Neither has run. WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What I checked:**
+- Source and workload mtimes are unchanged since the last recorded run.
+- `engine_workload --check` in the previous pass reported all 4 scenes matching, and `linux-unit` passed 30/30 in the previous pass.
+
+I appended a status entry to `.ralph-tui/progress.md`. Once you pick an option for item 1, I can make the change, rerun the benchmarks and gates, and then finish the story.

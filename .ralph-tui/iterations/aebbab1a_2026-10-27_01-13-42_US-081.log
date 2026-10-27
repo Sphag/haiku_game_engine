@@ -1,0 +1,95 @@
+# Iteration 1230 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T22:13:42.328Z
+- **Ended At**: 2026-10-26T22:38:05.826Z
+- **Duration**: 24m 23s
+- **Input Tokens**: 142
+- **Output Tokens**: 8549
+- **Total Tokens**: 8691
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root and progress log $ wc -l README.md tasks/prd-open-world-engine.md 2>/dev/null
+[94m[Bash][0m List presets and acceptance doc open items $ grep -n -i 'open\|not run' docs/acceptance.md | head -40
+[94m[Bash][0m Start linux-release configure and build in background $ tail -3 /tmp/us081_rel_cfg.log
+[94m[Bash][0m Check release build progress $ cat /tmp/us081_rel_status.txt 2>/dev/null
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: tail -3 /tmp/us081_rel_cfg.log tail -3 /tmp/us081_rel_build.log cat /tmp/us081_rel_status.txt. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check release build progress $ echo done-check
+[94m[Bash][0m Check whether release build is running $ ls -la /tmp/us081_rel_* 2>/dev/null
+[94m[Monitor][0m Wait for linux-release build to finish $ tail -5 /tmp/us081_rel_cfg.log
+[94m[Monitor][0m Wait for linux-release build to finish $ cat /tmp/us081_rel_status.txt
+[94m[Monitor][0m Wait for linux-release build to finish $ cat /tmp/us081_rel_status.txt
+[94m[ScheduleWakeup][0m
+The Linux release build is running in the background. Docs and the Linux debug, unit, and vendor gates were already recorded in an earlier pass. I'll record the release result when it finishes.
+
+**Status so far (US-081 is not signed off):**
+- Written: `README.md`, `docs/architecture.md`, `docs/schemas.md`, `docs/vendor.md`, `docs/capability-matrix.md`, `docs/acceptance.md`. Benchmark reproduction is in the existing `docs/benchmarks.md`.
+- Passed earlier: Linux `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (30/30); Windows `ValidateVendor`, `win-dev`, `win-debug`, `win-unit` (29/29).
+- Running now: `cmake --build --preset linux-release`, log at `/tmp/us081_rel_build.log`.
+- Still open and recorded as `not run` in `docs/acceptance.md`: linux-gcc (local GCC 9.4 cannot build Jolt), the ASan/sanitize gate, the win-release build, GPU suites (DX12 and Vulkan on Windows, Vulkan on native Linux), editor suite and visual smoke tests, the clean-copy offline build, clean-directory package smoke tests, and the full acceptance benchmark. This machine has no native Linux Vulkan device, and the RTX 5080 is visible only under WSL.
+
+I'll wake when the release build finishes, then update the acceptance page and the progress log.
+[94m[Bash][0m Find the failing step in the release build log $ grep -n -B2 -A12 'FAILED' /tmp/us081_rel_build.log | head -80
+The release build failed on a real first-party error: `core_assert_tests.cpp` does not compile under NDEBUG. I'll look at it and fix it.
+[94m[Bash][0m Read the failing assert test and macro $ sed -n 25,45p engine/core/include/engine/core/assert.hpp
+The release-only breakage is in the test itself: `ENGINE_DEBUG_ASSERT` expands to a statement, so it cannot sit inside `CHECK_NOTHROW`, and the helper's `never` variable becomes unused. I'll guard both pieces with `NDEBUG`.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_assert_tests.cpp[0m edit: "void failing_debug_assert() {
+    volatile bool ne..." → "#ifndef NDEBUG
+void failing_debug_assert() {
+    v..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/core_assert_tests.cpp[0m edit: "#ifdef NDEBUG
+    CHECK_NOTHROW(ENGINE_DEBUG_ASSER..." → "#ifdef NDEBUG
+    // The macro expands to a statem..."
+[94m[Bash][0m Rebuild linux-release in background after fix $ echo "release=$?" > /tmp/us081_rel_status.txt) > /dev/null 2>&1 & echo started
+[94m[Monitor][0m Wait for release rebuild after fix $ grep -n 'error' /tmp/us081_rel_build2.log | head -20
+[94m[ScheduleWakeup][0m
+The release build failed on its first run. The cause was a compile error in a test, not the engine. I fixed the test and the release build is running again.
+
+- **Cause:** `tests/src/core_assert_tests.cpp` used `ENGINE_DEBUG_ASSERT` inside `CHECK_NOTHROW`. Under `NDEBUG` that macro expands to a statement, so it does not compile there. The helper `failing_debug_assert` also left a variable unused, which `-Werror` rejects.
+- **Fix:** the helper is now compiled only when `NDEBUG` is not defined. The release branch calls the macro directly and checks that execution reaches the next line.
+- **Status:** `linux-release` rebuild in progress, log at `/tmp/us081_rel_build2.log`. The debug build and the earlier unit run do not cover this release-only path, so the release result is the real check.
+
+Still open: the Windows release build, the ASan gate, the GPU and editor suites, the clean-directory checks, and the full acceptance benchmark. None of those has run yet. I'll update `docs/acceptance.md` and the progress log once the release build and its ctest finish.
+[94m[Bash][0m Run release unit tests via ctest $ timeout 590 ctest --preset linux-release-unit --output-on-failure --no-tests=error 2>&1 | tail -8
+Release build passes and release unit tests pass 30/30. Recording it in the acceptance page and the progress log.
+[94m[Bash][0m Find release gate rows in acceptance doc $ grep -n 'win-release\|linux-release' docs/acceptance.md
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/docs/acceptance.md[0m edit: "| `cmake --build --preset win-release`, `cmake --b..." → "| `cmake --build --preset win-release` | Windows |..."
+[94m[Bash][0m Update acceptance row and append progress log $ `ctest --preset linux-release-unit` passed 30 of 30. Recorded in `docs/acceptance.md`. - Still not r...
+US-081 is not complete. The Linux release gate now passes, but several acceptance items remain unrun.
+
+**What changed this round**
+- The first `linux-release` build failed. `tests/src/core_assert_tests.cpp` used `ENGINE_DEBUG_ASSERT` inside `CHECK_NOTHROW`, which does not compile when `NDEBUG` is set. The helper it called also left an unused variable, which `-Werror` rejects. I guarded the helper with `#ifndef NDEBUG` and made the release branch call the macro directly.
+- After the fix, `cmake --build --preset linux-release` passed and `ctest --preset linux-release-unit` passed 30 of 30.
+- `docs/acceptance.md` now records the Linux release result, and `.ralph-tui/progress.md` has a new entry for this pass.
+
+**Still not run**
+- `win-release` build on Windows.
+- `linux-gcc`. The local GCC 9.4 cannot build Jolt.
+- `linux-asan` and `linux-sanitize`.
+- The GPU suites: DX12 and Vulkan on Windows, and Vulkan on native Linux. This machine has no native Linux Vulkan device, and the RTX 5080 is visible only under WSL.
+- The editor suite and visual smoke tests on both operating systems.
+- The clean-copy offline build and the clean-directory package smoke tests.
+- The full acceptance benchmark.
+
+The earlier Windows gates (`ValidateVendor`, `win-dev`, `win-debug`, `win-unit`) passed before this round. I did not re-run them after the test fix, so the Windows debug and unit results predate it. The Linux debug and unit results also predate it, though the release unit run covers the same test files.
+[94m[Bash][0m Confirm release status, build log, and recorded results $ grep -c 'linux-release gate' .ralph-tui/progress.md
+The release build passed, and I had already run its ctest and recorded the results. I re-checked the evidence just now:
+
+- `/tmp/us081_rel_status.txt` reads `release=0`.
+- `/tmp/us081_rel_build2.log` ends at `[112/112] Linking ... engine_tests`.
+- `ctest --preset linux-release-unit` passed 30 of 30 (run earlier this session).
+- `docs/acceptance.md` line 110 records the Linux release build and unit result.
+- `.ralph-tui/progress.md` has the "linux-release gate" entry.
+
+No further changes were needed. US-081 is still not complete: the Windows release build, ASan and sanitize, the GPU and editor suites, the clean-directory checks, and the full benchmark remain open, as listed in the last reply.

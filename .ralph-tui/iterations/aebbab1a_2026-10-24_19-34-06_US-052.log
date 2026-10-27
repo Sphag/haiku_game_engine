@@ -1,0 +1,43 @@
+# Iteration 277 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T16:34:06.801Z
+- **Ended At**: 2026-10-24T16:34:24.616Z
+- **Duration**: 17s
+- **Input Tokens**: 26
+- **Output Tokens**: 2306
+- **Total Tokens**: 2332
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the US-052 work against the progress log and the physics sources.
+[94m[Bash][0m Check progress log and physics module state $ git status 2>&1 | head -5
+The log shows US-052 stuck at Partial across many rechecks, with the `linux-gcc` gate blocked on a missing GCC 11+. I'll check whether the toolchain or sources have changed since the last pass.
+[94m[Bash][0m Check compilers, file times, and bench target $ grep -n "engine_bench" -r --include=CMakeLists.txt . | grep -v third_party | head -3
+[94m[Bash][0m Append no-change status entry to progress log $ no `/opt` compiler, no conda/micromamba/docker. `linux-gcc*` stays blocked (Jolt needs GCC 11+). - B...
+US-052 is still Partial, so I'm not signalling completion. Nothing has changed since the last pass, and the two blockers are outside what I can fix here.
+
+**Blocked:**
+- **`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`:** Jolt needs GCC 11+ (`__builtin_bit_cast`). `/usr/bin` still has only g++-9, gcc-9 and clang++-10, and there is no `/opt` compiler, conda, micromamba or docker. Installing g++-11 needs sudo, and sudo asks for a password here.
+- **`engine_bench --suite acceptance`:** there is no `engine_bench` target in a non-vendored CMakeLists.txt. The benchmark harness belongs to US-074.
+
+**Already passing, from earlier passes in the log:**
+- Linux clang: `ValidateVendor`, `linux-dev`, `linux-debug` build with no warnings, and `linux-unit` ctest (22 of 22).
+- Windows: the gates recorded as passing in the physics memory entry.
+
+I did not re-run the gates this pass, because the sources have not changed since the last run (file times 13:05–13:13).
+
+I appended a short no-change entry to `.ralph-tui/progress.md`. I did not make any source changes.
+
+To finish the story, one of these is needed:
+1. Install g++-11 or newer (or run the `linux-gcc` jobs in CI), then run the three `linux-gcc` presets.
+2. Decide where the benchmark gate belongs, since US-074 has to supply the `engine_bench` target before the acceptance run can happen.

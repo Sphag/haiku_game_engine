@@ -1,0 +1,37 @@
+# Iteration 371 Log
+
+## Metadata
+
+- **Task ID**: US-054
+- **Task Title**: Character and Constraints
+- **Description**: As a game creator, I want a controllable character and joints so that I can build basic gameplay.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T22:39:45.654Z
+- **Ended At**: 2026-10-24T22:40:00.896Z
+- **Duration**: 15s
+- **Input Tokens**: 18
+- **Output Tokens**: 1925
+- **Total Tokens**: 1943
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo state and progress log $ git status 2>&1 | head -5
+[94m[Bash][0m Check for newer source files and available compilers $ grep -n "engine_bench" -r --include=CMakeLists.txt . | grep -v third_party | head -3
+US-054 is still **Partial**, and I'm not signalling COMPLETE.
+
+I didn't change any code this pass. The tree is unchanged since the last recorded Linux and Windows runs: no file under `engine/`, `tests/`, `cmake/` or `docs/` is newer than `.ralph-tui/progress.md`. I also didn't append another identical status entry, because the log already has 17 of them.
+
+**Still open, and not fixable in this environment:**
+- **`linux-gcc` gate.** `/usr/bin` has only GCC/G++ 9 and clang/clang++ 10. Jolt needs GCC 11+ (`__builtin_bit_cast`), and `sudo` needs a password, so I can't install a newer toolchain. The `linux-gcc` configure, build and `linux-gcc-unit` steps can only run in the CI job.
+- **Acceptance benchmark.** No `engine_bench` target exists in any CMakeLists. That harness is US-074, and the `physics_stress` scene is US-077.
+- **`linux-sanitize`.** It passed 22 of 22 on the last run. One earlier run failed three X11 focus checks under ctest; I could not reproduce that, and it's recorded as timing-dependent on this host.
+
+**Passing on the current tree (from the log):**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, `linux-unit` 22 of 22, and `linux-asan`/`linux-sanitize` 22 of 22 (the latest sanitizer run).
+- Windows: the last pass was 21 of 21, and no source has changed since.
+
+Two things would move this to COMPLETE: a CI run of the `linux-gcc` job on a machine with GCC 11+, and the US-074 benchmark harness, which the performance criterion depends on. Until then the story stays Partial, and I'd rather report that than mark it done.

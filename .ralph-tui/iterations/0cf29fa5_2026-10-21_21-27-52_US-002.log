@@ -1,0 +1,53 @@
+# Iteration 2 Log
+
+## Metadata
+
+- **Task ID**: US-002
+- **Task Title**: Library Dependency Sources
+- **Description**: As a developer, I want all dependencies delivered with the repository so that I can build offline.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-21T18:27:52.762Z
+- **Ended At**: 2026-10-21T18:32:50.492Z
+- **Duration**: 4m 57s
+- **Input Tokens**: 84
+- **Output Tokens**: 5493
+- **Total Tokens**: 5577
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m List repo root and read progress notes $ ls -la && cat .ralph-tui/progress.md 2>/dev/null | head -300 && wc -l tasks/prd-open-world-engine.md
+[94m[Bash][0m Read the PRD $ cat tasks/prd-open-world-engine.md
+The progress log already has a US-002 entry, so this may be a verification pass. I'll check the story text, the manifest, and the validator.
+[94m[Bash][0m Inspect US-002 PRD section and vendor layout $ print(m.keys() if isinstance(m,dict) else len(m))"
+The earlier entry claims the work is done. I'll verify it against the acceptance criteria, starting with the manifest fields and the Linux gates.
+[94m[Bash][0m Check manifest fields and run Linux vendor validator $ (time cmake -P cmake/ValidateVendor.cmake) 2>&1 | tail -15
+Validator passes on Linux (26 deps, 8,459 files). Next I'll check the PRD catalog against the manifest, confirm there are no network fetch sites, and run the Linux configure, build, and tests.
+[94m[Bash][0m Check catalog list and search for network fetch hooks $ echo done
+[94m[Bash][0m Read the dependency catalog section of the PRD $ sed -n 818,915p tasks/prd-open-world-engine.md
+The catalog's stb entries and the Dear ImGui docking pin need a check. I'll also start the Linux configure and build in the background.
+[94m[Bash][0m Check stb, ImGui, Assimp catalog coverage $ grep -n "stb\|Assimp" tools/vendor/vendor.py | head -20
+[94m[Bash][0m Check ImGui docking, stb deprecated, Assimp contrib coverage $ ls third_party/assimp | head -30
+The catalog coverage looks right. Now the Linux configure, build, and unit tests.
+[94m[Bash][0m Run Linux dev configure, debug build, and unit tests $ tail -25 /tmp/us002_linux.log
+Linux gates pass (8/8). Next are the Windows gates, using the `.bat` approach recorded in the progress notes.
+[94m[Bash][0m Run Windows gates via generated batch file $ tail -30 /tmp/us002_win.log
+Windows gates pass. I'll confirm the validator line in the Windows log, remove the temporary `.bat` I created outside the repo, and record this verification in the progress log.
+[94m[Bash][0m Confirm validator result, delete temp gate script, check progress tail $ cd haiku_game_engine && tail -5 .ralph-tui/progress.md
+[94m[Bash][0m Append US-002 verification entry to progress log $ no source changes were needed. - Gates passed: Linux `ValidateVendor.cmake`, `linux-dev`, `linux-deb...
+US-002 checks out. The vendor set was already in place from an earlier pass, and I re-verified it on both operating systems without changing any source.
+
+**Gates (all pass):**
+- Linux: `ValidateVendor.cmake` (26 dependencies, 8,459 files), `linux-dev`, `linux-debug`, and `linux-unit` (8/8).
+- Windows (MSVC, VS 18 Community): `ValidateVendor.cmake`, `win-dev`, `win-debug`, and `win-unit` (8/8). I ran these through a temporary `.bat` outside the repo and deleted it afterwards.
+
+**Not run:** the ASan/sanitizer, `linux-gcc`, and CI jobs. The story is vendor-only and changes no runtime, memory, ECS, jobs, streaming, Lua, or physics code, so they don't apply here. GPU, GUI, and benchmark checks were not run either.
+
+**Gap against the catalog:** the "format fixtures and sample sounds" rows are assets rather than libraries. They are not vendored yet and are deferred to US-075. Roboto (Cyrillic font) is included. If you want those fixtures in this story, that is a separate change.
+
+I appended a verification entry to `.ralph-tui/progress.md`.
+
+<promise>COMPLETE</promise>

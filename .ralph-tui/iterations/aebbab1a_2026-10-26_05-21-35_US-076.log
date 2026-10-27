@@ -1,0 +1,36 @@
+# Iteration 723 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:21:35.677Z
+- **Ended At**: 2026-10-26T02:21:51.098Z
+- **Duration**: 15s
+- **Input Tokens**: 22
+- **Output Tokens**: 1727
+- **Total Tokens**: 1749
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether any US-076 work already exists in the tree.
+[94m[Bash][0m Read progress log and search for render_stress $ git status 2>&1 | head -3
+The log shows this story has been blocked for many passes on the same user decisions. I'll confirm the source and artifact state hasn't changed before deciding whether anything is left to do.
+[94m[Bash][0m Check source mtime and US-076 artifact verdicts $ done
+US-076 is not complete, so I'm not emitting the COMPLETE signal. Nothing changed in this pass: the source and the benchmark artifacts are the same as the last several status checks, and I didn't rerun anything.
+
+**What's stuck (needs your decision):**
+
+1. **Triangle floor and frame budget fail on placement.** The `render_stress` runs measured 312,068 submitted triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against the 16.7 ms budget. The contract's 2M-triangle floor is not met by the current instance placement, which spreads 20,000 instances uniformly over the world. Fixing it means changing the workload: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and likely denser placement near the route. That is a change to the fixed benchmark contract, so I need your approval first. Alternatively, you can accept the failing run as the measured result and close the story on that basis.
+2. **`full_1080` is unsupported.** The vendored FSR 2 permutation headers are missing, so that profile can't run until the vendoring route is chosen (see the FSR project memory).
+3. **Native Linux Vulkan GPU and `linux-gcc` were not run.** These need a native Linux GPU and a GCC 11+ toolchain. WSL and the local GCC 9.4 don't cover them.
+
+**What is done:** the `render_stress` counts match the contract, the indexed, indirect, and meshlet paths run separately on DX12 and Vulkan, `--disable-mesh-shaders` forces the fallback, and disabled features aren't reported as enabled. Eight `artifacts/bench/us076-*` reports exist and postdate the last driver edit (04:15:43). The reports are dated and I did not re-verify their contents here.
+
+**Decision needed:** approve a placement/workload change (which reruns the benchmark and the Windows and Linux gates), or accept the current failing measurement as the outcome of this story.

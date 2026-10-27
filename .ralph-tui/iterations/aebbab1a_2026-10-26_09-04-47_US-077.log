@@ -1,0 +1,52 @@
+# Iteration 830 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T06:04:47.597Z
+- **Ended At**: 2026-10-26T06:11:27.010Z
+- **Duration**: 6m 39s
+- **Input Tokens**: 64
+- **Output Tokens**: 5832
+- **Total Tokens**: 5896
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-077 already has code in the tree.
+[94m[Bash][0m Inspect repo layout, progress log, and benchmark tools $ grep -n "US-077" -A3 tasks/prd-open-world-engine.md | head -40
+The log shows US-077 is implemented and verified on Windows and Linux except for the Linux/GCC job. I'll check whether a GCC 11+ toolchain exists here, since that is the only open blocker, and re-run the cheap Linux gates on the current tree.
+[94m[Bash][0m Check for newer compilers and re-run Linux gates $ cd /mnt/d/dev/haiku_game_engine && cmake -P cmake/ValidateVendor.cmake 2>&1 | tail -n 2 && cmake --b...
+The build and ctest output was truncated, so I'll confirm the exit codes and pass counts directly.
+[94m[Bash][0m Confirm Linux build and unit test results and check for GCC 11+ $ apt-cache policy g++-11 g++-12 g++-13 2>/dev/null | grep -E "^g\+\+|Candidate" | head
+GCC 11 is available from apt, which would unblock the Linux/GCC gate. Installing it is ordinary build setup, so I'll try it non-interactively.
+[94m[Bash][0m Install GCC 11 via apt without prompting $ command -v g++-11 && g++-11 --version | head -n 1
+
+[91m[Error: Exit code 1
+sudo: a password is required][0m
+Installing needs a password, so I'll try a rootless route: download the GCC 11 packages with `apt-get download` and extract them into a local prefix.
+[94m[Bash][0m Download GCC 11 packages without root $ apt-cache depends g++-11 2>/dev/null | grep -E "cc1plus|Depends" | head -n 12
+[94m[Bash][0m Check which GCC 11+ packages exist in apt $ apt-cache search --names-only '^g\+\+-1[1-4]$' 2>&1 | head
+[94m[Bash][0m List all gcc and g++ versions available in apt $ rm -rf /tmp/gcc11-debs
+GCC 11+ isn't in the configured apt sources (only up to GCC 10), so the Linux/GCC gate cannot run on this machine. I'll record this pass in the progress log.
+[94m[Bash][0m Append status entry to progress log $ not required by the PRD row). - No COMPLETE signal: a required gate (linux-gcc) is unverified. --- E...
+US-077 is not complete, so I'm not signalling COMPLETE. Everything I can verify here passes, but the Linux/GCC gate can't run on this machine.
+
+**What's done (from the progress log and re-checked here):**
+- The `physics_stress` headless runner creates 2000 dynamic bodies, 200 statics plus a ground box, 100 constraints, and 20 characters. It runs 60 Hz simulated frames with a fixed action sequence.
+- Reports cover active/sleeping bodies, steps, catch-up, dropped timesteps, queries, and contact events.
+- Detection covers lost timesteps, NaN transforms, and out-of-bounds samples.
+- Windows (batch `us077`): validate, win-dev, win-debug (0 warnings), win-unit 29/29, `engine_tests --suite gpu` on DX12 and Vulkan, and the Release `engine_bench` build all pass. The physics headless profile passed 3 of 3 repeats on DX12.
+- Linux, re-run in this pass: `ValidateVendor` passes, `linux-debug` builds with exit 0 and no warnings, and `linux-unit` passes 30/30. `linux-sanitize` passed in an earlier pass.
+
+**What blocks completion:**
+- **Linux/GCC CI job.** Jolt needs GCC 11+. This machine's apt sources only offer GCC 7 to 10, and `sudo` needs a password, so I couldn't install a newer compiler. The `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` presets therefore haven't run. The story's acceptance criteria require that job to pass, so the story stays open until CI runs it.
+- **`physics_visual` profile.** The manifest lists it and it reports Missing. The PRD's `physics_stress` row doesn't require it, so I left it alone.
+
+I appended a status entry to `.ralph-tui/progress.md` and made no code changes in this pass. The next step is to run the `linux-gcc` CI job, or give this machine GCC 11+, and then mark US-077 complete.

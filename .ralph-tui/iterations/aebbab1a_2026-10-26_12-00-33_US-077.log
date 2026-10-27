@@ -1,0 +1,37 @@
+# Iteration 863 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-10-26T09:00:33.917Z
+- **Ended At**: 2026-10-26T09:00:51.393Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1979
+- **Total Tokens**: 2001
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the benchmark code and the progress log.
+[94m[Bash][0m Inspect benchmark sources, progress log, and PRD story $ grep -n "US-077" -A 60 tasks/prd-open-world-engine.md | head -120
+The log shows this story has been re-verified many times. The only open item is the Linux/GCC gate, which this host can't run. I'll spot-check the three acceptance criteria in the source before deciding anything.
+[94m[Bash][0m Spot-check physics stress criteria and toolchains $ wc -l tools/benchmark/src/physics_stress.cpp tests/src/bench_physics_tests.cpp && grep -n -i "lost\|...
+US-077 is implemented and the spot-check confirms its acceptance criteria, but I'm not emitting `<promise>COMPLETE</promise>`. One criterion is still unverified on this host, and the story says not to report it as passed.
+
+**Acceptance criteria, checked against the source this pass:**
+- **Scene and fixed action sequence:** `tools/benchmark/src/physics_stress.cpp` builds the table's bodies, constraints, and characters. `tests/src/bench_physics_tests.cpp` has a case for this, plus one that checks the fixed action sequence.
+- **Reports:** the report separates active and sleeping bodies (min and max), simulation steps, queries, and catch-up events.
+- **Detection:** lost timesteps (catch-up limit), NaN or missing transforms, and out-of-bounds samples each produce a failure reason. Tests cover each one.
+
+**Gates, from the progress log (not re-run this pass; no source changed since the last recorded run):**
+- Linux: `ValidateVendor`, `linux-dev`, `linux-debug` build, `linux-unit` (30/30), and `linux-asan` plus `linux-sanitize` (30/30) all passed.
+- Windows: the `us077` batch recorded the Windows gates as green.
+
+**Still open:** the `linux-gcc*` CI criterion. Jolt needs GCC 11+, and this host has only g++-9 and clang++-10. Installing GCC 11 needs root, and a root-free attempt did not work. This needs to run on a GCC 11+ host or in CI. I did not add another no-change entry to `.ralph-tui/progress.md`, since the log already has many identical status checks.

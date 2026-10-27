@@ -1,0 +1,42 @@
+# Iteration 505 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:15:08.599Z
+- **Ended At**: 2026-10-25T07:16:57.354Z
+- **Duration**: 1m 48s
+- **Input Tokens**: 36
+- **Output Tokens**: 3387
+- **Total Tokens**: 3423
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and whether US-058 already exists in the tree.
+[94m[Bash][0m Inspect progress log and existing UI directory $ ls && tail -n 80 .ralph-tui/progress.md && ls engine/ui 2>/dev/null && find engine/ui -type f | head...
+The log shows US-058 at Partial after many repeat passes, with three open items. Before deciding what to run, I'll check whether the tree changed since the last entry and how the Windows gates are run.
+[94m[Bash][0m Check tree changes, Windows gate notes, and running batches $ ps aux | grep -i -E "gate|ctest|cmake" | grep -v grep | head
+The tree has not changed since the last recorded gate pass. I'll re-run the Linux debug build and unit suite once to confirm the current state.
+[94m[Bash][0m Rebuild linux-debug and run linux-unit tests $ echo "unit=$?") && tail -n 4 /tmp/us058_unit.log
+[94m[Bash][0m Show ctest pass summary $ grep -E "tests passed|tests failed" /tmp/us058_unit.log
+US-058 is still **Partial**, so I'm not signalling COMPLETE. The Linux build and unit suite pass again on the current tree.
+
+**Verified this pass (Linux, the tree is unchanged since the last recorded gate run):**
+- `cmake --build --preset linux-debug`: exit 0, no `warning:` or `error:` lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22 of 22.
+
+**Still open, and none of it can be closed from this environment:**
+1. **`linux-gcc` gate and CI job.** Jolt needs GCC 11+, and only GCC 9 is installed here. Installing GCC 11+ would unblock it.
+2. **Overlay composition after post-processing.** `PostProcessor::set_overlay` has no caller outside `engine/ui`, and there is no application host. A GPU fixture that calls `set_overlay` and reads back the output would check this on the RTX 5080 through the Windows batch flow. I haven't written it, because that is a new GPU test with its own run cycle.
+3. **Running-application check with screenshots.** This needs an application host, which doesn't exist yet.
+
+**Windows gates:** the progress log records them as passing (vendor, dev, build, and `win-unit` at 21 of 21), but I did not re-run them in this pass. The Windows gate batch is in the reference notes if you want a fresh run.
+
+I did not add another progress entry, because the last ten entries repeat the same results. If you want, I can write the GPU overlay fixture next, or you can point me at a host that calls `set_overlay` and I'll wire it in.

@@ -1,0 +1,43 @@
+# Iteration 1130 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:13:29.458Z
+- **Ended At**: 2026-10-26T21:13:45.060Z
+- **Duration**: 15s
+- **Input Tokens**: 26
+- **Output Tokens**: 2328
+- **Total Tokens**: 2354
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark and gate tooling.
+[94m[Bash][0m Check progress log and benchmark artifacts $ ls benchmarks 2>/dev/null
+[94m[Bash][0m Read Windows gate and status memories $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/reference-windows-gate-runs.md /h...
+[94m[Bash][0m Re-check the known blockers on this host $ ls samples 2>&1 | head -1
+[94m[Bash][0m Append status entry to progress log $ `samples/` absent. - No source change, build, or bench run this pass. - Stop: US-080 cannot be signe...
+US-080 is not complete, and I have not emitted the COMPLETE signal. Nothing has changed since the last 34 status checks, so this pass made no code change and ran no build or benchmark.
+
+Blockers I re-verified on this WSL host:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL's `nvidia-smi`, which does not satisfy the native Linux/Vulkan report requirement.
+- **FSR 2 permutations are missing.** `third_party/fsr2` has 0 `*_permutations.h` files, so FSR cannot link. Closing this needs your decision on the vendoring route.
+- **Incomplete benchmark manifest.** `benchmarks/manifest.json` still has 4 entries with `implementation: none`. Physics, streaming, and all_features workloads are not implemented.
+- **No acceptance run exists.** `artifacts/bench` has no `acceptance` run, and `samples/` is absent.
+- **Frame budget not yet met.** Earlier notes record `render_stress` p99 above 16.7 ms. Per the story, that needs a measured fix, not a changed contract.
+
+Needed to finish:
+
+1. Access to the RTX 5080 reference computer for the native Linux/Vulkan and Windows DX12/Vulkan acceptance reports, with three repeats per scene, profile, and backend.
+2. A decision on the FSR 2 permutations route.
+3. Implementation of the missing physics, streaming, and all_features workloads.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this. Per the earlier notes, I won't repeat these checks until one of these blockers changes.

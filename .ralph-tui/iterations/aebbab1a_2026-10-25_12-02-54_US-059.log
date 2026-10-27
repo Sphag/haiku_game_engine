@@ -1,0 +1,64 @@
+# Iteration 525 Log
+
+## Metadata
+
+- **Task ID**: US-059
+- **Task Title**: Game Saves
+- **Description**: As a player, I want to save progress so that I can continue after restarting the game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T09:02:54.171Z
+- **Ended At**: 2026-10-25T09:03:37.453Z
+- **Duration**: 43s
+- **Input Tokens**: 54
+- **Output Tokens**: 5948
+- **Total Tokens**: 6002
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing save code, since the codebase notes say US-059 is already partly implemented.
+[94m[Bash][0m Inspect repo root, progress log, and save module $ ls engine/save/* 2>/dev/null
+[94m[Bash][0m Search for US-059 references and save files $ find . -path ./third_party -prune -o -name '*save*' -print 2>/dev/null | grep -v build | head -30
+The log says US-059 is Partial, blocked only by the Linux/GCC gate (needs GCC 11+). I'll check whether a newer GCC is now available and whether the tree has changed since the last Windows run.
+[94m[Bash][0m Check GCC versions and whether tree changed since log $ ls /mnt/d/dev/haiku_game_engine/build | head
+Only GCC 9 is installed, and nothing in the tree has changed since the last recorded run. I'll check whether a GCC 11+ toolchain can be fetched without root, since the Linux/GCC gate is the only open item.
+[94m[Bash][0m Test fetching GCC 11 without root $ which conda mamba docker podman 2>/dev/null
+
+[91m[Error: Exit code 1
+Get:4 http://archive.ubuntu.com/ubuntu focal-updates/universe amd64 clang-11-examples amd64 1:11.0.0-2~ubuntu20.04.1 [14.4 kB]
+Get:5 http://archive.ubuntu.com/ubuntu focal-updates/universe amd64 python3-clang-11 amd64 1:11.0.0-2~ubuntu20.04.1 [28.6 kB]
+Fetched 20.5 MB in 6s (3506 kB/s)
+clang-11-doc_1%3a11.0.0-2~ubuntu20.04.1_all.deb
+clang-11-examples_1%3a11.0.0-2~ubuntu20.04.1_amd64.deb
+clang-11_1%3a11.0.0-2~ubuntu20.04.1_amd64.deb
+libclang-11-dev_1%3a11.0.0-2~ubuntu20.04.1_amd64.deb
+python3-clang-11_1%3a11.0.0-2~ubuntu20.04.1_amd64.deb
+clang-11:
+  Installed: (none)
+  Candidate: 1:11.0.0-2~ubuntu20.04.1
+deb http://ppa.launchpad.net/neovim-ppa/unstable/ubuntu focal main
+deb http://archive.ubuntu.com/ubuntu/ focal main restricted
+deb http://archive.ubuntu.com/ubuntu/ focal-updates main restricted][0m
+`apt-get download` works without root. The GCC 11 package itself did not appear in that output, so I'll check which GCC versions the mirror actually carries.
+[94m[Bash][0m Check GCC 11 candidates in apt and download them $ ls
+The mirror has GCC 10 but not 11. Jolt needs `__builtin_bit_cast` (GCC 11+), so GCC 10 will not do. I'll check whether GCC 12 is installable.
+[94m[Bash][0m Download GCC 12 packages without root $ ls *.deb
+GCC 11+ is not reachable from this machine: the focal mirror tops out at GCC 10, and gcc-12 only comes from the PPA, which needs root. I'll record that in the progress log so the next iteration does not repeat the search.
+[94m[Bash][0m Append GCC toolchain attempt to progress log $ cat >> .ralph-tui/progress.md <<'EOF'  ## 2026-10-25 - US-059 (GCC 11+ acquisition attempt, still Pa...
+US-059 is not complete, so I have not signalled completion. The save code and its tests are in place, but the Linux/GCC gate cannot run on this machine.
+
+**Where it stands**
+- The story is implemented: `engine/save/` (slot format, CRC, atomic writes, `.prev` backup, world-change capture and restore), `engine/script/src/script_state.cpp` (Lua instance state), and 12 `[unit]` cases in `tests/src/save_tests.cpp`.
+- Linux gates recorded in the log pass on the current tree: `ValidateVendor`, `linux-dev`, `linux-debug`, `linux-unit` (22/22), and the ASan/UBSan sanitize run.
+- Windows gates passed on the same tree per the log. I confirmed nothing under `engine`, `tests`, or `cmake` has changed since, so those results still hold. I did not re-run them.
+
+**Still open**
+- `linux-gcc`, `linux-gcc-debug`, and `linux-gcc-unit` need GCC 11+ (Jolt uses `__builtin_bit_cast`). This machine has only GCC 9.4.
+- I checked for a way to get GCC 11+ without root. `apt-get download` works, but the focal mirror has only GCC 9 and 10. GCC 11 and 12 are not in the configured sources, and the PPA that carries them needs root. The next step has to run on a machine that already has GCC 11+.
+- `engine_bench --suite acceptance` has no harness yet (US-074).
+- A real save and load through a running game needs the application host (US-060).
+
+I appended these findings to `.ralph-tui/progress.md`, including a note not to repeat the apt search.

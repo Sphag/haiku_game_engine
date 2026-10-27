@@ -1,0 +1,42 @@
+# Iteration 798 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:51:08.275Z
+- **Ended At**: 2026-10-26T02:51:25.578Z
+- **Duration**: 17s
+- **Input Tokens**: 22
+- **Output Tokens**: 1993
+- **Total Tokens**: 2015
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what US-076 already has in the tree.
+[94m[Bash][0m Read progress log and locate US-076 artifacts $ tail -n 120 .ralph-tui/progress.md && echo ---- && ls tools/benchmark tools/benchmark/src 2>/dev/nul...
+Earlier passes left US-076 blocked on a decision that only you can make. I'll check whether anything changed since the last recorded status.
+[94m[Bash][0m Check source and manifest mtimes and latest bench artifacts $ ls -t artifacts/bench | head -3
+US-076 is not complete, and I can't finish it without a decision from you. I made no changes in this pass.
+
+**What's blocked (unchanged since the last recorded check):**
+
+1. **Route-start triangle floor and frame budget fail.** The contract requires at least 2,000,000 submitted triangles on the indexed path at the start frame (PRD line 875). The measured start frame has 312,068. Frame times are p99 35–47 ms against a 16.7 ms budget. Fixing this changes the fixed contract: the instance placement comes from the seeded generator, and the start pose comes from the SHA-256-pinned camera route. A fix means bumping `kWorkloadVersion` (currently 1 in `tools/benchmark/include/engine/benchmark/workload.hpp:25`), regenerating `benchmarks/workload_expected.json`, and updating the manifest hash. The PRD reserves that for a user decision.
+2. **`full_1080` is unsupported.** The vendored FSR 2 lacks its generated `*_permutations.h` tables, so the upscale path cannot run until you choose a vendoring route.
+3. **Native Linux Vulkan GPU and linux-gcc have not run.** WSL has no usable Vulkan device, and the local GCC 9.4 cannot build Jolt.
+
+**What is verified:**
+- Source and workload files are unchanged since the last runs: `render_stress.cpp` 04:15:43, `workload.cpp` 02:42:31, `workload_expected.json` 02:21:05, `manifest.json` 02:43:31. The eight `us076-*` artifact directories postdate them.
+- The last Linux re-run (status check 23) passed: `linux-debug` builds, `linux-unit` passes 30/30, and `engine_workload --check` reports all 4 scenes matching.
+
+**Decisions I need from you:**
+- Approve the workload change for the route-start triangle count, or accept the failing measured run as the US-076 result and close the story as measured. The acceptance criteria cannot pass on the current placement.
+- Pick the FSR 2 permutation route, or mark `full_1080` as unsupported for this story.
+
+I did not append another "no change" entry to `.ralph-tui/progress.md`, since the last 30 entries already say the same thing. Once you decide, I can make the workload change or close the story and run the Windows gates.

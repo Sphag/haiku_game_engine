@@ -1,0 +1,40 @@
+# Iteration 506 Log
+
+## Metadata
+
+- **Task ID**: US-058
+- **Task Title**: Game UI
+- **Description**: As a game creator, I want a game interface so that I can display a HUD and menus.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-25T07:16:58.399Z
+- **Ended At**: 2026-10-25T07:17:34.366Z
+- **Duration**: 35s
+- **Input Tokens**: 26
+- **Output Tokens**: 2395
+- **Total Tokens**: 2421
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout, UI module, and progress log $ tail -60 .ralph-tui/progress.md 2>/dev/null
+[94m[Bash][0m Rebuild linux-debug and run linux-unit tests $ grep -rn "set_overlay" --include=*.cpp --include=*.hpp . | grep -v third_party | grep -v "^./build" ...
+[94m[Bash][0m Check ctest summary and overlay GPU test coverage $ grep -n "overlay" tests/src/render_postprocess_gpu_tests.cpp | head -5
+[94m[Bash][0m Check ctest pass count and append progress entry $ GPU coverage of composition is in `tests/src/render_postprocess_gpu_tests.cpp` (needs a GPU, not run...
+<promise>NOT COMPLETE</promise>
+
+US-058 is still **Partial**, so I am not signalling completion.
+
+**Verified this pass (Linux, no source changes):**
+- `cmake --build --preset linux-debug` exits 0 with no `warning:` or `error:` lines (`/tmp/us058_build.log`).
+- `ctest --preset linux-unit --output-on-failure --no-tests=error` passes 22 of 22 (`/tmp/us058_unit.log`).
+
+**Still open:**
+- **`linux-gcc` gate and CI job:** only GCC 9 is installed, and Jolt needs GCC 11+. This needs a newer toolchain from you.
+- **Overlay composition after post-processing:** `PostProcessor::set_overlay` and `SceneRenderer::set_overlay` have no caller in any application host. The only composition coverage is the GPU test in `tests/src/render_postprocess_gpu_tests.cpp`, which needs a GPU and did not run here.
+- **Running-application UI check with screenshots:** there is no application host to drive. Nothing here is a GUI check.
+- **Windows gates:** not re-run in this pass. The earlier Windows results in the progress log still stand, since the tree has not changed since they were recorded.
+
+I appended a progress entry to `.ralph-tui/progress.md` recording these results. Each loop of this story has repeated the same checks with the same blockers, so the next useful step is either a GCC 11+ toolchain or an application host that calls `set_overlay`.

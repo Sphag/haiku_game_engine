@@ -1,0 +1,40 @@
+# Iteration 56 Log
+
+## Metadata
+
+- **Task ID**: US-046
+- **Task Title**: Temporal Upscaling
+- **Description**: As a player, I want upscaling so that I can run the full profile at a lower internal resolution.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T00:43:15.225Z
+- **Ended At**: 2026-10-24T00:43:30.288Z
+- **Duration**: 15s
+- **Input Tokens**: 16
+- **Output Tokens**: 2141
+- **Total Tokens**: 2157
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the FSR memory note and the current state of the FSR code, since the note says the story may be blocked.
+[94m[Bash][0m Read FSR memory note and progress log $ tail -c 6000 .ralph-tui/progress.md
+[94m[Bash][0m Inspect repo layout and FSR files $ find . -name "*permutations*" 2>/dev/null | head
+US-046 is still blocked, and I haven't changed any source. The FSR 2 generated shader tables are still missing, so the story can't be completed without your decision.
+
+I checked the tree just now: `find` finds no `*permutations*` file anywhere in the repo, and `third_party/fsr2` still holds only `LICENSE.txt` and `src`. My notes show the same result across the last several runs, so repeating the check would just add another identical log entry.
+
+**What's blocked:** FSR 2 cannot compile or link. Its precompiled shader tables `#include` eight `ffx_fsr2_<pass>_permutations.h` headers per backend, and neither the vendored tree nor the pinned upstream archive contains them. `ENGINE_FSR2_AVAILABLE` therefore stays off, and both backends return `Unsupported` for upscale. The reactive mask, the switch of `SceneRenderer` to the profile resolutions, UI-after-upscale, and every GPU check that exercises an upscale all depend on this. I did not add stub headers, since that would hide the failure until pipeline creation.
+
+**Decision needed.** Pick one route to generate the headers:
+
+1. **Run the archive's `tools/sc/FidelityFX_SC.exe` once and vendor its outputs, pinned by hash.** This is the upstream generator for exactly these files, so it's the fastest route. It needs a documented exception to the rule against vendoring prebuilt tools. It also runs on Windows, not WSL.
+2. **Regenerate the blobs with the engine's pinned DXC through a first-party generator.** This keeps every byte under our control, but it is considerably more work and produces different bytes than upstream.
+
+I'd recommend route 1, with the exception recorded in `third_party/manifest.json` and the output hashes checked in.
+
+**What's already in place, and passing:** the CPU contract (profile sizes, jitter phases, benchmark policy, history reset), the RHI upscaler interface and both backend implementations behind the gate, and the earlier Windows and Linux gate runs. The Linux gates still pass; the last Windows gate run was on the RHI-contract entry.
+
+Once you choose a route, I can wire the headers into the build and finish the remaining items.

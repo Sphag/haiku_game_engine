@@ -1,0 +1,40 @@
+# Iteration 1124 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:11:53.597Z
+- **Ended At**: 2026-10-26T21:12:07.622Z
+- **Duration**: 14s
+- **Input Tokens**: 26
+- **Output Tokens**: 2004
+- **Total Tokens**: 2030
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the benchmark harness and acceptance artifacts.
+[94m[Bash][0m Read progress log and check benchmark artifacts $ git status 2>&1 | head -3
+[94m[Bash][0m Re-check hardware and blocker state $ nvidia-smi --query-gpu=name --format=csv,noheader 2>&1 | head -1
+The blockers are unchanged, so I'll record this check in the progress log and stop.
+[94m[Bash][0m Append status check entry to progress log $ `samples/` absent. - No source change, build, or bench run. The blockers need the reference machine,...
+US-080 is not complete, and I'm not emitting the COMPLETE signal. Nothing changed in the code this pass; I only re-checked the blockers and logged the result.
+
+Still blocking sign-off on this host:
+
+- **Native Linux Vulkan GPU:** `/dev/dri` is absent. `nvidia-smi` sees the RTX 5080, but only through WSL, which does not count as a native Linux Vulkan report.
+- **FSR 2 permutations:** `third_party/fsr2` has none of the `*_permutations.h` files. `full_1080` cannot run until you choose a vendoring route.
+- **Unimplemented workloads:** `benchmarks/manifest.json` still has four `implementation: none` entries (lines 88, 108, 122, 132). These are the physics, streaming, and all_features workloads.
+- **Acceptance runs:** `artifacts/bench` has no three-repeat `acceptance` run. It holds only the earlier `us076` to `us078` runs and two `us080-*readback-off` runs.
+- **Frame budget:** from earlier runs, `render_stress` at native_1080 has CPU p99 above 16.7 ms on repeats 2 and 3. Residency is not measured.
+- **Other open items:** the `linux-gcc*` presets need GCC 11+ or clang 14+, and the visual editor smoke tests have not been run.
+
+To finish, I need either the reference RTX 5080 machine for the native Windows/DX12, Windows/Vulkan, and Linux/Vulkan reports, or your decision on the FSR 2 route plus the three missing workloads. Re-running status checks on this host will not move these items, so I've stopped looping.
+
+I appended this check as "status check 30" to `.ralph-tui/progress.md`, with no build or bench run.

@@ -1,0 +1,43 @@
+# Iteration 1045 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T16:29:19.137Z
+- **Ended At**: 2026-10-26T16:29:35.893Z
+- **Duration**: 16s
+- **Input Tokens**: 26
+- **Output Tokens**: 2387
+- **Total Tokens**: 2413
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD entry for US-079, and whether the prerequisite features exist.
+[94m[Bash][0m Inspect repo layout, progress log, and PRD entry $ ls && tail -c 6000 .ralph-tui/progress.md && grep -n "US-079" -A3 tasks/prd-open-world-engine.md | h...
+The log shows 117 prior status checks, all stopped on the same user decisions. I'll re-verify those blockers in one pass before deciding anything.
+[94m[Bash][0m Re-check blockers: samples, FSR2 headers, manifest route $ grep -rln "all_features" tools/benchmark/src engine tests 2>/dev/null | head
+[94m[Bash][0m Append status check entry to progress log $ (4) a decision on the runtime component catalog for `samples/all_features`. - Stop: no COMPLETE sign...
+US-079 is not complete, and I am not emitting the COMPLETE signal. Its remaining work depends on decisions and hardware that only you can provide.
+
+**What I checked this pass (no code changes, no builds run):**
+- `samples/` does not exist, so `samples/all_features` has not been created.
+- `third_party/fsr2` still has 0 `*_permutations.h` files, so `full_1080` cannot be built with FSR 2.
+- `benchmarks/manifest.json` still marks `all_features` as `implementation: none`. Its route, `all_features_route_v1`, is still a proposal at line 152.
+- No all_features runner exists in `tools/benchmark/src`.
+
+**What needs you:**
+1. **Approve `all_features_route_v1`.** The route is a proposal in the manifest, and the fixed benchmark contract depends on it.
+2. **Decide on FSR 2.** Either vendor the permutation headers or accept that `full_1080` stays unsupported. Until then, the upscale profile cannot run.
+3. **Decide on the runtime component catalog.** It is empty in this build, so a sample scene with components is refused. The sample project is blocked until that is settled.
+4. **Provide a Windows GPU and GUI session.** The tour, the DX12 and Vulkan profiles, the live editor scenario, and the package/relaunch step need the RTX 5080 and a running editor. WSL cannot substitute for these.
+
+Once you approve the route, the next work is the all_features runner and the sample scene. The existing `all_features_tests.cpp` and `all_features_editor_tests.cpp` are there to be filled in.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this check. The Linux gates from the previous check (ValidateVendor, linux-dev, linux-debug, linux-unit 30/30) still stand. I have not re-run the Windows gates in this session.

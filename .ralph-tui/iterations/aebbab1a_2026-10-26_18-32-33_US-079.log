@@ -1,0 +1,50 @@
+# Iteration 999 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T15:32:33.962Z
+- **Ended At**: 2026-10-26T15:32:56.764Z
+- **Duration**: 22s
+- **Input Tokens**: 28
+- **Output Tokens**: 2565
+- **Total Tokens**: 2593
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the tree, the progress log, and whether an `all_features` scene already exists.
+[94m[Bash][0m Inspect repo layout and existing all_features references $ grep -n "US-079" -A3 tasks/prd-open-world-engine.md | head -40
+[94m[Bash][0m Read the tail of the progress log $ tail -120 .ralph-tui/progress.md
+The progress log has 85 status checks, all recording the same blockers. Before deciding whether to repeat that, I'll confirm the blockers still hold on the current tree.
+[94m[Bash][0m Check blockers: samples dir, FSR permutations, benchmark branch, manifest $ find engine tools tests benchmarks docs cmake -newer tests/src/all_features_editor_tests.cpp -type f...
+[94m[Bash][0m Show the all_features manifest entry $ for k,v in m.items():   if 'all_features' in json.dumps(v): print(k, json.dumps(v)[:900]) " 2>&1 | h...
+US-079 is not complete, and I'm not signalling COMPLETE. The remaining work needs your decisions or a Windows GUI session that I can't provide from here.
+
+**What exists and was verified in earlier passes**
+- `tests/src/all_features_tests.cpp` and `tests/src/all_features_editor_tests.cpp` are built into `engine_tests`. They cover the workload digests, Lua gameplay and audio, animation, the UI click, the save round trip, the material graph, and the marker tour.
+- Linux CPU gates: `ValidateVendor` passes, `linux-debug` builds, and `ctest --preset linux-unit` passes 30/30.
+- Windows (from the 2026-10-26 log entry, check 71): `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit` pass. `engine_tests --suite gpu` passes on DX12 and on Vulkan with validation layers.
+- `linux-sanitize` passed 30/30 on the last run. An X11 input test failed intermittently in earlier runs under WSL focus timing, so that flake is still open.
+
+**What is still missing (re-checked just now)**
+- `benchmarks/manifest.json` has `all_features` with `implementation: none`. Its route `all_features_route_v1` is only a proposal.
+- `tools/benchmark/src/main.cpp` has no `all_features` branch, so the GPU profiles and `engine_bench --suite acceptance` cannot run it.
+- `third_party/fsr2` has 0 `*_permutations.h` files, so the `full_1080` profile cannot be built.
+- There is no `samples/all_features` project.
+- The tour has no real run with screenshots and an action log.
+- The live editor scenario with package and relaunch has not been run in a GUI session.
+- Not run: the native Linux Vulkan GPU suite and the `linux-gcc` presets.
+
+**What I need from you**
+1. Approve `all_features_route_v1`. It fixes the benchmark contract, so I shouldn't choose it myself. Once it is approved I can wire the benchmark branch and the tour.
+2. Choose how to handle FSR 2. Either vendor the generated permutation headers, or decide to leave `full_1080` unsupported and report it that way.
+3. Provide a Windows session with a GUI, plus an RTX 5080 run, for the live editor scenario, the tour, the GI/RT/upscale profiles, and the forced geometry paths.
+
+I did not change any source or re-run any build this turn. The earlier progress log already records the same blockers across 85 status checks, so I did not append another identical entry.

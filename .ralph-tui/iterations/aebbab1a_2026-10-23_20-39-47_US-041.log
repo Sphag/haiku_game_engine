@@ -1,0 +1,255 @@
+# Iteration 24 Log
+
+## Metadata
+
+- **Task ID**: US-041
+- **Task Title**: DX12 Ray Tracing Foundation
+- **Description**: As a rendering developer, I want DXR acceleration structures so that I can implement RT effects.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-23T17:39:47.206Z
+- **Ended At**: 2026-10-23T18:17:47.574Z
+- **Duration**: 38m 0s
+- **Input Tokens**: 786
+- **Output Tokens**: 199657
+- **Total Tokens**: 200443
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the PRD section for this story, and the current state of the repo.
+[94m[Bash][0m Inspect repo layout, progress log, and git state $ ls -la && wc -l .ralph-tui/progress.md tasks/prd-open-world-engine.md && git status 2>&1 | head -30 ...
+[94m[Bash][0m Search progress and PRD for ray tracing references $ grep -n -i "US-041\|ray trac\|DXR\|RT \|raytrac" .ralph-tui/progress.md tasks/prd-open-world-engine....
+[94m[Bash][0m Read progress header and PRD RT-related sections $ sed -n 1,60p .ralph-tui/progress.md && echo ---- && sed -n 280,300p tasks/prd-open-world-engine.md &...
+[94m[Bash][0m Read PRD non-goals and perf contract; list engine layout $ ls engine/*/ | head -100
+The story depends on US-036 and US-037, so I'll check what those delivered and what the RHI already exposes for ray tracing.
+[94m[Bash][0m Check US-036/037 progress entries and RHI file layout $ wc -l engine/rhi/include/engine/rhi/* engine/rhi/src/dx12/* | tail -1
+Both prerequisites are in place. Next I'll read the RHI capability and device contracts, and check for any existing DXR or ray tracing code.
+[94m[Bash][0m Search for existing RT code and read capabilities header $ wc -l engine/rhi/include/engine/rhi/*.hpp engine/rhi/src/dx12/*.cpp engine/rhi/src/vulkan/*.cpp
+[94m[Bash][0m Find RT references in RHI code, docs, and read device header $ cat engine/rhi/include/engine/rhi/device.hpp
+The DX12 device has `RaytracingTier` detection but no RT commands yet. I'll read the memory notes on the Windows gate process, then the DX12 device and object model that the new RT code has to fit into.
+[94m[Bash][0m Read memory notes on Windows gate runs $ cd /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/ && cat reference-windows-gate-run...
+[94m[Bash][0m Read handle, lifetime, and types headers $ cat engine/rhi/include/engine/rhi/handle.hpp engine/rhi/src/object_lifetime.hpp && sed -n 1,294p eng...
+The RT surface has to touch the abstract `Device`, the CPU validation device, the Vulkan device (which must report Unsupported), and the DX12 device. I'll read the DX12 device header and how it creates buffers and retains submissions.
+[94m[Bash][0m Read DX12 device header and command list interface $ cat engine/rhi/src/dx12/dx12_device.hpp && cat engine/rhi/include/engine/rhi/command_list.hpp | sed ...
+The DX12 side needs a DXR state object, so the shader toolchain has to compile a `lib_6_3` target. I'll check whether the shader compiler and the existing GPU test helpers can do that.
+[94m[Bash][0m List shader module and test files; check profile handling $ grep -n "lib_\|target_profile\|enum class" engine/shader/include/engine/shader/*.hpp | head -30
+The compiler always passes `-E`, so a `lib_6_3` target needs a small change there. Next I'll map every class that implements `Device` or `CommandList`, since each new pure virtual has to be overridden in all of them.
+[94m[Bash][0m Find Device/CommandList implementers and read DX12 command list header $ cat engine/rhi/src/dx12/dx12_command_list.hpp | sed -n 1,200p
+Every new virtual has to be implemented in the CPU reference device, the DX12 and Vulkan devices, and their command lists. Before designing the API I'll check how `PipelineKind` is switched on and which DXR interfaces the DX12 code already uses.
+[94m[Bash][0m Find PipelineKind uses and DX12 interface queries $ sed -n 225,260p engine/rhi/src/dx12/dx12_device.cpp
+I'll keep the new ray pipeline on its own handle type and command rather than adding a `PipelineKind`, because that enum is switched on in many places. Next I'll read the DX12 root-signature and binding code the ray pipeline has to reuse.
+[94m[Bash][0m List function definitions in DX12 backend sources $ grep -n "^[A-Za-z].*(\|^}" engine/rhi/src/dx12/dx12_pipeline.cpp engine/rhi/src/dx12/dx12_command_li...
+[94m[Bash][0m Read DX12 root signature and pipeline creation $ sed -n 1,260p engine/rhi/src/dx12/dx12_pipeline.cpp
+Registers follow the layout: space = set index, register = binding. The ray root signature can reuse `build_root_signature` from this file. Next, the rest of pipeline creation and the command-list binding path.
+[94m[Bash][0m Read rest of DX12 pipeline file and command list helpers $ sed -n 1,60p engine/rhi/src/dx12/dx12_command_list.cpp | sed -n 1,60p
+[94m[Bash][0m Read DX12 set_pipeline, set_descriptor_set, dispatch and close $ sed -n 685,700p engine/rhi/src/dx12/dx12_command_list.cpp
+The ray pipeline can reuse the compute binding path if the command list tracks which layout set is active. Next I'll read the buffer creation, submit/retire, and upload paths so the acceleration-structure objects follow the same lifetime and "not ready" rules.
+[94m[Bash][0m Read DX12 device helpers, buffer creation, retire and submit paths $ sed -n 479,560p engine/rhi/src/dx12/dx12_device.cpp
+[94m[Bash][0m Read DX12 submit, upload, and resource stats $ sed -n 734,790p engine/rhi/src/dx12/dx12_device.cpp
+Submission already rejects lists that name objects destroyed after recording, and retirement holds objects until their timeline completes. The acceleration-structure objects can reuse both. Next the descriptor write path, which the TLAS binding needs to extend.
+[94m[Bash][0m Read DX12 descriptor set write and destroy code $ sed -n 334,351p engine/rhi/src/dx12/dx12_descriptors.cpp
+The descriptor write path is clear, and the AS element can follow the same pattern. Next, how the existing DX12 GPU tests get their shaders and gate on the backend, so the hit/miss fixture follows the same structure.
+[94m[Bash][0m Read DX12 GPU test structure and shader usage $ grep -n "rhi_dx12\|shader_gpu\|add_executable\|engine_tests" tests/CMakeLists.txt | head -30
+[94m[Bash][0m Read tests CMake shader fixture wiring and a DX12 compute test $ grep -n "dxil\|load_shader\|read_file\|dx12_compute" tests/src/rhi_dx12_gpu_tests.cpp | head -20
+Test shaders are built by the `engine_add_hlsl_shader` CMake function. I'll check whether it can produce a `lib_6_3` library without an entry point.
+[94m[Bash][0m Read the HLSL shader build function $ grep -rn "function(engine_add_hlsl_shader" -A60 cmake/ | head -90
+The build function always emits SPIR-V too, which a DXR library can't produce, so I'll add a DXIL-only library mode. Next I'll check what the CPU reference device and the Vulkan device report for ray tracing, so their stubs match.
+[94m[Bash][0m Read validation device header and feature report $ grep -n "RaytracingTier\|ray" docs/rhi.md | head
+The CPU reference device reports the feature from `simulated_hardware` and has no acceleration structures, so its RT calls will return Unsupported. Before writing code I need four more facts: the DX12 common helpers, the GPU test helpers, the RHI CMake source list, and the DX12 suite's platform guard.
+[94m[Bash][0m Read DX12 common helpers, RHI CMake sources, and GPU test helpers $ sed -n 60,180p tests/src/rhi_dx12_gpu_tests.cpp
+The DX12 test file has no platform guard, so new test code also compiles on Linux and the Linux gate will catch its errors. I'll read the existing test helpers I plan to reuse.
+[94m[Bash][0m Read shader loader and buffer helpers; check Catch2 SKIP usage $ grep -n "unsupported\|exit" tests/src/main.cpp | head -10
+I have what I need to design the change. The plan:
+
+- **Public RHI** (`handle.hpp`, `types.hpp`, `device.hpp`, `command_list.hpp`): BLAS/TLAS and ray pipeline handles and descs, plus build, instance write, `set_ray_tracing_pipeline`, and `dispatch_rays`. Keeping a separate handle type and command avoids touching the `PipelineKind` switches.
+- **DX12** (new `dx12_raytracing.cpp`): DXR objects, a state object with a shader table, and the list methods. Objects follow the existing retire/`use` lifetime model.
+- **CPU and Vulkan backends**: explicit Unsupported stubs, so the contract is complete.
+- **Build and tests**: a DXIL-only `lib_6_3` fixture and hit/miss/refit/deletion GPU tests, plus CPU contract tests.
+
+I'll start with the public headers.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/handle.hpp[0m edit: "struct QueryPoolTag {};
+
+using BufferHandle = Hand..." → "struct QueryPoolTag {};
+struct AccelerationStructu..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/include/engine/rhi/types.hpp[0m edit: "    std::optional<float> clear_depth;
+};" → "    std::optional<float> clear_depth;
+};
+
+// Ray t..."
+Next, the device contract: creation, instance writes, descriptor binding, and destruction.
+[94m[Bash][0m Add ray tracing methods to Device and CommandList headers $ """) open(p,'w').write(s) print("ok") EOF
+Now the CPU reference device. I'll check how it phrases its existing unsupported results so the new stubs match.
+[94m[Bash][0m Check unsupported error style and validation device method locations $ grep -n "write_texture\|QueryPoolHandle pool) override\|dispatch_mesh" engine/rhi/src/validation_dev...
+[94m[Bash][0m Add ray tracing stubs to the CPU reference device $ grep -n "failure" engine/core/include/engine/core/result.hpp | head -5
+The helper I just wrote builds its status through a dummy `RhiResult<int>`, which is awkward. I'll check `error.hpp` and simplify it to a single error builder.
+[94m[Bash][0m Read RHI error type definitions $ sed -n 1,37p engine/rhi/include/engine/rhi/error.hpp
+[94m[Bash][0m Simplify CPU device RT error helper and update call sites $ }  }  // namespace  ''' s=s.replace(old_helpers,new_helpers) s,n1=re.subn(r'ray_tracing_unavailable<...
+The CPU reference device is done. Next the Vulkan backend: its RT calls return Unsupported until US-042. I'll find the matching declaration sites first.
+[94m[Bash][0m Locate Vulkan device and command list declaration points $ sed -n 40,47p engine/rhi/src/vulkan/vulkan_device.hpp
+[94m[Bash][0m Add Vulkan ray tracing stubs returning Unsupported $ grep -n "report_" engine/rhi/src/vulkan/vulkan_device.hpp | head -3
+The Vulkan helper is a free function in the middle of a namespace, which could trip `-Wmissing-declarations` under `-Werror`. I'll wrap it in an anonymous namespace.
+[94m[Bash][0m Wrap Vulkan RT error helper in anonymous namespace $ }  }  // namespace """ assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) EOF grep -n ...
+Vulkan is done. The DX12 backend comes next. It needs the new objects in `dx12_device.hpp`, plus helpers that are currently file-local (`create_upload_resource` and `build_root_signature`) exposed to the new file. I'll make those edits now.
+[94m[Bash][0m Declare DX12 acceleration structure and RT pipeline objects $ set only when the device reports ray tracing """), ]) print("ok") EOF
+I declared a destructor for the acceleration-structure object that doesn't need to do anything (no mapping to undo), so I'll remove it. Then I'll update `dx12_device.cpp` to expose the upload helper, query `ID3D12Device5`, count DXR as supported only when it's present, and release the list's ray-pipeline reference on submit.
+[94m[Bash][0m Expose upload helper, add DXR device query and submit reset $ }     }     const std::array<bool, kFeatureCount> hardware{         options7.MeshShaderTier >= D3D12...
+The namespace edit was position-sensitive, so I'll read the result to confirm the braces pair up.
+[94m[Bash][0m Verify namespace braces around upload helper $ sed -n 48,70p engine/rhi/src/dx12/dx12_device.cpp
+The braces in `dx12_device.cpp` pair correctly. I'll apply the same change to `dx12_pipeline.cpp`: close the anonymous namespace before `build_root_signature` so it has external linkage.
+[94m[Bash][0m Expose root signature builder from pipeline file $ }  PipelineObject* Dx12Device::find_pipeline(""") open(p,'w').write(s) print("ok") EOF grep -n "^nam...
+The `build_root_signature` split is done. Next is the command list: track the active ray pipeline, bind its sets the way compute sets are bound, and check acceleration-structure descriptors at dispatch.
+[94m[Bash][0m Update DX12 command list for ray tracing pipeline binding $ }"""), ]) print("ok") EOF grep -n "pipeline_->layouts\|pipeline_ = \|sets_.fill" engine/rhi/src/dx12...
+Next, descriptor writes: `write_buffer` and `write_texture` must clear the new acceleration-structure slot, and a new `write_acceleration_structure` binds a top-level structure as an SRV.
+[94m[Bash][0m Locate descriptor element assignment lines $ grep -n "entry\.\(buffer\|texture\) \?=\|entry\.\(buffer\|texture\)\.reset" engine/rhi/src/dx12/dx12...
+[94m[Bash][0m Add acceleration structure descriptor write on DX12 $ }  RhiStatus Dx12Device::write_texture(DescriptorSetHandle set, std::uint32_t binding, std::uint32_t...
+Descriptor writes are in place. Before writing the new DX12 file, I'll move two helpers that every backend file would otherwise duplicate: the queue-order table and the `share` cast. Both move into `dx12_device.hpp`, and the file-local copies go.
+[94m[Bash][0m Move shared queue order and share helper into DX12 header $ sed -n 75,90p engine/rhi/src/dx12/dx12_descriptors.cpp
+The descriptor file's copy has no leading comment, so the match failed. The header, `dx12_device.cpp`, and `dx12_command_list.cpp` edits applied. I'll remove the descriptor copy by its actual text.
+[94m[Bash][0m Remove duplicate share helper from descriptors file $ sed -n 24,36p engine/rhi/src/dx12/dx12_device.hpp
+The shared helpers now live in one header. Next is the core of the DX12 work: `dx12_raytracing.cpp`, covering acceleration-structure creation, instance writes, the ray pipeline and its shader table, and the list's build and dispatch commands.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/engine/rhi/src/dx12/dx12_raytracing.cpp[0m "// Ray tracing foundation for DX12 (US-041): bottom- and top-level acceleration structures, ray tracing state objects with their shader
+// tables, and the list commands that build them and launch rays... (33136 chars)"
+I left a stray helper (`write_top_level_check_unused`) in the file and some dead instance-count assignments in `create_top_level`. I'll remove them, use an explicit null check on the ComPtr, and add the missing standard includes.
+[94m[Bash][0m Clean up stray helper and minor issues in DXR source $ """) rep("""#include <algorithm> #include <cstring> #include <string> #include <vector> ""","""#incl...
+That notice is from my own Python edit just before, so the file is as I intended. Next: wire the new source into the RHI build, and add a DXIL-library mode to the shader build function.
+[94m[Bash][0m Wire RT source into RHI and add DXIL library mode to shader build $ PROFILE" "" ${ARGN})   if(ARG_UNPARSED_ARGUMENTS OR NOT ARG_SOURCE OR NOT ARG_PROFILE OR (NOT ARG_EN...
+Next the test side. I'll write the DXIL library fixture first: one ray per output pixel, a closest-hit that writes 1, and a miss that writes 0.
+[94m[Write][0m [95m/mnt/d/dev/haiku_game_engine/tests/shaders/dx12_raytrace.hlsl[0m "// Hit/miss fixture for the DX12 ray tracing foundation (US-041). Built as a DXIL library (lib_6_3); the GPU suite loads it through
+// rhi_dx12_gpu_tests.cpp. Each output element is one ray cast from ... (1415 chars)"
+Now the test CMake wiring for the fixture, and the test-file helpers. I'll add the fixture target next to the existing DX12 compute shader.
+[94m[Bash][0m Add ray tracing fixture target to test CMake $ python3 - <<'EOF' def edit(p, pairs):     s=open(p).read()     for old,new in pairs:         assert ...
+Now the GPU tests. I'll add the RT `using` declarations, then append the helpers and four test cases at the end of the DX12 suite.
+[94m[Bash][0m Add ray tracing using declarations to DX12 GPU tests $ """) open(p,'w').write(s) print(s[-600:]) EOF
+[94m[Bash][0m Append DX12 ray tracing GPU test cases $ } EOF echo done
+I typed `FeatureState::Disabled ForTest` in the first test by mistake. I'll fix that, then review the remaining `using` and helper references.
+[94m[Bash][0m Fix feature state name typo in DX12 test $ grep -n "feature_name" tests/src/rhi_dx12_gpu_tests.cpp | head -3
+The GPU tests are in place. Next, CPU-side unit tests for the reference device's RT behavior, so Linux coverage exercises the new contract. I'll check the helpers that file already has.
+[94m[Bash][0m Check contract test helpers and using declarations $ grep -n "fails_with" tests/src/rhi_contract_tests.cpp | head -3
+The contract tests use a local `fails_with`, which works for any `RhiResult`. I'll append one unit test covering both the default (FeatureDisabled) and simulated (Unsupported) paths, including a command list.
+[94m[Bash][0m Add CPU contract unit test for ray tracing stubs $ \n",1) open(p,'w').write(s) print("ok") EOF grep -n "ValidationDeviceDesc" tests/src/rhi_contract_te...
+The Linux side is wired and the unit test is written. I'll configure and build the Linux debug preset now, which will surface any compile errors in the shared RHI, the Vulkan and CPU backends, and the tests.
+[94m[Bash][0m Configure and build Linux debug preset $ tail -3 /tmp/us041_build.log
+The Linux debug build passes with no errors or warnings. I'll confirm the new DXIL library was actually compiled, not skipped, and then run the unit suite.
+[94m[Bash][0m Check the RT shader target built on Linux $ cat /tmp/us041_configure.log | tail -3
+The DXIL library compiled (5.2 KB). Now the Linux unit gate.
+[94m[Bash][0m Run Linux unit tests via ctest and engine_tests $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -4
+[94m[Bash][0m Show the failing unit test details $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | grep -B5 -A12 "FAILED" | head -60
+The default CPU device simulates every feature, so ray tracing is enabled there and my expectation was wrong. I'll check the default in `ValidationDeviceDesc` and rewrite the test to cover the three real cases: no hardware, forced off, and simulated.
+[94m[Bash][0m Check ValidationDeviceDesc default feature set $ grep -n "simulated_hardware\|disabled_features" engine/rhi/include/engine/rhi/validation_device.hpp
+[94m[Bash][0m Fix contract test expectations and rerun unit suite $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -3
+The unit suite passes now. Before the Windows build, I reviewed the DX12 code against the SDK API and found two compile problems: `identifiers.size()` is called on a C array, and a `ComPtr` is used directly in a boolean expression. I'll fix both now.
+[94m[Bash][0m Fix identifier array type and ComPtr boolean use $ grep -n "identifiers" engine/rhi/src/dx12/dx12_raytracing.cpp
+The DX12 code now compiles by inspection. One real runtime bug turned up while checking the descriptors: `write_buffer` creates raw UAV views (`R32_TYPELESS`, `BUFFER_UAV_FLAG_RAW`), so the shader must declare a byte-address buffer, not a `RWStructuredBuffer`. I'll fix the fixture to match.
+[94m[Bash][0m Use byte-address UAV in RT fixture to match raw views $ ")] for old,new in pairs:     assert s.count(old)==1, old     s=s.replace(old,new) open(p,'w').write...
+That notice is my own edit, so the fixture's current state is the intended one. Next are the docs: the DX12 doc says ray tracing commands arrive in US-041, and the build table needs a US-041 row. I'll read those sections first.
+[94m[Bash][0m Read DX12 and build docs sections to update $ grep -n "US-04" docs/build.md | tail -3
+The DX12 doc and build table both need US-041 entries. I'll write those after the gates have results. First, the Windows gate is the long pole, so I'll start it: I'll check the batch template from the last story's gate run and check that no earlier batch is still running.
+[94m[Bash][0m Inspect latest Windows gate batch template and running batches $ ps -eo pid,args | grep -i "\.bat" | grep -v grep | head
+The template is clear. I'll create `us041_gate.bat` from it, with CRLF endings, and confirm nothing else is running before launching it in the background.
+[94m[Bash][0m Create and launch the US-041 Windows gate batch $ echo started
+The Windows batch is running. While it runs, I'll do the Linux gates that don't touch the Windows build: vendor validation and the clang unit suite.
+[94m[Bash][0m Run vendor validation and Linux unit ctest $ grep -E "tests passed|FAILED|Failed" /tmp/us041_unit.log | head -5
+Clang unit tests pass 22/22 and vendor validation passes. Next the GCC and sanitizer gates. These builds are long, so I'll run them in the background and check on them.
+[94m[Bash][0m Start Linux GCC and sanitizer gates in background $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep us041
+The Windows batch already has log files for all six steps, which is suspiciously fast. I'll read the result codes and the build log before trusting anything.
+[94m[Bash][0m Read Windows batch result codes and build errors $ tr -d '\r' < us041_3.log | grep -E "error|FAILED" | head -20
+The build step reports 0, which is plausible on a warm tree, but I need to confirm it compiled the new DX12 file and that no `warning C` or `error C` lines appeared.
+[94m[Bash][0m Confirm DX12 files compiled on Windows and unit results $ tr -d '\r' < us041_4.log | tail -4
+The Windows build compiled the new DX12 backend and the DX12 GPU test file with no warnings or errors, and the unit gate passed. The GPU steps are still running. I'll set up a bounded waiter on the batch's done file so I get notified when they finish.
+[94m[Bash][0m Set up bounded wait for Windows GPU gate completion $ cat us041_rc.txt) > /tmp/us041_wait.out 2>&1 & echo waiting
+The Windows GPU steps are running in the background and a poll is set up. Meanwhile I'll update `docs/dx12.md`: the "ray tracing commands come in US-041" bullet becomes a real section describing what was built and what is still deferred.
+[94m[Bash][0m Document DX12 ray tracing design in dx12.md $ python3 - <<'EOF' p='docs/dx12.md' s=open(p).read() old="- `RayTracing` and `IndirectCount` are repo...
+Next, `docs/rhi.md` gets the backend-neutral contract, and the Vulkan doc's ray tracing sentence gets updated to point at US-042.
+[94m[Bash][0m Read Vulkan capability note and RHI backends section $ sed -n 86,100p docs/rhi.md
+[94m[Bash][0m Update Vulkan and RHI docs for ray tracing contract $ ls /mnt/c/Users/bucha/AppData/Local/Temp/ | grep "us041_[5-9]\|us041_done"
+The DX12 GPU step has produced a log. I'll read its result and output before the Vulkan step finishes.
+[94m[Bash][0m Read DX12 GPU suite result and output $ tr -d '\r' < us041_5.log | tail -40
+The DX12 suite is reporting failures. The message says a copy destination is in the wrong state, which points at my `stage_quad` helper: device-local buffers start in `Common`, not `CopyDestination`, so the copy needs a transition first. I'll check the full log to see which tests failed.
+[94m[Bash][0m List failing DX12 test cases and messages $ tr -d '\r' < us041_5.log | grep -B2 "with message" | grep -E "^D:|with" | head
+[94m[Bash][0m Show DX12 log header and failure lines $ tr -d '\r' < us041_5.log | sed -n '1,30p' | head -40 | grep -v "^$" | head -30
+The log shows only one failure, in the last test, and no summary line. The step may still be running or stuck, so I'll check whether `engine_tests.exe` is still alive on the Windows side before reading anything more.
+[94m[Bash][0m Check whether the Windows GPU test process is still running $ date +%H:%M:%S
+No `engine_tests.exe` is running, and the Vulkan step has already started. The `gpu_dx12=` line is missing from the result file, which the earlier batches also had trouble with. I'll read the Vulkan step's log and the current result file to see where the batch is.
+[94m[Bash][0m Read Vulkan step log and current batch status $ cat /tmp/us041_wait.out 2>/dev/null
+The batch reports `gpu_dx12=1`, so the DX12 suite failed, and the Vulkan step is now running. The bug is in my test helper: `stage_quad` copies into device-local buffers that are still in `Common`. I'll add the `Common → CopyDestination` transitions and check the rest of the staging code for the same mistake.
+[94m[Bash][0m Transition device-local quad buffers before copying $ """ assert s.count(old)==1 s=s.replace(old,new) open(p,'w').write(s) print("ok") EOF grep -n "Common...
+The other copies in that file already transition correctly. I'll check the background Linux gates, then rerun the full Windows batch once the Vulkan step finishes.
+[94m[Bash][0m Check progress of Linux gates and Windows Vulkan step $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us041_rc.txt | tail -2
+
+[91m[Error: <tool_use_error>Blocked: sleep 240 followed by: cat /tmp/us041_linux_rc.txt cat /tmp/us041_linux_gates.out tail -3 cat /mnt/c/Users/bucha/AppData/Local/Temp/us041_rc.txt tail -2. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Check Linux gate and Windows batch progress $ tail -2 /mnt/c/Users/bucha/AppData/Local/Temp/us041_rc.txt
+The Windows batch finished with `gpu_vulkan=0`, so the Vulkan GPU suite passes with validation layers on, and `gpu_dx12=1` is the copy bug I just fixed. The Linux GCC gate is still at its first step. Before relaunching the Windows batch I'll check that no earlier batch is still running, per the overlap rule in memory.
+[94m[Bash][0m Relaunch Windows gate batch after the test fix $ echo relaunched
+The batch is relaunched on the fixed test. I'll run a bounded background waiter on its done file so I'm notified when it finishes, rather than polling.
+[94m[Bash][0m Wait for Windows gate batch to finish $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us041_rc.txt
+While the batch runs, I'll add the two reusable patterns from this story to the Codebase Patterns section at the top of `progress.md`.
+[94m[Bash][0m Add reusable DX12 and RT patterns to progress codebase section $ python3 - <<'EOF' p='.ralph-tui/progress.md' s=open(p).read() anchor="- A texture that a descriptor ...
+[94m[Bash][0m Check interim status of batch and Linux gates $ cat /tmp/us041_linux_rc.txt 2>/dev/null
+The Windows batch is still in its first steps, and the GCC gate has moved on to its build. I'll load the Monitor tool so I can wait on the Windows done file with an until-loop.
+[94m[ToolSearch][0m query: [93mselect:Monitor[0m
+[94m[Monitor][0m US-041 Windows gate batch: each rc step and completion $ done
+The Windows gate batch is running, and I'm waiting on it. The Linux GCC gate is also still in progress. I'll get the results when they arrive.
+Vendor validation passed on Windows (`validate=0`). The rest of the batch is still running, so I'm waiting for the next step's result.
+The Windows `win-dev` configure step passed (`configure=0`). The build, unit, and GPU steps are still running.
+The Windows `win-debug` build passed (`build=0`), so the DX12 backend and the GPU test file compiled. The unit, DX12 GPU, and Vulkan GPU steps are still running.
+The Windows `win-unit` tests passed (`unit=0`). The DX12 and Vulkan GPU steps are next.
+The DX12 GPU step failed again (`gpu_dx12=1`). I'll read its log to find the failing check.
+[94m[Bash][0m Read DX12 GPU suite failure details $ cd /mnt/c/Users/bucha/AppData/Local/Temp && tr -d '\r' < us041_5.log | grep -n "" | grep -E "^[0-9]+...
+The debug layer shows a real contract error. DXR requires BLAS input buffers to be in `NON_PIXEL_SHADER_RESOURCE`, which our `ShaderRead` state maps to. Neither `VertexBuffer` nor `IndexBuffer` is accepted. I'll change the build check, the test staging, and the docs to use `ShaderRead`, and require `ShaderResource` usage on geometry buffers.
+[94m[Bash][0m Switch BLAS inputs to ShaderRead state and ShaderResource usage $ """), ]) print("ok") EOF grep -n "VertexBuffer\|IndexBuffer" engine/rhi/src/dx12/dx12_raytracing.cpp...
+The batch finished with `gpu_dx12=1` (the run before this fix) and `gpu_vulkan=0`. I changed the RHI types and tests after that run, so the background Linux gates may be compiling stale sources. I'll check their progress, then rebuild the Linux debug target against the current tree.
+[94m[Bash][0m Check Linux gates and rebuild Linux debug with the fix $ ./build/linux-dev/tests/Debug/engine_tests --suite unit 2>&1 | tail -2
+The Linux debug build passes with the fix, and the unit suite is green at 512 cases. The earlier waiter has also finished. Now I'll relaunch the Windows batch on the fixed tree.
+[94m[Bash][0m Relaunch Windows gate batch on the fixed tree $ echo relaunched
+[94m[Monitor][0m US-041 Windows gate batch (relaunch): each rc step and completion $ done
+The Windows batch is relaunched on the ShaderRead fix. I'll report results as each step completes.
+The relaunched Windows batch has passed vendor validation (`validate=0`). The configure, build, unit, and GPU steps are still running.
+The `win-dev` configure step passed (`configure=0`). The build, unit, and GPU steps are next.
+The `win-debug` build passed (`build=0`) on the fixed tree. The unit and GPU steps are next.
+The Windows unit tests passed (`unit=0`). The DX12 GPU suite is running now, and it's the step that failed before.
+The DX12 GPU suite passed (`gpu_dx12=0`), so the ray tracing tests now run clean on the RTX 5080. The Vulkan GPU step is running.
+The whole Windows batch is green now: vendor, configure, build, unit, DX12 GPU, and Vulkan GPU. Before I record that, I'll check the GPU logs for the real case counts and debug-layer output, since an exit code alone isn't enough. I'll also check whether the old Linux GCC gate script is still running.
+[94m[Bash][0m Verify Windows GPU logs and Linux gate status $ pgrep -fa us041_linux_gates | grep -v pgrep | head -2
+Both GPU suites pass on the RTX 5080 with validation layers on and `software=no`. DX12 ran 51 cases and Vulkan ran 48. The Linux GCC and sanitizer gates also finished, but the script started before my last edits, so I'll rebuild the GCC debug tree incrementally and rerun its unit suite against the current sources.
+[94m[Bash][0m Rebuild GCC debug and rerun GCC unit suite on current sources $ grep "tests passed" /tmp/us041_gcc2_unit.log
+The GCC debug build has no warnings, and its unit suite passes 22/22 on the current sources. Last, I'll record the story in `progress.md` and add its row to the build table, with the gate results as they stand.
+[94m[Bash][0m Record US-041 progress entry and build table row $ builds reject destroyed references. The CPU reference and Vulkan return `Unsupported` (US-042). Wind...
+US-041 is implemented: DX12 has DXR bottom- and top-level acceleration structures, refit, a ray pipeline with a shader table, and `dispatch_rays`. Every required gate I could run passes. The benchmark criterion and the native Linux Vulkan GPU run are not done.
+
+**Gate results** (final tree; Windows GPU runs on the RTX 5080, debug layers on, `validation_layers=on`, `software=no`):
+
+| Gate | Result |
+|---|---|
+| Windows `ValidateVendor`, `win-dev`, `win-debug` | pass, 0 `warning C`/`error C` |
+| Windows `win-unit` | 21/21 |
+| Windows `gpu dx12` | pass, 51 cases / 17878 assertions |
+| Windows `gpu vulkan` | pass, 48 cases / 17875 assertions |
+| Linux `ValidateVendor`, `linux-dev`, `linux-debug` | pass, 0 warnings |
+| Linux `linux-unit` | 22/22 (unit suite 512 cases) |
+| Linux `linux-gcc-debug`, `linux-gcc-unit` | 0 warnings, 22/22 |
+| Linux `linux-asan`, `linux-sanitize` | built; sanitize 22/22, but this ran before the final DX12-only fix |
+
+**Not run or not claimed:**
+- `engine_bench --suite acceptance`: no bench target exists yet (US-074), so the performance criterion is not measured.
+- The native Linux Vulkan GPU suite: this WSL host has no usable Vulkan device.
+- The GUI check and GitHub CI: no application window exists yet, and nothing was pushed.
+- Vulkan ray tracing (US-042): the Vulkan and CPU reference devices return `Unsupported` for the new calls, so no cross-backend equivalence is claimed.
+
+**What changed:**
+- **Public RHI** (`engine/rhi/include/engine/rhi/`): new handles, descriptions, and `Device`/`CommandList` methods for structures, instance writes, builds, the ray pipeline, and dispatch.
+- **DX12** (`engine/rhi/src/dx12/dx12_raytracing.cpp`, plus edits to the device, descriptor, pipeline, and command-list files): the DXR implementation. Destroyed structures are kept until their submission's fence, and builds reject destroyed references.
+- **Build**: DXIL-only `lib_6_3` mode in `cmake/ShaderToolchain.cmake`, and the hit/miss fixture `tests/shaders/dx12_raytrace.hlsl`.
+- **Tests**: four DX12 GPU cases (hit/miss, refit plus destroyed-reference rejection, destroy during an unfinished trace, capability gating) and one CPU contract case.
+- **Docs**: `docs/dx12.md`, `docs/rhi.md`, `docs/vulkan.md`, the US-041 row in `docs/build.md`, and `.ralph-tui/progress.md`.
+
+**Two bugs the GPU runs caught, both fixed:**
+- The DXR debug layer requires BLAS input buffers in `NON_PIXEL_SHADER_RESOURCE`, so geometry buffers now carry `ShaderResource` usage and sit in `ShaderRead`.
+- Device-local buffers start in `Common`, so the test staging now transitions them before copying.
+
+**Choices I made that you may want to revisit:**
+- Each structure owns its own scratch buffer. Sharing scratch between structures would save memory but was not needed for the foundation.
+- Every instance uses the one hit group, and any-hit/intersection shaders, local root signatures, and compaction are deferred.
+- The CPU reference device reports `Unsupported` for ray tracing commands. It does not simulate them.

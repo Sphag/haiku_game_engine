@@ -1,0 +1,45 @@
+# Iteration 845 Log
+
+## Metadata
+
+- **Task ID**: US-077
+- **Task Title**: Physics Benchmark
+- **Description**: As a physics developer, I want a dedicated workload so that I can observe simulation cost.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T07:44:04.698Z
+- **Ended At**: 2026-10-26T07:56:02.495Z
+- **Duration**: 11m 57s
+- **Input Tokens**: 34
+- **Output Tokens**: 3674
+- **Total Tokens**: 3708
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether US-077 is already partly implemented and what the progress log says.
+[94m[Bash][0m Inspect benchmark tree and progress log $ tail -40 .ralph-tui/progress.md
+The log shows US-077's code is in place and the Windows batch passed. The only open item is the Linux/GCC CI job, which this machine can't run (GCC 9.4 only). I'll re-check the Linux gates on the current tree rather than rely on the older notes.
+[94m[Bash][0m Run Linux quality gates and check for GCC 11+ $ echo "gcc_check_done"
+Linux dev, build (0 warnings), vendor validation, and the unit suite all pass on the current tree. `linux-sanitize` is a required gate for physics changes, and its last green run is stale, so I'll rerun it.
+[94m[Bash][0m Run linux-asan configure, build, and sanitizer tests $ tail -4 /tmp/asan_test.log
+[94m[Bash][0m Check test summary and log this status check $ Jolt needs GCC 11+, and installing it needs root. Not reported as passed. - No COMPLETE signal: the ...
+US-077 is not complete, so I have not emitted the completion signal. The physics stress benchmark is implemented and the Linux gates I could run pass, but the story's criteria require a Linux/GCC job this machine cannot run.
+
+**Verified on the current tree (Linux, this pass):**
+- `cmake -P cmake/ValidateVendor.cmake`: pass.
+- `cmake --preset linux-dev`: pass.
+- `cmake --build --preset linux-debug`: pass, 0 warnings.
+- `ctest --preset linux-unit --no-tests=error`: 30/30 pass.
+- `linux-asan` configure and build, then `ctest --preset linux-sanitize --no-tests=error`: 30/30 pass. The earlier X11 failure did not recur.
+
+**Still open:**
+- **Linux/GCC CI job** (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`): only g++-9 and clang++-10 are installed. Jolt needs GCC 11+, and installing it needs root. I did not attempt the install.
+- **Windows gates** were not rerun in this pass. The last results come from batch `us077` (`artifacts/bench/us077-dx12/report.json`), and no file under the benchmark, physics, or test paths has changed since that batch.
+- **`engine_bench --suite acceptance`** exits 3 (incomplete) because the render, streaming, and all-features stories are still open. That is the designed result, not a pass.
+
+The physics stress code (`tools/benchmark/src/physics_stress.cpp`) covers the three acceptance criteria as far as the earlier checks showed: active and sleeping counts, lost timesteps from the catch-up limit, and NaN and out-of-bounds detection. The last headless run reported 3 of 3 repeats with zero lost timesteps, zero NaN, and zero out-of-bounds samples.
+
+I appended a status entry to `.ralph-tui/progress.md`. Closing the story needs a machine with GCC 11+ for the Linux/GCC job, plus a Windows gate rerun if you want the results to match the current tree.

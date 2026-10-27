@@ -1,0 +1,147 @@
+# Iteration 815 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:56:12.568Z
+- **Ended At**: 2026-10-26T04:45:47.240Z
+- **Duration**: 1h 49m 34s
+- **Input Tokens**: 308
+- **Output Tokens**: 25650
+- **Total Tokens**: 25958
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and what US-076 already has.
+[94m[Bash][0m Inspect repo state, progress log, and benchmark tools $ grep -n "US-076\|render_stress" -r tasks/prd-open-world-engine.md | head -30
+The progress log shows 32 prior passes stalled on one blocker: the start frame has 312,068 triangles against a 2,000,000 floor. Before deciding whether that's really a user call, I'll read the PRD constraints and the current render_stress triangle code.
+[94m[Bash][0m Read PRD US-076 and US-080 and triangle counting code $ ls artifacts/bench 2>/dev/null | tail -20
+The PRD says the fixtures must specify at least 2M submitted triangles on the start frame, and that a missed budget is fixed in the implementation, not by reducing the workload. The current mesh generator is the knob that sets triangle density, so I'll check how the render_stress content and its pools are wired before deciding whether changing density is in scope.
+[94m[Bash][0m Read workload recipe, expected counts, and render_stress constants $ sed -n 15,120p tools/benchmark/src/workload.cpp && echo ---- && sed -n 180,240p tools/benchmark/src/...
+The start-frame count is set by the 957 instances within draw distance times mesh density. The table counts (20,000 instances, 200 meshes) stay fixed; only the fixture mesh density is in question. The PRD says fixtures must specify at least 2M start-frame triangles, so making the fixture meshes denser is an implementation fix rather than a contract reduction. I'll check the build tooling and version constant before changing anything.
+[94m[Bash][0m Locate workload version constant and existing build outputs $ grep -n "start_triangles\|instances_within" -r tools/benchmark/src/workload.cpp | head -5
+The mesh generator is the lever: `quads = 8 + below(25)`, and the workload version is 1. I'll raise mesh density to 24–96 quads per side (about 8.9× the triangles per mesh, which projects the 312k start-frame count to roughly 2.8M), bump the workload version, and rebuild the generator.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/src/workload.cpp[0m edit: "// The geometry of mesh `index`: a square grid of ..." → "// The geometry of mesh `index`: a square grid of ..."
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tools/benchmark/include/engine/benchmark/workload.hpp[0m edit: "inline constexpr int kWorkloadVersion = 1;" → "inline constexpr int kWorkloadVersion = 2;"
+Now I'll rebuild the generator on the Linux dev preset and check the regenerated counts against the old expected file.
+[94m[Bash][0m Rebuild engine_workload on linux-dev and show usage $ cp benchmarks/workload_expected.json /tmp/workload_expected_v1.json && timeout 900 cmake --build --p...
+[94m[Bash][0m Build engine_workload in linux-dev tree and run check $ echo "exit=$?"
+The version check now fails as expected, so the expected file must be regenerated. I'll write the new file to a temporary path first and compare its counts before replacing the pinned file.
+[94m[Bash][0m Write candidate expected file and diff counts $ for k in a:         if a[k]!=b.get(k): print(s,k,a[k],'->',b.get(k)) print('scenes', list(n['scenes'...
+The new counts are about 8.5× the old ones, which projects the render_stress start frame to roughly 2.6–2.7M triangles. I'll pin the new file, verify it with `--check`, and run the Linux benchmark-related tests.
+[94m[Bash][0m Pin new expected file, verify check, find related tests $ cat CMakePresets.json | grep -n '"name"' | head -40
+The expected file now matches. Next are the Linux gates: vendor validation, configure, debug build, and the unit tests.
+[94m[Bash][0m Run vendor validation, configure, and debug build on Linux $ tail -5 /tmp/build.log
+[94m[Bash][0m Run Linux unit test suite via ctest $ grep -i "fail" /tmp/ctest.log | head
+[94m[Bash][0m Show failing bench workload test assertion $ grep -n -B5 "bench_workload_tests.cpp:267" /tmp/ctest.log | head -30
+The failing test hardcodes `workload_version": 1` in its fixture text. I'll change it to use the current constant so it stays correct across version bumps.
+[94m[Edit][0m [95m/mnt/d/dev/haiku_game_engine/tests/src/bench_workload_tests.cpp[0m edit: "    std::string other = text;
+    const auto at = ..." → "    // The version is read from the constant, so a..."
+[94m[Bash][0m Rebuild and rerun Linux unit tests after test fix $ grep -A3 "tests passed\|FAILED" /tmp/ctest2.log | tail -12
+Linux is green: vendor validation, configure, debug build, and all 30 unit/integration tests pass. The start-frame floor still needs a real GPU run, and the Windows gates need a run too. I'll check the Windows runner notes from memory.
+[94m[Bash][0m Read Windows gate run notes and existing US-076 artifacts $ ls /mnt/d/dev/haiku_game_engine/artifacts | head -30
+The GPU runs go through the Windows host. I'll check how the existing US-076 reports were produced so I can repeat the same run with the new fixture.
+[94m[Bash][0m Inspect existing US-076 report structure and reports directory $ ls /mnt/d/dev/haiku_game_engine/artifacts/reports | tail -20
+The prior runs were built Release on the Windows host and recorded a floor failure with exit 1. I'll check which Windows build trees already have `engine_bench` before writing a batch.
+[94m[Bash][0m Find Windows bench binaries and check for running batches $ ps -eo pid,args | grep "\.bat" | grep -v grep | head
+No batch is running. I'll look at the most recent batch file as a template for the Windows run.
+[94m[Bash][0m Show most recent Windows batch template $ ls -t | grep -i "us076" | head
+That template covers the Windows gates and GPU suites. The benchmark invocation lives in `us076_bench.bat`, so I'll read that too.
+[94m[Bash][0m Read the US-076 bench batch and its result file $ ls -la /mnt/d/dev/haiku_game_engine/artifacts/bench/us076-dx12-indexed/ | head
+The Windows batch will rerun the four gates, the GPU suites, a Release `engine_bench` build, and all eight acceptance runs on the new fixture. Nothing else is running, so I'll write it with CRLF endings and launch it in the background.
+[94m[Bash][0m Write and launch the Windows gate and benchmark batch $ cmd.exe /c "C:\\Users\\bucha\\AppData\\Local\\Temp\\us076e.bat" > us076e_stdout.txt 2>&1 & echo laun...
+The batch is running in the background. I'll wait for its completion marker rather than poll in the foreground.
+[94m[Bash][0m Wait for Windows batch to finish and print result codes $ cat /mnt/c/Users/bucha/AppData/Local/Temp/us076e_rc.txt
+The launch command returned immediately, which may mean the batch exited early. I'll check the result file and the stdout capture.
+[94m[Bash][0m Check batch progress and stdout capture $ ps -eo pid,args | grep "us076e" | grep -v grep
+The batch is still running; the earlier completion notice was for the launch wrapper. The wait task will report when the stdout capture shows DONE.
+[94m[Bash][0m Confirm wait task is still pending $ echo waiting
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check batch result codes so far $ ps -eo pid,args | grep "us076e" | grep -v grep | head -2
+The result file is still empty, which is suspicious. I'll check the first step's log to see whether the batch is progressing.
+[94m[Bash][0m List batch logs and timestamps $ date
+The Windows batch started at 06:11 and is working through its steps; its first result codes aren't written yet. Here's where things stand.
+
+**What changed this pass**
+
+- **Fixture density (the blocker from the last 32 passes):** the render_stress start frame was at 312,068 triangles against a 2,000,000 floor, and the PRD says the fixtures must reach that floor and that a missed budget is fixed in the implementation, not by reducing the workload. I read that as allowing the mesh generator to change, and I took that reading rather than asking again. The table counts (20,000 instances, 200 meshes, 128 lights, and so on) are untouched.
+  - `tools/benchmark/src/workload.cpp`: mesh grids go from 8–32 quads per side to 24–96. That gives about 8.5× the instance triangles, which projects the start frame to roughly 2.6–2.7M. The projection still needs the GPU run to confirm.
+  - `kWorkloadVersion` 1 → 2, and `benchmarks/workload_expected.json` regenerated. This also changes the three other scenes' mesh and instance triangle totals, since the generator is shared. Their table counts are unchanged.
+  - `tests/src/bench_workload_tests.cpp`: a test hardcoded version 1; it now reads the constant.
+- **Linux gates, all passing:** `ValidateVendor`, `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest (30/30, after the test fix).
+- **Windows batch running now:** vendor validation, `win-dev` configure, `win-debug` build, `win-unit` ctest, both GPU suites, and a Release `engine_bench` build, followed by all eight acceptance runs (DX12 and Vulkan, indexed, indirect, meshlets, and meshlets with mesh shaders forced off). Results go to `us076e_rc.txt` in the Windows Temp directory.
+
+**Still open**
+
+- The start-frame floor is unverified until the batch's acceptance runs finish. If the new fixture still falls short, the next step is more density, not a placement change.
+- The frame budget is still expected to fail (earlier p99 was 35–47 ms against 16.7 ms). That is US-080's performance work, not part of this story's criteria.
+- `full_1080` stays unsupported until the FSR 2 permutation tables exist.
+- Native Linux Vulkan GPU and `linux-gcc` were not run.
+
+I'll wait for the batch to finish, then record the results in `.ralph-tui/progress.md`.
+[94m[Bash][0m Check Windows batch progress $ date
+Gates and GPU suites are green, but the first DX12 indexed acceptance run exited 1. I'll read its log.
+[94m[Bash][0m Read the failing DX12 indexed run log $ cd /mnt/c/Users/bucha/AppData/Local/Temp/ && tr -d '\r' < us076e_dx12_indexed.log | tail -30
+The run fails on the frame-time budget, which earlier passes already expected. I'll check whether the start-frame triangle floor is now met.
+[94m[Bash][0m Inspect start-frame triangle counters in the DX12 indexed report $ ls screenshots | head
+The start-frame floor is now met: 3,202,690 triangles on the indexed path, against the 2,000,000 minimum. The run still fails on the frame-time budget, which the PRD assigns to US-080. The batch is continuing through the remaining acceptance runs, so I'll re-arm the wakeup.
+[94m[ScheduleWakeup][0m
+The Windows batch is still running its remaining acceptance runs, and I've re-armed the wakeup to check again in about 25 minutes.
+
+**Progress since the last update**
+
+- **Start-frame floor is met.** The DX12 indexed render_stress run now submits 3,202,690 triangles on the starting frame, against the 2,000,000 minimum. The denser fixture (mesh grids of 24–96 quads per side) is what moved it from 312,068.
+- **Windows gates and GPU suites passed:** vendor validation, `win-dev` configure, `win-debug` build, `win-unit` ctest, `engine_tests --suite gpu` on DX12 and Vulkan, and the Release `engine_bench` build.
+- **Linux gates passed:** vendor validation, `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest (30/30).
+
+**Still open**
+
+- The DX12 indexed acceptance run exits 1. Its reason is the frame-time budget (p99 well above 16.7 ms), plus "residency was not measured." Under the PRD, closing the budget is US-080's job. The batch will record the remaining paths and both profiles either way.
+- `full_1080` is unsupported because FSR 2 is not built; the report records that as unsupported, not passed.
+- Streaming, physics, and all_features scenes have no workload implementation yet, so their runs are `missing`.
+- Native Linux Vulkan GPU and `linux-gcc` have not been run.
+- I haven't yet written the progress log entry. I'll do that once the batch finishes.
+[94m[Bash][0m Check Windows batch progress and result codes $ date
+[94m[Bash][0m Summarize DX12 run results so far $ done
+[94m[ScheduleWakeup][0m
+The Windows batch is still running. Gates and GPU suites are green, and four of the eight DX12/Vulkan acceptance runs have finished:
+
+- **Passed:** vendor validation, `win-dev` configure, `win-debug` build, `win-unit` ctest, `engine_tests --suite gpu` on DX12 and Vulkan, and the Release `engine_bench` build.
+- **Finished with exit 1:** DX12 indexed, indirect, meshlets, and meshlets with mesh shaders forced off. Each run fails on the frame-time budget, and the reports say "residency was not measured." The fallback-run logs show no separate failure for the forced-off path, but I haven't inspected its report yet.
+- **Start-frame floor:** met on the indexed path (3,202,690 triangles against 2,000,000).
+- **Not yet done:** the four Vulkan acceptance runs, the progress-log entry, and the fallback report check. Native Linux Vulkan GPU and `linux-gcc` remain unrun.
+
+I've re-armed the wakeup for about 25 minutes.
+[94m[Bash][0m Check Windows batch progress $ date
+[94m[ScheduleWakeup][0m
+Status: the Windows batch is still running. Six of the eight acceptance runs have exited 1. The last two Vulkan runs (meshlets and meshlets with mesh shaders forced off) are still going. Nothing new since the last tick, so I've re-armed the wakeup for about 25 minutes.
+[94m[Bash][0m Collect final batch results and per-run counters $ done
+The batch finished. All gates and GPU suites pass, but every acceptance run exits 1 on the frame-time budget. I'll confirm the fallback is recorded correctly, then log the result.
+[94m[Bash][0m Check fallback feature reporting and counters per path $ cd /mnt/d/dev/haiku_game_engine && tail -c 400 .ralph-tui/progress.md
+The fallback is recorded correctly: forced-off runs report "fell back to indirect-indexed draws" and mesh shaders as disabled. I'll append the progress entry.
+[94m[Bash][0m Append US-076 progress entry to progress log $ fix the measured cause), residency measurement, screenshots are written (6 per run). Native Linux Vu...
+[94m[ScheduleWakeup][0m
+The Windows batch finished, and I've stopped the loop. US-076 is not complete: every acceptance run fails on the frame-time budget.
+
+**Passing**
+- Start-frame floor: the indexed path submits 3,202,690 triangles, against the 2,000,000 minimum. This came from raising mesh density in the fixture generator (workload version 1 → 2), not from changing the table counts. The generator is shared, so the other three scenes' triangle totals changed as well.
+- Linux: vendor validation, `linux-dev` configure, `linux-debug` build, and `linux-unit` ctest (30/30).
+- Windows: vendor validation, `win-dev` configure, `win-debug` build, `win-unit` ctest (29/29), and `engine_tests --suite gpu` on DX12 (72 cases) and Vulkan (73 cases).
+- Fallback: with mesh shaders forced off, the reports show "disabled" and fall back to indirect-indexed draws. Meshlet runs report the meshlet path as active.
+
+**Failing**
+- All eight render_stress acceptance runs (DX12 and Vulkan, indexed, indirect, meshlets, and meshlets forced off) exit 1. The reason is the frame-time budget, and the reports also say "residency was not measured." The PRD assigns the budget to US-080 (fix the measured cause), so I haven't attempted that here.
+- Streaming, physics, and all_features have no workload implementation yet (US-077, US-078, and the final scene).
+- `full_1080` is unsupported because FSR 2 is not built.
+- Native Linux Vulkan GPU and `linux-gcc` were not run.
+
+**Decisions to confirm**
+- I treated the mesh density change as an implementation fix under the PRD's "fix the implementation first" rule. If you read the 2M floor as part of the fixed contract, the change should be reverted and the floor reopened for discussion.
+- The progress log has an entry for this pass. Artifacts under `artifacts/bench/us076-*` were overwritten by the new runs.

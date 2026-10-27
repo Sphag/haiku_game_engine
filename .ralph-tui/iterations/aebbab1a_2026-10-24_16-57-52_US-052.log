@@ -1,0 +1,43 @@
+# Iteration 216 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T13:57:52.819Z
+- **Ended At**: 2026-10-24T14:03:50.511Z
+- **Duration**: 5m 57s
+- **Input Tokens**: 32
+- **Output Tokens**: 2655
+- **Total Tokens**: 2687
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since the notes suggest US-052 is partly done.
+[94m[Bash][0m Inspect physics module, progress log, and memory note $ ls engine/physics/ && tail -n 60 .ralph-tui/progress.md && cat /home/max/.claude/projects/-mnt-d-dev...
+The notes show US-052 is implemented and was re-verified several times, with the status held at Partial by two open items. I'll confirm the current tree still builds and passes, and check whether a GCC 11+ compiler now exists.
+[94m[Bash][0m Re-run validation, Linux build, unit tests, and check compilers $ grep -rl "engine_bench" --include=CMakeLists.txt . | grep -v third_party | head
+Validation, the dev configure, and the debug build all pass with zero warnings. The unit-test tail cut off the pass line, so I'll confirm it.
+[94m[Bash][0m Re-run Linux unit tests and capture the summary $ grep -E "tests passed|Failed|\*\*\*" /tmp/ct.log | tail -n 5
+[94m[Bash][0m Append this pass's entry to the progress log $ US-074). Windows gates and ASan/UBSan not re-run this pass. - Status call: US-052 stays **Partial**....
+US-052 is still **Partial**, so I'm not signalling COMPLETE. The adapter is implemented, and the Linux clang gates pass on the current tree. Two acceptance items remain blocked by the environment and by the repo, not by the physics code.
+
+**Re-verified this pass (Linux, clang 10):**
+- `cmake -P cmake/ValidateVendor.cmake`: exit 0.
+- `cmake --preset linux-dev`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0, zero warning or error lines.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 100% passed, 22/22 (1 unit, 21 integration).
+
+**Still open:**
+- **`linux-gcc` gate:** the local compilers are GCC 9.4 only, and Jolt needs GCC 11+ (`__builtin_bit_cast`). I checked `/usr/bin` again and found nothing newer. This needs a GCC 11+ environment or the CI job.
+- **Acceptance benchmark:** no `engine_bench` CMake target exists in any non-vendored `CMakeLists.txt`, so `engine_bench --suite acceptance` cannot run. The notes tie this to US-074.
+
+**Not re-run this pass:** the Windows gates (recorded as passing on the unchanged tree in an earlier entry) and the ASan/UBSan sanitize run (passed in an earlier entry).
+
+I made no source changes. I appended a dated entry to `.ralph-tui/progress.md` recording this pass.

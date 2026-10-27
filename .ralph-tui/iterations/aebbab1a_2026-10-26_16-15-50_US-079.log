@@ -1,0 +1,45 @@
+# Iteration 927 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:15:50.569Z
+- **Ended At**: 2026-10-26T13:16:12.488Z
+- **Duration**: 21s
+- **Input Tokens**: 32
+- **Output Tokens**: 2802
+- **Total Tokens**: 2834
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking whether any of US-079 already exists in the tree, and what the progress log says about it.
+[94m[Bash][0m Inspect repo root, progress log, and existing all_features references $ ls && tail -n 80 .ralph-tui/progress.md && grep -rn "all_features" --include=*.cpp --include=*.hpp -...
+The progress log shows US-079 has been blocked for many passes on two user decisions. I'll confirm those blockers still hold before deciding whether any work is left to do.
+[94m[Bash][0m Recheck FSR 2 headers, samples dir, manifest entry, and recent edits $ find engine tests tools benchmarks docs cmake -newer .ralph-tui/progress.md -type f | head
+[94m[Bash][0m Show all_features entry in benchmark manifest $ grep -n -A3 "all_features" benchmarks/manifest.json | head -20
+[94m[Bash][0m Append status check entry to progress log $ (2) approval of the `all_features_route_v1` definition (proposed in check 29). Without them the scen...
+US-079 is not complete, so I am not signalling COMPLETE. The work is blocked on two decisions that only you can make, and I made no source changes this pass.
+
+**What is blocking it (rechecked just now):**
+1. **FSR 2 vendoring route.** `third_party/fsr2` still has 0 `*_permutations.h` files. Without them FSR 2 cannot link, so the `full_1080` profile and the upscale mode can't be built or measured. Options: obtain the generated headers (a vendoring change), or record `full_1080` as unsupported.
+2. **`all_features` route definition.** `benchmarks/manifest.json` still has `all_features` at `implementation: none`, with the route marked "pending final benchmark scene". Check 29 in the progress log proposes `all_features_route_v1`: the `streaming_route_v1` geometry (centre (4096, 4096) m, same waypoints, 30 m/s, 60 Hz), with the 10 000 resident-renderable checkpoint. That changes the fixed benchmark contract, so it needs your approval. The PRD doesn't specify a route.
+
+**What's still open, none of it reported as passed:**
+- The `all_features` GPU scene and the automated tour runner with screenshots and an action log
+- GI/RT/upscale profiles and forced indirect/meshlet geometry paths
+- Editor scenario on Windows, and the package relaunch beyond Build Game's verify step
+- GUI checks, native Linux Vulkan GPU, `engine_bench --suite acceptance`
+- `linux-gcc*` and the ASan/sanitize presets (the host has GCC 9.4 only)
+
+**Earlier results that still stand (from the log):** the Linux gates pass (validate, linux-dev, linux-debug, linux-unit 30/30), and the Windows gates passed in an earlier batch.
+
+**What would unblock it:** reply with (1) which FSR 2 route to take, or confirm `full_1080` as unsupported, and (2) whether to approve `all_features_route_v1`. With both, I can define the builtin scene, wire the tour, and run the profiles, provided a Windows GPU session is available for the GPU steps.
+
+I appended a status-check entry to `.ralph-tui/progress.md` recording this.

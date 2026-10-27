@@ -1,0 +1,43 @@
+# Iteration 1207 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:55:06.814Z
+- **Ended At**: 2026-10-26T21:55:25.323Z
+- **Duration**: 18s
+- **Input Tokens**: 26
+- **Output Tokens**: 2215
+- **Total Tokens**: 2241
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo, since this story depends on earlier work and on hardware runs.
+[94m[Bash][0m Check progress log, git status, and bench artifacts $ ls benchmarks 2>/dev/null
+The log shows US-080 has been blocked across many prior passes. I'll re-check the blocking facts before deciding whether anything new is possible.
+[94m[Bash][0m Re-verify blockers: DRI device, FSR tables, manifest entries, GPU $ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>&1 | head -2
+[94m[Bash][0m Append status note to progress log $ RTX 5080 visible under WSL only. - No build or bench run. US-080 is not signed off. Open items as in...
+US-080 is not complete, so I'm not emitting the COMPLETE signal. Nothing in the repo changed in this pass, and I did not run any builds or benchmarks.
+
+I re-checked the blockers and they are unchanged:
+
+- **Native Linux Vulkan:** `/dev/dri` is absent, so there is no native Linux Vulkan device. The RTX 5080 is visible only under WSL.
+- **FSR 2:** there are zero `*_permutations.h` files under `third_party`, so FSR cannot be built until you choose a vendoring route.
+- **Workloads:** `benchmarks/manifest.json` still has four entries marked `implementation: "none"` (lines 88, 108, 122, 132). An acceptance run would exit 3 (incomplete) while they remain.
+- **Frame budget:** the last measured run (`artifacts/bench/us076-dx12-meshlets`, native_1080) has CPU p99 of 42.4 ms against a 16.7 ms budget, while GPU p99 is 11.5 ms. The miss is on the CPU side. Profiling it on the RTX 5080 through cmd.exe is the one step I can take without your input. I did not start it because the story cannot be signed off until the Linux host and workloads exist, and I judged that a profile now would not change the outcome.
+
+Decisions I need from you:
+
+1. Access to a native Linux host with `/dev/dri` for the Vulkan run.
+2. The FSR 2 vendoring route (regenerate the permutation tables, or drop FSR from this build).
+3. Sources for the four unimplemented workloads.
+4. If the frame budget stays exceeded after profiling, whether you want to change the contract. The contract says budgets are not reduced automatically, so I will not do that.
+
+I appended a status entry to `.ralph-tui/progress.md`.

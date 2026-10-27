@@ -1,0 +1,41 @@
+# Iteration 653 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:01:27.262Z
+- **Ended At**: 2026-10-26T02:01:42.185Z
+- **Duration**: 14s
+- **Input Tokens**: 18
+- **Output Tokens**: 2130
+- **Total Tokens**: 2148
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo layout and progress notes $ ls && tail -n 80 .ralph-tui/progress.md && grep -n "US-076" -A3 .ralph-tui/progress.md | head -40 &&...
+[94m[Bash][0m Check for source changes since last driver edit $ date +%H:%M
+US-076 is not complete, and I did not emit the completion signal. Nothing changed in this pass: no source file is newer than the last driver edit, so the earlier results still describe the tree and I did not rerun the benchmarks.
+
+**Done and verified in earlier passes:**
+- `render_route_v1`, the `render_stress` driver, `--path indexed|indirect|meshlets`, and `--disable-mesh-shaders` are in place.
+- The forced mesh-shader-off run falls back to indirect-indexed draws and reports mesh shaders as disabled. The fallback works on DX12 and Vulkan.
+- Eight acceptance reports exist under `artifacts/bench/us076-*`, with screenshots and counters.
+- Gates on the current tree:
+  - Windows: validate, `win-dev`, `win-debug` build (0 warnings), `win-unit` (29/29), `engine_tests --suite gpu` for DX12 (72) and Vulkan (73), and the Release `engine_bench` build all pass.
+  - Linux: ValidateVendor, `linux-dev`, `linux-debug` build (0 warnings), and `linux-unit` (30/30) pass.
+
+**Blocked on your decision:**
+1. **Triangle floor and frame budget fail on every indexed/indirect/meshlet run.** The route start submits 312,068 triangles against the 2,000,000 floor, and p99 frame time is 35–47 ms against 16.7 ms. Instances are uniform over the 8192 m world, so the start view sees about 330 items. Two options:
+   - (a) Keep the contract and report these as the measured result. The story then cannot pass as written.
+   - (b) Change instance placement. That is a workload change: bump `kWorkloadVersion`, regenerate `benchmarks/workload_expected.json`, and rerun the eight reports. I did not make this change without your approval.
+2. **`full_1080` is unsupported** because the FSR 2 permutation headers are missing. Only `native_1080` runs, so "both profiles" is not met.
+3. **Not run:** native Linux Vulkan GPU suite, `linux-gcc` (GCC 9.4 cannot build Jolt), and `linux-asan`.
+
+Tell me whether to take option (a) or (b). I did not append another progress entry, since the last status entry still describes the state accurately.

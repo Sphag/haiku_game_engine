@@ -1,0 +1,40 @@
+# Iteration 756 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:31:09.602Z
+- **Ended At**: 2026-10-26T02:31:22.179Z
+- **Duration**: 12s
+- **Input Tokens**: 20
+- **Output Tokens**: 1794
+- **Total Tokens**: 1814
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the repo and the progress log for US-076.
+[94m[Bash][0m Check repo status, progress log, and US-076 PRD entry $ grep -n "US-076" -A3 tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Confirm workload version and latest benchmark artifacts $ grep -h '"verdict"\|"exit"\|"status"' artifacts/bench/us076-*/manifest.json 2>/dev/null | sort | uni...
+US-076 is not complete, and I have not signaled COMPLETE. Nothing has changed since the last recorded check, so I did not rerun any gates or benchmarks.
+
+**What's blocking it (needs your decision):**
+
+1. **Triangle floor and frame budget fail.** The `render_stress` placement yields 312,068 triangles against a 2,000,000 target at the route start. Frame time is p99 35–47 ms against a 16.7 ms budget. The fix changes the fixed benchmark workload, so it needs `kWorkloadVersion` bumped (currently 1) and `workload_expected.json` regenerated. The contract reserves that for an intended change, so I need your approval before I make it.
+2. **`full_1080` is unsupported.** The vendored FSR 2 is missing its generated permutation headers, so the upscale profile cannot run. Choosing how to vendor them is your call.
+3. **Not run here:** native Linux Vulkan GPU testing (WSL has no Vulkan device) and the `linux-gcc` gate (local GCC 9.4 cannot build Jolt).
+
+**What is done:** the eight `us076-*` benchmark runs (DX12 and Vulkan, each indexed, indirect, meshlets, and meshlets with mesh shaders forced off) exist. Each exits 1 on the frame budget and triangle floor, as the measured results show.
+
+**Decisions for you:**
+- Approve or reject the placement change in item 1.
+- Choose a route for the FSR 2 permutation headers.
+- Say whether a measured run that fails the budget should close the story as measured, or stay open until the workload is fixed. The acceptance criteria cannot pass on the current placement.
+
+I did not append another "status check" entry to `.ralph-tui/progress.md`. The last twenty entries repeat the same blockers, and adding another would add nothing.

@@ -1,0 +1,38 @@
+# Iteration 186 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T10:59:12.483Z
+- **Ended At**: 2026-10-24T11:01:39.572Z
+- **Duration**: 2m 27s
+- **Input Tokens**: 26
+- **Output Tokens**: 2356
+- **Total Tokens**: 2382
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the physics code and the progress log, since the notes say US-052 is already largely implemented.
+[94m[Bash][0m Inspect physics dir, progress log, and repo state $ ls artifacts/bench 2>/dev/null | head
+The progress log shows several re-verification passes that all left US-052 Partial. Before I repeat them, I'll check whether a GCC 11+ compiler has appeared, since that's the only open gate that could change the outcome, and confirm the tree still builds.
+[94m[Bash][0m Check for GCC 11+ and rerun Linux build and unit tests $ (ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Confirm unit test pass count and log this pass $ US-074). - Status call: US-052 stays **Partial**. Open: the `linux-gcc` gate (needs GCC 11+) and the...
+US-052 is not complete, so I'm not signalling COMPLETE. The physics code was already in place from earlier passes, and nothing in the source changed this pass.
+
+**Verified this pass (Linux, clang 10):**
+- `cmake --build --preset linux-debug` succeeds.
+- `ctest --preset linux-unit --no-tests=error` passes 22/22 (1 unit, 21 integration).
+
+**Still open:**
+- **Linux/GCC gate (`linux-gcc`, `linux-gcc-debug`, `linux-gcc-unit`):** blocked. Only `g++-9` is installed, and Jolt needs GCC 11+ (`__builtin_bit_cast`). There's no passwordless sudo, conda, micromamba, or docker to get a newer compiler. The GCC gate needs a GCC 11+ environment, such as CI.
+- **`engine_bench --suite acceptance`:** there is no benchmark harness yet (US-074), so this can't run.
+- **Windows gates:** the earlier progress entry records them passing on this same source, but I did not re-run them this pass.
+
+I appended a short entry to `.ralph-tui/progress.md` recording this pass. The story stays **Partial** until the GCC 11+ gate can be run.

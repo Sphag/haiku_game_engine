@@ -1,0 +1,49 @@
+# Iteration 1293 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:02:38.702Z
+- **Ended At**: 2026-10-27T00:03:00.630Z
+- **Duration**: 21s
+- **Input Tokens**: 38
+- **Output Tokens**: 3574
+- **Total Tokens**: 3612
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log, the existing docs, and the PRD so I know what already exists.
+[94m[Bash][0m Inspect repo layout and recent progress log $ tail -c 6000 .ralph-tui/progress.md
+[94m[Bash][0m Read README and PRD sections for US-080/081 $ grep -n "US-08[01]" -A30 tasks/prd-open-world-engine.md | head -120
+The progress log shows earlier passes concluded this story can't be signed off here, and it says to check for source changes before re-running gates. I'll check that first.
+[94m[Bash][0m Check for source changes since last recorded gate run $ sed -n '1,60p' docs/acceptance.md | head -80
+No source, test, or CMake file has changed since the recorded gate logs. The only newer files are the acceptance doc, the PRD JSON, and a screenshot. Next I'll read the open-items section to see whether anything there is doable in this environment.
+[94m[Bash][0m Read open items and existing CI/report artifacts $ grep -n "US-081" -A3 tasks/prd.json | head -20
+Everything the environment can verify has already been run and recorded. The remaining open items need hardware this machine lacks, or a user decision. I'll log this pass in the progress file.
+[94m[Bash][0m Append US-081 status entry to progress log $ no COMPLETE signal) - `find -newer artifacts/reports/us081` lists only `docs/acceptance.md`, `tasks/...
+US-081 is not signed off, so I am not emitting the COMPLETE signal. The documentation deliverables exist, but the final-acceptance criteria need hardware or decisions this environment doesn't have.
+
+**What I checked this pass**
+- No source, test, or CMake file has changed since the recorded gate logs (`artifacts/reports/us081`). Only `docs/acceptance.md`, `tasks/prd.json`, and a launch screenshot are newer, so I did not re-run the gates.
+- The README covers OS/SDK requirements, offline CMake setup, the editor workflow, the Lua API, the asset pipeline, and packaging. The architecture, schema, capability-matrix, benchmark, and vendor docs are also in `docs/`.
+- `docs/acceptance.md` maps each story to its tests and artifacts, and it already records the offline clean-copy build and the editor-suite package test as passed.
+
+**Still open (recorded in `docs/acceptance.md`, not passed)**
+1. Native Linux Vulkan GPU report: `/dev/dri` is absent, so no native Vulkan device is available here.
+2. Full acceptance benchmark: the acceptance scenes don't yet produce GPU timestamps, so the run reports `incomplete`.
+3. FSR 2: the vendored tree lacks its generated shader permutations. This needs your vendoring choice.
+4. Linux GCC: the local GCC 9.4 cannot build Jolt. The `linux-gcc` gate needs GCC 11 or newer.
+5. Visual editor smoke test: there is no screenshot-backed run of the editor on Linux, and the Windows run is launch-only.
+6. A package built from a real sample game has not been produced.
+7. There is no LICENSE file. This is your decision.
+
+**What I changed:** I appended a status entry to `.ralph-tui/progress.md`. No product code, tests, or docs changed.
+
+**What would unblock sign-off:** a native Linux machine with a Vulkan GPU, the RTX 5080 reports for the acceptance benchmark, a license choice, and an FSR 2 vendoring decision. A sample game for the package test would also help.

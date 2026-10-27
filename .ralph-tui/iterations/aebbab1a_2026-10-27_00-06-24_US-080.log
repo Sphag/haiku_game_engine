@@ -1,0 +1,45 @@
+# Iteration 1105 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:06:24.224Z
+- **Ended At**: 2026-10-26T21:06:38.241Z
+- **Duration**: 14s
+- **Input Tokens**: 24
+- **Output Tokens**: 2142
+- **Total Tokens**: 2166
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and benchmark artifacts $ git status 2>&1 | head -5
+[94m[Bash][0m Find US-080 and performance contract in PRD $ grep -n -i "performance contract" -A25 tasks/prd-open-world-engine.md | head -60
+[94m[Bash][0m Re-check the known blockers on this host $ ls artifacts/bench | grep -c acceptance
+[94m[Bash][0m Append status entry to progress log $ no acceptance run in `artifacts/bench`. - No source change, build, or bench run. Blockers need hardw...
+US-080 is not complete, so I am not signalling COMPLETE. The blockers are still there, and none of them can be fixed by another pass on this WSL host.
+
+**Re-checked today:**
+- `/dev/dri` is absent, so there is no native Linux Vulkan device. WSL sees the RTX 5080 through `nvidia-smi` only, which does not count as native Linux Vulkan.
+- `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` cannot build FSR 2.
+- `benchmarks/manifest.json` still has 4 entries with `implementation: none`, which are the physics, streaming, and all_features workloads.
+- `artifacts/bench` has no `acceptance` run. It holds only the earlier `us076`–`us078` runs and two `us080-*readback-off` runs.
+
+**Still open, from earlier runs:**
+- The render_stress `native_1080` CPU p99 is over 16.7 ms on repeats 2 and 3.
+- Residency is not measured.
+- Visual editor smoke tests have not been run on either OS.
+- `linux-gcc*` needs GCC 11+ or clang 14+. This host has g++ 9.4 and clang 10.
+
+**What would unblock it:**
+1. A native Linux Vulkan device on the reference RTX 5080 machine, plus the Windows DX12 and Vulkan GPU reports.
+2. A user decision on the FSR 2 route: vendor the generated permutation tables, or keep the upscaler unavailable.
+3. Implementation of the physics, streaming, and all_features workloads.
+
+I did not change the performance contract or the workloads to get a pass. I appended a status entry to `.ralph-tui/progress.md`. Further status checks would only repeat the same findings, so I've stopped looping on them.

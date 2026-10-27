@@ -1,0 +1,46 @@
+# Iteration 1168 Log
+
+## Metadata
+
+- **Task ID**: US-080
+- **Task Title**: RTX 5080 Performance Acceptance
+- **Description**: As a user, I want stable 60 FPS so that I can use the engine on my computer.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T21:32:41.562Z
+- **Ended At**: 2026-10-26T21:32:58.629Z
+- **Duration**: 17s
+- **Input Tokens**: 28
+- **Output Tokens**: 2496
+- **Total Tokens**: 2524
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the current state of the repo before deciding what this story can actually verify here.
+[94m[Bash][0m Inspect repo root and recent progress log $ ls -la && tail -c 6000 .ralph-tui/progress.md && grep -n "US-080\|US-079" .ralph-tui/progress.md | h...
+The progress log records about 60 earlier passes on this story, all blocked. Before deciding anything, I'll re-check the stated blockers in one pass.
+[94m[Bash][0m Re-check GPU, FSR, manifest, and bench blockers $ find engine tools tests benchmarks -newer .ralph-tui/progress.md -type f | head
+The blockers are unchanged, so I'm not starting a batch that would fail. I'll record this pass in the progress log.
+[94m[Bash][0m Append status entry to progress log $ acceptance runs only us076-*, us077-*, us078-* in artifacts/bench. No source file newer than this lo...
+US-080 is not complete, and I did not signal COMPLETE. Nothing in the repo changed in this pass: no build, no gate run, no benchmark run.
+
+The blockers I re-checked are still in place:
+
+- **No native Linux Vulkan device.** `/dev/dri` is absent. The RTX 5080 is visible only through WSL `nvidia-smi`, which can't stand in for the required native Linux/Vulkan report.
+- **FSR 2 is not vendored in buildable form.** `third_party/fsr2` has 0 `*_permutations.h` files, so `full_1080` can't build. Picking a vendoring route is your decision.
+- **Four benchmark workloads are unimplemented.** `benchmarks/manifest.json` has 4 `implementation: none` entries, including `physics_action_sequence_v1` and `streaming_route_v1`. A 3×180 s acceptance batch would exit 3 (incomplete) against them.
+- **Frame budget is unmet.** From the earlier logs, `render_stress` p99 is over 16.7 ms. The story says to fix the measured cause in the implementation first. Changing the contract needs your decision.
+
+No source file is newer than the last log entry. The only acceptance-related output in `artifacts/bench` is the earlier `us076-*`, `us077-*`, and `us078-*` runs.
+
+I appended a status entry to `.ralph-tui/progress.md` recording this pass.
+
+To move forward, I need:
+1. Your call on the FSR 2 vendoring route.
+2. Whether the frame-budget miss should be fixed in the renderer, or whether you want to change the contract (I won't relax it myself).
+3. Access to the RTX 5080 reference machine, or a native Linux session with a Vulkan device, for the native Linux/Vulkan report.
+
+Once the workloads are implemented and the Windows gates are run, the 3×180 s DX12 and Vulkan runs can start.

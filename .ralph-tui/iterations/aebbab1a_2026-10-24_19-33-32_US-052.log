@@ -1,0 +1,43 @@
+# Iteration 275 Log
+
+## Metadata
+
+- **Task ID**: US-052
+- **Task Title**: Jolt World and Fixed Timestep
+- **Description**: As a game developer, I want a physics world so that I can simulate rigid bodies.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-24T16:33:32.415Z
+- **Ended At**: 2026-10-24T16:33:48.052Z
+- **Duration**: 15s
+- **Input Tokens**: 20
+- **Output Tokens**: 2002
+- **Total Tokens**: 2022
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Read progress log and list physics module $ tail -n 80 .ralph-tui/progress.md && ls engine/physics && git status 2>&1 | head -5
+[94m[Bash][0m Read saved physics status memory $ cat /home/max/.claude/projects/-mnt-d-dev-haiku-game-engine/memory/project-physics-jolt.md
+[94m[Bash][0m Check compilers and physics file timestamps $ cd /mnt/d/dev/haiku_game_engine && ls -la --time-style=+%H:%M engine/physics/CMakeLists.txt engine/p...
+US-052 is still **Partial**, so I'm not emitting the COMPLETE signal.
+
+**What I checked this pass**
+- Nothing in the physics code has changed since the last passing gate runs. `engine/physics/CMakeLists.txt` (13:13), `engine/physics/src/physics_world.cpp` (13:05) and `tests/src/physics_world_tests.cpp` (13:06) are the same as before.
+- The compilers are unchanged: `/usr/bin` has only g++-9, gcc-9 and clang++-10, and there is no `/opt` toolchain. Jolt needs GCC 11+ for `__builtin_bit_cast`, so the `linux-gcc` preset cannot build it here.
+
+**Status against the acceptance criteria**
+- **Passing, per the recorded gate runs:**
+  - Windows: validate, win-dev, win-debug and win-unit (21/21), re-run after the last CMake edit.
+  - Linux clang 10: validate, linux-dev, linux-debug and linux-unit (22/22).
+  - ASan/UBSan: the linux-asan build and linux-sanitize ctest pass (22/22).
+- **Blocked:** the `linux-gcc`, `linux-gcc-debug` and `linux-gcc-unit` gates. The local GCC is 9.4, and sudo needs a password, so GCC 11 cannot be installed from here. The story says not to report an OS as verified until its job succeeds, so this stays open.
+- **Not run:** `engine_bench --suite acceptance`. The tree has no `engine_bench` target yet (that is US-074), so this is not applicable until that story lands.
+
+**What closes it**
+- Install g++-11 or newer (`sudo apt install g++-11` after refreshing the lists), then run the three linux-gcc presets.
+- Or run them in a CI job that has GCC 11+.
+
+I did not add another progress entry. The log already holds about ten identical "still blocked" entries for this story, and a further one would not change anything. I can write one if you want the record updated.

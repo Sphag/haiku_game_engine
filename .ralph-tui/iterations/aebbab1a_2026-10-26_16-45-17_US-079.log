@@ -1,0 +1,74 @@
+# Iteration 937 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T13:45:17.822Z
+- **Ended At**: 2026-10-26T13:51:31.371Z
+- **Duration**: 6m 13s
+- **Input Tokens**: 80
+- **Output Tokens**: 4912
+- **Total Tokens**: 4992
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and the existing `all_features` code, since the memory notes say much of this infrastructure already exists.
+[94m[Bash][0m Read progress log and locate all_features references $ ls tools/ tools/benchmark 2>/dev/null
+The log shows this story has been stopped at the same blockers for many passes. Before deciding anything, I'll re-verify the current Linux state so my report rests on fresh output.
+[94m[Bash][0m Check scene dirs, FSR2 headers, manifest, and run Linux build and unit tests $ ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -4)
+[94m[Bash][0m Wait for background build and test output $ cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/3f1880ed-29d3-4194-a5b4-227048cda0b5/tasks/bxv02is...
+
+[91m[Error: <tool_use_error>Blocked: sleep 100 followed by: cat /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/3f1880ed-29d3-4194-a5b4-227048cda0b5/tasks/bxv02islz.output tail -15. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Bash][0m Read background command output so far $ tail -15 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/3f1880ed-29d3-4194-a5b4-227048cda0b5/tasks/bx...
+[94m[Bash][0m Run Linux unit test suite and show summary $ timeout 110 ctest --preset linux-unit --output-on-failure --no-tests=error 2>&1 | tail -3
+
+[91m[Error: Exit code 143
+Terminated][0m
+The foreground unit run exceeded the timeout. I'll run it in the background and read the result when it finishes.
+[94m[Bash][0m Run Linux unit tests in background to a log file $ echo exit=$? >> /tmp/ct_us079.out
+[94m[Bash][0m Check ctest progress and all_features manifest entry $ cd /mnt/d/dev/haiku_game_engine && grep -n -A8 '"all_features"' benchmarks/manifest.json | head -30
+[94m[Bash][0m Check unit test progress after a short wait $ tail -4 /tmp/ct_us079.out
+
+[91m[Error: <tool_use_error>Blocked: sleep 60 followed by: tail -4 /tmp/ct_us079.out. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>][0m
+[94m[Monitor][0m Wait until the unit test run finishes $ tail -4 /tmp/ct_us079.out
+[94m[Bash][0m Read the unit test summary $ tail -5 /tmp/ct_us079.out
+[94m[Monitor][0m Wait for the unit test run to finish $ tail -4 /tmp/ct_us079.out
+[94m[Bash][0m Read unit test summary so far $ tail -5 /tmp/ct_us079.out
+I'm stopping here without the COMPLETE signal. The Linux unit run was still in progress when I stopped, so I have no verified pass result from this pass.
+
+**US-079 is not complete.** Most acceptance criteria depend on work that does not exist yet, and the prior ~40 status passes stopped at the same point.
+
+**What I verified in this pass**
+- `cmake --build --preset linux-debug` exited 0 (background run, log in `/tmp/b.log`).
+- `samples/` does not exist, and `third_party/fsr2` has 0 `*_permutations.h` files, so the FSR 2 upscale profile cannot be built.
+- `benchmarks/manifest.json` lists `all_features` with `"implementation": "none"`. Its `native_1080` and `full_1080` profiles are not wired to any runner.
+- `ctest --preset linux-unit` did not finish within the foreground timeout. A background run is writing to `/tmp/ct_us079.out`. It has not reported a pass or fail, so I am not claiming one. Earlier passes recorded 30/30 (integration 29, unit 1), but that is not re-verified here.
+
+**Not done (none of these are reported as passed)**
+- The `all_features` project and its workload, Lua, audio, UI, save/load, animation, and material wiring.
+- The automated tour, screenshots, GI/RT/upscale profiles, and forced geometry paths.
+- The editor scenario on a live app: scene, material, animation, and terrain edits, undo/redo, Play/Stop, and package/relaunch.
+- Windows gates in this pass. Batch `us079gate` recorded them as passing in an earlier pass, but I did not re-run them.
+- `engine_tests --suite gpu`, `engine_bench --suite acceptance`, the `linux-gcc*` presets (no GCC 11+ here), and the ASan preset.
+
+**Decisions needed from you**
+1. **FSR 2 vendoring route.** The permutation headers are missing, so `full_1080` stays unsupported until you pick a route to vendor them.
+2. **`all_features_route_v1`.** The earlier pass wrote a concrete definition into the manifest but no one has approved it. It uses the streaming waypoints at 30 m/s with the workload resident and every feature running each frame.
+
+Once those are settled, the next step is building the `samples/all_features` project and its tour runner. The live editor scenario and the GPU suites need a native Windows and Linux session, which this environment cannot provide.
+[94m[Bash][0m Extract ctest pass summary from log $ grep -E "tests passed|Test #|exit=" /tmp/ct_us079.out | tail -8
+The Linux unit run finished: `ctest --preset linux-unit --output-on-failure --no-tests=error` passed 30/30 with exit 0. Its log is `/tmp/ct_us079.out`.
+
+US-079 is still not complete, and I am not emitting the COMPLETE signal. The Linux build and unit gates pass, but the rest of the acceptance criteria are open:
+- No `samples/all_features` project or tour runner exists. The manifest entry is `implementation: none`.
+- The `full_1080` profile is blocked because the FSR 2 permutation headers are not vendored.
+- The live editor scenario, GI/RT/upscale profiles, forced geometry paths, GPU suites, acceptance benchmark, `linux-gcc*` presets, and ASan preset were not run.
+
+The two decisions from my previous report still stand: choose a route for the FSR 2 permutation headers, and approve `all_features_route_v1`. The next code step after those is building the `all_features` project and its tour runner.

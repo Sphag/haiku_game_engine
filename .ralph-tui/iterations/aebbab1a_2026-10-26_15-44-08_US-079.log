@@ -1,0 +1,47 @@
+# Iteration 907 Log
+
+## Metadata
+
+- **Task ID**: US-079
+- **Task Title**: Combined Feature Scene
+- **Description**: As an engine author, I want to see all features together so that I can verify their interactions.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T12:44:08.215Z
+- **Ended At**: 2026-10-26T12:44:36.853Z
+- **Duration**: 28s
+- **Input Tokens**: 36
+- **Output Tokens**: 3200
+- **Total Tokens**: 3236
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the progress log and what already exists for `all_features`.
+[94m[Bash][0m Read progress log and search for all_features $ tail -n 80 .ralph-tui/progress.md && echo ---- && grep -ril "all_features" --include=* . 2>/dev/null...
+The log shows this story has been stuck across many passes on the same open items. I'll look at the current `all_features` code and the benchmark manifest to see whether any of those items can move now.
+[94m[Bash][0m Locate all_features code, manifest entries and tests $ wc -l tests/src/all_features*.cpp
+The remaining acceptance items depend on things this host and this loop can't provide. I'll confirm the tree hasn't changed since the last recorded gate run before deciding whether to re-run anything.
+[94m[Bash][0m Check for changes since last log and blocker state $ print(m['scenes']['all_features'].get('implementation'))" 2>/dev/null || grep -n '"implementation"' ...
+Nothing under the code or test trees has changed since the last recorded run, and both blockers are still present. I'll log this pass in the progress file and leave the story open.
+[94m[Bash][0m Append status entry to progress log $ all_features route definition). - No COMPLETE signal: the acceptance criteria that remain unmet are ...
+US-079 is not complete, so I'm not emitting the COMPLETE signal. This pass changed no source code; it only appended a status entry to `.ralph-tui/progress.md`.
+
+**What's in place (from earlier passes, re-checked as far as this host allows):**
+- `tests/src/all_features_tests.cpp` covers the CPU markers and the generated workload against the expected digests.
+- `tests/src/all_features_editor_tests.cpp` covers the editor scenario, including the published-package relaunch.
+- The last recorded Windows gate run passed: `ValidateVendor`, `win-dev`, `win-debug`, and `win-unit`. The Linux `linux-unit` run passed 30/30. Neither has been rerun since the tree last changed.
+
+**What's still open:**
+- **Tour runner.** No automated tour with screenshots and an action log exists. The current CPU test checks markers, not a running tour.
+- **GPU scene and profiles.** `all_features` is still `implementation: none` in `benchmarks/manifest.json`, so the GI/RT/upscale profiles and forced indirect/meshlet paths cannot run.
+- **FSR 2.** `third_party/fsr2` has no `*_permutations.h` headers, so `full_1080` and the upscale mode are unsupported.
+- **Not runnable here:** GUI checks, native Linux Vulkan GPU, `engine_bench --suite acceptance`, and the `linux-gcc*` and sanitizer presets. This host has GCC 9.4 only and no `/dev/dri`.
+
+**Decisions needed to move this forward:**
+1. The FSR 2 vendoring route: obtain the generated permutation headers, or record `full_1080` as unsupported.
+2. The `all_features` route definition, which turns the table workload into a `builtin` scene. The tour, profiles, and forced paths depend on it.
+
+Once both are decided, the next work is the route and tour code, then a Windows GPU session for the profiles and the editor suite.

@@ -1,0 +1,45 @@
+# Iteration 683 Log
+
+## Metadata
+
+- **Task ID**: US-076
+- **Task Title**: Render Benchmark
+- **Description**: As a rendering developer, I want a dedicated GPU workload so that I can compare rendering paths.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-26T02:10:33.040Z
+- **Ended At**: 2026-10-26T02:10:46.276Z
+- **Duration**: 13s
+- **Input Tokens**: 14
+- **Output Tokens**: 1466
+- **Total Tokens**: 1480
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+I'll start by checking the current state of the render benchmark and the progress log.
+[94m[Bash][0m Inspect repo state and progress notes $ cd /mnt/d/dev/haiku_game_engine 2>/dev/null && pwd && ls && tail -n 80 .ralph-tui/progress.md && gre...
+US-076 is not complete, and I did not signal COMPLETE. The remaining blockers need your decision, and I made no code or artifact changes in this pass.
+
+**Blocked on your decision (1): the benchmark fails its contract on placement.**
+- The route start sees about 330 items, and the workload has 312,068 triangles against the 2,000,000 floor.
+- p99 frame time is 35–47 ms against the 16.7 ms budget, so 0% of frames meet it.
+- Instances are placed uniformly over 8192 m. That is the cause, and the contract forbids reducing the workload.
+- Fixing it means changing instance placement, which is a workload change: bump `kWorkloadVersion` and regenerate `benchmarks/workload_expected.json`.
+- Options: (a) keep the contract and close the story with these failures recorded as the measured result, or (b) approve the placement change and I will make it and rerun.
+
+**Blocked on your decision (2): the full profile cannot run.** `full_1080` is unsupported until the vendored FSR 2 shader permutation headers exist. Only `native_1080` has run, so "both profiles" is only partly met.
+
+**Done and verified on the current tree:**
+- Mesh-shader-off fallback works on DX12 and Vulkan. The driver checks `geometry_path()`, and the run reports mesh shaders as forced off, the meshlet path as fell back, and indirect as active.
+- The eight `artifacts/bench/us076-*` reports postdate the last source edit, so no rerun is needed for them.
+- Windows gates pass: ValidateVendor, win-dev, win-debug build (0 warnings), win-unit (29/29), engine_tests gpu dx12 (72 cases) and gpu vulkan (73 cases), and win-release engine_bench.
+- Linux gates pass: ValidateVendor, linux-dev, linux-debug build (0 warnings), linux-unit (30/30).
+
+**Not run:**
+- Native Linux Vulkan GPU tests. WSL has no usable Vulkan device.
+- The linux-gcc preset. Local GCC 9.4 cannot build Jolt.
+
+Once you pick option (a) or (b), I'll either close the story with the measured failures recorded or make the placement change and rerun the affected reports.
