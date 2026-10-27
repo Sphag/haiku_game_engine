@@ -303,6 +303,8 @@ struct Platform::Impl {
                 break;
             }
             ++dispatch_depth;
+            // Without TranslateMessage a key press never becomes WM_CHAR, so no text could be typed (text fields, chat, console).
+            TranslateMessage(&msg);
             DispatchMessageW(&msg);
             --dispatch_depth;
         }
