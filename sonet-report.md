@@ -179,7 +179,7 @@ says so. State: `sonnet` branch, all Windows suites green on DX12 and Vulkan.
 | `engine_tests --suite editor --backend dx12` / `vulkan` | 111 of 111 on both |
 | `tools/ui_tests/editor_ui_test.ps1` (real mouse and keyboard on the real window) | 0 failed checks |
 | The packaged showcase, started with its own launcher in a window, DX12 and Vulkan | Draws the lit, shadowed scene; the kinematic platform turns between frames |
-| Linux (WSL, clang 10, Debug, `-Werror`) | Passed 30 of 30 on the previous commit; a rerun on the final commit is noted at the end of this report |
+| Linux (WSL, clang 10, Debug, `-Werror`) | **30 of 30** on the final code (the runtime, renderer, and importer changes included) |
 
 ## What I did
 
