@@ -86,6 +86,16 @@ core::Result<bool, PlatformError> Platform::cursor_captured(WindowId) const {
     return core::failure(PlatformError{PlatformErrorCode::Unsupported, "unreachable"});
 }
 
+core::Result<core::Unit, PlatformError> Platform::set_cursor_shape(WindowId, CursorShape) {
+    ENGINE_ASSERT(false, "set_cursor_shape called on a Platform that could not be created");
+    return core::failure(PlatformError{PlatformErrorCode::Unsupported, "unreachable"});
+}
+
+core::Result<core::Unit, PlatformError> Platform::set_window_title(WindowId, const std::string&) {
+    ENGINE_ASSERT(false, "set_window_title called on a Platform that could not be created");
+    return core::failure(PlatformError{PlatformErrorCode::Unsupported, "unreachable"});
+}
+
 core::Result<PointerPosition, PlatformError> Platform::pointer_position(WindowId) const {
     ENGINE_ASSERT(false, "pointer_position called on a Platform that could not be created");
     return core::failure(PlatformError{PlatformErrorCode::Unsupported, "unreachable"});

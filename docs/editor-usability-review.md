@@ -75,22 +75,28 @@ characters. Scripts that moved an entity raised an error. Play now runs the same
 The console and the Errors panel exist and every command reports its outcome there, which is good. Added `--log <file>` so the same text can
 be read by scripts. A failed rename or field edit shows its reason under the inspector.
 
+## Fixed in the third round
+
+| # | Issue | What changed |
+|---|---|---|
+| R1 | The viewport drew markers, not the scene | `GameRenderer` draws the scene in the Viewport panel: from the editor camera in Edit, from the scene's camera in Play. Markers stay for lights, cameras, emitters, and the selection. Resizing the panel resizes the render target (this found and fixed a `SceneRenderer::resize` bug: the cluster lighting buffer kept its first size) |
+| R3 | No right-click menus | Right-click a hierarchy row: Rename, Duplicate, Add child, Move to root, Delete |
+| R4 | No inline rename | F2 or a double click renames the row in place; Enter keeps, Escape cancels, leaving the field keeps. Prefab instances and their interiors cannot be renamed |
+| R5 | Flat Assets list | The catalog is a folder tree; a search shows the flat list with full paths |
+| R6 | No unsaved marker | The window title is `Game Editor - <scene file> *` |
+| R7 | Cursor never changed | `Platform::set_cursor_shape`; the editor passes ImGui's requested shape (text, resize, hand, not allowed). Windows only: X11 keeps the default pointer |
+| R8 | No redraw while resizing or moving | The editor frame runs as the platform's modal tick too, so the window redraws during a drag on Windows. X11 has no modal loop and did not need it |
+| R9 | Tool windows hidden in View | A Tools menu, and Editors buttons in the Project panel (material graph, animation graph, terrain, world, Build game) |
+
 ## Remaining issues
 
 | # | Severity | Issue | Suggested fix |
 |---|---|---|---|
-| R1 | Major | The viewport draws entity markers and a gizmo, not the scene. A person cannot see what they are editing without pressing Play in a game window. | Render the edit viewport with `GameRenderer` into a texture shown in the panel |
-| R2 | Major | The Hierarchy lives in a tab beside Project and Assets, so selecting an entity means changing tabs | Make the Hierarchy its own default dock |
-| R3 | Minor | No right-click menus (rename, duplicate, delete, add child) on hierarchy rows; no drag-to-reorder | Context menus |
-| R4 | Minor | No rename by double click or F2 in the hierarchy; names are edited in the inspector | Inline rename |
-| R5 | Minor | The Assets panel lists a flat catalog with paths, no folders or thumbnails except for textures | Folder tree and icons |
-| R6 | Minor | No unsaved-changes marker in the window title or the panel title | `*` in the title |
-| R7 | Minor | Mouse cursor shapes never change (resize, text, hand) | Platform cursor API |
-| R8 | Minor | The window does not redraw while it is being resized or moved | Use the platform's modal tick |
-| R9 | Minor | A material graph, animation graph, terrain, and world editor exist but are opened from the View menu with no hint that they exist | Put them in a "Windows" section with icons, and in the welcome panel |
 | R10 | Polish | No dark/light choice, no UI scale control (it follows the display's DPI), and the font is fixed | Settings panel |
 | R11 | Polish | No undo history list | History panel |
-| R12 | Polish | Linux: the folder chooser needs zenity or kdialog; the X11 path was not re-checked for the mouse and focus fixes made on Windows | Test on a native Linux desktop |
+| R12 | Polish | Linux: the folder chooser needs zenity or kdialog; the X11 path was not re-checked for the mouse and focus fixes made on Windows, and the pointer shape is not applied | Test on a native Linux desktop; bind XCreateFontCursor |
+| R13 | Polish | The scene view width is rounded down to a multiple of 64 pixels (a renderer limit), leaving a strip at the right edge of the panel | Lift the limit in `SceneRenderer` |
+| R14 | Polish | In Edit the viewport shows no particles (they are drawn only in Play) | Bind pools without adding entities |
 
 ## How this was checked
 - Screenshots of the real window at each step: `artifacts/ui/` after a run of `tools/ui_tests/editor_ui_test.ps1`.

@@ -343,8 +343,12 @@ int main(int argc, char** argv) {
     std::uint64_t frame = 0;
     int exit_code = 0;
     bool running = true;
-    while (running && !model.quit_requested() && (options.frames == 0 || frame < options.frames)) {
-        platform->pump_events();
+    // One frame of the editor. The OS runs its own loop while a window is dragged or resized, so the same frame is also the modal tick:
+    // the window keeps redrawing then (the events were pumped by the OS already, which is what `pump` tells).
+    const auto run_frame = [&](bool pump) -> bool {
+        if (pump) {
+            platform->pump_events();
+        }
         for (const platform::WindowEvent& event : platform->drain_events()) {
             if (std::holds_alternative<platform::CloseRequested>(event.data)) {
                 // The window's close button asks first when the scene has unsaved changes.
@@ -365,12 +369,12 @@ int main(int argc, char** argv) {
         auto current = platform->window_info(window);
         if (!current.ok()) {
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         const platform::WindowInfo& info = current.value();
         if (info.minimized || info.framebuffer_size.width == 0 || info.framebuffer_size.height == 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
-            continue;
+            return true;
         }
 
         // The pointer is polled: it is inside the window only while the window has focus and the position is within its bounds. A drag
@@ -405,6 +409,33 @@ int main(int argc, char** argv) {
         ImGui::NewFrame();
         ui.build();
         ImGui::Render();
+
+        // The title tells which scene is open and whether it has unsaved changes; the pointer takes the shape the UI under it asks for.
+        {
+            std::string title = "Game Editor";
+            if (const auto& scene_path = model.scene().path()) {
+                const std::string text = scene_path->str();
+                const std::size_t slash = text.find_last_of('/');
+                title += " - " + (slash == std::string::npos ? text : text.substr(slash + 1));
+            }
+            if (model.scene().dirty()) {
+                title += " *";
+            }
+            static_cast<void>(platform->set_window_title(window, title));
+            platform::CursorShape shape = platform::CursorShape::Arrow;
+            switch (ImGui::GetMouseCursor()) {
+                case ImGuiMouseCursor_TextInput: shape = platform::CursorShape::Text; break;
+                case ImGuiMouseCursor_Hand: shape = platform::CursorShape::Hand; break;
+                case ImGuiMouseCursor_ResizeEW: shape = platform::CursorShape::ResizeHorizontal; break;
+                case ImGuiMouseCursor_ResizeNS: shape = platform::CursorShape::ResizeVertical; break;
+                case ImGuiMouseCursor_ResizeAll: shape = platform::CursorShape::ResizeAll; break;
+                case ImGuiMouseCursor_ResizeNESW: shape = platform::CursorShape::ResizeDiagonalNeSw; break;
+                case ImGuiMouseCursor_ResizeNWSE: shape = platform::CursorShape::ResizeDiagonalNwSe; break;
+                case ImGuiMouseCursor_NotAllowed: shape = platform::CursorShape::NotAllowed; break;
+                default: break;
+            }
+            static_cast<void>(platform->set_cursor_shape(window, shape));
+        }
 
         // The scene: Edit draws the scene being edited from the editor's camera; Play draws the running copy from its own camera.
         bool scene_drawn = false;
@@ -465,10 +496,10 @@ int main(int argc, char** argv) {
         if (!back.ok()) {
             core::log_message(core::LogLevel::Error, "editor", "cannot acquire a back buffer: " + back.error().message);
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         if (!back.value().has_value()) {
-            continue;  // the surface is empty; the next frame tries again
+            return true;  // the surface is empty; the next frame tries again
         }
         const rhi::TextureHandle target = *back.value();
         if (scene_drawn) {
@@ -486,7 +517,7 @@ int main(int argc, char** argv) {
         auto list_result = device->create_command_list(rhi::QueueType::Graphics);
         if (!list_result.ok()) {
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         std::unique_ptr<rhi::CommandList> list = std::move(list_result).value();
         // The frame's list is a single submission. Its fence is waited on before the next frame, so per-frame buffers can be reused.
@@ -495,7 +526,7 @@ int main(int argc, char** argv) {
                                         scene_drawn ? std::optional<std::array<float, 4>>() : std::optional<std::array<float, 4>>(clear)); !drawn.ok()) {
             core::log_message(core::LogLevel::Error, "editor", "the UI could not be drawn: " + drawn.error().message);
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         static_cast<void>(list->transition(target, rhi::ResourceState::RenderTarget, rhi::ResourceState::Present));
         static_cast<void>(list->close());
@@ -504,15 +535,23 @@ int main(int argc, char** argv) {
         if (auto submitted = device->submit(rhi::QueueType::Graphics, lists, fence, fence_value); !submitted.ok()) {
             core::log_message(core::LogLevel::Error, "editor", "the frame could not be submitted: " + submitted.error().message);
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         if (auto waited = device->wait_fence(fence, fence_value); !waited.ok()) {
             exit_code = kExitFailed;
-            break;
+            return false;
         }
         static_cast<void>(swapchain->present());
         ++frame;
+        return true;
+    };
+    platform->set_modal_tick([&run_frame]() { static_cast<void>(run_frame(false)); });
+    while (running && !model.quit_requested() && (options.frames == 0 || frame < options.frames)) {
+        if (!run_frame(true)) {
+            break;
+        }
     }
+    platform->set_modal_tick({});
 
     // The layout is captured from ImGui and written with the rest of the workspace, so a closed editor reopens as it was left.
     ui.capture_layout();

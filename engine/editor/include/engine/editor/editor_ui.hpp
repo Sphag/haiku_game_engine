@@ -18,6 +18,7 @@
 #include "engine/editor/world_panel.hpp"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,8 @@ private:
     // Opens a scene asset of the project (a path relative to its assets folder), asking about unsaved changes first.
     void open_scene_asset(const std::string& relative);
     void editor_shortcuts();
+    void begin_rename(const core::Guid& entity, const std::string& current);
+    void commit_rename(const core::Guid& entity);
     void menu_bar();
     void project_panel();
     void console_panel();
@@ -134,6 +137,10 @@ private:
     std::array<char, 128> search_text_{};    // the hierarchy filter
     std::string scene_status_;               // the last scene command's error, or empty
     std::string dialog_status_;              // the last error in the unsaved-changes dialog
+    std::optional<core::Guid> renaming_;      // the hierarchy row being renamed in place
+    std::array<char, 260> rename_text_{};
+    bool rename_focus_ = false;
+    bool rename_requested_ = false;
     std::array<char, 260> entity_name_text_{}; // the entity name being edited in the inspector
     std::string entity_name_key_;            // which entity entity_name_text_ belongs to
     std::array<char, 64> picker_filter_{};   // the filter of the open asset or component picker

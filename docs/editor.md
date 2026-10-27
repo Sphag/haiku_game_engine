@@ -226,6 +226,19 @@ The sample project is `samples/showcase` (see its README).
   Ctrl+Z, Ctrl+Y, Delete, Ctrl+S, F5) on a copy of the showcase, checks the editor's log, and saves screenshots to `artifacts/ui/`.
   It needs an unlocked Windows desktop. Its first run found that typed text never arrived: the message pump did not call `TranslateMessage`.
 
+## The scene view, the hierarchy, and the window
+
+- **Scene view.** The Viewport panel shows the scene drawn by the game's renderer (`GameRenderer`), not markers: the editor camera in Edit, the
+  scene's own camera in Play. The editor host draws the picture into the back buffer first and the UI over it, so it needs the game shaders
+  beside the editor (`--shader-dir`); without them the panel falls back to the grid and markers. Lights, cameras, emitters, and the selection
+  keep a marker and the gizmo.
+- **Hierarchy.** Right-click a row for Rename, Duplicate, Add child, Move to root, and Delete. F2 or a double click renames in place (Enter
+  keeps, Escape cancels). Drag a row onto another to reparent.
+- **Assets.** A folder tree; typing in the search box shows a flat list with full paths.
+- **Tools menu.** Material graph, animation graph, terrain, world, and Build game; the same buttons are in the Project panel.
+- **Window.** The title shows the scene file and `*` while there are unsaved changes. The pointer changes shape over text fields, splitters,
+  and links (Windows). The window keeps redrawing while it is dragged or resized (Windows modal tick).
+
 ## Review and the second round of changes
 
 `docs/editor-usability-review.md` is the usability review: what was wrong, what changed, and what remains. In short: the project and scene

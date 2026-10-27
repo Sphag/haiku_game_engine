@@ -28,6 +28,9 @@ struct PointerPosition {
 //
 // Zero size: a minimized window has an empty framebuffer. Renderers must skip presenting while it is empty and
 // must not create swapchains with zero dimensions.
+// The pointer's look while it is over a window's client area.
+enum class CursorShape { Arrow, Text, Hand, ResizeHorizontal, ResizeVertical, ResizeAll, ResizeDiagonalNwSe, ResizeDiagonalNeSw, NotAllowed };
+
 class Platform {
 public:
     using ModalTick = std::function<void()>;
@@ -82,6 +85,13 @@ public:
     // Fails with NotFound for a stale id. The position is read from the OS, so a window without focus still reports where the
     // pointer is; the caller decides whether that counts as hovering the window.
     [[nodiscard]] core::Result<PointerPosition, PlatformError> pointer_position(WindowId id) const;
+
+    // The look of the pointer over the client area of a window. Win32 applies it; X11 keeps the default pointer for now (the in-house Xlib
+    // layer has no cursor binding). A captured cursor stays hidden whatever the shape.
+    [[nodiscard]] core::Result<core::Unit, PlatformError> set_cursor_shape(WindowId id, CursorShape shape);
+
+    // Changes the title of a window (UTF-8, checked like WindowDesc::title). A title that did not change is not sent again.
+    [[nodiscard]] core::Result<core::Unit, PlatformError> set_window_title(WindowId id, const std::string& title);
 
     // An empty function removes the tick.
     void set_modal_tick(ModalTick tick);

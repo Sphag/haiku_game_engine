@@ -187,3 +187,55 @@ TEST_CASE("A click uses the pointer position set before it, not the one from the
     CHECK(io.MouseDown[0]);
     ImGui::EndFrame();
 }
+
+namespace {
+
+void frame(engine::editor::EditorUi& ui) {
+    ImGui::NewFrame();
+    ui.build();
+    ImGui::Render();
+}
+
+std::string name_of(EditorModel& model, const engine::core::Guid& entity) {
+    const auto value = model.scene().scene().field(entity, "engine.name_tag", "name");
+    return value && std::holds_alternative<std::string>(*value) ? std::get<std::string>(*value) : std::string();
+}
+
+}  // namespace
+
+TEST_CASE("F2 renames the selected hierarchy row in place and Enter keeps the name", "[unit][editor]") {
+    Scratch scratch;
+    EditorModel model(std::make_shared<engine::editor::Console>(), scratch.path.join("workspace.json").value());
+    ImGuiScope scope;
+    engine::editor::EditorUi ui(model);
+    ui.apply_saved_layout();
+    engine::editor::set_imgui_focused(true);
+    frame(ui);
+
+    auto created = model.scene().create_entity();
+    REQUIRE(created.ok());
+    const engine::core::Guid entity = created.value();
+    model.scene().select(entity);
+    frame(ui);
+
+    press_key_for_frame(ui, Key::F2);
+    frame(ui);   // the field takes the keyboard
+    for (const char c : std::string("Boss")) {
+        engine::editor::handle_imgui_input(event(engine::platform::TextInput{std::string(1, c)}));
+    }
+    frame(ui);
+    press_key_for_frame(ui, Key::Enter);
+    frame(ui);
+    CHECK(name_of(model, entity) == "Boss");
+
+    // Escape leaves the name as it was.
+    press_key_for_frame(ui, Key::F2);
+    frame(ui);
+    for (const char c : std::string("X")) {
+        engine::editor::handle_imgui_input(event(engine::platform::TextInput{std::string(1, c)}));
+    }
+    frame(ui);
+    press_key_for_frame(ui, Key::Escape);
+    frame(ui);
+    CHECK(name_of(model, entity) == "Boss");
+}

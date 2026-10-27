@@ -313,3 +313,37 @@ TEST_CASE("Gamepad polling runs on every pump and never fails the frame", "[inte
         }
     }
 }
+
+TEST_CASE("The window title and the pointer shape can be changed after creation", "[integration]") {
+    auto platform = make_platform();
+    WindowDesc desc;
+    desc.title = "before";
+    const WindowId id = platform->create_window(desc).value();
+    const HWND hwnd = hwnd_of(*platform, id);
+
+    REQUIRE(platform->set_window_title(id, "Редактор - main.scene *").ok());
+    wchar_t text[64] = {};
+    GetWindowTextW(hwnd, text, 64);
+    CHECK(std::wstring(text) == L"Редактор - main.scene *");
+    CHECK(platform->set_window_title(id, "Редактор - main.scene *").ok());  // unchanged: accepted, nothing sent
+
+    // An embedded NUL is refused like at creation, and the old title stays.
+    CHECK_FALSE(platform->set_window_title(id, std::string("a\0b", 3)).ok());
+    GetWindowTextW(hwnd, text, 64);
+    CHECK(std::wstring(text) == L"Редактор - main.scene *");
+
+    // The OS asks for the cursor while the pointer is over the client area; the answer is the chosen shape.
+    for (const auto& [shape, resource] : {std::pair<engine::platform::CursorShape, LPCWSTR>{engine::platform::CursorShape::Text, MAKEINTRESOURCEW(32513)},
+                                          std::pair<engine::platform::CursorShape, LPCWSTR>{engine::platform::CursorShape::Hand, MAKEINTRESOURCEW(32649)},
+                                          std::pair<engine::platform::CursorShape, LPCWSTR>{engine::platform::CursorShape::ResizeHorizontal, MAKEINTRESOURCEW(32644)},
+                                          std::pair<engine::platform::CursorShape, LPCWSTR>{engine::platform::CursorShape::Arrow, MAKEINTRESOURCEW(32512)}}) {
+        REQUIRE(platform->set_cursor_shape(id, shape).ok());
+        const LRESULT handled = SendMessageW(hwnd, WM_SETCURSOR, reinterpret_cast<WPARAM>(hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+        CHECK(handled == TRUE);
+        CHECK(GetCursor() == LoadCursorW(nullptr, resource));
+    }
+
+    CHECK(platform->destroy_window(id).ok());
+    CHECK(platform->set_window_title(id, "gone").error().code == PlatformErrorCode::NotFound);
+    CHECK(platform->set_cursor_shape(id, engine::platform::CursorShape::Text).error().code == PlatformErrorCode::NotFound);
+}

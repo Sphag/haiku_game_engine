@@ -13,6 +13,7 @@
 #include <initializer_list>
 #include <cctype>
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -170,6 +171,11 @@ void EditorUi::editor_shortcuts() {
         viewport.set_mode(GizmoMode::Rotate);
     } else if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
         viewport.set_mode(GizmoMode::Scale);
+    } else if (ImGui::IsKeyPressed(ImGuiKey_F2, false)) {
+        SceneEditor& scene = model_.scene();
+        if (const auto selected = scene.selected(); selected && !scene.is_instance_interior(*selected) && !scene.scene().prefab_of(*selected)) {
+            rename_requested_ = true;
+        }
     } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
         SceneEditor& scene = model_.scene();
         if (const auto selected = scene.selected()) {
@@ -351,6 +357,17 @@ void EditorUi::menu_bar() {
         ImGui::TextDisabled("W / E / R: move, rotate, scale   F5: play / stop");
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("Tools")) {
+        ImGui::MenuItem("Material Graph", nullptr, &material_graph_open_);
+        ImGui::MenuItem("Animation Graph", nullptr, &animation_graph_open_);
+        ImGui::MenuItem("Terrain", nullptr, &terrain_open_);
+        ImGui::MenuItem("World", nullptr, &world_open_);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Build game...", nullptr, false, model_.project().state() == ProjectState::Open)) {
+            build_open_ = true;
+        }
+        ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu("View")) {
         for (const Panel panel : {Panel::Project, Panel::Viewport, Panel::Console, Panel::Errors, Panel::Workspace}) {
             bool visible = model_.panel_visible(panel);
@@ -358,10 +375,6 @@ void EditorUi::menu_bar() {
                 model_.set_panel_visible(panel, visible);
             }
         }
-        ImGui::MenuItem("Material Graph", nullptr, &material_graph_open_);
-        ImGui::MenuItem("Animation Graph", nullptr, &animation_graph_open_);
-        ImGui::MenuItem("Terrain", nullptr, &terrain_open_);
-        ImGui::MenuItem("World", nullptr, &world_open_);
         ImGui::Separator();
         if (ImGui::MenuItem("Reset layout")) {
             model_.reset_layout();
@@ -403,6 +416,29 @@ void EditorUi::project_panel() {
         }
         if (session.state() == ProjectState::Open && ImGui::Button("Close project", ImVec2(full, 0.0f))) {
             request(PendingAction::CloseProject);
+        }
+        if (session.state() == ProjectState::Open) {
+            // The editors that are not docked panels, one click away (they are also in the Tools menu).
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Editors");
+            const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            if (ImGui::Button("Material graph", ImVec2(half, 0.0f))) {
+                material_graph_open_ = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Animation graph", ImVec2(half, 0.0f))) {
+                animation_graph_open_ = true;
+            }
+            if (ImGui::Button("Terrain", ImVec2(half, 0.0f))) {
+                terrain_open_ = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("World", ImVec2(half, 0.0f))) {
+                world_open_ = true;
+            }
+            if (ImGui::Button("Build game...", ImVec2(full, 0.0f))) {
+                build_open_ = true;
+            }
         }
         if (!platform::dialogs_available()) {
             ImGui::TextDisabled("No file chooser is installed (zenity or kdialog); type the folder below.");
@@ -1089,6 +1125,26 @@ void EditorUi::unsaved_dialog() {
     ImGui::EndPopup();
 }
 
+void EditorUi::begin_rename(const core::Guid& entity, const std::string& current) {
+    renaming_ = entity;
+    std::snprintf(rename_text_.data(), rename_text_.size(), "%s", current.c_str());
+    rename_focus_ = true;
+}
+
+void EditorUi::commit_rename(const core::Guid& entity) {
+    renaming_.reset();
+    SceneEditor& scene = model_.scene();
+    const auto types = scene.scene().component_types(entity);
+    if (std::find(types.begin(), types.end(), gameplay::kNameId) == types.end()) {
+        if (rename_text_[0] == '\0') {
+            return;
+        }
+        report(scene.add_component(entity, gameplay::kNameId), scene_status_);
+    }
+    report(scene.set_field(entity, gameplay::kNameId, "name", scene::FieldValue(std::in_place_type<std::string>, std::string(rename_text_.data()))),
+           scene_status_);
+}
+
 void EditorUi::hierarchy_panel() {
     SceneEditor& scene = model_.scene();
     if (ImGui::Begin("Hierarchy")) {
@@ -1177,8 +1233,55 @@ void EditorUi::hierarchy_panel() {
             } else {
                 label += (kinds.empty() ? std::string("Entity") : kinds) + "  " + short_guid(row.guid);
             }
-            if (ImGui::Selectable(label.c_str(), selected && *selected == row.guid)) {
+            const bool can_rename = !row.prefab_instance && !scene.is_instance_interior(row.guid);
+            if (rename_requested_ && selected && *selected == row.guid && can_rename) {
+                rename_requested_ = false;
+                begin_rename(row.guid, name);
+            }
+            if (renaming_ && *renaming_ == row.guid) {
+                if (rename_focus_) {
+                    ImGui::SetKeyboardFocusHere();
+                    rename_focus_ = false;
+                }
+                ImGui::SetNextItemWidth(-1.0f);
+                const bool entered = ImGui::InputText("##rename", rename_text_.data(), rename_text_.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+                if (entered) {
+                    commit_rename(row.guid);
+                } else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    renaming_.reset();
+                } else if (ImGui::IsItemDeactivated()) {
+                    commit_rename(row.guid);
+                }
+                ImGui::Unindent(indent);
+                ImGui::PopID();
+                continue;
+            }
+            if (ImGui::Selectable(label.c_str(), selected && *selected == row.guid, ImGuiSelectableFlags_AllowDoubleClick)) {
                 scene.select(row.guid);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && can_rename) {
+                    begin_rename(row.guid, name);
+                }
+            }
+            if (ImGui::BeginPopupContextItem("##row_menu")) {
+                scene.select(row.guid);
+                if (ImGui::MenuItem("Rename", "F2", false, can_rename)) {
+                    begin_rename(row.guid, name);
+                }
+                if (ImGui::MenuItem("Duplicate", "Ctrl+D")) {
+                    report(scene.duplicate(row.guid), scene_status_);
+                }
+                if (ImGui::MenuItem("Add child")) {
+                    report(scene.create_entity(row.guid), scene_status_);
+                }
+                if (ImGui::MenuItem("Move to root", nullptr, false,
+                                    !scene.is_instance_interior(row.guid) && !scene.scene().parent(row.guid).is_nil())) {
+                    report(scene.reparent(row.guid, core::Guid{}), scene_status_);
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete", "Del")) {
+                    report(scene.remove(row.guid), scene_status_);
+                }
+                ImGui::EndPopup();
             }
             // Dropping an entity on a row makes it a child of that row. Dragging it onto a row it would cycle through is refused.
             if (ImGui::BeginDragDropSource()) {
@@ -1755,8 +1858,7 @@ void EditorUi::assets_body() {
     const float list_width = std::max(ImGui::GetContentRegionAvail().x * 0.45f, 120.0f);
     ImGui::BeginChild("##asset_catalog", ImVec2(list_width, 0.0f), ImGuiChildFlags_Borders);
     const CatalogEntry* selected = assets.selected();
-    for (const CatalogEntry* entry : assets.search(query)) {
-        const std::string label = entry->source + (entry->registered() ? "  [" + entry->asset->importer + "]" : "  [no metadata]");
+    const auto draw_entry = [&](const CatalogEntry* entry, const std::string& label) {
         const bool is_selected = selected != nullptr && selected->source == entry->source;
         if (ImGui::Selectable(label.c_str(), is_selected) && entry->registered()) {
             assets.select(entry->asset->guid.to_string());
@@ -1771,6 +1873,70 @@ void EditorUi::assets_body() {
             ImGui::SetDragDropPayload(kAssetPayload, bytes.data(), bytes.size());
             ImGui::TextUnformatted(entry->source.c_str());
             ImGui::EndDragDropSource();
+        }
+    };
+    const auto describe_entry = [](const CatalogEntry* entry, const std::string& name) {
+        return name + (entry->registered() ? "  [" + entry->asset->importer + "]" : "  [no metadata]");
+    };
+    std::vector<const CatalogEntry*> found = assets.search(query);
+    if (!query.empty()) {
+        // A search shows a flat list with full paths: the folders would hide the matches.
+        for (const CatalogEntry* entry : found) {
+            draw_entry(entry, describe_entry(entry, entry->source));
+        }
+    } else {
+        // Without a search the assets sit in their folders, which open and close like a file browser's.
+        std::sort(found.begin(), found.end(), [](const CatalogEntry* a, const CatalogEntry* b) { return a->source < b->source; });
+        std::vector<std::string> opened;  // the folders drawn open, outermost first
+        std::vector<std::string> closed;  // the folder drawn closed, whose content is skipped
+        for (const CatalogEntry* entry : found) {
+            std::vector<std::string> segments;
+            const std::size_t last_slash = entry->source.find_last_of('/');
+            if (last_slash != std::string::npos) {
+                std::size_t start = 0;
+                while (start <= last_slash) {
+                    const std::size_t slash = entry->source.find('/', start);
+                    if (slash == std::string::npos || slash > last_slash) {
+                        break;
+                    }
+                    segments.push_back(entry->source.substr(start, slash - start));
+                    start = slash + 1;
+                }
+            }
+            if (!closed.empty() && segments.size() >= closed.size() && std::equal(closed.begin(), closed.end(), segments.begin())) {
+                continue;
+            }
+            closed.clear();
+            std::size_t common = 0;
+            while (common < opened.size() && common < segments.size() && opened[common] == segments[common]) {
+                ++common;
+            }
+            while (opened.size() > common) {
+                ImGui::TreePop();
+                opened.pop_back();
+            }
+            bool hidden = false;
+            std::string path;
+            for (std::size_t i = 0; i < segments.size(); ++i) {
+                path += segments[i] + "/";
+                if (i < common) {
+                    continue;
+                }
+                if (ImGui::TreeNodeEx((segments[i] + "##dir_" + path).c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                    opened.push_back(segments[i]);
+                } else {
+                    closed.assign(segments.begin(), segments.begin() + static_cast<std::ptrdiff_t>(i) + 1);
+                    hidden = true;
+                    break;
+                }
+            }
+            if (!hidden) {
+                draw_entry(entry, describe_entry(entry, last_slash == std::string::npos ? entry->source : entry->source.substr(last_slash + 1)));
+            }
+        }
+        while (!opened.empty()) {
+            ImGui::TreePop();
+            opened.pop_back();
         }
     }
     ImGui::EndChild();

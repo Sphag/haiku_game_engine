@@ -204,6 +204,13 @@ says so. State: `sonnet` branch, all Windows suites green on DX12 and Vulkan.
 7. **License:** MIT (`LICENSE`), with a note that `third_party/` keeps its own licenses. **Build docs:** MSVC 14.51 and the
    same-Visual-Studio rule are stated. **Vulkan docs:** the SDK and `VK_LAYER_PATH` setup is in `docs/vulkan.md`.
 
+## Fourth pass: the scene in the editor, and the editor polish
+
+- **The Viewport shows the scene** (R1), drawn by `GameRenderer`. It crashed the editor at first. The cause was in the renderer: `SceneRenderer::resize` rebuilt the targets but not the cluster lighting buffer, whose size depends on the target size, so a larger target overran it. It is fixed and the showcase GPU test now resizes up and down on both backends.
+- **R3 to R9**: right-click menus, F2 and double-click rename, a folder tree in Assets, the unsaved marker in the title, pointer shapes, redraw while dragging or resizing the window, and a Tools menu with Editors buttons. The platform got `set_window_title` and `set_cursor_shape`.
+- Tests added: a GPU resize case, a Win32 title and cursor case, and an editor case for F2 rename (Enter and Escape).
+- `editor_ui_test.ps1` was not re-run after these changes.
+
 ## What is still not done
 
 1. **Meshes in the runtime are primitives** (a box, or a sphere for a sphere body), tinted by the component. The cooked model payload reader
@@ -266,10 +273,9 @@ Details and the remaining list are in the review. Highlights:
 
 ## What is still not done
 
-1. **The edit viewport does not show the scene.** It draws entity markers and a gizmo; the real picture appears only in a running game. The renderer exists, so the fix is to draw the viewport with `GameRenderer` into a texture. This is R1 in the review and the biggest remaining usability gap.
-2. **Textures and material graphs are not applied when drawing** (model material factors and the component tint are). Material graph compilation needs a cooked form that does not need the shader compiler at run time.
-3. **Particles are boxes, not sprites; the terrain has four fixed layer colors**, not material textures.
+1. **Textures and material graphs** are applied through material instances mapped onto the fixed PBR model. Arithmetic nodes are not evaluated, mip 0 only, and the terrain ignores materials.
+2. **Particles are boxes, not sprites; the terrain has four fixed layer colors**, not material textures. In Edit the viewport shows no particles.
 4. **Windowed runtime:** no resize or fullscreen, no configurable input mapping (WASD and Space are fixed), no gamepad, no game menu beyond the HUD.
-5. **Editor polish** (the review's R3 to R12): context menus and inline rename in the hierarchy, a folder view in Assets, an unsaved marker in the title, cursor shapes, redraw during a resize drag, settings. The X11 path was not re-checked for the mouse and focus fixes made on Windows.
+5. **Editor polish left** (the review's R10 to R14): settings (theme, UI scale), an undo history list, the 64 pixel width step of the scene view, X11 pointer shapes. The X11 path was not re-checked for the mouse and focus fixes made on Windows.
 6. **Not run:** the full acceptance benchmark, native Linux Vulkan GPU, FSR 2, Linux GCC 11, ASan and UBSan on the new code, and a Windows Debug rebuild after the last changes (the previous Debug run passed).
 7. One editor-suite case failed once during the inspector work and passed on every rerun; I could not reproduce it, so I am noting it as a possible flaky test.

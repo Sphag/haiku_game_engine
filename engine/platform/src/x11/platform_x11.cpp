@@ -71,6 +71,7 @@ struct Platform::Impl {
         bool focused = false;
         bool minimized = false;
         bool captured = false;     // the application asked for capture; it is applied only while focused
+        std::string title;
         x11::XIC input_context = nullptr;  // null when no input method serves this window
     };
 
@@ -247,6 +248,35 @@ struct Platform::Impl {
             return core::failure(PlatformError{PlatformErrorCode::NotFound, "window id is stale or unknown"});
         }
         return core::success(record->captured);
+    }
+
+    [[nodiscard]] core::Result<core::Unit, PlatformError> set_cursor_shape(WindowId id, CursorShape) {
+        require_owner();
+        if (windows.find(id) == nullptr) {
+            return core::failure(PlatformError{PlatformErrorCode::NotFound, "window id is stale or unknown"});
+        }
+        return core::success();  // the pointer keeps the default look on X11
+    }
+
+    [[nodiscard]] core::Result<core::Unit, PlatformError> set_window_title(WindowId id, const std::string& title) {
+        require_owner();
+        WindowRecord* record = windows.find(id);
+        if (record == nullptr) {
+            return core::failure(PlatformError{PlatformErrorCode::NotFound, "window id is stale or unknown"});
+        }
+        if (record->title == title) {
+            return core::success();
+        }
+        WindowDesc check;
+        check.title = title;
+        if (auto valid = validate_window_desc(check); !valid.ok()) {
+            return core::failure(valid.error());
+        }
+        record->title = title;
+        api->XChangeProperty(display, record->window, net_wm_name, utf8_string, 8, x11::kPropModeReplace,
+                             reinterpret_cast<const unsigned char*>(title.data()), static_cast<int>(title.size()));
+        api->XFlush(display);
+        return core::success();
     }
 
     [[nodiscard]] core::Result<PointerPosition, PlatformError> pointer_position(WindowId id) const {
@@ -879,6 +909,14 @@ core::Result<core::Unit, PlatformError> Platform::set_cursor_capture(WindowId id
 
 core::Result<bool, PlatformError> Platform::cursor_captured(WindowId id) const {
     return impl_->cursor_captured(id);
+}
+
+core::Result<core::Unit, PlatformError> Platform::set_cursor_shape(WindowId id, CursorShape shape) {
+    return impl_->set_cursor_shape(id, shape);
+}
+
+core::Result<core::Unit, PlatformError> Platform::set_window_title(WindowId id, const std::string& title) {
+    return impl_->set_window_title(id, title);
 }
 
 core::Result<PointerPosition, PlatformError> Platform::pointer_position(WindowId id) const {
