@@ -68,9 +68,10 @@ Reflected field kinds (`FieldKind`):
 
 Any other C++ member type fails a `static_assert`, so a field cannot be reflected by accident.
 
-The catalog is supplied by the host program. The runtime's catalog is empty in this build (`engine/runtime/src/game_main.cpp`),
-so a scene that contains components is refused rather than partly loaded. The reflection tests build a small catalog
-(`tests/src/scene_format_tests.cpp`, `make_catalog`) that shows the registration pattern.
+The catalog is supplied by the host program. The editor and the runtime both register the built-in components
+(`engine/gameplay`, [components.md](components.md)) and then any game types, so a scene that names a type the catalog does not
+hold is refused rather than partly loaded. The reflection tests build a small catalog (`tests/src/scene_format_tests.cpp`,
+`make_catalog`) that shows the registration pattern.
 
 ## Asset sidecar (`engine.asset_meta`, version 1)
 

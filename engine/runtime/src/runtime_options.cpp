@@ -43,7 +43,7 @@ core::Result<RuntimeOptions, std::string> parse_runtime_options(const std::vecto
             options.help = true;
             return core::success(std::move(options));
         }
-        if (arg != "--pack" && arg != "--start-scene" && arg != "--backend" && arg != "--profile") {
+        if (arg != "--pack" && arg != "--start-scene" && arg != "--backend" && arg != "--profile" && arg != "--frames") {
             return core::failure("unknown argument: " + arg);
         }
         if (i + 1 >= args.size()) {
@@ -67,6 +67,18 @@ core::Result<RuntimeOptions, std::string> parse_runtime_options(const std::vecto
                 return core::failure("invalid backend '" + value + "'");
             }
             options.backend = value;
+        } else if (arg == "--frames") {
+            std::uint64_t frames = 0;
+            for (const char c : value) {
+                if (c < '0' || c > '9' || frames > 100000000ULL) {
+                    return core::failure("--frames requires a whole number, got '" + value + "'");
+                }
+                frames = frames * 10 + static_cast<std::uint64_t>(c - '0');
+            }
+            if (value.empty() || frames > 100000000ULL) {
+                return core::failure("--frames requires a whole number, got '" + value + "'");
+            }
+            options.frames = static_cast<std::uint32_t>(frames);
         } else {
             if (value != kProfileNative && value != kProfileFull) {
                 return core::failure("invalid profile '" + value + "'");

@@ -79,3 +79,24 @@ TEST_CASE("Runtime options: help is accepted without the required arguments", "[
     CHECK(parsed.value().help);
     CHECK(engine::runtime::runtime_usage_text().find("--start-scene") != std::string::npos);
 }
+
+TEST_CASE("Runtime options: --frames sets the simulated frame count, and a bad count is a usage error", "[unit]") {
+    const std::vector<std::string> base{"--pack", "game.pack", "--start-scene", "3898c084-2f9e-4e6f-af6c-4ae6e8920395"};
+    auto with = [&base](const std::string& value) {
+        std::vector<std::string> args = base;
+        args.push_back("--frames");
+        args.push_back(value);
+        return engine::runtime::parse_runtime_options(args);
+    };
+    auto defaults = engine::runtime::parse_runtime_options(base);
+    REQUIRE(defaults.ok());
+    CHECK(defaults.value().frames == 60);
+    auto parsed = with("600");
+    REQUIRE(parsed.ok());
+    CHECK(parsed.value().frames == 600);
+    CHECK(with("0").ok());
+    CHECK_FALSE(with("-1").ok());
+    CHECK_FALSE(with("ten").ok());
+    CHECK_FALSE(with("").ok());
+    CHECK_FALSE(with("99999999999999999999").ok());
+}

@@ -24,6 +24,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -304,6 +305,21 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     // The scene reaches the prefab, the models, the textures, the materials, the scripts, the animation graph, the terrain, the audio,
     // and the probe volume: every importer type the builtin registry has except none.
     CHECK(result.value().pack_entries >= 18);
+
+    // The published folder starts through its own launcher, and the runtime simulates the scene: bodies and scripts from the cooked data.
+    const fs::path published = scratch / "output" / "Showcase";
+    const fs::path log = scratch / "relaunch.log";
+#ifdef _WIN32
+    const std::string command = "cd /d \"" + published.string() + "\" && \".\\run_game.bat\" --frames 120 > \"" + log.string() + "\" 2>&1";
+#else
+    const std::string command = "cd '" + published.string() + "' && sh './run_game.sh' --frames 120 > '" + log.string() + "' 2>&1";
+#endif
+    CHECK(std::system(command.c_str()) == 0);
+    const std::string output = read_text(path_of(log.string()));
+    INFO(output);
+    CHECK(output.find("simulated 120 frames") != std::string::npos);
+    CHECK(output.find("bodies=7") != std::string::npos);
+    CHECK(output.find("scripts=5") != std::string::npos);
     fs::remove_all(scratch);
 }
 

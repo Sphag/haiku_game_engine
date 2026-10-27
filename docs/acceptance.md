@@ -132,3 +132,22 @@ These block final acceptance. Each one is recorded as incomplete rather than pas
 5. **Visual editor smoke test.** No screenshot-backed run of the editor on Windows or Linux exists for US-081.
 6. **Clean-directory checks.** The offline clean-copy build passed. The standalone package test (build from the sample project, then launch from an empty folder) passed in the editor suite on Linux and on Windows (DX12 and Vulkan runs). It is not a separate package-only run, and a package from a real game is not yet built.
 7. **License.** The repository has no license file (see [vendor.md](vendor.md)).
+
+## Update 2026-10-27 (Windows re-verification and fixes)
+
+Re-run on the Windows host (RTX 5080, MSVC 14.51, Release and Debug), `sonnet` branch. The full account is in `sonet-report.md`.
+
+- `ctest --preset win-release-unit`: 29 of 29. Before the fixes below it was 28 of 29: two Build Game cases failed on Windows because the
+  launch check ran `"game_runtime.exe"` with no `.\`, and `cmd` does not search the current folder when
+  `NoDefaultCurrentDirectoryInExePath` is set.
+- `engine_tests --suite gpu --backend dx12`: 72 cases, all passed (validation layers on).
+- `engine_tests --suite gpu --backend vulkan`: not reproducible from the repository. The pinned 1.4.363 validation layer is not built by
+  this tree (`third_party/vulkan_validation_layers` holds the build scripts only). With the Vulkan SDK 1.3.224 layer that this host
+  registers, 59 of 73 cases pass and the rest fail on messages that layer produces for features it predates (mutable descriptor types,
+  mesh shaders). Messages about "unknown VkStructureType" are now ignored, because they only mean the layer is older than the headers.
+- Editor input and focus were reviewed and fixed (see [editor.md](editor.md#input-focus-and-shortcuts)): modifier keys never reached
+  Dear ImGui, mouse buttons came from Raw Input, and the pointer was read after the click.
+- The editor and the runtime had no components. They now register the built-in set ([components.md](components.md)).
+- A sample project, `samples/showcase`, covers every feature area and is tested end to end.
+- Still open: the screenshot-backed editor smoke test (the desktop session was locked during this pass, so no real mouse or keyboard input
+  could be injected), native Linux Vulkan GPU, the full acceptance benchmark, FSR 2, Linux GCC, a license, and drawing in the runtime.

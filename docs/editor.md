@@ -184,3 +184,35 @@ is no clip importer yet. Undo and redo and save and open are in the document, so
 - `engine_tests --suite editor --backend dx12|vulkan` adds the GPU test that draws rectangles, a clip rectangle, and Cyrillic text
   through the RHI and reads the pixels back. A GPU run is a report only on real hardware.
 - A visual check of the running window is not part of the tests. Record screenshots from a native run and say so in the report.
+
+## Input, focus, and shortcuts
+
+- **Mouse buttons and the wheel come from window messages** (`WM_*BUTTON*`, `WM_MOUSEWHEEL`) with mouse capture while a button is held.
+  Raw Input carries relative motion only. Raw Input follows keyboard focus, not the window under the cursor, so a click that activates the
+  editor was lost and a click on a window overlapping the editor reached it.
+- **Modifiers.** The adapter sends `ImGuiMod_Ctrl`, `Shift`, `Alt`, and `Super` as well as the left and right keys. Dear ImGui reads
+  `io.KeyCtrl` from the `ImGuiMod_*` keys, so without them Ctrl+Z, Ctrl+A, and modifier clicks never saw their modifier.
+- **Pointer.** It is read before the frame's button events, so a click lands where the cursor is now. While a button is held it keeps
+  reporting outside the window, so a slider, a splitter, or a gizmo handle follows a drag that leaves the window.
+- **Focus.** Losing focus releases every held key and button. An unfocused editor draws at a reduced rate.
+
+| Shortcut | Action |
+|---|---|
+| Ctrl+Z, Ctrl+Y (Ctrl+Shift+Z) | Undo, redo |
+| Ctrl+S | Save scene |
+| Ctrl+D | Duplicate the selected entity |
+| Delete | Delete the selected entity |
+| W, E, R | Move, rotate, scale gizmo |
+| F5 | Play, or stop when playing |
+| F | Frame the selection (over the viewport) |
+| RMB drag, RMB + WASD/QE | Orbit, fly |
+
+Shortcuts do nothing while a text field has the keyboard, while Play runs (except F5), or with Ctrl/Alt held (except the Ctrl ones above).
+
+## Components
+
+The editor registers the built-in components (`docs/components.md`), so Add Component lists them from the first launch. The scene editor
+loads every `.prefab` asset of the open project into its prefab library, so scenes with prefab instances open. Play creates physics bodies
+and attaches Lua scripts from the scene's components, reading script sources from the project's `assets/` folder.
+
+The sample project is `samples/showcase` (see its README).

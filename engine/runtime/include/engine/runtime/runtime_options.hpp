@@ -11,6 +11,7 @@
 #include "engine/core/guid.hpp"
 #include "engine/core/result.hpp"
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,6 +28,7 @@ struct RuntimeOptions {
     core::Guid start_scene;          // nil until --start-scene is given
     std::string backend;
     std::string profile = std::string(kProfileNative);
+    std::uint32_t frames = 60;       // simulated frames at 60 Hz before the runtime stops; this build has no window yet
     bool help = false;
 };
 

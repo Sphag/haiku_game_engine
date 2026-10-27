@@ -5,6 +5,7 @@
 #include "engine/assets/cooked_container.hpp"
 #include "engine/core/path.hpp"
 #include "engine/gameplay/components.hpp"
+#include "engine/gameplay/game_world.hpp"
 #include "engine/pack/pack.hpp"
 #include "engine/runtime/lifecycle.hpp"
 #include "engine/runtime/runtime_options.hpp"
@@ -12,6 +13,7 @@
 #include "engine/scene/scene.hpp"
 #include "engine/scene/scene_format.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <unordered_set>
@@ -128,6 +130,20 @@ int main(int argc, char** argv) {
                            missing.front().asset.to_string());
     }
 
+    // Scripts come out of the packs by GUID. A script that is not in a pack is reported by the world, and the others still run.
+    const auto read_script = [&packs](const Guid& guid) -> engine::core::Result<std::string, std::string> {
+        for (const auto& pack : packs) {
+            if (const auto* script_entry = pack.find(guid)) {
+                auto cooked = engine::assets::read_cooked_container(pack.payload(*script_entry));
+                if (!cooked.ok()) {
+                    return engine::core::failure(cooked.error());
+                }
+                return engine::core::success(std::string(cooked.value()));
+            }
+        }
+        return engine::core::failure(std::string("not in any pack"));
+    };
+
     engine::runtime::Lifecycle lifecycle;
     if (!lifecycle.start().ok()) {
         return load_failed("runtime lifecycle could not start");
@@ -135,6 +151,33 @@ int main(int argc, char** argv) {
     std::printf("game_runtime: started scene %s entities=%zu packs=%zu backend=%s profile=%s\n",
                 options.start_scene.to_string().c_str(), scene.to_document().entities.size(), packs.size(),
                 options.backend.c_str(), options.profile.c_str());
+
+    // The game runs on the CPU: physics bodies and Lua scripts from the scene's components, stepped at 60 Hz for the requested frames.
+    // Drawing needs a window and a device, which this build's runtime does not open yet (docs/components.md).
+    auto world = engine::gameplay::GameWorld::create(scene, read_script);
+    if (!world.ok()) {
+        return load_failed("the game world could not start: " + world.error());
+    }
+    int exit_code = kExitOk;
+    const auto report_errors = [&exit_code, &world]() {
+        for (const std::string& error : world.value()->take_errors()) {
+            std::fprintf(stderr, "game_runtime: %s\n", error.c_str());
+            exit_code = kExitLoadFailed;
+        }
+    };
+    report_errors();
+    for (std::uint32_t frame = 0; frame < options.frames; ++frame) {
+        world.value()->advance(1.0 / 60.0);
+    }
+    report_errors();
+    const auto stats = world.value()->stats();
+    std::printf("game_runtime: simulated %u frames bodies=%zu scripts=%zu fixed_steps=%llu\n", options.frames, stats.bodies,
+                stats.scripts, static_cast<unsigned long long>(stats.fixed_steps));
+    world.value().reset();
+    if (exit_code != kExitOk) {
+        return exit_code;
+    }
+
     if (!lifecycle.stop().ok()) {
         return load_failed("runtime lifecycle could not stop");
     }

@@ -23,7 +23,9 @@ and artifacts, and marks what is still open. Read it before relying on any featu
 | [docs/schemas.md](docs/schemas.md) | Scene, prefab, component, pack, save, and manifest schemas |
 | [docs/vendor.md](docs/vendor.md) | Vendored dependencies, their pinned revisions, licenses, and notices |
 | [docs/benchmarks.md](docs/benchmarks.md) | `engine_bench` and `engine_workload`, and how to reproduce a run |
-| [docs/editor.md](docs/editor.md) | The editor workflow |
+| [docs/editor.md](docs/editor.md) | The editor workflow, input and focus rules, shortcuts |
+| [docs/components.md](docs/components.md) | The built-in components and `GameWorld` |
+| [samples/showcase](samples/showcase/README.md) | A sample project that uses every feature area, tested end to end |
 | [docs/distribution.md](docs/distribution.md) | Building a standalone game package |
 | [docs/asset-converter.md](docs/asset-converter.md), [docs/runtime-packs.md](docs/runtime-packs.md) | The asset pipeline and the pack format |
 
