@@ -1,6 +1,7 @@
 #include "engine/scene/scene_format.hpp"
 
 #include "engine/core/file_io.hpp"
+#include "engine/core/utf8.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -150,6 +151,16 @@ std::optional<FieldValue> value_from_json(const Json& json, FieldKind kind) {
             }
             return FieldValue(values);
         }
+        case FieldKind::String: {
+            if (!json.is_string()) {
+                return std::nullopt;
+            }
+            std::string text = json.get<std::string>();
+            if (text.size() > kMaxStringBytes || !core::is_valid_utf8(text)) {
+                return std::nullopt;
+            }
+            return FieldValue(std::move(text));
+        }
         case FieldKind::Guid: {
             if (!json.is_string()) {
                 return std::nullopt;
@@ -187,6 +198,9 @@ struct ValueToJson {
     }
     Json operator()(const core::Guid& value) const {
         return value.to_string();
+    }
+    Json operator()(const std::string& value) const {
+        return value;
     }
 };
 

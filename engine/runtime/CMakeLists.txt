@@ -12,11 +12,12 @@ engine_configure_first_party(engine_runtime)
 # The windowed game: GameRenderer (the scene through SceneRenderer, presented by a buffer copy) and the window loop. Kept apart from
 # engine_runtime so the option parser and lifecycle tests do not link the renderer.
 add_library(engine_game_render STATIC
+  src/animation_binding.cpp
   src/game_renderer.cpp
   src/windowed_game.cpp
 )
 target_include_directories(engine_game_render PUBLIC include)
-target_link_libraries(engine_game_render PUBLIC engine_runtime engine_render engine_rhi engine_platform engine_gameplay engine_scene engine_core)
+target_link_libraries(engine_game_render PUBLIC engine_runtime engine_render engine_rhi engine_platform engine_gameplay engine_scene engine_animation engine_world engine_model_format engine_core)
 engine_configure_first_party(engine_game_render)
 
 add_executable(game_runtime src/game_main.cpp)

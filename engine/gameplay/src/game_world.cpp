@@ -193,6 +193,7 @@ core::Result<std::unique_ptr<GameWorld>, std::string> GameWorld::create(scene::S
     script::ScriptServices services = extra;
     services.registry = &scene.mutable_registry();
     services.physics = world->physics_.get();
+    services.animators = &world->animators_;
     services.audio = world->audio_.get();
     world->scripts_->bind(services);
     world->runner_ = std::make_unique<script::ScriptRunner>(*world->scripts_, scene.registry());
@@ -242,6 +243,7 @@ void GameWorld::advance(double frame_seconds) {
         accumulator_ = 0.0;  // the catch-up limit was reached; the rest of the frame's time is dropped, as physics drops it
     }
     runner_->update(frame_seconds);
+    animators_.update(static_cast<float>(frame_seconds));
 
     sync_scene(*scene_, *physics_, bindings_);
     stats_.seconds += frame_seconds;

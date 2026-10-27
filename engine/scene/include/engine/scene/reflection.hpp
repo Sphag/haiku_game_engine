@@ -34,10 +34,13 @@ enum class FieldKind : std::uint8_t {
     Float32x3,
     Float32x4,
     Guid,
+    String,  // UTF-8 text of at most kMaxStringBytes bytes, without control characters
 };
 
+inline constexpr std::size_t kMaxStringBytes = 256;
+
 using FieldValue = std::variant<bool, std::int32_t, std::uint32_t, float, std::array<float, 2>, std::array<float, 3>,
-                                std::array<float, 4>, core::Guid>;
+                                std::array<float, 4>, core::Guid, std::string>;
 
 // Maps a C++ member type to its FieldKind. Any other type fails the static_assert, so a field cannot be reflected by accident.
 template <typename T>
@@ -77,6 +80,10 @@ struct FieldTraits<std::array<float, 4>> {
 template <>
 struct FieldTraits<core::Guid> {
     static constexpr FieldKind kind = FieldKind::Guid;
+};
+template <>
+struct FieldTraits<std::string> {
+    static constexpr FieldKind kind = FieldKind::String;
 };
 
 // Stable identity of a component type. The name is written by the author ("engine.transform", "game.door_lock") and never

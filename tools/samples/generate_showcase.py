@@ -255,6 +255,30 @@ HERO_GRAPH = {
 }
 
 
+ARM_GRAPH = {
+    "format": "engine.animation_graph", "version": 1,
+    "parameters": [{"name": "excite", "type": "float", "default": 0}],
+    "default_state": "wave",
+    "states": [{"name": "wave", "clip": "wave", "speed": 1}, {"name": "slide", "clip": "slide", "speed": 1}],
+    "transitions": [
+        {"from": "wave", "to": "slide", "duration": 0.3, "priority": 1,
+         "conditions": [{"when": "float", "parameter": "excite", "op": ">", "value": 0.5}]},
+        {"from": "slide", "to": "wave", "duration": 0.3, "priority": 1,
+         "conditions": [{"when": "float", "parameter": "excite", "op": "<=", "value": 0.5}]},
+    ],
+}
+
+ARM_LUA = """-- Switches the arm's animation graph between its two clips every three seconds, through the animation module.
+local elapsed = 0
+
+function update(entity, dt)
+  elapsed = elapsed + dt
+  local excite = (math.floor(elapsed / 3) % 2 == 0) and 0 or 1
+  animation.set_float('arm', 'excite', excite)
+end
+"""
+
+
 def material_graph(name, texture_names, tint):
     nodes = [{"id": "uv", "kind": "uv"}]
     textures = []
@@ -304,7 +328,12 @@ def comp(**fields):
 
 
 def entity(name, transform, components=None, parent=None):
-    return {"guid": guid("entity/" + name), "parent": parent, "transform": transform, "components": components or {}}
+    """A scene entity. Its name is stored in its engine.name_tag component, so the editor's hierarchy and scripts can use it."""
+    components = dict(components or {})
+    tag = components.get("engine.name_tag", comp())
+    tag["fields"]["name"] = name
+    components["engine.name_tag"] = tag
+    return {"guid": guid("entity/" + name), "parent": parent, "transform": transform, "components": components}
 
 
 def build_scene(a, prefab):
@@ -328,39 +357,49 @@ def build_scene(a, prefab):
         entity("camera", xform((0, 4, 10), about_x(-10)), {
             "engine.camera": comp(vertical_fov_degrees=65.0, far_plane=500.0, primary=True),
         }),
-        entity("ground", xform((0, -0.5, 0), scale=(20, 1, 20)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, receive_shadows=True, tint=[0.30, 0.50, 0.26, 1.0]),
+        entity("ground", xform((0, -0.5, 0), scale=(40, 1, 40)), {
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, receive_shadows=True, tint=[0.30, 0.50, 0.26, 1.0]),
             "engine.rigid_body": comp(motion=0, shape=0, size=[40.0, 1.0, 40.0], friction=0.8),
         }),
-        entity("terrain", xform((-64, -6, -64)), {
+        entity("terrain", xform((-64, -0.5, -150)), {
             "engine.terrain": comp(heightmap=a["heightmap"].guid, material=a["ground_mat"].guid, size_meters=[128.0, 128.0], height_scale=1.0),
         }),
         entity("hero", xform((0, 1, 4)), {
             "engine.name_tag": comp(tag=2),
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid),
             "engine.character_controller": comp(height=1.8, radius=0.35, move_speed=3.0, jump_speed=5.5),
             "engine.script": comp(script=a["player_lua"].guid),
-            "engine.animator": comp(graph=a["hero_graph"].guid, model=a["props"].guid, speed=1.0),
             "engine.audio_emitter": comp(clip=a["tone"].guid, volume=0.6, looping=False, spatial=True, play_on_start=False),
         }),
         entity("hero_hand", xform((0.4, 1.0, 0)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.8, 0.55, 0.12, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.8, 0.55, 0.12, 1.0]),
         }, parent=hero),
         entity("campfire", xform((-3, 0.2, -1)), {
             "engine.particle_emitter": comp(rate=120.0, lifetime=1.5, speed=1.8, size=0.08, color=[1.0, 0.55, 0.2, 1.0], max_particles=4096),
             "engine.light": comp(kind=1, intensity=4.0, range=8.0, color=[1.0, 0.5, 0.2], cast_shadows=False),
             "engine.audio_emitter": comp(clip=a["ambience"].guid, volume=0.4, looping=True, spatial=True, play_on_start=True),
         }),
+        entity("arm", xform((5, 0.0, -4), scale=(1.5, 1.5, 1.5)), {
+            "engine.mesh_renderer": comp(mesh=a["arm"].guid, material=a["crate_mat"].guid, tint=[0.9, 0.55, 0.2, 1.0]),
+            "engine.animator": comp(name="arm", graph=a["arm_graph"].guid, model=a["arm"].guid, speed=1.0),
+            "engine.script": comp(script=a["arm_lua"].guid),
+        }),
+        entity("tree_a", xform((-9, 0.0, -9), scale=(2.0, 2.0, 2.0)), {
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, tint=[0.35, 0.65, 0.3, 1.0]),
+        }),
+        entity("tree_b", xform((10, 0.0, -11), scale=(2.5, 2.5, 2.5)), {
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, tint=[0.3, 0.6, 0.28, 1.0]),
+        }),
         entity("platform", xform((6, 0.5, 0), scale=(3, 0.3, 3)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, tint=[0.55, 0.55, 0.6, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, tint=[0.55, 0.55, 0.6, 1.0]),
             "engine.rigid_body": comp(motion=1, shape=0, size=[3.0, 0.3, 3.0]),
             "engine.script": comp(script=a["spinner_lua"].guid),
         }),
         entity("zone", xform((0, 1, -6)), {
             "engine.rigid_body": comp(motion=0, shape=1, size=[4.0, 4.0, 4.0], trigger=True),
         }),
-        entity("ball", xform((2, 6, 2)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.2, 0.5, 1.0, 1.0]),
+        entity("ball", xform((2, 6, 2), scale=(0.8, 0.8, 0.8)), {
+            "engine.mesh_renderer": comp(mesh=a["sphere"].guid, material=a["crate_mat"].guid, tint=[0.2, 0.5, 1.0, 1.0]),
             "engine.rigid_body": comp(motion=2, shape=1, size=[0.8, 0.8, 0.8], mass=2.0, restitution=0.6),
         }),
         entity("hud", xform(), {
@@ -388,6 +427,50 @@ def referenced_guids(value, known):
     elif isinstance(value, str) and value in known:
         found.add(value)
     return found
+
+
+def cube_obj():
+    """A unit cube centered on the origin, with a normal and texture coordinates per face (24 vertices)."""
+    faces = [((0, 0, 1), [(-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)]), ((0, 0, -1), [(1, -1, -1), (-1, -1, -1), (-1, 1, -1), (1, 1, -1)]),
+             ((1, 0, 0), [(1, -1, 1), (1, -1, -1), (1, 1, -1), (1, 1, 1)]), ((-1, 0, 0), [(-1, -1, -1), (-1, -1, 1), (-1, 1, 1), (-1, 1, -1)]),
+             ((0, 1, 0), [(-1, 1, 1), (1, 1, 1), (1, 1, -1), (-1, 1, -1)]), ((0, -1, 0), [(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)])]
+    lines = ["# unit cube", "o cube"]
+    for normal, corners in faces:
+        for corner in corners:
+            lines.append("v %g %g %g" % tuple(c * 0.5 for c in corner))
+    for normal, _ in faces:
+        lines.append("vn %d %d %d" % normal)
+    lines += ["vt 0 0", "vt 1 0", "vt 1 1", "vt 0 1"]
+    for f in range(6):
+        base = f * 4 + 1
+        lines.append("f " + " ".join("%d/%d/%d" % (base + k, k + 1, f + 1) for k in range(4)))
+    return "\n".join(lines) + "\n"
+
+
+def sphere_obj(rings=12, segments=24, radius=0.5):
+    """A UV sphere with smooth normals."""
+    lines = ["# uv sphere", "o sphere"]
+    for i in range(rings + 1):
+        theta = math.pi * i / rings
+        for j in range(segments + 1):
+            phi = 2 * math.pi * j / segments
+            lines.append("v %.6f %.6f %.6f" % (radius * math.sin(theta) * math.cos(phi), radius * math.cos(theta), radius * math.sin(theta) * math.sin(phi)))
+    for i in range(rings + 1):
+        theta = math.pi * i / rings
+        for j in range(segments + 1):
+            phi = 2 * math.pi * j / segments
+            lines.append("vn %.6f %.6f %.6f" % (math.sin(theta) * math.cos(phi), math.cos(theta), math.sin(theta) * math.sin(phi)))
+    for i in range(rings + 1):
+        for j in range(segments + 1):
+            lines.append("vt %.6f %.6f" % (j / segments, 1 - i / rings))
+    stride = segments + 1
+    for i in range(rings):
+        for j in range(segments):
+            a = i * stride + j + 1
+            b = a + stride
+            lines.append("f %d/%d/%d %d/%d/%d %d/%d/%d" % (a, a, a, b, b, b, a + 1, a + 1, a + 1))
+            lines.append("f %d/%d/%d %d/%d/%d %d/%d/%d" % (a + 1, a + 1, a + 1, b, b, b, b + 1, b + 1, b + 1))
+    return "\n".join(lines) + "\n"
 
 
 def write_world(a):
@@ -435,6 +518,12 @@ def main():
     (ASSETS / "models").mkdir(parents=True)
     shutil.copyfile(FIXTURES / "models" / "triangle_tree.glb", ASSETS / "models" / "props.glb")
     a["props"] = asset("models/props.glb", "model", {"scale": 1.0})
+    shutil.copyfile(FIXTURES / "models" / "skinned_arm.gltf", ASSETS / "models" / "arm.gltf")
+    a["arm"] = asset("models/arm.gltf", "model", {"scale": 1.0})
+    write_text(ASSETS / "models" / "cube.obj", cube_obj())
+    a["cube"] = asset("models/cube.obj", "model", {"scale": 1.0})
+    write_text(ASSETS / "models" / "sphere.obj", sphere_obj())
+    a["sphere"] = asset("models/sphere.obj", "model", {"scale": 1.0})
     shutil.copyfile(FIXTURES / "models" / "triangle.obj", ASSETS / "models" / "marker.obj")
     a["marker"] = asset("models/marker.obj", "model", {"scale": 2.0})
 
@@ -455,6 +544,10 @@ def main():
 
     write_json(ASSETS / "animation" / "hero.animgraph.json", HERO_GRAPH)
     a["hero_graph"] = asset("animation/hero.animgraph.json", "json")
+    write_json(ASSETS / "animation" / "arm.animgraph.json", ARM_GRAPH)
+    a["arm_graph"] = asset("animation/arm.animgraph.json", "json")
+    write_text(ASSETS / "scripts" / "arm.lua", ARM_LUA)
+    a["arm_lua"] = asset("scripts/arm.lua", "text")
 
     write_json(ASSETS / "materials" / "crate.material.json", material_graph("crate", [("albedo", "srgb"), ("normal", "linear")], [1.0, 1.0, 1.0, 1.0]))
     a["crate_mat"] = asset("materials/crate.material.json", "json", deps=[a["checker"].guid, a["normal"].guid])
@@ -468,12 +561,12 @@ def main():
     crate_root = guid("prefab/crate/root")
     prefab_doc = {"format": "engine.prefab", "version": 1, "entities": [
         {"guid": crate_root, "parent": None, "transform": xform(), "components": {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.62, 0.42, 0.25, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.62, 0.42, 0.25, 1.0]),
             "engine.rigid_body": comp(motion=2, shape=0, size=[1.0, 1.0, 1.0], mass=1.0, friction=0.6),
             "engine.script": comp(script=a["crate_lua"].guid),
         }},
         {"guid": guid("prefab/crate/lid"), "parent": crate_root, "transform": xform((0, 0.55, 0), scale=(1.0, 0.1, 1.0)), "components": {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.55, 0.38, 0.22, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.55, 0.38, 0.22, 1.0]),
         }},
     ]}
     write_json(ASSETS / "prefabs" / "crate.prefab", prefab_doc)

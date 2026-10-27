@@ -36,6 +36,7 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
     std::vector<scene::ReflectionError> errors;
 
     ComponentBuilder<NameTag> name(kNameId, 1);
+    name.field<&NameTag::name>("name", std::string());
     name.field<&NameTag::tag>("tag", 0u);
     add(catalog, name, errors);
 
@@ -95,6 +96,7 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
     add(catalog, audio, errors);
 
     ComponentBuilder<Animator> animator(kAnimatorId, 1);
+    animator.field<&Animator::name>("name", std::string());
     animator.field<&Animator::graph>("graph", core::Guid{});
     animator.field<&Animator::model>("model", core::Guid{});
     animator.field<&Animator::speed>("speed", 1.0f, Range{0.0, 100.0});

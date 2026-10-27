@@ -24,7 +24,8 @@ int failed(const std::string& message) {
 
 }  // namespace
 
-int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const RuntimeOptions& options, const std::string& shader_dir) {
+int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const RuntimeOptions& options, const std::string& shader_dir,
+                      AssetReader reader, const std::map<core::Guid, std::string>& animator_names) {
     auto platform_result = platform::Platform::create();
     if (!platform_result.ok()) {
         return failed("the platform cannot start: " + platform_result.error().detail);
@@ -81,11 +82,14 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
 
     // The renderer's width is a multiple of 64 so its readback rows are tight; the picture is placed at the window's top-left corner.
     const std::uint32_t render_width = std::max<std::uint32_t>(64, fb_width / 64 * 64);
-    auto renderer_result = GameRenderer::create(*device, device_desc.backend, shader_dir, render_width, fb_height);
+    auto renderer_result = GameRenderer::create(*device, device_desc.backend, shader_dir, render_width, fb_height, std::move(reader));
     if (!renderer_result.ok()) {
         return failed(renderer_result.error());
     }
     std::unique_ptr<GameRenderer> renderer = std::move(renderer_result).value();
+    for (const std::string& problem : renderer->bind_scene(scene, animator_names)) {
+        std::fprintf(stderr, "game_runtime: %s\n", problem.c_str());
+    }
 
     using Clock = std::chrono::steady_clock;
     Clock::time_point previous = Clock::now();
@@ -123,7 +127,7 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
             std::fprintf(stderr, "game_runtime: %s\n", error.c_str());
         }
 
-        auto drawn = renderer->render(scene);
+        auto drawn = renderer->render(scene, &world.animators(), delta);
         if (!drawn.ok()) {
             exit_code = failed(drawn.error());
             break;

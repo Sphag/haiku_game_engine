@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace engine::gameplay {
@@ -32,8 +33,9 @@ inline constexpr const char* kTerrainId = "engine.terrain";
 inline constexpr const char* kEnvironmentId = "engine.environment";
 inline constexpr const char* kUiCanvasId = "engine.ui_canvas";
 
-// A group number a game can use to find entities of one kind (0 means none).
+// The entity's name, shown in the hierarchy and used to find it, and a group number a game can use for entities of one kind (0 means none).
 struct NameTag {
+    std::string name;
     std::uint32_t tag = 0;
 };
 
@@ -98,6 +100,7 @@ struct AudioEmitter {
 };
 
 struct Animator {
+    std::string name;  // the machine's name for scripts: animation.set_float(name, ...)
     core::Guid graph;  // an animation state graph asset
     core::Guid model;  // the model asset that carries the skeleton and clips
     float speed = 1.0f;

@@ -1,7 +1,9 @@
 #include "engine/scene/reflection.hpp"
 
 #include "engine/core/assert.hpp"
+#include "engine/core/utf8.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <unordered_set>
@@ -29,7 +31,7 @@ bool is_float_kind(FieldKind kind) noexcept {
 }
 
 bool has_numbers(FieldKind kind) noexcept {
-    return kind != FieldKind::Bool && kind != FieldKind::Guid;
+    return kind != FieldKind::Bool && kind != FieldKind::Guid && kind != FieldKind::String;
 }
 
 // Numeric components of a value, widened to double. Returns how many there are; bool and Guid have none.
@@ -37,7 +39,7 @@ std::size_t numeric_components(const FieldValue& value, std::array<double, 4>& o
     return std::visit(
         [&out](const auto& v) -> std::size_t {
             using V = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<V, bool> || std::is_same_v<V, core::Guid>) {
+            if constexpr (std::is_same_v<V, bool> || std::is_same_v<V, core::Guid> || std::is_same_v<V, std::string>) {
                 return 0;
             } else if constexpr (std::is_arithmetic_v<V>) {
                 out[0] = static_cast<double>(v);
@@ -142,6 +144,17 @@ core::Result<core::Unit, ReflectionError> ComponentDescriptor::set_field(void* c
 std::optional<ReflectionError> check_value(const FieldDescriptor& field, const FieldValue& value) {
     if (value.index() != field.default_value.index()) {
         return ReflectionError{ReflectionErrorKind::ValueTypeMismatch, field.name, "value kind does not match the field kind"};
+    }
+
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        if (text->size() > kMaxStringBytes) {
+            return ReflectionError{ReflectionErrorKind::ValueOutOfRange, field.name,
+                                   "text is longer than " + std::to_string(kMaxStringBytes) + " bytes"};
+        }
+        if (!core::is_valid_utf8(*text) || std::any_of(text->begin(), text->end(), [](char c) { return static_cast<unsigned char>(c) < 0x20; })) {
+            return ReflectionError{ReflectionErrorKind::ValueTypeMismatch, field.name, "text must be UTF-8 without control characters"};
+        }
+        return std::nullopt;
     }
 
     std::array<double, 4> numbers{};

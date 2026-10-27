@@ -73,7 +73,6 @@ add_library(engine_converter STATIC
   src/importer.cpp
   src/converter.cpp
   src/model_importer.cpp
-  src/model_format.cpp
   src/mesh_cooking.cpp
   src/texture_importer.cpp
   src/bc5_codec.cpp
@@ -88,7 +87,7 @@ target_include_directories(engine_converter SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/stb
   ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo
 )
-target_link_libraries(engine_converter PUBLIC engine_core engine_assets engine_gi engine_world)
+target_link_libraries(engine_converter PUBLIC engine_core engine_assets engine_gi engine_world engine_model_format)
 target_link_libraries(engine_converter PRIVATE assimp engine_bc7_vendor engine_meshopt_vendor)
 engine_configure_first_party(engine_converter)
 

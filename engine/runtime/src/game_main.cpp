@@ -7,6 +7,7 @@
 #include "engine/gameplay/components.hpp"
 #include "engine/gameplay/game_world.hpp"
 #include "engine/pack/pack.hpp"
+#include "engine/runtime/animation_binding.hpp"
 #include "engine/runtime/lifecycle.hpp"
 #include "engine/runtime/runtime_options.hpp"
 #include "engine/runtime/windowed_game.hpp"
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -146,6 +148,19 @@ int main(int argc, char** argv) {
         return engine::core::failure(std::string("not in any pack"));
     };
 
+    // Any asset's importer payload by GUID: models, terrain, and graphs for the renderer.
+    const engine::runtime::AssetReader read_asset = [&packs](const Guid& guid) -> std::optional<std::string> {
+        for (const auto& pack : packs) {
+            if (const auto* found = pack.find(guid)) {
+                auto cooked = engine::assets::read_cooked_container(pack.payload(*found));
+                if (cooked.ok()) {
+                    return std::string(cooked.value());
+                }
+            }
+        }
+        return std::nullopt;
+    };
+
     engine::runtime::Lifecycle lifecycle;
     if (!lifecycle.start().ok()) {
         return load_failed("runtime lifecycle could not start");
@@ -161,6 +176,12 @@ int main(int argc, char** argv) {
         return load_failed("the game world could not start: " + world.error());
     }
     int exit_code = kExitOk;
+    // Animators: the state machines scripts steer by name. Headless and windowed runs bind the same ones.
+    const engine::runtime::AnimatorBinding animators = engine::runtime::bind_animators(scene, read_asset, world.value()->animators());
+    for (const std::string& problem : animators.problems) {
+        std::fprintf(stderr, "game_runtime: %s\n", problem.c_str());
+        exit_code = kExitLoadFailed;
+    }
     const auto report_errors = [&exit_code, &world]() {
         for (const std::string& error : world.value()->take_errors()) {
             std::fprintf(stderr, "game_runtime: %s\n", error.c_str());
@@ -171,7 +192,7 @@ int main(int argc, char** argv) {
     if (options.window) {
         // Shaders ship in a folder beside the executable (Build Game copies them there).
         const std::string shader_dir = (std::filesystem::absolute(std::filesystem::path(argv[0])).parent_path() / "shaders").string();
-        const int windowed = engine::runtime::run_windowed_game(scene, *world.value(), options, shader_dir);
+        const int windowed = engine::runtime::run_windowed_game(scene, *world.value(), options, shader_dir, read_asset, animators.names);
         world.value().reset();
         if (windowed != kExitOk) {
             return windowed;

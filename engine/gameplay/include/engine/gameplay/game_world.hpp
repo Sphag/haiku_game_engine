@@ -11,6 +11,7 @@
 // Limits: a body's pose is written back to a root entity only (a child follows its parent through the scene graph, not through physics),
 // and a kinematic body is placed where the scene puts it at start.
 
+#include "engine/animation/state_machine.hpp"
 #include "engine/audio/audio_engine.hpp"
 #include "engine/core/guid.hpp"
 #include "engine/core/result.hpp"
@@ -97,6 +98,10 @@ public:
     [[nodiscard]] audio::AudioEngine& audio() noexcept {
         return *audio_;
     }
+    // The named animation machines scripts reach through animation.set_float and friends. The host adds machines; advance() updates them.
+    [[nodiscard]] animation::AnimatorSet& animators() noexcept {
+        return animators_;
+    }
 
 private:
     GameWorld() = default;
@@ -104,6 +109,7 @@ private:
     scene::Scene* scene_ = nullptr;
     std::unique_ptr<physics::PhysicsWorld> physics_;
     std::unique_ptr<audio::AudioEngine> audio_;
+    animation::AnimatorSet animators_;
     std::unique_ptr<script::ScriptEngine> scripts_;
     std::unique_ptr<script::ScriptRunner> runner_;
     SceneBindings bindings_;

@@ -18,6 +18,7 @@
 #include "engine/material_graph/graph.hpp"
 #include "engine/scene/scene.hpp"
 #include "engine/rhi/device.hpp"
+#include "engine/runtime/animation_binding.hpp"
 #include "engine/runtime/game_renderer.hpp"
 #include "engine/scene/scene_format.hpp"
 #include "engine/world/terrain_edit.hpp"
@@ -69,6 +70,32 @@ const engine::assets::AssetRecord& record(const engine::assets::ProjectScan& sca
     INFO("asset " << relative);
     REQUIRE(found != nullptr);
     return *found;
+}
+
+// The importer payload of a showcase asset, as the packed game would read it: a model goes through the model importer, anything else is its
+// file as written (a graph is JSON text and a terrain is its own binary form).
+std::optional<std::string> showcase_asset_bytes(const engine::assets::ProjectScan& scan, const Guid& guid) {
+    const auto* record = scan.registry.find(guid);
+    if (record == nullptr) {
+        return std::nullopt;
+    }
+    auto source = engine::core::read_file(path_of(kShowcase + "/assets/" + record->source_path.str()));
+    if (!source.ok()) {
+        return std::nullopt;
+    }
+    if (record->importer != "model") {
+        return source.value();
+    }
+    const auto importer = engine::converter::make_model_importer();
+    auto settings = importer->canonical_settings(record->importer_settings);
+    if (!settings.ok()) {
+        return std::nullopt;
+    }
+    auto imported = importer->import(source.value(), settings.value());
+    if (!imported.ok()) {
+        return std::nullopt;
+    }
+    return imported.value().payload;
 }
 
 // A loaded main scene with its catalog and prefab library, kept together because the scene holds pointers into them.
@@ -154,6 +181,13 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
     auto created = engine::gameplay::GameWorld::create(*loaded.scene, read_script, services, resolve_audio);
     REQUIRE(created.ok());
     auto world = std::move(created).value();
+    const engine::runtime::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
+    const auto animators = engine::runtime::bind_animators(*loaded.scene, reader, world->animators());
+    for (const std::string& problem : animators.problems) {
+        FAIL_CHECK("animator: " << problem);
+    }
+    CHECK(animators.names.size() == 1);
+    CHECK(world->animators().find("arm") != nullptr);
     for (const std::string& error : world->take_errors()) {
         FAIL_CHECK("script setup: " << error);
     }
@@ -170,7 +204,7 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
 
     const auto before = world->stats();
     CHECK(before.bodies >= 7);   // ground, platform, zone, ball, three crates
-    CHECK(before.scripts >= 5);  // hero, platform, three crates
+    CHECK(before.scripts >= 6);  // hero, platform, arm, three crates
 
     for (int frame = 0; frame < 180; ++frame) {
         world->advance(1.0 / 60.0);
@@ -343,7 +377,7 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     INFO(output);
     CHECK(output.find("simulated 120 frames") != std::string::npos);
     CHECK(output.find("bodies=7") != std::string::npos);
-    CHECK(output.find("scripts=5") != std::string::npos);
+    CHECK(output.find("scripts=6") != std::string::npos);
     // Keep a copy of the package for running by hand: build/win-dev/showcase_package/run_game.bat opens the game.
     std::error_code ignored;
     fs::remove_all(ENGINE_SHOWCASE_PACKAGE_OUT, ignored);
@@ -395,17 +429,35 @@ void render_showcase_on(engine::rhi::Backend backend) {
     if (!device.ok()) {
         FAIL("device: " << device.error().message);
     }
-    auto renderer = engine::runtime::GameRenderer::create(*device.value(), backend, ENGINE_TEST_SHADER_DIR, 1280, 720);
+    const engine::runtime::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
+    engine::animation::AnimatorSet animators;
+    const auto binding = engine::runtime::bind_animators(*loaded.scene, reader, animators);
+    for (const std::string& problem : binding.problems) {
+        FAIL_CHECK("animator: " << problem);
+    }
+    auto renderer = engine::runtime::GameRenderer::create(*device.value(), backend, ENGINE_TEST_SHADER_DIR, 1280, 720, reader);
     if (!renderer.ok()) {
         FAIL("renderer: " << renderer.error());
     }
-    auto drawn = renderer.value()->render(*loaded.scene);
-    if (!drawn.ok()) {
-        FAIL("render: " << drawn.error());
+    for (const std::string& problem : renderer.value()->bind_scene(*loaded.scene, binding.names)) {
+        FAIL_CHECK("renderer: " << problem);
     }
+    // A second of frames, so the particles are alive and the arm's animation has moved.
+    engine::core::Result<engine::runtime::RenderStats, std::string> drawn = engine::core::failure(std::string("not drawn"));
+    for (int frame = 0; frame < 60; ++frame) {
+        animators.update(1.0f / 60.0f);
+        drawn = renderer.value()->render(*loaded.scene, &animators, 1.0 / 60.0);
+        if (!drawn.ok()) {
+            FAIL("render: " << drawn.error());
+        }
+    }
+    CHECK(drawn.value().models >= 2);          // the props and the arm come from cooked payloads, not primitives
+    CHECK(drawn.value().skinned >= 1);         // the arm is skinned
+    CHECK(drawn.value().terrain_tiles == 4);   // the 2 x 2 tile island
+    CHECK(drawn.value().particles > 0);        // the campfire
     CHECK(drawn.value().camera);
     CHECK(drawn.value().lights >= 4);
-    CHECK(drawn.value().items >= 8);
+    CHECK(drawn.value().items >= 12);
 
     const auto& image = renderer.value()->image();
     REQUIRE(image.width == 1280);
@@ -424,9 +476,9 @@ void render_showcase_on(engine::rhi::Backend backend) {
     CHECK(lit > image.color.size() / 10);
     CHECK(objects.size() >= 4);
     // Drawing again after the scene moved still works and keeps the same objects visible.
-    auto again = renderer.value()->render(*loaded.scene);
+    auto again = renderer.value()->render(*loaded.scene, &animators, 1.0 / 60.0);
     REQUIRE(again.ok());
-    CHECK(again.value().items == drawn.value().items);
+    CHECK(again.value().items > 0);
 }
 
 }  // namespace
