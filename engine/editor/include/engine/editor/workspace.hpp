@@ -18,6 +18,7 @@
 #include "engine/core/result.hpp"
 
 #include <string>
+#include <vector>
 #include <string_view>
 
 namespace engine::editor {
@@ -41,13 +42,16 @@ struct PanelVisibility {
     }
 };
 
+inline constexpr std::size_t kMaxRecentProjects = 8;
+
 struct WorkspaceSettings {
     std::string last_project;  // the project folder's path text, or empty for none
+    std::vector<std::string> recent_projects;  // most recent first, at most kMaxRecentProjects; optional in the file
     std::string layout;        // ImGui ini text of the docking layout, or empty for the default layout
     PanelVisibility panels;
 
     friend bool operator==(const WorkspaceSettings& lhs, const WorkspaceSettings& rhs) noexcept {
-        return lhs.last_project == rhs.last_project && lhs.layout == rhs.layout && lhs.panels == rhs.panels;
+        return lhs.last_project == rhs.last_project && lhs.recent_projects == rhs.recent_projects && lhs.layout == rhs.layout && lhs.panels == rhs.panels;
     }
     friend bool operator!=(const WorkspaceSettings& lhs, const WorkspaceSettings& rhs) noexcept {
         return !(lhs == rhs);

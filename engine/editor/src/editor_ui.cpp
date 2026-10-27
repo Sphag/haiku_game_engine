@@ -1,11 +1,17 @@
 #include "engine/editor/editor_ui.hpp"
 
+#include "engine/gameplay/components.hpp"
+#include "engine/platform/dialogs.hpp"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <cfloat>
+#include <initializer_list>
+#include <cctype>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -245,7 +251,7 @@ void EditorUi::default_layout(unsigned int dock_id) {
     ImGui::DockBuilderSplitNode(bottom, ImGuiDir_Right, 0.35f, &errors, &console);
     ImGuiID inspector = 0;
     ImGuiID viewport_area = 0;
-    ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, &inspector, &viewport_area);
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.40f, &inspector, &viewport_area);
 
     ImGui::DockBuilderDockWindow(panel_title(Panel::Project), left);
     ImGui::DockBuilderDockWindow("Hierarchy", left);
@@ -266,6 +272,23 @@ void EditorUi::menu_bar() {
         if (ImGui::MenuItem("New scene")) {
             request(PendingAction::NewScene);
         }
+        if (ImGui::MenuItem("Open project...")) {
+            browse_and_open_project();
+        }
+        if (ImGui::MenuItem("New project...")) {
+            model_.set_panel_visible(Panel::Project, true);
+            new_project_open_ = true;
+        }
+        if (ImGui::BeginMenu("Open recent", !model_.workspace().recent_projects.empty())) {
+            for (const std::string& folder : model_.workspace().recent_projects) {
+                if (ImGui::MenuItem(folder.c_str())) {
+                    static_cast<void>(model_.open_project(folder));
+                    break;
+                }
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
         if (ImGui::BeginMenu("Open scene", model_.project().scan() != nullptr)) {
             for (const assets::AssetRecord* record : model_.project().scan()->registry.records()) {
                 if (record->source_path.str().ends_with(".scene") && ImGui::MenuItem(record->source_path.str().c_str())) {
@@ -273,6 +296,13 @@ void EditorUi::menu_bar() {
                 }
             }
             ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Open scene from file...", nullptr, false, model_.project().state() == ProjectState::Open)) {
+            const std::string start = model_.project().info() ? model_.project().info()->root.str() : std::string();
+            if (const auto file = platform::pick_file("Open a scene", start, {{"Scenes", "*.scene"}, {"All files", "*.*"}})) {
+                copy_text(scene_text_, *file);
+                request(PendingAction::OpenScene);
+            }
         }
         if (ImGui::MenuItem("Save scene", "Ctrl+S")) {
             static_cast<void>(save_scene());
@@ -343,40 +373,65 @@ void EditorUi::project_panel() {
     bool open = true;
     if (ImGui::Begin(panel_title(Panel::Project), &open)) {
         const ProjectSession& session = model_.project();
+        const float full = -FLT_MIN;
         switch (session.state()) {
             case ProjectState::Closed:
-                ImGui::TextUnformatted("No project is open.");
+                ImGui::TextUnformatted("Welcome");
+                ImGui::TextDisabled("Open an existing project, or create one, to begin.");
                 break;
             case ProjectState::Invalid:
                 ImGui::TextColored(kErrorColor, "The project cannot be opened: %s", session.error()->message.c_str());
                 break;
             case ProjectState::Open:
                 ImGui::Text("Project: %s", session.info()->name.c_str());
-                ImGui::TextUnformatted(session.info()->root.str().c_str());
+                ImGui::TextDisabled("%s", session.info()->root.str().c_str());
                 break;
         }
+        ImGui::Spacing();
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("Open a project folder");
-        ImGui::InputText("Folder##open", path_text_.data(), path_text_.size());
-        if (ImGui::Button("Open")) {
-            static_cast<void>(model_.open_project(path_text_.data()));
+        // The two things a person does first, as buttons that open the system's folder chooser.
+        if (ImGui::Button("Open project...", ImVec2(full, 0.0f))) {
+            browse_and_open_project();
         }
+        if (ImGui::Button("New project...", ImVec2(full, 0.0f))) {
+            new_project_open_ = true;
+        }
+        if (session.state() == ProjectState::Open && ImGui::Button("Close project", ImVec2(full, 0.0f))) {
+            request(PendingAction::CloseProject);
+        }
+        if (!platform::dialogs_available()) {
+            ImGui::TextDisabled("No file chooser is installed (zenity or kdialog); type the folder below.");
+        }
+        if (new_project_open_) {
+            new_project_open_ = false;
+            new_project_status_.clear();
+            ImGui::OpenPopup("New project");
+        }
+        new_project_dialog();
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("Create a project");
-        ImGui::InputText("Parent folder##create", parent_text_.data(), parent_text_.size());
-        ImGui::InputText("Name##create", name_text_.data(), name_text_.size());
-        if (ImGui::Button("Create")) {
-            const auto created = model_.create_project(parent_text_.data(), name_text_.data());
-            if (created.ok()) {
-                copy_text(path_text_, model_.workspace().last_project);
+        const std::vector<std::string>& recent = model_.workspace().recent_projects;
+        if (!recent.empty()) {
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Recent projects");
+            for (const std::string& folder : recent) {
+                const std::size_t slash = folder.find_last_of("/\\");
+                const std::string name = slash == std::string::npos ? folder : folder.substr(slash + 1);
+                if (ImGui::Selectable((name + "##recent_" + folder).c_str())) {
+                    static_cast<void>(model_.open_project(folder));
+                    copy_text(path_text_, folder);
+                    break;  // the list changed
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s", folder.c_str());
+                }
             }
         }
-        if (model_.project().state() == ProjectState::Open) {
-            ImGui::SameLine();
-            if (ImGui::Button("Close project")) {
-                request(PendingAction::CloseProject);
+
+        if (ImGui::CollapsingHeader("Type a path instead")) {
+            ImGui::SetNextItemWidth(full);
+            ImGui::InputTextWithHint("##open_path", "Project folder", path_text_.data(), path_text_.size());
+            if (ImGui::Button("Open##typed")) {
+                static_cast<void>(model_.open_project(path_text_.data()));
             }
         }
 
@@ -405,6 +460,51 @@ void EditorUi::project_panel() {
     if (!open) {
         model_.set_panel_visible(Panel::Project, false);
     }
+}
+
+void EditorUi::browse_and_open_project() {
+    const std::string start = model_.project().info() ? model_.project().info()->root.str() : model_.workspace().last_project;
+    if (const auto folder = platform::pick_folder("Open a project folder (the one that holds project.json)", start)) {
+        copy_text(path_text_, *folder);
+        static_cast<void>(model_.open_project(*folder));
+    }
+}
+
+void EditorUi::new_project_dialog() {
+    if (!ImGui::BeginPopupModal("New project", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+    ImGui::TextUnformatted("A project is a folder with its assets inside. Choose where to put it and name it.");
+    ImGui::SetNextItemWidth(360.0f * static_cast<float>(model_.dpi_scale()));
+    ImGui::InputTextWithHint("##parent", "Parent folder", parent_text_.data(), parent_text_.size());
+    ImGui::SameLine();
+    if (ImGui::Button("Browse...")) {
+        if (const auto folder = platform::pick_folder("Where should the project folder go?", parent_text_.data())) {
+            copy_text(parent_text_, *folder);
+        }
+    }
+    ImGui::SetNextItemWidth(360.0f * static_cast<float>(model_.dpi_scale()));
+    ImGui::InputTextWithHint("##name", "Project name", name_text_.data(), name_text_.size());
+    if (!new_project_status_.empty()) {
+        ImGui::TextColored(kErrorColor, "%s", new_project_status_.c_str());
+    }
+    const bool ready = parent_text_[0] != '\0' && name_text_[0] != '\0';
+    ImGui::BeginDisabled(!ready);
+    if (ImGui::Button("Create")) {
+        const auto created = model_.create_project(parent_text_.data(), name_text_.data());
+        if (created.ok()) {
+            copy_text(path_text_, model_.workspace().last_project);
+            ImGui::CloseCurrentPopup();
+        } else {
+            new_project_status_ = created.error().message;
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 void EditorUi::console_panel() {
@@ -1000,16 +1100,28 @@ void EditorUi::hierarchy_panel() {
             ImGui::PushID(row.guid.to_string().c_str());
             const float indent = kHierarchyIndent * static_cast<float>(row.depth);
             ImGui::Indent(indent);
-            // Entities have no name field, so a row says what the entity is: its components (without the engine. prefix), then its GUID.
+            // A row shows the entity's name; an unnamed entity shows what it is (its components), then a short GUID to tell it apart.
             std::string kinds;
+            std::string name;
             for (const std::string& type : scene.scene().component_types(row.guid)) {
+                if (type == gameplay::kNameId) {
+                    const auto value = scene.scene().field(row.guid, gameplay::kNameId, "name");
+                    if (value && std::holds_alternative<std::string>(*value)) {
+                        name = std::get<std::string>(*value);
+                    }
+                    continue;
+                }
                 if (!kinds.empty()) {
                     kinds += ", ";
                 }
                 kinds += type.starts_with("engine.") ? type.substr(7) : type;
             }
-            const std::string label = (row.prefab_instance ? "[prefab] " : "") + (kinds.empty() ? std::string("entity") : kinds) + "  " +
-                                      short_guid(row.guid);
+            std::string label = row.prefab_instance ? "[prefab] " : "";
+            if (!name.empty()) {
+                label += name;
+            } else {
+                label += (kinds.empty() ? std::string("Entity") : kinds) + "  " + short_guid(row.guid);
+            }
             if (ImGui::Selectable(label.c_str(), selected && *selected == row.guid)) {
                 scene.select(row.guid);
             }
@@ -1042,28 +1154,154 @@ void EditorUi::hierarchy_panel() {
     ImGui::End();
 }
 
+namespace {
+
+// "engine.mesh_renderer" -> "Mesh Renderer", "cone_angle_degrees" -> "Cone Angle Degrees".
+std::string humanize(std::string_view id) {
+    if (id.starts_with("engine.")) {
+        id.remove_prefix(7);
+    }
+    std::string out;
+    bool word_start = true;
+    for (const char c : id) {
+        if (c == '_' || c == '.') {
+            out.push_back(' ');
+            word_start = true;
+        } else {
+            out.push_back(word_start ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c);
+            word_start = false;
+        }
+    }
+    return out;
+}
+
+std::vector<std::string> split_options(std::string_view text) {
+    std::vector<std::string> options;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t end = text.find('|', start);
+        options.emplace_back(text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+        if (end == std::string_view::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return options;
+}
+
+bool ends_with_any(const std::string& text, std::initializer_list<const char*> suffixes) {
+    for (const char* suffix : suffixes) {
+        if (text.ends_with(suffix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a registered asset suits a field whose hint is "asset:<kind>".
+bool asset_suits(std::string_view kind, const CatalogEntry& entry) {
+    if (!entry.registered()) {
+        return false;
+    }
+    const std::string& source = entry.source;
+    const std::string& importer = entry.asset->importer;
+    if (kind == "model") {
+        return importer == "model";
+    }
+    if (kind == "material") {
+        return source.ends_with(".material.json");
+    }
+    if (kind == "script") {
+        return source.ends_with(".lua");
+    }
+    if (kind == "audio") {
+        return ends_with_any(source, {".wav", ".ogg", ".mp3", ".flac"});
+    }
+    if (kind == "graph") {
+        return source.ends_with(".animgraph.json");
+    }
+    if (kind == "terrain") {
+        return source.ends_with(".terrain");
+    }
+    if (kind == "gi") {
+        return importer == "gi_probes";
+    }
+    if (kind == "texture") {
+        return importer == "texture";
+    }
+    return true;
+}
+
+bool contains_text(const std::string& text, const char* needle) {
+    if (needle[0] == '\0') {
+        return true;
+    }
+    const std::string lower_text = [&text] {
+        std::string copy = text;
+        std::transform(copy.begin(), copy.end(), copy.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return copy;
+    }();
+    std::string lower_needle(needle);
+    std::transform(lower_needle.begin(), lower_needle.end(), lower_needle.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower_text.find(lower_needle) != std::string::npos;
+}
+
+}  // namespace
+
 void EditorUi::inspector_panel() {
     SceneEditor& scene = model_.scene();
     if (ImGui::Begin("Inspector")) {
         ImGui::BeginDisabled(!model_.scene_editable());
         const std::optional<core::Guid> selected = scene.selected();
         if (!selected) {
-            ImGui::TextUnformatted("Select an entity in the hierarchy to edit it.");
+            ImGui::Dummy(ImVec2(0.0f, 8.0f * static_cast<float>(model_.dpi_scale())));
+            ImGui::TextDisabled("Nothing is selected.");
+            ImGui::TextWrapped("Click an entity in the Hierarchy or in the Viewport to edit it here, or press New entity to make one.");
         } else {
             const core::Guid entity = *selected;
             const bool interior = scene.is_instance_interior(entity);
             const bool prefab_instance = scene.scene().prefab_of(entity).has_value();
-            ImGui::Text("Entity %s", entity.to_string().c_str());
+
+            // The header: the entity's name, editable, and its identity below it.
+            const std::string key = entity.to_string();
+            const std::string current_name = [&] {
+                const auto value = scene.scene().field(entity, gameplay::kNameId, "name");
+                return value && std::holds_alternative<std::string>(*value) ? std::get<std::string>(*value) : std::string();
+            }();
+            if (entity_name_key_ != key || (!ImGui::IsAnyItemActive() && current_name != entity_name_text_.data())) {
+                entity_name_key_ = key;
+                copy_text(entity_name_text_, current_name);
+            }
+            ImGui::BeginDisabled(interior);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##entity_name", "Entity name", entity_name_text_.data(), entity_name_text_.size());
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                const auto types = scene.scene().component_types(entity);
+                if (std::find(types.begin(), types.end(), gameplay::kNameId) == types.end() && !prefab_instance) {
+                    report(scene.add_component(entity, gameplay::kNameId), scene_status_);
+                }
+                report(scene.set_field(entity, gameplay::kNameId, "name", scene::FieldValue(std::in_place_type<std::string>, std::string(entity_name_text_.data()))),
+                       scene_status_);
+            }
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("%s", key.c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("The entity's GUID. Click to copy.");
+            }
+            if (ImGui::IsItemClicked()) {
+                ImGui::SetClipboardText(key.c_str());
+            }
             if (interior) {
-                ImGui::TextWrapped("Inside a prefab instance: its transform and components come from the prefab. Field values can be overridden.");
+                ImGui::TextColored(kWarningColor, "Part of a prefab instance: field values can be overridden here; the prefab owns the rest.");
             } else if (prefab_instance) {
-                ImGui::TextWrapped("Prefab instance: its components come from the prefab and it cannot gain or lose any.");
+                ImGui::TextColored(kWarningColor, "Prefab instance: its components come from the prefab.");
             }
             ImGui::Separator();
             transform_section(entity, interior);
-            ImGui::Separator();
+            ImGui::Spacing();
             component_section(entity, prefab_instance);
             if (!scene_status_.empty()) {
+                ImGui::Spacing();
                 ImGui::TextColored(kErrorColor, "%s", scene_status_.c_str());
             }
         }
@@ -1092,13 +1330,38 @@ void EditorUi::transform_section(const core::Guid& entity, bool read_only) {
     double position[3] = {current->position.x, current->position.y, current->position.z};
     double rotation[3] = {euler.x, euler.y, euler.z};
     double scale[3] = {current->scale.x, current->scale.y, current->scale.z};
-    ImGui::TextUnformatted("Transform");
-    ImGui::BeginDisabled(read_only);
-    bool changed = ImGui::InputScalarN("Position##transform", ImGuiDataType_Double, position, 3, nullptr, nullptr, "%.3f");
-    changed = ImGui::InputScalarN("Rotation (deg)##transform", ImGuiDataType_Double, rotation, 3, nullptr, nullptr, "%.2f") || changed;
-    changed = ImGui::InputScalarN("Scale##transform", ImGuiDataType_Double, scale, 3, nullptr, nullptr, "%.3f") || changed;
-    ImGui::EndDisabled();
-    if (changed) {
+    bool changed = false;
+    bool reset = false;
+    if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::BeginDisabled(read_only);
+        if (ImGui::BeginTable("##transform", 2, ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 80.0f * static_cast<float>(model_.dpi_scale()));
+            ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+            const auto row = [&](const char* label, const char* id, double* values, float speed, const char* format, const char* tip) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(label);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                changed = ImGui::DragScalarN(id, ImGuiDataType_Double, values, 3, speed, nullptr, nullptr, format) || changed;
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s", tip);
+                }
+            };
+            row("Position", "##position", position, 0.05f, "%.3f", "X, Y, Z in meters. Drag, or double-click a field to type.");
+            row("Rotation", "##rotation", rotation, 0.5f, "%.1f", "Degrees about X, Y, Z.");
+            row("Scale", "##scale", scale, 0.01f, "%.3f", "A scale of 1 keeps the size.");
+            ImGui::EndTable();
+        }
+        if (ImGui::SmallButton("Reset transform")) {
+            reset = true;
+        }
+        ImGui::EndDisabled();
+    }
+    if (reset) {
+        report(model_.scene().set_transform(entity, scene::Transform{}), scene_status_);
+    } else if (changed) {
         scene::Transform edit;
         edit.position = glm::dvec3(position[0], position[1], position[2]);
         edit.rotation = glm::dquat(glm::radians(glm::dvec3(rotation[0], rotation[1], rotation[2])));
@@ -1109,24 +1372,35 @@ void EditorUi::transform_section(const core::Guid& entity, bool read_only) {
 
 void EditorUi::component_section(const core::Guid& entity, bool read_only) {
     SceneEditor& scene = model_.scene();
-    ImGui::TextUnformatted("Components");
     std::optional<std::string> to_remove;
     for (const std::string& type_id : scene.scene().component_types(entity)) {
+        if (type_id == gameplay::kNameId) {
+            continue;  // the name is the header's field
+        }
         ImGui::PushID(type_id.c_str());
         const scene::ComponentDescriptor* descriptor = scene.catalog().find(type_id);
-        if (ImGui::CollapsingHeader(type_id.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+        const bool open = ImGui::CollapsingHeader(humanize(type_id).c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+        if (!read_only) {
+            // The remove button sits at the right end of the header.
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::GetFrameHeight());
+            if (ImGui::SmallButton("x")) {
+                to_remove = type_id;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Remove this component");
+            }
+        }
+        if (open) {
             if (descriptor == nullptr) {
                 ImGui::TextColored(kWarningColor, "No descriptor is registered for this component, so its fields cannot be shown.");
-            } else {
+            } else if (ImGui::BeginTable("##fields", 2, ImGuiTableFlags_SizingFixedFit)) {
+                ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 150.0f * static_cast<float>(model_.dpi_scale()));
+                ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
                 for (const scene::FieldDescriptor& field : descriptor->fields) {
                     field_editor(entity, *descriptor, field);
                 }
+                ImGui::EndTable();
             }
-            ImGui::BeginDisabled(read_only);
-            if (ImGui::Button("Remove component")) {
-                to_remove = type_id;
-            }
-            ImGui::EndDisabled();
         }
         ImGui::PopID();
     }
@@ -1141,30 +1415,46 @@ void EditorUi::add_component_row(const core::Guid& entity, bool read_only) {
     const std::vector<std::string> present = scene.scene().component_types(entity);
     std::vector<const scene::ComponentDescriptor*> available;
     for (const scene::ComponentDescriptor& descriptor : scene.catalog().components()) {
-        if (std::find(present.begin(), present.end(), descriptor.type_id) == present.end()) {
+        if (descriptor.type_id != gameplay::kNameId && std::find(present.begin(), present.end(), descriptor.type_id) == present.end()) {
             available.push_back(&descriptor);
         }
     }
+    ImGui::Spacing();
     if (available.empty()) {
         ImGui::TextDisabled(scene.catalog().size() == 0 ? "No component types are registered." : "Every registered component is on this entity.");
         return;
     }
-    add_component_index_ = std::clamp(add_component_index_, 0, static_cast<int>(available.size()) - 1);
     ImGui::BeginDisabled(read_only);
-    ImGui::SetNextItemWidth(220.0f);
-    if (ImGui::BeginCombo("##add_component", available[static_cast<std::size_t>(add_component_index_)]->type_id.c_str())) {
-        for (std::size_t i = 0; i < available.size(); ++i) {
-            if (ImGui::Selectable(available[i]->type_id.c_str(), static_cast<int>(i) == add_component_index_)) {
-                add_component_index_ = static_cast<int>(i);
-            }
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Add component")) {
-        report(scene.add_component(entity, available[static_cast<std::size_t>(add_component_index_)]->type_id), scene_status_);
+    if (ImGui::Button("Add Component", ImVec2(-FLT_MIN, 0.0f))) {
+        picker_filter_[0] = '\0';
+        picker_key_ = "add_component";
+        ImGui::OpenPopup("##add_component_popup");
     }
     ImGui::EndDisabled();
+    if (ImGui::BeginPopup("##add_component_popup")) {
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(260.0f * static_cast<float>(model_.dpi_scale()));
+        ImGui::InputTextWithHint("##filter", "Search components", picker_filter_.data(), picker_filter_.size());
+        ImGui::Separator();
+        bool any = false;
+        for (const scene::ComponentDescriptor* descriptor : available) {
+            const std::string label = humanize(descriptor->type_id);
+            if (!contains_text(label, picker_filter_.data()) && !contains_text(descriptor->type_id, picker_filter_.data())) {
+                continue;
+            }
+            any = true;
+            if (ImGui::Selectable(label.c_str())) {
+                report(scene.add_component(entity, descriptor->type_id), scene_status_);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (!any) {
+            ImGui::TextDisabled("No component matches.");
+        }
+        ImGui::EndPopup();
+    }
 }
 
 void EditorUi::field_editor(const core::Guid& entity, const scene::ComponentDescriptor& descriptor, const scene::FieldDescriptor& field) {
@@ -1172,52 +1462,91 @@ void EditorUi::field_editor(const core::Guid& entity, const scene::ComponentDesc
     if (!value) {
         return;
     }
-    const char* label = field.name.c_str();
     // Each edit goes through the scene, which checks the value against the descriptor. A rejected value is shown in the status line.
     auto apply = [&](const scene::FieldValue& edit) {
         report(model_.scene().set_field(entity, descriptor.type_id, field.name, edit), scene_status_);
     };
-    ImGui::PushID(label);
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(humanize(field.name).c_str());
+    const std::string range = range_text(field.range);
+    if (!range.empty() && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", range.c_str());
+    }
+    ImGui::TableSetColumnIndex(1);
+    ImGui::PushID(field.name.c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    const bool bounded = field.range.min && field.range.max && (*field.range.max - *field.range.min) <= 1000.0;
     if (const auto* bool_value = std::get_if<bool>(&*value)) {
         bool edit = *bool_value;
-        if (ImGui::Checkbox(label, &edit)) {
+        if (ImGui::Checkbox("##v", &edit)) {
             apply(scene::FieldValue(std::in_place_type<bool>, edit));
         }
     } else if (const auto* int_value = std::get_if<std::int32_t>(&*value)) {
         int edit = *int_value;
-        if (ImGui::InputInt(label, &edit)) {
+        if (field.hint.starts_with("enum:")) {
+            const std::vector<std::string> options = split_options(std::string_view(field.hint).substr(5));
+            const char* preview = edit >= 0 && static_cast<std::size_t>(edit) < options.size() ? options[static_cast<std::size_t>(edit)].c_str() : "?";
+            if (ImGui::BeginCombo("##v", preview)) {
+                for (std::size_t i = 0; i < options.size(); ++i) {
+                    if (ImGui::Selectable(options[i].c_str(), static_cast<int>(i) == edit)) {
+                        apply(scene::FieldValue(std::in_place_type<std::int32_t>, static_cast<std::int32_t>(i)));
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        } else if (bounded) {
+            if (ImGui::SliderInt("##v", &edit, static_cast<int>(*field.range.min), static_cast<int>(*field.range.max))) {
+                apply(scene::FieldValue(std::in_place_type<std::int32_t>, static_cast<std::int32_t>(edit)));
+            }
+        } else if (ImGui::DragInt("##v", &edit, 0.2f)) {
             apply(scene::FieldValue(std::in_place_type<std::int32_t>, static_cast<std::int32_t>(edit)));
         }
     } else if (const auto* uint_value = std::get_if<std::uint32_t>(&*value)) {
         std::uint32_t edit = *uint_value;
-        if (ImGui::InputScalar(label, ImGuiDataType_U32, &edit)) {
+        if (ImGui::DragScalar("##v", ImGuiDataType_U32, &edit, 0.2f)) {
             apply(scene::FieldValue(std::in_place_type<std::uint32_t>, edit));
         }
     } else if (const auto* float_value = std::get_if<float>(&*value)) {
         float edit = *float_value;
-        if (ImGui::InputFloat(label, &edit, 0.0f, 0.0f, "%.4f")) {
+        if (bounded) {
+            if (ImGui::SliderFloat("##v", &edit, static_cast<float>(*field.range.min), static_cast<float>(*field.range.max), "%.3f")) {
+                apply(scene::FieldValue(std::in_place_type<float>, edit));
+            }
+        } else if (ImGui::DragFloat("##v", &edit, 0.05f, 0.0f, 0.0f, "%.3f")) {
             apply(scene::FieldValue(std::in_place_type<float>, edit));
         }
     } else if (const auto* vec2_value = std::get_if<std::array<float, 2>>(&*value)) {
         std::array<float, 2> edit = *vec2_value;
-        if (ImGui::InputFloat2(label, edit.data())) {
+        if (ImGui::DragFloat2("##v", edit.data(), 0.05f, 0.0f, 0.0f, "%.3f")) {
             apply(scene::FieldValue(std::in_place_type<std::array<float, 2>>, edit));
         }
     } else if (const auto* vec3_value = std::get_if<std::array<float, 3>>(&*value)) {
         std::array<float, 3> edit = *vec3_value;
-        if (ImGui::InputFloat3(label, edit.data())) {
+        const bool picked = field.hint == "color" ? ImGui::ColorEdit3("##v", edit.data(), ImGuiColorEditFlags_NoInputs) : ImGui::DragFloat3("##v", edit.data(), 0.05f, 0.0f, 0.0f, "%.3f");
+        if (picked) {
             apply(scene::FieldValue(std::in_place_type<std::array<float, 3>>, edit));
         }
     } else if (const auto* vec4_value = std::get_if<std::array<float, 4>>(&*value)) {
         std::array<float, 4> edit = *vec4_value;
-        if (ImGui::InputFloat4(label, edit.data())) {
+        const bool picked = field.hint == "color" ? ImGui::ColorEdit4("##v", edit.data(), ImGuiColorEditFlags_NoInputs) : ImGui::DragFloat4("##v", edit.data(), 0.05f, 0.0f, 0.0f, "%.3f");
+        if (picked) {
             apply(scene::FieldValue(std::in_place_type<std::array<float, 4>>, edit));
+        }
+    } else if (const auto* text_value = std::get_if<std::string>(&*value)) {
+        std::array<char, 260> buffer{};
+        copy_text(buffer, *text_value);
+        if (ImGui::InputText("##v", buffer.data(), buffer.size(), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            apply(scene::FieldValue(std::in_place_type<std::string>, std::string(buffer.data())));
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            apply(scene::FieldValue(std::in_place_type<std::string>, std::string(buffer.data())));
         }
     } else if (const auto* guid_value = std::get_if<core::Guid>(&*value)) {
         guid_field(entity, descriptor, field, *guid_value);
     }
-    const std::string range = range_text(field.range);
-    if (!range.empty() && ImGui::IsItemHovered()) {
+    if (!range.empty() && ImGui::IsItemHovered() && !field.hint.starts_with("asset:")) {
         ImGui::SetTooltip("%s", range.c_str());
     }
     ImGui::PopID();
@@ -1225,21 +1554,48 @@ void EditorUi::field_editor(const core::Guid& entity, const scene::ComponentDesc
 
 void EditorUi::guid_field(const core::Guid& entity, const scene::ComponentDescriptor& descriptor, const scene::FieldDescriptor& field,
                           const core::Guid& value) {
-    // The text is kept while the field is edited; it is reloaded when the field changes.
-    const std::string key = entity.to_string() + "/" + descriptor.type_id + "/" + field.name;
-    if (guid_key_ != key) {
-        guid_key_ = key;
-        copy_text(guid_text_, value.is_nil() ? std::string() : value.to_string());
+    // An asset reference shows the asset's path, not its GUID. The button opens a searchable list of the assets that suit the field; an
+    // asset dragged from the Assets panel also sets it.
+    const std::string_view kind = field.hint.starts_with("asset:") ? std::string_view(field.hint).substr(6) : std::string_view("any");
+    const CatalogEntry* current = value.is_nil() ? nullptr : model_.assets().find(value.to_string());
+    std::string label;
+    if (value.is_nil()) {
+        label = "None";
+    } else if (current != nullptr && current->registered()) {
+        // The file name is what a person recognizes; the whole path is in the tooltip.
+        const std::size_t slash = current->source.find_last_of('/');
+        label = slash == std::string::npos ? current->source : current->source.substr(slash + 1);
+    } else {
+        label = "Missing: " + value.to_string();
     }
-    ImGui::InputText(field.name.c_str(), guid_text_.data(), guid_text_.size());
-    if (ImGui::IsItemDeactivatedAfterEdit()) {
-        const std::string text(guid_text_.data());
-        if (text.empty()) {
+    const bool missing = !value.is_nil() && (current == nullptr || !current->registered());
+    if (missing) {
+        ImGui::PushStyleColor(ImGuiCol_Text, kErrorColor);
+    } else if (value.is_nil()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    }
+    const std::string popup_id = "##asset_picker_" + field.name;
+    const float clear_width = value.is_nil() ? 0.0f : ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::Button((label + "##pick").c_str(), ImVec2(ImGui::GetContentRegionAvail().x - clear_width, 0.0f))) {
+        picker_filter_[0] = '\0';
+        picker_key_ = popup_id;
+        ImGui::OpenPopup(popup_id.c_str());
+    }
+    if (missing || value.is_nil()) {
+        ImGui::PopStyleColor();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s\nClick to choose an asset, or drag one here from the Assets panel.",
+                          current != nullptr && current->registered() ? current->source.c_str() : value.is_nil() ? "No asset" : value.to_string().c_str());
+    }
+    if (!value.is_nil()) {
+        ImGui::SameLine();
+        if (ImGui::Button("x##clear", ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
             set_guid_field(entity, descriptor, field, core::Guid{});
-        } else if (auto parsed = core::Guid::parse(text); parsed.ok()) {
-            set_guid_field(entity, descriptor, field, parsed.value());
-        } else {
-            scene_status_ = "\"" + text + "\" is not a GUID; use 8-4-4-4-12 hexadecimal digits";
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Clear the reference");
         }
     }
     // An asset dragged from the Assets panel sets the reference. Only a registered asset is accepted.
@@ -1257,12 +1613,30 @@ void EditorUi::guid_field(const core::Guid& entity, const scene::ComponentDescri
         }
         ImGui::EndDragDropTarget();
     }
-    if (value.is_nil()) {
-        ImGui::TextDisabled("No asset");
-    } else if (model_.scene().is_known_asset(value)) {
-        ImGui::TextColored(kOkColor, "Asset %s", value.to_string().c_str());
-    } else {
-        ImGui::TextColored(kErrorColor, "Missing asset %s", value.to_string().c_str());
+    if (ImGui::BeginPopup(popup_id.c_str())) {
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(320.0f * static_cast<float>(model_.dpi_scale()));
+        ImGui::InputTextWithHint("##filter", "Search assets", picker_filter_.data(), picker_filter_.size());
+        ImGui::Separator();
+        if (ImGui::Selectable("None")) {
+            set_guid_field(entity, descriptor, field, core::Guid{});
+        }
+        bool any = false;
+        for (const CatalogEntry* entry : model_.assets().search(std::string())) {
+            if (!asset_suits(kind, *entry) || !contains_text(entry->source, picker_filter_.data())) {
+                continue;
+            }
+            any = true;
+            if (ImGui::Selectable(entry->source.c_str(), entry->asset->guid == value)) {
+                set_guid_field(entity, descriptor, field, entry->asset->guid);
+            }
+        }
+        if (!any) {
+            ImGui::TextDisabled("No %s assets in the project.", std::string(kind).c_str());
+        }
+        ImGui::EndPopup();
     }
 }
 

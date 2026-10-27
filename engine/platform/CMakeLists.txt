@@ -2,12 +2,12 @@
 # slot table, event queue, input state, input mapping, evdev decoding, and actions (US-011: action maps, input router,
 # input profiles) are platform-neutral and compile everywhere; exactly one backend is built per operating system.
 if(WIN32)
-  set(engine_platform_backend src/win32/platform_win32.cpp src/win32/input_win32.cpp)
+  set(engine_platform_backend src/win32/platform_win32.cpp src/win32/input_win32.cpp src/win32/dialogs_win32.cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   # X11 backend. libX11.so.6 is loaded with dlopen (xlib_abi.cpp), so no X11 headers or -dev packages are needed.
-  set(engine_platform_backend src/x11/platform_x11.cpp src/x11/xlib_abi.cpp src/x11/gamepads_linux.cpp)
+  set(engine_platform_backend src/x11/platform_x11.cpp src/x11/xlib_abi.cpp src/x11/gamepads_linux.cpp src/dialogs_other.cpp)
 else()
-  set(engine_platform_backend src/platform_unsupported.cpp)
+  set(engine_platform_backend src/platform_unsupported.cpp src/dialogs_other.cpp)
 endif()
 
 add_library(engine_platform STATIC
@@ -30,7 +30,7 @@ target_include_directories(engine_platform SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/
 if(WIN32)
   # Win32 system import libraries, listed explicitly as permitted OS ABIs (PRD: Technical Considerations).
   # user32 for windows and messages; xinput for controller state (XInputGetState).
-  target_link_libraries(engine_platform PRIVATE user32 xinput)
+  target_link_libraries(engine_platform PRIVATE user32 xinput ole32 shell32 uuid)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   # dlopen/dlsym bind libX11.so.6 and libXi.so.6 at run time. Listed explicitly as a system ABI (PRD: Dependency Catalog).
   target_link_libraries(engine_platform PRIVATE ${CMAKE_DL_LIBS})

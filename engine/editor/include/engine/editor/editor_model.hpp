@@ -155,6 +155,8 @@ private:
     void report_play_errors();
     // The asset GUIDs of the open project's registry; empty when no project is open.
     [[nodiscard]] std::unordered_set<core::Guid> known_assets() const;
+    // Puts a project folder at the front of the recent list (without a duplicate) and keeps at most kMaxRecentProjects.
+    void remember_project(const std::string& folder);
     // Parses every .prefab asset of the open project into the scene editor's library. Called when a project opens.
     void load_project_prefabs();
     // Reads a script asset's text from the open project, for Play.

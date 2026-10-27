@@ -42,11 +42,14 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
 
     ComponentBuilder<MeshRenderer> mesh(kMeshRendererId, 1);
     mesh.field<&MeshRenderer::mesh>("mesh", core::Guid{});
+    mesh.hint("asset:model");
     mesh.field<&MeshRenderer::material>("material", core::Guid{});
+    mesh.hint("asset:material");
     mesh.field<&MeshRenderer::visible>("visible", true);
     mesh.field<&MeshRenderer::cast_shadows>("cast_shadows", true);
     mesh.field<&MeshRenderer::receive_shadows>("receive_shadows", true);
     mesh.field<&MeshRenderer::tint>("tint", std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f});
+    mesh.hint("color");
     add(catalog, mesh, errors);
 
     ComponentBuilder<Camera> camera(kCameraId, 1);
@@ -58,7 +61,9 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
 
     ComponentBuilder<Light> light(kLightId, 1);
     light.field<&Light::kind>("kind", 0, Range{0.0, 2.0});
+    light.hint("enum:Directional|Point|Spot");
     light.field<&Light::color>("color", std::array<float, 3>{1.0f, 1.0f, 1.0f});
+    light.hint("color");
     light.field<&Light::intensity>("intensity", 1.0f, Range{0.0, 1.0e6});
     light.field<&Light::range>("range", 20.0f, Range{0.01, 1.0e5});
     light.field<&Light::cone_angle_degrees>("cone_angle_degrees", 45.0f, Range{1.0, 179.0});
@@ -67,7 +72,9 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
 
     ComponentBuilder<RigidBody> body(kRigidBodyId, 1);
     body.field<&RigidBody::motion>("motion", 2, Range{0.0, 2.0});
+    body.hint("enum:Static|Kinematic|Dynamic");
     body.field<&RigidBody::shape>("shape", 0, Range{0.0, 2.0});
+    body.hint("enum:Box|Sphere|Capsule");
     body.field<&RigidBody::size>("size", std::array<float, 3>{1.0f, 1.0f, 1.0f});
     body.field<&RigidBody::mass>("mass", 1.0f, Range{0.001, 1.0e6});
     body.field<&RigidBody::friction>("friction", 0.5f, Range{0.0, 10.0});
@@ -84,11 +91,13 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
 
     ComponentBuilder<Script> script(kScriptId, 1);
     script.field<&Script::script>("script", core::Guid{});
+    script.hint("asset:script");
     script.field<&Script::enabled>("enabled", true);
     add(catalog, script, errors);
 
     ComponentBuilder<AudioEmitter> audio(kAudioEmitterId, 1);
     audio.field<&AudioEmitter::clip>("clip", core::Guid{});
+    audio.hint("asset:audio");
     audio.field<&AudioEmitter::volume>("volume", 1.0f, kUnit);
     audio.field<&AudioEmitter::looping>("looping", false);
     audio.field<&AudioEmitter::spatial>("spatial", true);
@@ -98,7 +107,9 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
     ComponentBuilder<Animator> animator(kAnimatorId, 1);
     animator.field<&Animator::name>("name", std::string());
     animator.field<&Animator::graph>("graph", core::Guid{});
+    animator.hint("asset:graph");
     animator.field<&Animator::model>("model", core::Guid{});
+    animator.hint("asset:model");
     animator.field<&Animator::speed>("speed", 1.0f, Range{0.0, 100.0});
     add(catalog, animator, errors);
 
@@ -108,27 +119,34 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
     particles.field<&ParticleEmitter::speed>("speed", 2.0f, Range{0.0, 1.0e4});
     particles.field<&ParticleEmitter::size>("size", 0.1f, Range{0.0001, 100.0});
     particles.field<&ParticleEmitter::color>("color", std::array<float, 4>{1.0f, 0.8f, 0.4f, 1.0f});
+    particles.hint("color");
     particles.field<&ParticleEmitter::max_particles>("max_particles", 2048u, Range{1.0, 1.0e7});
     add(catalog, particles, errors);
 
     ComponentBuilder<Terrain> terrain(kTerrainId, 1);
     terrain.field<&Terrain::heightmap>("heightmap", core::Guid{});
+    terrain.hint("asset:terrain");
     terrain.field<&Terrain::material>("material", core::Guid{});
+    terrain.hint("asset:material");
     terrain.field<&Terrain::size_meters>("size_meters", std::array<float, 2>{256.0f, 256.0f});
     terrain.field<&Terrain::height_scale>("height_scale", 40.0f, Range{0.0, 1.0e5});
     add(catalog, terrain, errors);
 
     ComponentBuilder<Environment> environment(kEnvironmentId, 1);
     environment.field<&Environment::sky_color>("sky_color", std::array<float, 3>{0.45f, 0.62f, 0.85f});
+    environment.hint("color");
     environment.field<&Environment::ambient_color>("ambient_color", std::array<float, 3>{0.25f, 0.27f, 0.32f});
+    environment.hint("color");
     environment.field<&Environment::fog_density>("fog_density", 0.0f, Range{0.0, 10.0});
     environment.field<&Environment::gi_probes>("gi_probes", core::Guid{});
+    environment.hint("asset:gi");
     environment.field<&Environment::ray_traced_shadows>("ray_traced_shadows", false);
     environment.field<&Environment::ray_traced_reflections>("ray_traced_reflections", false);
     add(catalog, environment, errors);
 
     ComponentBuilder<UiCanvas> canvas(kUiCanvasId, 1);
     canvas.field<&UiCanvas::layout>("layout", core::Guid{});
+    canvas.hint("asset:script");
     canvas.field<&UiCanvas::visible>("visible", true);
     add(catalog, canvas, errors);
 

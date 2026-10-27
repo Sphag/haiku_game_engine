@@ -23,6 +23,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -64,6 +65,7 @@ private:
 
 struct Options {
     std::string log_file;  // when set, every log line is also appended here
+    std::string scene;     // a scene of the project to open at start: a path relative to its assets folder, or absolute
     rhi::Backend backend = rhi::Backend::Dx12;
     std::string project;
     std::string workspace = "editor-workspace.json";
@@ -75,7 +77,7 @@ struct Options {
 
 void print_usage() {
     std::puts("Usage: game_editor [--backend dx12|vulkan] [--project <folder>] [--workspace <file>] [--font <file>]");
-    std::puts("                   [--frames <n>] [--debug-layers] [--log <file>]");
+    std::puts("                   [--frames <n>] [--debug-layers] [--log <file>] [--scene <path>]");
     std::puts("");
     std::puts("Opens the game editor in a native window. --frames stops after n frames (for smoke runs).");
     std::puts("Exit codes: 0 closed normally, 1 failed to start or lost the device, 2 invalid command line.");
@@ -99,6 +101,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             } else {
                 return false;
             }
+        } else if (arg == "--scene" && has_value) {
+            options.scene = argv[++i];
         } else if (arg == "--log" && has_value) {
             options.log_file = argv[++i];
         } else if (arg == "--project" && has_value) {
@@ -194,6 +198,19 @@ int main(int argc, char** argv) {
     }
     editor::EditorModel model(console, workspace_file.value());
     model.startup(options.project);
+    if (!options.scene.empty() && model.project().state() == editor::ProjectState::Open) {
+        auto scene_path = core::Path::from_utf8(options.scene);
+        if (scene_path.ok() && !std::filesystem::path(scene_path.value().str()).is_absolute() && model.project().info()) {
+            // A relative path is inside the project's assets folder.
+            auto assets_root = model.project().info()->root.join(std::string(editor::kProjectAssetsFolder));
+            if (assets_root.ok()) {
+                scene_path = assets_root.value().join(options.scene);
+            }
+        }
+        if (scene_path.ok()) {
+            static_cast<void>(model.scene().open(scene_path.value()));
+        }
+    }
 
     auto platform_result = platform::Platform::create();
     if (!platform_result.ok()) {

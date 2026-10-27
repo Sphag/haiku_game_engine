@@ -4,6 +4,7 @@
 #include "engine/scene/reflection.hpp"
 
 #include <unordered_set>
+#include <algorithm>
 #include <utility>
 #include <variant>
 
@@ -49,6 +50,7 @@ core::Result<core::Unit, ProjectError> EditorModel::open_project(std::string_vie
         return opened;
     }
     workspace_.last_project = std::string(path_text);
+    remember_project(std::string(path_text));
     note(core::LogLevel::Info, "opened project " + project_.info()->name + " at " + std::string(path_text));
     if (project_.scan_error()) {
         note(core::LogLevel::Warning, "assets: " + project_.scan_error()->message);
@@ -57,6 +59,15 @@ core::Result<core::Unit, ProjectError> EditorModel::open_project(std::string_vie
     scene_.set_known_assets(known_assets());
     open_asset_browser();
     return core::success();
+}
+
+void EditorModel::remember_project(const std::string& folder) {
+    auto& recent = workspace_.recent_projects;
+    recent.erase(std::remove(recent.begin(), recent.end(), folder), recent.end());
+    recent.insert(recent.begin(), folder);
+    if (recent.size() > kMaxRecentProjects) {
+        recent.resize(kMaxRecentProjects);
+    }
 }
 
 void EditorModel::load_project_prefabs() {

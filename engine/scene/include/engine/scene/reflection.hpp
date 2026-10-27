@@ -126,6 +126,10 @@ struct FieldDescriptor {
     std::string name;
     FieldValue default_value;  // the kind of the field is the kind of this value
     Range range;
+    // How tools should present the field; the value itself is unchanged. One of: "color" (a float vector shown as a color picker),
+    // "enum:A|B|C" (an integer shown as a list of names, starting at 0), "asset:<kind>" (a Guid shown as an asset picker; kind is model,
+    // material, script, audio, graph, terrain, gi, texture, or any). Empty means the plain widget for the kind.
+    std::string hint;
 
     // Type-erased access to the member. ComponentBuilder fills these in. The component pointer must be a live object of the
     // owning type; ComponentDescriptor::set_field and get_field check the name and the value, not the pointer.
@@ -199,6 +203,14 @@ public:
             static_cast<C*>(component)->*Member = std::get<index>(value);
         };
         descriptor_.fields.push_back(std::move(desc));
+        return *this;
+    }
+
+    // Sets the presentation hint of the field added last (see FieldDescriptor::hint).
+    ComponentBuilder& hint(std::string text) {
+        if (!descriptor_.fields.empty()) {
+            descriptor_.fields.back().hint = std::move(text);
+        }
         return *this;
     }
 

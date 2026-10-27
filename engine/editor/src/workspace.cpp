@@ -55,7 +55,10 @@ core::Result<WorkspaceSettings, WorkspaceError> parse_workspace(std::string_view
     if (document.is_discarded() || !document.is_object()) {
         return core::failure(make_error(WorkspaceErrorCode::Malformed, "the workspace file is not a JSON object"));
     }
-    if (!has_exactly_keys(document, {"format", "version", "last_project", "layout", "panels"})) {
+    // recent_projects is optional, so a workspace written before it existed still loads.
+    nlohmann::json required = document;
+    required.erase("recent_projects");
+    if (!has_exactly_keys(required, {"format", "version", "last_project", "layout", "panels"})) {
         return core::failure(make_error(WorkspaceErrorCode::Malformed, "the workspace file needs exactly the keys of engine.editor_workspace"));
     }
     if (!document["format"].is_string() || document["format"].get<std::string>() != kWorkspaceFormat) {
@@ -77,6 +80,18 @@ core::Result<WorkspaceSettings, WorkspaceError> parse_workspace(std::string_view
     }
 
     WorkspaceSettings settings;
+    if (document.contains("recent_projects")) {
+        const auto& recent = document["recent_projects"];
+        if (!recent.is_array() || recent.size() > kMaxRecentProjects) {
+            return core::failure(make_error(WorkspaceErrorCode::Malformed, "recent_projects must be an array of at most 8 strings"));
+        }
+        for (const auto& item : recent) {
+            if (!item.is_string()) {
+                return core::failure(make_error(WorkspaceErrorCode::Malformed, "recent_projects must hold strings"));
+            }
+            settings.recent_projects.push_back(item.get<std::string>());
+        }
+    }
     settings.last_project = document["last_project"].get<std::string>();
     settings.layout = document["layout"].get<std::string>();
     // Each flag is read in turn, so the first bad one names itself in the error.
@@ -121,6 +136,9 @@ std::string serialize_workspace(const WorkspaceSettings& settings) {
     document["version"] = kWorkspaceVersion;
     document["last_project"] = settings.last_project;
     document["layout"] = settings.layout;
+    if (!settings.recent_projects.empty()) {
+        document["recent_projects"] = settings.recent_projects;
+    }
     document["panels"] = std::move(panels);
     return document.dump(2, ' ', false, nlohmann::json::error_handler_t::strict) + "\n";
 }
