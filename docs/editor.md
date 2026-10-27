@@ -225,3 +225,10 @@ The sample project is `samples/showcase` (see its README).
 - **`tools/ui_tests/editor_ui_test.ps1`** drives the real window with real mouse and keyboard input (typing a path, a double click, Ctrl+D,
   Ctrl+Z, Ctrl+Y, Delete, Ctrl+S, F5) on a copy of the showcase, checks the editor's log, and saves screenshots to `artifacts/ui/`.
   It needs an unlocked Windows desktop. Its first run found that typed text never arrived: the message pump did not call `TranslateMessage`.
+
+## Review and the second round of changes
+
+`docs/editor-usability-review.md` is the usability review: what was wrong, what changed, and what remains. In short: the project and scene
+choosers are native dialogs, entities have names, the inspector shows components as cards with meaningful widgets and asset pickers, the
+Hierarchy has its own panel, and Play runs the game's systems. The inspector reads field presentation from a `hint` that a component declares
+(`color`, `enum:A|B|C`, `asset:<kind>`).

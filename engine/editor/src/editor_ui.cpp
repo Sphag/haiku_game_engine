@@ -243,6 +243,10 @@ void EditorUi::default_layout(unsigned int dock_id) {
     ImGuiID left = 0;
     ImGuiID right = 0;
     ImGui::DockBuilderSplitNode(dock_id, ImGuiDir_Left, 0.30f, &left, &right);
+    // The Hierarchy is what a person looks at all day, so it has its own place above the project, asset, and workspace tabs.
+    ImGuiID left_top = 0;
+    ImGuiID left_bottom = 0;
+    ImGui::DockBuilderSplitNode(left, ImGuiDir_Up, 0.52f, &left_top, &left_bottom);
     ImGuiID bottom = 0;
     ImGuiID center = 0;
     ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.30f, &bottom, &center);
@@ -253,10 +257,10 @@ void EditorUi::default_layout(unsigned int dock_id) {
     ImGuiID viewport_area = 0;
     ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.40f, &inspector, &viewport_area);
 
-    ImGui::DockBuilderDockWindow(panel_title(Panel::Project), left);
-    ImGui::DockBuilderDockWindow("Hierarchy", left);
-    ImGui::DockBuilderDockWindow(kAssetsTitle, left);
-    ImGui::DockBuilderDockWindow(panel_title(Panel::Workspace), left);
+    ImGui::DockBuilderDockWindow("Hierarchy", left_top);
+    ImGui::DockBuilderDockWindow(panel_title(Panel::Project), left_bottom);
+    ImGui::DockBuilderDockWindow(kAssetsTitle, left_bottom);
+    ImGui::DockBuilderDockWindow(panel_title(Panel::Workspace), left_bottom);
     ImGui::DockBuilderDockWindow(panel_title(Panel::Viewport), viewport_area);
     ImGui::DockBuilderDockWindow("Inspector", inspector);
     ImGui::DockBuilderDockWindow(panel_title(Panel::Console), console);
@@ -711,9 +715,36 @@ void EditorUi::build_game_window() {
     if (ImGui::Begin("Build Game", &build_open_)) {
         const bool idle = !game_build_.running();
         ImGui::BeginDisabled(!idle);
-        ImGui::InputText("Output folder##build", build_output_.data(), build_output_.size());
+        ImGui::SetNextItemWidth(360.0f * static_cast<float>(model_.dpi_scale()));
+        ImGui::InputText("##build_output", build_output_.data(), build_output_.size());
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...##build_output")) {
+            if (const auto folder = platform::pick_folder("Where should the game be built?", build_output_.data())) {
+                copy_text(build_output_, *folder);
+            }
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Output folder");
         ImGui::InputText("Package name##build", build_name_.data(), build_name_.size());
-        ImGui::InputText("Start scene GUID##build", build_scene_.data(), build_scene_.size());
+        // The start scene is chosen from the project's scenes, by name; its GUID is what the build needs.
+        {
+            std::string current = "Choose a scene";
+            if (const auto selected = core::Guid::parse(build_scene_.data()); selected.ok() && model_.project().scan() != nullptr) {
+                if (const assets::AssetRecord* record = model_.project().scan()->registry.find(selected.value())) {
+                    current = record->source_path.str();
+                }
+            }
+            if (ImGui::BeginCombo("Start scene##build", current.c_str())) {
+                if (model_.project().scan() != nullptr) {
+                    for (const assets::AssetRecord* record : model_.project().scan()->registry.records()) {
+                        if (record->source_path.str().ends_with(".scene") && ImGui::Selectable(record->source_path.str().c_str())) {
+                            copy_text(build_scene_, record->guid.to_string());
+                        }
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
         const char* backends[] = {"dx12", "vulkan"};
         ImGui::Combo("Backend##build", &build_backend_, backends, 2);
         ImGui::EndDisabled();

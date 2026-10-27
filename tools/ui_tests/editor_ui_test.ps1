@@ -76,7 +76,7 @@ $p = $run[0]; $h = $run[1]
 Check 'the editor window exists' ($h -ne [IntPtr]::Zero)
 Check 'the editor window is in front' ([W]::GetForegroundWindow() -eq $h)
 Shot $h '01-welcome'
-Click $h 286 173                                       # "Open project..."
+Click $h 286 718                                       # "Open project..."
 Start-Sleep -Seconds 2
 [W]::Shot((Join-Path $shots '02-folder-chooser.png'), 0, 0, 1920, 1080)
 [System.Windows.Forms.SendKeys]::SendWait($work + '{ENTER}')   # type the folder into the chooser, go there
@@ -97,7 +97,6 @@ $run = Start-Editor @('--backend', $Backend, '--workspace', $ws2, '--log', $log,
 $p = $run[0]; $h = $run[1]
 Check 'the scene opens at start' ((LogText $log) -match 'opened scene')
 Click $h 1000 950                                      # a click in an empty part of the window, so it is active
-Click $h 287 53                                        # the Hierarchy tab
 Shot $h '04-hierarchy'
 Click $h 100 341                                       # the second entity (a plain one; the first is a prefab instance)
 Shot $h '05-inspector'

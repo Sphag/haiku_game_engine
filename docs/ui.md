@@ -53,3 +53,11 @@ or a GPU. `engine/script/include/engine/script/script_ui.hpp` connects Lua funct
 
 These run on every OS with no window. Visual checks in a running application are not part of this change: the repository has no
 application host that calls the overlay yet.
+
+## Layout files
+
+A screen is an asset, `engine.ui_layout` version 1 (`engine/ui/include/engine/ui/ui_layout.hpp`): JSON with a `reference` size and a flat list of
+`elements` (panel, text, button, slider, image), each with an anchor, an offset and size, colors, and for buttons and sliders the name of a Lua
+function (`on_click`, `on_change`). An unknown key, kind, or anchor is an error. An `engine.ui_canvas` component names the layout and the Lua
+source that defines those functions; the runtime refuses a layout that names a function the script lacks. `samples/showcase/assets/ui/hud.ui.json`
+is an example. The package carries the font as `fonts/ui.ttf` (Build Game copies the bundled Roboto, which has the Cyrillic range).
