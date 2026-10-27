@@ -366,7 +366,7 @@ def build_scene(a, prefab):
             "engine.camera": comp(vertical_fov_degrees=65.0, far_plane=500.0, primary=True),
         }),
         entity("ground", xform((0, -0.5, 0), scale=(40, 1, 40)), {
-            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, receive_shadows=True, tint=[0.30, 0.50, 0.26, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, receive_shadows=True),
             "engine.rigid_body": comp(motion=0, shape=0, size=[40.0, 1.0, 40.0], friction=0.8),
         }),
         entity("terrain", xform((-64, -0.5, -150)), {
@@ -380,7 +380,7 @@ def build_scene(a, prefab):
             "engine.audio_emitter": comp(clip=a["tone"].guid, volume=0.6, looping=False, spatial=True, play_on_start=False),
         }),
         entity("hero_hand", xform((0.4, 1.0, 0)), {
-            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.8, 0.55, 0.12, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[1.0, 0.8, 0.45, 1.0]),
         }, parent=hero),
         entity("campfire", xform((-3, 0.2, -1)), {
             "engine.particle_emitter": comp(rate=120.0, lifetime=1.5, speed=1.8, size=0.08, color=[1.0, 0.55, 0.2, 1.0], max_particles=4096),
@@ -399,7 +399,7 @@ def build_scene(a, prefab):
             "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, tint=[0.3, 0.6, 0.28, 1.0]),
         }),
         entity("platform", xform((6, 0.5, 0), scale=(3, 0.3, 3)), {
-            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, tint=[0.55, 0.55, 0.6, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["ground_mat"].guid, tint=[0.8, 0.85, 1.0, 1.0]),
             "engine.rigid_body": comp(motion=1, shape=0, size=[3.0, 0.3, 3.0]),
             "engine.script": comp(script=a["spinner_lua"].guid),
         }),
@@ -559,10 +559,16 @@ def main():
     write_text(ASSETS / "scripts" / "arm.lua", ARM_LUA)
     a["arm_lua"] = asset("scripts/arm.lua", "text")
 
-    write_json(ASSETS / "materials" / "crate.material.json", material_graph("crate", [("albedo", "srgb"), ("normal", "linear")], [1.0, 1.0, 1.0, 1.0]))
-    a["crate_mat"] = asset("materials/crate.material.json", "json", deps=[a["checker"].guid, a["normal"].guid])
-    write_json(ASSETS / "materials" / "ground.material.json", material_graph("ground", [("albedo", "srgb"), ("normal", "linear")], [0.8, 1.0, 0.8, 1.0]))
-    a["ground_mat"] = asset("materials/ground.material.json", "json", deps=[a["grass"].guid, a["normal"].guid])
+    # A material is a graph (what the surface is made of) plus an instance (which textures and values it uses).
+    write_json(ASSETS / "materials" / "surface.matgraph.json", material_graph("surface", [("albedo", "srgb"), ("normal", "linear")], [1.0, 1.0, 1.0, 1.0]))
+    a["surface_graph"] = asset("materials/surface.matgraph.json", "json")
+    for name, albedo, tint, roughness in (("crate", "checker", [1.0, 0.95, 0.9, 1.0], 0.65), ("ground", "grass", [0.85, 1.0, 0.85, 1.0], 0.95)):
+        write_json(ASSETS / "materials" / (name + ".material.json"), {
+            "format": "engine.material", "version": 1, "graph": a["surface_graph"].guid,
+            "textures": {"albedo": a[albedo].guid, "normal": a["normal"].guid},
+            "parameters": {"tint": tint, "roughness": [roughness]},
+        })
+        a[name + "_mat"] = asset("materials/%s.material.json" % name, "json", deps=[a["surface_graph"].guid, a[albedo].guid, a["normal"].guid])
 
     write_json(ASSETS / "gi" / "probes.gi.json", GI_SOURCE)
     a["gi"] = asset("gi/probes.gi.json", "gi_probes")
@@ -571,12 +577,12 @@ def main():
     crate_root = guid("prefab/crate/root")
     prefab_doc = {"format": "engine.prefab", "version": 1, "entities": [
         {"guid": crate_root, "parent": None, "transform": xform(), "components": {
-            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.62, 0.42, 0.25, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid),
             "engine.rigid_body": comp(motion=2, shape=0, size=[1.0, 1.0, 1.0], mass=1.0, friction=0.6),
             "engine.script": comp(script=a["crate_lua"].guid),
         }},
         {"guid": guid("prefab/crate/lid"), "parent": crate_root, "transform": xform((0, 0.55, 0), scale=(1.0, 0.1, 1.0)), "components": {
-            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[0.55, 0.38, 0.22, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["cube"].guid, material=a["crate_mat"].guid, tint=[1.0, 1.0, 0.85, 1.0]),
         }},
     ]}
     write_json(ASSETS / "prefabs" / "crate.prefab", prefab_doc)

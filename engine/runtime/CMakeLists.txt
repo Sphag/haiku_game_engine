@@ -14,10 +14,13 @@ engine_configure_first_party(engine_runtime)
 add_library(engine_game_render STATIC
   src/game_hud.cpp
   src/game_renderer.cpp
+  src/runtime_material.cpp
   src/windowed_game.cpp
 )
 target_include_directories(engine_game_render PUBLIC include)
-target_link_libraries(engine_game_render PUBLIC engine_runtime engine_render engine_rhi engine_platform engine_gameplay engine_scene engine_animation engine_world engine_model_format engine_ui engine_script engine_core)
+target_link_libraries(engine_game_render PUBLIC engine_runtime engine_render engine_rhi engine_platform engine_gameplay engine_scene engine_animation engine_world engine_model_format engine_texture_codec engine_material_graph engine_assets engine_ui engine_script engine_core)
+# nlohmann/json is a system include: its warnings stay out of the first-party -Werror policy. Only runtime_material.cpp includes it.
+target_include_directories(engine_game_render SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/nlohmann_json/single_include)
 engine_configure_first_party(engine_game_render)
 
 add_executable(game_runtime src/game_main.cpp)

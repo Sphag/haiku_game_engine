@@ -39,6 +39,8 @@ struct RenderStats {
     std::uint32_t skinned = 0;     // skinned items drawn
     std::uint32_t terrain_tiles = 0;
     std::uint32_t particles = 0;   // alive
+    std::uint32_t materials = 0;   // material instances in use (a graph with its textures and parameters)
+    std::uint32_t textures = 0;    // textures uploaded for them
     bool camera = false;           // a primary camera was found
 };
 

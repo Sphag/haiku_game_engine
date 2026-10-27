@@ -27,7 +27,6 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/assimp assimp)
 # warning policy. The converter's BC4/BC5 codec is first-party code.
 add_library(engine_bc7_vendor STATIC
   ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo/bc7enc.cpp
-  ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo/bc7decomp.cpp
 )
 target_include_directories(engine_bc7_vendor SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo)
 
@@ -75,9 +74,7 @@ add_library(engine_converter STATIC
   src/model_importer.cpp
   src/mesh_cooking.cpp
   src/texture_importer.cpp
-  src/bc5_codec.cpp
   src/bc7_encode.cpp
-  src/bc7_decode.cpp
   src/gi_importer.cpp
   src/world_partition.cpp
 )
@@ -87,7 +84,7 @@ target_include_directories(engine_converter SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/stb
   ${PROJECT_SOURCE_DIR}/third_party/bc7enc_rdo
 )
-target_link_libraries(engine_converter PUBLIC engine_core engine_assets engine_gi engine_world engine_model_format)
+target_link_libraries(engine_converter PUBLIC engine_core engine_assets engine_gi engine_world engine_model_format engine_texture_codec)
 target_link_libraries(engine_converter PRIVATE assimp engine_bc7_vendor engine_meshopt_vendor)
 engine_configure_first_party(engine_converter)
 

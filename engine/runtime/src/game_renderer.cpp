@@ -3,7 +3,9 @@
 #include "asset_converter/model_format.hpp"
 #include "engine/animation/clip.hpp"
 #include "engine/animation/skeleton.hpp"
+#include "engine/assets/texture_format.hpp"
 #include "engine/gameplay/animation_binding.hpp"
+#include "engine/runtime/runtime_material.hpp"
 #include "engine/core/file_io.hpp"
 #include "engine/core/path.hpp"
 #include "engine/gameplay/components.hpp"
@@ -135,13 +137,83 @@ struct GameRenderer::Impl {
     std::uint32_t overlay_height = 0;
 
     std::map<core::Guid, CachedModel> models;
+    std::map<core::Guid, std::uint32_t> textures;                      // by texture asset: the renderer's texture id
+    std::map<core::Guid, std::optional<std::uint32_t>> instances;      // by material asset: the renderer's material, or nothing when it failed
     std::map<core::Guid, TerrainEntry> terrains;  // by terrain entity
     std::map<core::Guid, std::string> animator_names;  // by entity that has an animator
     std::vector<Pool> pools;
 
     const CachedModel& model(const core::Guid& asset, std::vector<std::string>* problems);
+    // The renderer material of a material asset, built once. A failure is reported once and the model's own materials are used instead.
+    std::optional<std::uint32_t> instance_material(const core::Guid& asset, std::vector<std::string>* problems);
     void load_terrain(scene::Scene& scene, const core::Guid& entity, std::vector<std::string>& problems);
 };
+
+std::optional<std::uint32_t> GameRenderer::Impl::instance_material(const core::Guid& asset, std::vector<std::string>* problems) {
+    const auto cached = instances.find(asset);
+    if (cached != instances.end()) {
+        return cached->second;
+    }
+    std::optional<std::uint32_t>& slot = instances[asset];
+    const auto fail = [&](const std::string& message) {
+        if (problems != nullptr) {
+            problems->push_back("material " + asset.to_string() + ": " + message);
+        }
+        return std::optional<std::uint32_t>();
+    };
+    const std::optional<std::string> text = reader ? reader(asset) : std::nullopt;
+    if (!text) {
+        return fail("not in the packs");
+    }
+    auto recipe = resolve_material(*text, reader);
+    if (!recipe.ok()) {
+        return fail(recipe.error());
+    }
+    if (problems != nullptr) {
+        for (const std::string& note : recipe.value().notes) {
+            problems->push_back("material " + asset.to_string() + ": " + note);
+        }
+    }
+    render::MaterialTextures bound;
+    for (const auto& [slot_name, texture_asset] : recipe.value().textures) {
+        std::optional<std::uint32_t> id;
+        if (const auto uploaded = textures.find(texture_asset); uploaded != textures.end()) {
+            id = uploaded->second;
+        } else {
+            const std::optional<std::string> payload = reader ? reader(texture_asset) : std::nullopt;
+            if (!payload) {
+                return fail("the texture " + texture_asset.to_string() + " is not in the packs");
+            }
+            auto image = decode_texture_payload(*payload);
+            if (!image.ok()) {
+                return fail(image.error());
+            }
+            auto created = renderer->upload_texture(image.value());
+            if (!created.ok()) {
+                return fail(describe(created.error()));
+            }
+            textures[texture_asset] = created.value();
+            id = created.value();
+        }
+        if (slot_name == kSlotBaseColor) {
+            bound.base_color = id;
+        } else if (slot_name == kSlotNormal) {
+            bound.normal = id;
+        } else if (slot_name == kSlotMetallicRoughness) {
+            bound.metallic_roughness = id;
+        } else if (slot_name == kSlotEmissive) {
+            bound.emissive = id;
+        } else if (slot_name == kSlotOcclusion) {
+            bound.occlusion = id;
+        }
+    }
+    auto material = renderer->create_material(recipe.value().params, bound);
+    if (!material.ok()) {
+        return fail(describe(material.error()));
+    }
+    slot = material.value();
+    return slot;
+}
 
 const CachedModel& GameRenderer::Impl::model(const core::Guid& asset, std::vector<std::string>* problems) {
     const auto found = models.find(asset);
@@ -399,6 +471,13 @@ std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std
         if (has_component(scene, guid, gameplay::kTerrainId)) {
             impl_->load_terrain(scene, guid, problems);
         }
+        if (has_component(scene, guid, gameplay::kMeshRendererId)) {
+            // Materials are built now, so a missing graph or texture is reported at start and not as a surprise on screen.
+            const core::Guid material = read<core::Guid>(scene, guid, gameplay::kMeshRendererId, "material", core::Guid{});
+            if (!material.is_nil()) {
+                static_cast<void>(impl_->instance_material(material, &problems));
+            }
+        }
         if (has_component(scene, guid, gameplay::kParticleEmitterId)) {
             Pool pool;
             pool.emitter = guid;
@@ -543,6 +622,9 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
             const auto tint_values = read<std::array<float, 4>>(scene, guid, gameplay::kMeshRendererId, "tint", {1.0f, 1.0f, 1.0f, 1.0f});
             const glm::vec4 tint(tint_values[0], tint_values[1], tint_values[2], tint_values[3]);
             const core::Guid asset = read<core::Guid>(scene, guid, gameplay::kMeshRendererId, "mesh", core::Guid{});
+            const core::Guid material_asset = read<core::Guid>(scene, guid, gameplay::kMeshRendererId, "material", core::Guid{});
+            const std::optional<std::uint32_t> override_material =
+                material_asset.is_nil() ? std::nullopt : impl_->instance_material(material_asset, nullptr);
             const CachedModel* cached = asset.is_nil() ? nullptr : &impl_->model(asset, nullptr);
             if (cached != nullptr && cached->ok) {
                 const render::SkinPose* skin = nullptr;
@@ -563,7 +645,7 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
                     item.node = *handle;
                     item.mesh = part.mesh;
                     item.color = tint;
-                    item.material = part.material;
+                    item.material = override_material ? *override_material : part.material;
                     item.skin = skin;
                     renderables.push_back(item);
                 }
@@ -574,6 +656,7 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
                                     read<std::int32_t>(scene, guid, gameplay::kRigidBodyId, "shape", 0) == 1;
                 item.mesh = sphere ? impl_->sphere_mesh : impl_->box_mesh;
                 item.color = tint;
+                item.material = override_material ? *override_material : 0u;
                 renderables.push_back(item);
             }
         }
@@ -611,6 +694,10 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
     for (const auto& entry : impl_->models) {
         stats.models += entry.second.ok ? 1u : 0u;
     }
+    for (const auto& entry : impl_->instances) {
+        stats.materials += entry.second ? 1u : 0u;
+    }
+    stats.textures = static_cast<std::uint32_t>(impl_->textures.size());
     return core::success(stats);
 }
 

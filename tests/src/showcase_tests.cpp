@@ -20,6 +20,7 @@
 #include "engine/rhi/device.hpp"
 #include "engine/gameplay/animation_binding.hpp"
 #include "engine/runtime/game_hud.hpp"
+#include "engine/runtime/runtime_material.hpp"
 #include "engine/runtime/game_renderer.hpp"
 #include "engine/script/script_engine.hpp"
 #include "engine/ui/ui_layout.hpp"
@@ -90,10 +91,10 @@ std::optional<std::string> showcase_asset_bytes(const engine::assets::ProjectSca
     if (!source.ok()) {
         return std::nullopt;
     }
-    if (record->importer != "model") {
+    if (record->importer != "model" && record->importer != "texture") {
         return source.value();
     }
-    const auto importer = engine::converter::make_model_importer();
+    const auto importer = record->importer == "texture" ? engine::converter::make_texture_importer() : engine::converter::make_model_importer();
     auto settings = importer->canonical_settings(record->importer_settings);
     if (!settings.ok()) {
         return std::nullopt;
@@ -322,20 +323,80 @@ TEST_CASE("The showcase animation graph builds a state machine, and its paramete
     CHECK(machine.value().state_name() == "idle");
 }
 
-TEST_CASE("The showcase material graphs parse, and their textures are registered assets", "[integration][showcase]") {
+TEST_CASE("The showcase materials: the graph parses, and each instance resolves to the fixed surface model", "[integration][showcase]") {
     const auto scan = scan_showcase();
+    auto graph = engine::material_graph::parse_graph(read_text(path_of(kShowcase + "/assets/materials/surface.matgraph.json")));
+    if (!graph.ok()) {
+        for (const auto& error : graph.error()) {
+            FAIL_CHECK("surface.matgraph.json: " << engine::material_graph::to_text(error));
+        }
+    }
+    const engine::gameplay::AssetReader reader = [&scan](const Guid& guid) { return showcase_asset_bytes(scan, guid); };
     for (const char* name : {"crate", "ground"}) {
         const std::string relative = std::string("materials/") + name + ".material.json";
-        auto graph = engine::material_graph::parse_graph(read_text(path_of(kShowcase + "/assets/" + relative)));
         INFO(relative);
-        if (!graph.ok()) {
-            for (const auto& error : graph.error()) {
-                FAIL_CHECK(relative << ": " << engine::material_graph::to_text(error));
-            }
+        // The instance lists its graph and its two textures as dependencies, so a cook pulls them into the pack.
+        CHECK(record(scan, relative).dependencies.size() == 3);
+        auto recipe = engine::runtime::resolve_material(read_text(path_of(kShowcase + "/assets/" + relative)), reader);
+        if (!recipe.ok()) {
+            FAIL(relative << ": " << recipe.error());
         }
-        // Each material lists the textures it samples as dependencies, so a cook pulls them into the pack.
-        CHECK(record(scan, relative).dependencies.size() == 2);
+        CHECK(recipe.value().notes.empty());
+        // The albedo sample multiplied by the tint is the base color: a map and a factor. The normal map feeds the normal pin.
+        CHECK(recipe.value().textures.count(engine::runtime::kSlotBaseColor) == 1);
+        CHECK(recipe.value().textures.count(engine::runtime::kSlotNormal) == 1);
+        CHECK(recipe.value().params.roughness > 0.6f);
     }
+    auto crate = engine::runtime::resolve_material(read_text(path_of(kShowcase + "/assets/materials/crate.material.json")), reader);
+    REQUIRE(crate.ok());
+    CHECK(crate.value().textures.at(engine::runtime::kSlotBaseColor) == record(scan, "textures/checker.png").guid);
+    CHECK(crate.value().params.base_color == glm::vec4(1.0f, 0.95f, 0.9f, 1.0f));
+    CHECK(crate.value().params.roughness == 0.65f);
+}
+
+TEST_CASE("A material instance is checked: unknown keys, missing graphs, and undeclared textures are errors", "[integration][showcase]") {
+    const auto scan = scan_showcase();
+    const engine::gameplay::AssetReader reader = [&scan](const Guid& guid) { return showcase_asset_bytes(scan, guid); };
+    const std::string graph = record(scan, "materials/surface.matgraph.json").guid.to_string();
+    const auto resolve = [&reader](const std::string& text) { return engine::runtime::resolve_material(text, reader); };
+    CHECK(resolve("{\"format\":\"engine.material\",\"version\":1,\"graph\":\"" + graph + "\"}").ok());
+    CHECK_FALSE(resolve("not json").ok());
+    CHECK_FALSE(resolve("{\"format\":\"engine.material\",\"version\":1}").ok());
+    CHECK_FALSE(resolve("{\"format\":\"engine.material\",\"version\":1,\"graph\":\"" + graph + "\",\"colour\":1}").ok());
+    CHECK_FALSE(resolve("{\"format\":\"engine.material\",\"version\":1,\"graph\":\"00000000-0000-4000-8000-000000000001\"}").ok());
+    CHECK_FALSE(resolve("{\"format\":\"engine.material\",\"version\":1,\"graph\":\"" + graph + "\",\"textures\":{\"nope\":\"" + graph + "\"}}").ok());
+    CHECK_FALSE(resolve("{\"format\":\"engine.material\",\"version\":1,\"graph\":\"" + graph + "\",\"blend\":\"glass\"}").ok());
+}
+
+TEST_CASE("Texture payloads decode to RGBA8: block-compressed color and normals match their sources", "[integration][showcase]") {
+    const auto scan = scan_showcase();
+    // The cooked texture is BC7 (color) or BC5 (normal), so this runs the decoders the game uses.
+    const auto checker = showcase_asset_bytes(scan, record(scan, "textures/checker.png").guid);
+    REQUIRE(checker.has_value());
+    auto color = engine::runtime::decode_texture_payload(*checker);
+    REQUIRE(color.ok());
+    CHECK(color.value().width == 64);
+    CHECK(color.value().height == 64);
+    // The first 8 x 8 square is tan and the next one brown (see the generator); the decoded texels are close to them.
+    const auto* tan = color.value().texel(2, 2);
+    const auto* brown = color.value().texel(10, 2);
+    CHECK(std::abs(static_cast<int>(tan[0]) - 200) < 14);
+    CHECK(std::abs(static_cast<int>(brown[0]) - 120) < 14);
+
+    const auto normal_bytes = showcase_asset_bytes(scan, record(scan, "textures/bump_normal.png").guid);
+    REQUIRE(normal_bytes.has_value());
+    auto normal = engine::runtime::decode_texture_payload(*normal_bytes);
+    REQUIRE(normal.ok());
+    // Every normal points out of the surface: Z, rebuilt from the BC5 X and Y, is above the middle.
+    std::size_t outward = 0;
+    for (std::uint32_t y = 0; y < normal.value().height; ++y) {
+        for (std::uint32_t x = 0; x < normal.value().width; ++x) {
+            outward += normal.value().texel(x, y)[2] > 128 ? 1 : 0;
+        }
+    }
+    CHECK(outward == static_cast<std::size_t>(normal.value().width) * normal.value().height);
+
+    CHECK_FALSE(engine::runtime::decode_texture_payload("not a texture").ok());
 }
 
 TEST_CASE("The showcase terrain and audio load through the engine readers", "[integration][showcase]") {
@@ -432,7 +493,8 @@ TEST_CASE("Every feature area has a showcase asset", "[integration][showcase]") 
         {"model import (obj)", "models/marker.obj"},
         {"texture import (color)", "textures/checker.png"},
         {"texture import (normal)", "textures/bump_normal.png"},
-        {"material graph", "materials/crate.material.json"},
+        {"material graph", "materials/surface.matgraph.json"},
+        {"material instance", "materials/crate.material.json"},
         {"animation state graph", "animation/hero.animgraph.json"},
         {"lua scripting", "scripts/player.lua"},
         {"game ui scripting", "scripts/hud.lua"},
@@ -488,6 +550,8 @@ void render_showcase_on(engine::rhi::Backend backend) {
     CHECK(drawn.value().skinned >= 1);         // the arm is skinned
     CHECK(drawn.value().terrain_tiles == 4);   // the 2 x 2 tile island
     CHECK(drawn.value().particles > 0);        // the campfire
+    CHECK(drawn.value().materials >= 2);       // the crate and the ground material instances
+    CHECK(drawn.value().textures >= 3);        // the checker, the grass, and the shared normal map
     CHECK(drawn.value().camera);
     CHECK(drawn.value().lights >= 4);
     CHECK(drawn.value().items >= 12);
