@@ -40,6 +40,8 @@ choice is open; see `docs/benchmarks.md`.
 | `models/fbx_cm_yup.fbx` | b08ffd765b8e165e39f16b77a2f59108115a6a4a66266b5b2796d946e088efb8 | `models/generate_fixtures.py` (run with `python3 -I`); reproduces byte for byte | project-authored |
 | `models/fbx_m_zup.fbx` | 8840dc39984d5074eeee69bbd8bbff0928d010ed6fbe3616b357e93d830279cd | `models/generate_fixtures.py` (run with `python3 -I`); reproduces byte for byte | project-authored |
 | `models/generate_fixtures.py` | 7af6538b8b06784015a0f6ebc0a3b65e095b666c9e43ebe50330e6e995d4714a | Hand-written generator script in this directory | project-authored |
+| `models/generate_skinned.py` | ca6958d3adddad3c723ad64bbfc39d0a7d184ce9229e869d2e2359a7e682d4c5 | Hand-written generator script in this directory | project-authored |
+| `models/skinned_arm.gltf` | 951183103777d829622032fad2950ca97917a81251217ddad40c99a27534d8b4 | `models/generate_skinned.py` (run with `python3 -I`); reproduces byte for byte | project-authored |
 | `models/triangle.obj` | 2fccdbc0cb978264ab5f97fc8efaade17a05cdb8c771408bc7b6c40a7df8e26b | `models/generate_fixtures.py` (run with `python3 -I`); reproduces byte for byte | project-authored |
 | `models/triangle_tree.glb` | f2060cb38431613c58cd8120916ee3deee79e11d9f3d8065b94638cb525d58d3 | `models/generate_fixtures.py` (run with `python3 -I`); reproduces byte for byte | project-authored |
 | `models/triangle_tree.gltf` | cdf0b26599077a244323d483558d47f08ca7d09cc762a88fb35d3f7ecd9aea78 | `models/generate_fixtures.py` (run with `python3 -I`); reproduces byte for byte | project-authored |

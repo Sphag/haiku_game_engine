@@ -447,3 +447,106 @@ TEST_CASE("Model import: a source that is not a model fails with a message", "[i
     const auto truncated = importer->import(read_bytes(model_fixture("triangle_tree.glb")).substr(0, 40), settings);
     CHECK(!truncated.ok());
 }
+
+TEST_CASE("Model import: a skinned glTF keeps its joints, skin weights, and clips", "[integration]") {
+    const auto output = import_model(read_bytes(model_fixture("skinned_arm.gltf")));
+    const ModelPayload model = read_payload(output.payload);
+
+    REQUIRE(model.joints.size() == 2);
+    CHECK(model.joints[0].name == "arm_root");
+    CHECK(model.joints[0].parent == -1);
+    CHECK(model.joints[1].name == "arm_tip");
+    CHECK(model.joints[1].parent == 0);
+    CHECK(model.nodes[static_cast<std::size_t>(model.joints[1].node)].name == "arm_tip");
+    // arm_tip sits one meter up, so its inverse bind moves the model down by one.
+    CHECK(near(glm::vec3(model.joints[1].inverse_bind[3]), glm::vec3(0.0f, -1.0f, 0.0f)));
+
+    REQUIRE(model.meshes.size() == 1);
+    const ModelMesh& mesh = model.meshes[0];
+    REQUIRE(mesh.joints.size() == mesh.positions.size());
+    REQUIRE(mesh.weights.size() == mesh.positions.size());
+    bool saw_blend = false;
+    for (std::size_t v = 0; v < mesh.positions.size(); ++v) {
+        const glm::vec4& w = mesh.weights[v];
+        CHECK(std::fabs(w.x + w.y + w.z + w.w - 1.0f) < 1e-4f);
+        // The skin follows the vertex through the cook's reordering: the bottom row is arm_root, the top row is arm_tip.
+        if (near(mesh.positions[v].y, 0.0f)) {
+            CHECK(mesh.joints[v].x == 0);
+            CHECK(near(w.x, 1.0f));
+        } else if (near(mesh.positions[v].y, 2.0f)) {
+            CHECK(mesh.joints[v].x == 1);
+            CHECK(near(w.x, 1.0f));
+        } else {
+            saw_blend = true;
+            CHECK(near(w.x, 0.5f));
+            CHECK(near(w.y, 0.5f));
+        }
+    }
+    CHECK(saw_blend);
+
+    REQUIRE(model.clips.size() == 2);
+    const auto find_clip = [&model](const char* name) -> const engine::converter::ModelClip* {
+        for (const auto& clip : model.clips) {
+            if (clip.name == name) {
+                return &clip;
+            }
+        }
+        return nullptr;
+    };
+    const auto* wave = find_clip("wave");
+    const auto* slide = find_clip("slide");
+    REQUIRE(wave != nullptr);
+    REQUIRE(slide != nullptr);
+    CHECK(near(wave->duration, 1.0f));
+    REQUIRE(wave->channels.size() == 1);
+    CHECK(wave->channels[0].joint == 1);
+    REQUIRE(wave->channels[0].rotation.size() == 4);
+    CHECK(near(wave->channels[0].rotation[1].time, 0.25f));
+    CHECK(wave->channels[0].rotation[1].value.z > 0.2f);  // turned one way a quarter of the way in
+    CHECK(wave->channels[0].rotation[2].value.z < -0.2f);
+    CHECK(near(slide->duration, 2.0f));
+    REQUIRE(slide->channels.size() == 1);
+    CHECK(slide->channels[0].joint == 0);
+    REQUIRE(slide->channels[0].translation.size() == 2);
+    CHECK(near(slide->channels[0].translation[1].value, glm::vec3(1.0f, 0.0f, 0.0f)));
+
+    // The same import is byte for byte the same, so a cache keyed on the source stays valid.
+    CHECK(import_model(read_bytes(model_fixture("skinned_arm.gltf"))).payload == output.payload);
+}
+
+TEST_CASE("Model payload: a skinned model round trips, a static one stays version 2, and broken skin data is rejected", "[unit]") {
+    ModelPayload model = read_payload(import_model(read_bytes(model_fixture("skinned_arm.gltf"))).payload);
+    const std::string bytes = write_model_payload(model);
+    const ModelPayload again = read_payload(bytes);
+    CHECK(write_model_payload(again) == bytes);
+    CHECK(again.joints.size() == model.joints.size());
+    CHECK(again.clips.size() == model.clips.size());
+
+    const ModelPayload static_model = read_payload(import_model(read_bytes(model_fixture("triangle.obj"))).payload);
+    CHECK(static_model.joints.empty());
+    CHECK(static_model.clips.empty());
+    CHECK(write_model_payload(static_model).compare(4, 4, std::string("\x02\0\0\0", 4)) == 0);  // the version after the magic
+
+    ModelPayload bad_joint = model;
+    bad_joint.meshes[0].joints[0].x = 99;
+    CHECK_FALSE(validate_model(bad_joint).ok());
+
+    ModelPayload bad_weights = model;
+    bad_weights.meshes[0].weights[0] = glm::vec4(0.9f, 0.9f, 0.0f, 0.0f);
+    CHECK_FALSE(validate_model(bad_weights).ok());
+
+    ModelPayload bad_parent = model;
+    bad_parent.joints[0].parent = 1;  // a parent that comes later
+    CHECK_FALSE(validate_model(bad_parent).ok());
+
+    ModelPayload bad_times = model;
+    bad_times.clips[0].channels[0].rotation.back().time = bad_times.clips[0].duration + 5.0f;
+    CHECK_FALSE(validate_model(bad_times).ok());
+
+    ModelPayload bad_channel = model;
+    bad_channel.clips[0].channels[0].joint = 7;
+    CHECK_FALSE(validate_model(bad_channel).ok());
+
+    // A truncated version 3 payload is refused without reading past its end.
+    CHECK_FALSE(read_model_payload(std::string_view(bytes).substr(0, bytes.size() - 10)).ok());
+}

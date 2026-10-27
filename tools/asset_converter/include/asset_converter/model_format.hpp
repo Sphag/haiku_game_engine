@@ -22,6 +22,13 @@
 //   u32 node count, then per node: string name, i32 parent (-1 for a root), f32 local[16] (column-major, so
 //     world = parent_world * local), u32 mesh count, u32 mesh indices
 //
+// Version 3 (written only when the model has joints or clips; a static model is still version 2 and reads the same):
+//   per mesh, flags bit 3 (skin): after the uv0 block, u32 joints[4] then f32 weights[4] per vertex
+//   after the nodes: u32 joint count, per joint: string name, i32 parent joint, i32 node, f32 inverse_bind[16];
+//   u32 clip count, per clip: string name, f32 duration, u32 channel count, per channel: u32 joint,
+//     u32 translation key count, then (f32 time, f32 value[3]) each; u32 rotation key count, then (f32 time, f32 value[4]) each;
+//     u32 scale key count, then (f32 time, f32 value[3]) each
+//
 // A string is a u32 byte count followed by UTF-8 bytes. A texture string is a source-relative path, or empty when the
 // material has no such texture. Nodes are ordered parents first. Reading checks every count against the remaining bytes,
 // so a corrupt file cannot make the reader allocate more than it contains.
@@ -39,7 +46,7 @@
 namespace engine::converter {
 
 inline constexpr std::string_view kModelPayloadMagic = "OWMD";
-inline constexpr std::uint32_t kModelPayloadVersion = 2;
+inline constexpr std::uint32_t kModelPayloadVersion = 3;  // the version of a model with joints or clips; a static model is still written as 2
 
 // Meshlet limits (US-023). A meshlet holds at most 64 vertices and 124 triangles, the limits the GPU mesh path uses.
 inline constexpr std::uint32_t kMeshletMaxVertices = 64;
@@ -84,6 +91,10 @@ struct ModelMesh {
     std::vector<glm::vec3> normals;
     std::vector<glm::vec4> tangents;  // xyz tangent, w handedness: bitangent = w * cross(normal, tangent)
     std::vector<glm::vec2> uvs;       // set 0; v = 0 is the top row of the texture image
+    // Skinned meshes (version 3): four influences per vertex. joints index ModelPayload::joints; weights are non-negative and sum to one.
+    // Both are empty for a static mesh, and both have one entry per vertex otherwise.
+    std::vector<glm::uvec4> joints;
+    std::vector<glm::vec4> weights;
     MeshBounds bounds;
     std::vector<MeshLod> lods;  // 1 to kMaxLodCount entries; lods[0] uses every vertex
 };
@@ -112,10 +123,43 @@ struct ModelNode {
     std::vector<std::uint32_t> meshes;
 };
 
+// One bone of the skeleton (version 3). Joints are ordered parents first. `node` is the joint's node in ModelPayload::nodes, whose local
+// matrix is the joint's bind pose; inverse_bind takes a vertex from model space to the joint's space in the bind pose.
+struct ModelJoint {
+    std::string name;
+    std::int32_t parent = -1;  // joint index of the parent joint, or -1 for a root joint
+    std::int32_t node = -1;
+    glm::mat4 inverse_bind{1.0f};
+};
+
+// Keys of one channel. Times are seconds from the start of the clip and do not decrease. A rotation key is a unit quaternion stored as
+// (x, y, z, w).
+struct ModelKey3 {
+    float time = 0.0f;
+    glm::vec3 value{0.0f};
+};
+struct ModelKeyRotation {
+    float time = 0.0f;
+    glm::vec4 value{0.0f, 0.0f, 0.0f, 1.0f};
+};
+struct ModelChannel {
+    std::uint32_t joint = 0;  // index into ModelPayload::joints
+    std::vector<ModelKey3> translation;
+    std::vector<ModelKeyRotation> rotation;
+    std::vector<ModelKey3> scale;
+};
+struct ModelClip {
+    std::string name;
+    float duration = 0.0f;  // seconds, positive
+    std::vector<ModelChannel> channels;
+};
+
 struct ModelPayload {
     std::vector<ModelMesh> meshes;
     std::vector<ModelNode> nodes;
     std::vector<ModelMaterial> materials;
+    std::vector<ModelJoint> joints;  // empty unless a mesh is skinned or a clip animates the model
+    std::vector<ModelClip> clips;
 };
 
 // Writes the payload. The model must already be valid (see read_model_payload for the rules); the writer does not repeat

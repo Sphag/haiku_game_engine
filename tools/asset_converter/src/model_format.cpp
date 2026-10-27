@@ -20,7 +20,9 @@ using core::success;
 constexpr std::uint32_t kFlagNormals = 1u << 0;
 constexpr std::uint32_t kFlagTangents = 1u << 1;
 constexpr std::uint32_t kFlagUvs = 1u << 2;
-constexpr std::uint32_t kKnownFlags = kFlagNormals | kFlagTangents | kFlagUvs;
+constexpr std::uint32_t kFlagSkin = 1u << 3;
+constexpr std::uint32_t kKnownFlags = kFlagNormals | kFlagTangents | kFlagUvs | kFlagSkin;
+constexpr std::uint32_t kStaticVersion = 2;  // a model with no joints or clips is written in the version that predates them
 constexpr std::uint32_t kLastAlphaMode = static_cast<std::uint32_t>(AlphaMode::Blend);
 // Relative slack for bounds checks. The bounds come from float arithmetic, so an exact sphere test would reject
 // correct output.
@@ -442,13 +444,13 @@ Result<Unit, std::string> validate_node(const ModelPayload& model, std::size_t i
 
 void read_lod(Reader& in, MeshLod& lod);
 
-ModelMesh read_mesh(Reader& in) {
+ModelMesh read_mesh(Reader& in, std::uint32_t version) {
     ModelMesh mesh;
     mesh.name = in.text();
     mesh.material = in.i32();
     const std::uint32_t vertex_count = in.u32();
     const std::uint32_t flags = in.u32();
-    if ((flags & ~kKnownFlags) != 0) {
+    if ((flags & ~kKnownFlags) != 0 || ((flags & kFlagSkin) != 0 && version < 3)) {
         throw ReadError{"a mesh has unknown attribute flags"};
     }
     in.need_elements(vertex_count, 3 * sizeof(float));
@@ -475,6 +477,17 @@ ModelMesh read_mesh(Reader& in) {
         mesh.uvs.resize(vertex_count);
         for (glm::vec2& uv : mesh.uvs) {
             in.floats(&uv.x, 2);
+        }
+    }
+    if ((flags & kFlagSkin) != 0) {
+        in.need_elements(vertex_count, 8 * sizeof(float));
+        mesh.joints.resize(vertex_count);
+        mesh.weights.resize(vertex_count);
+        for (std::uint32_t v = 0; v < vertex_count; ++v) {
+            for (int k = 0; k < 4; ++k) {
+                mesh.joints[v][k] = in.u32();
+            }
+            in.floats(&mesh.weights[v].x, 4);
         }
     }
     in.floats(&mesh.bounds.min.x, 3);
@@ -567,6 +580,50 @@ ModelNode read_node(Reader& in) {
     return node;
 }
 
+void read_keys3(Reader& in, std::vector<ModelKey3>& keys) {
+    const std::uint32_t count = in.u32();
+    in.need_elements(count, 4 * sizeof(float));
+    keys.resize(count);
+    for (ModelKey3& key : keys) {
+        key.time = in.f32();
+        in.floats(&key.value.x, 3);
+    }
+}
+
+void read_animation(Reader& in, ModelPayload& model) {
+    const std::uint32_t joint_count = in.u32();
+    in.need_elements(joint_count, 4 + 4 + 4 + 16 * sizeof(float));
+    model.joints.resize(joint_count);
+    for (ModelJoint& joint : model.joints) {
+        joint.name = in.text();
+        joint.parent = in.i32();
+        joint.node = in.i32();
+        in.floats(&joint.inverse_bind[0].x, 16);
+    }
+    const std::uint32_t clip_count = in.u32();
+    in.need_elements(clip_count, 4 + 4 + 4);
+    model.clips.resize(clip_count);
+    for (ModelClip& clip : model.clips) {
+        clip.name = in.text();
+        clip.duration = in.f32();
+        const std::uint32_t channel_count = in.u32();
+        in.need_elements(channel_count, 4 + 3 * 4);
+        clip.channels.resize(channel_count);
+        for (ModelChannel& channel : clip.channels) {
+            channel.joint = in.u32();
+            read_keys3(in, channel.translation);
+            const std::uint32_t rotation_count = in.u32();
+            in.need_elements(rotation_count, 5 * sizeof(float));
+            channel.rotation.resize(rotation_count);
+            for (ModelKeyRotation& key : channel.rotation) {
+                key.time = in.f32();
+                in.floats(&key.value.x, 4);
+            }
+            read_keys3(in, channel.scale);
+        }
+    }
+}
+
 ModelPayload parse_payload(std::string_view bytes) {
     Reader in(bytes);
     if (bytes.substr(0, kModelPayloadMagic.size()) != kModelPayloadMagic) {
@@ -575,7 +632,8 @@ ModelPayload parse_payload(std::string_view bytes) {
     for (std::size_t i = 0; i < kModelPayloadMagic.size(); ++i) {
         in.u8();
     }
-    if (in.u32() != kModelPayloadVersion) {
+    const std::uint32_t version = in.u32();
+    if (version != kStaticVersion && version != kModelPayloadVersion) {
         throw ReadError{"unsupported model payload version"};
     }
 
@@ -584,7 +642,7 @@ ModelPayload parse_payload(std::string_view bytes) {
     in.need_elements(mesh_count, kMeshMinBytes);
     model.meshes.reserve(mesh_count);
     for (std::uint32_t i = 0; i < mesh_count; ++i) {
-        model.meshes.push_back(read_mesh(in));
+        model.meshes.push_back(read_mesh(in, version));
     }
 
     const std::uint32_t material_count = in.u32();
@@ -601,8 +659,11 @@ ModelPayload parse_payload(std::string_view bytes) {
         model.nodes.push_back(read_node(in));
     }
 
+    if (version >= 3) {
+        read_animation(in, model);
+    }
     if (!in.at_end()) {
-        throw ReadError{"the payload has bytes after its last node"};
+        throw ReadError{"the payload has bytes after its last section"};
     }
     return model;
 }
@@ -614,7 +675,8 @@ std::string write_model_payload(const ModelPayload& model) {
     for (char letter : kModelPayloadMagic) {
         out.u8(static_cast<std::uint8_t>(letter));
     }
-    out.u32(kModelPayloadVersion);
+    const bool animated = !model.joints.empty() || !model.clips.empty();
+    out.u32(animated ? kModelPayloadVersion : kStaticVersion);
 
     out.u32(static_cast<std::uint32_t>(model.meshes.size()));
     for (const ModelMesh& mesh : model.meshes) {
@@ -625,6 +687,7 @@ std::string write_model_payload(const ModelPayload& model) {
         flags |= mesh.normals.empty() ? 0 : kFlagNormals;
         flags |= mesh.tangents.empty() ? 0 : kFlagTangents;
         flags |= mesh.uvs.empty() ? 0 : kFlagUvs;
+        flags |= mesh.joints.empty() ? 0 : kFlagSkin;
         out.u32(flags);
         for (const glm::vec3& position : mesh.positions) {
             out.floats(&position.x, 3);
@@ -637,6 +700,12 @@ std::string write_model_payload(const ModelPayload& model) {
         }
         for (const glm::vec2& uv : mesh.uvs) {
             out.floats(&uv.x, 2);
+        }
+        for (std::size_t v = 0; v < mesh.joints.size(); ++v) {
+            for (int k = 0; k < 4; ++k) {
+                out.u32(mesh.joints[v][k]);
+            }
+            out.floats(&mesh.weights[v].x, 4);
         }
         out.floats(&mesh.bounds.min.x, 3);
         out.floats(&mesh.bounds.max.x, 3);
@@ -699,7 +768,119 @@ std::string write_model_payload(const ModelPayload& model) {
             out.u32(mesh);
         }
     }
+    if (animated) {
+        out.u32(static_cast<std::uint32_t>(model.joints.size()));
+        for (const ModelJoint& joint : model.joints) {
+            out.text(joint.name);
+            out.i32(joint.parent);
+            out.i32(joint.node);
+            out.floats(&joint.inverse_bind[0].x, 16);
+        }
+        out.u32(static_cast<std::uint32_t>(model.clips.size()));
+        for (const ModelClip& clip : model.clips) {
+            out.text(clip.name);
+            out.f32(clip.duration);
+            out.u32(static_cast<std::uint32_t>(clip.channels.size()));
+            for (const ModelChannel& channel : clip.channels) {
+                out.u32(channel.joint);
+                out.u32(static_cast<std::uint32_t>(channel.translation.size()));
+                for (const ModelKey3& key : channel.translation) {
+                    out.f32(key.time);
+                    out.floats(&key.value.x, 3);
+                }
+                out.u32(static_cast<std::uint32_t>(channel.rotation.size()));
+                for (const ModelKeyRotation& key : channel.rotation) {
+                    out.f32(key.time);
+                    out.floats(&key.value.x, 4);
+                }
+                out.u32(static_cast<std::uint32_t>(channel.scale.size()));
+                for (const ModelKey3& key : channel.scale) {
+                    out.f32(key.time);
+                    out.floats(&key.value.x, 3);
+                }
+            }
+        }
+    }
     return out.take();
+}
+
+Result<Unit, std::string> validate_animation(const ModelPayload& model) {
+    for (std::size_t i = 0; i < model.joints.size(); ++i) {
+        const ModelJoint& joint = model.joints[i];
+        const std::string label = "joint " + std::to_string(i);
+        if (joint.parent < -1 || joint.parent >= static_cast<std::int32_t>(i)) {
+            return failure(label + " has a parent that is not an earlier joint");
+        }
+        if (joint.node < -1 || joint.node >= static_cast<std::int32_t>(model.nodes.size())) {
+            return failure(label + " names a node that does not exist");
+        }
+        if (!finite(joint.inverse_bind)) {
+            return failure(label + " has a non-finite inverse bind matrix");
+        }
+    }
+    for (std::size_t m = 0; m < model.meshes.size(); ++m) {
+        const ModelMesh& mesh = model.meshes[m];
+        if (mesh.joints.size() != mesh.weights.size() || (!mesh.joints.empty() && mesh.joints.size() != mesh.positions.size())) {
+            return failure(mesh_label(m) + " has skin arrays that do not match its vertices");
+        }
+        for (std::size_t v = 0; v < mesh.joints.size(); ++v) {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k) {
+                if (mesh.joints[v][k] >= model.joints.size()) {
+                    return failure(mesh_label(m) + " has a vertex influenced by a joint that does not exist");
+                }
+                const float weight = mesh.weights[v][k];
+                if (!(weight >= 0.0f) || !std::isfinite(weight)) {
+                    return failure(mesh_label(m) + " has a negative or non-finite skin weight");
+                }
+                sum += weight;
+            }
+            if (std::abs(sum - 1.0f) > 1.0e-3f) {
+                return failure(mesh_label(m) + " has skin weights that do not sum to one");
+            }
+        }
+    }
+    for (std::size_t c = 0; c < model.clips.size(); ++c) {
+        const ModelClip& clip = model.clips[c];
+        const std::string label = "clip " + std::to_string(c);
+        if (!(clip.duration > 0.0f) || !std::isfinite(clip.duration)) {
+            return failure(label + " has a duration that is not positive");
+        }
+        const auto times_ok = [&clip](const auto& keys) {
+            float previous = 0.0f;
+            for (const auto& key : keys) {
+                if (!std::isfinite(key.time) || key.time < previous || key.time > clip.duration + 1.0e-3f) {
+                    return false;
+                }
+                previous = key.time;
+            }
+            return true;
+        };
+        for (const ModelChannel& channel : clip.channels) {
+            if (channel.joint >= model.joints.size()) {
+                return failure(label + " animates a joint that does not exist");
+            }
+            if (!times_ok(channel.translation) || !times_ok(channel.rotation) || !times_ok(channel.scale)) {
+                return failure(label + " has key times that are not in order inside the clip");
+            }
+            for (const ModelKeyRotation& key : channel.rotation) {
+                if (!finite(key.value)) {
+                    return failure(label + " has a non-finite rotation key");
+                }
+            }
+            for (const ModelKey3& key : channel.translation) {
+                if (!finite(key.value)) {
+                    return failure(label + " has a non-finite translation key");
+                }
+            }
+            for (const ModelKey3& key : channel.scale) {
+                if (!finite(key.value)) {
+                    return failure(label + " has a non-finite scale key");
+                }
+            }
+        }
+    }
+    return success();
 }
 
 Result<Unit, std::string> validate_model(const ModelPayload& model) {
@@ -718,7 +899,7 @@ Result<Unit, std::string> validate_model(const ModelPayload& model) {
             return checked;
         }
     }
-    return success();
+    return validate_animation(model);
 }
 
 Result<ModelPayload, std::string> read_model_payload(std::string_view bytes) {

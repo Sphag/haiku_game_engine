@@ -21,6 +21,7 @@
 #include "engine/core/utf8.hpp"
 
 #include <assimp/GltfMaterial.h>
+#include <assimp/anim.h>
 #include <assimp/Importer.hpp>
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
@@ -39,6 +40,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -271,11 +274,150 @@ std::vector<glm::vec4> generate_tangents(const ModelMesh& mesh, const std::vecto
     return tangents;
 }
 
+// The skeleton of the model: every node that a mesh names as a bone, in node order (parents first), so a joint index is the position of
+// the bone among them. A joint's parent is its nearest ancestor that is also a joint.
+struct SkeletonSource {
+    std::vector<ModelJoint> joints;
+    std::unordered_map<std::string, std::uint32_t> index_of;
+};
+
+void collect_joints(const aiNode& node, std::int32_t& node_index, std::int32_t parent_joint,
+                    const std::unordered_map<std::string, glm::mat4>& offsets, SkeletonSource& skeleton) {
+    const std::int32_t self_node = node_index++;
+    std::int32_t joint_for_children = parent_joint;
+    const std::string name = node.mName.C_Str();
+    const auto offset = offsets.find(name);
+    if (offset != offsets.end() && skeleton.index_of.count(name) == 0) {
+        ModelJoint joint;
+        joint.name = name;
+        joint.parent = parent_joint;
+        joint.node = self_node;
+        joint.inverse_bind = offset->second;
+        joint_for_children = static_cast<std::int32_t>(skeleton.joints.size());
+        skeleton.index_of.emplace(name, static_cast<std::uint32_t>(skeleton.joints.size()));
+        skeleton.joints.push_back(std::move(joint));
+    }
+    for (unsigned int c = 0; c < node.mNumChildren; ++c) {
+        collect_joints(*node.mChildren[c], node_index, joint_for_children, offsets, skeleton);
+    }
+}
+
+SkeletonSource build_skeleton(const aiScene& scene) {
+    std::unordered_map<std::string, glm::mat4> offsets;
+    for (unsigned int m = 0; m < scene.mNumMeshes; ++m) {
+        const aiMesh& mesh = *scene.mMeshes[m];
+        for (unsigned int b = 0; b < mesh.mNumBones; ++b) {
+            offsets.emplace(mesh.mBones[b]->mName.C_Str(), to_glm(mesh.mBones[b]->mOffsetMatrix));
+        }
+    }
+    SkeletonSource skeleton;
+    if (!offsets.empty()) {
+        std::int32_t node_index = 0;
+        collect_joints(*scene.mRootNode, node_index, -1, offsets, skeleton);
+    }
+    return skeleton;
+}
+
+// Keeps the four strongest influences of each vertex and scales them to sum to one. A vertex with no influence follows joint 0.
+void fill_skin(const aiMesh& mesh, const SkeletonSource& skeleton, ModelMesh& out) {
+    struct Influence {
+        std::uint32_t joint;
+        float weight;
+    };
+    std::vector<std::vector<Influence>> per_vertex(mesh.mNumVertices);
+    for (unsigned int b = 0; b < mesh.mNumBones; ++b) {
+        const aiBone& bone = *mesh.mBones[b];
+        const auto joint = skeleton.index_of.find(bone.mName.C_Str());
+        if (joint == skeleton.index_of.end()) {
+            continue;
+        }
+        for (unsigned int w = 0; w < bone.mNumWeights; ++w) {
+            const aiVertexWeight& weight = bone.mWeights[w];
+            if (weight.mVertexId < per_vertex.size() && weight.mWeight > 0.0f) {
+                per_vertex[weight.mVertexId].push_back({joint->second, weight.mWeight});
+            }
+        }
+    }
+    out.joints.assign(mesh.mNumVertices, glm::uvec4(0));
+    out.weights.assign(mesh.mNumVertices, glm::vec4(0.0f));
+    for (unsigned int v = 0; v < mesh.mNumVertices; ++v) {
+        auto& list = per_vertex[v];
+        std::sort(list.begin(), list.end(), [](const Influence& a, const Influence& b) { return a.weight > b.weight; });
+        float total = 0.0f;
+        for (std::size_t k = 0; k < list.size() && k < 4; ++k) {
+            total += list[k].weight;
+        }
+        if (total <= 0.0f) {
+            out.weights[v] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+            continue;
+        }
+        for (std::size_t k = 0; k < list.size() && k < 4; ++k) {
+            out.joints[v][static_cast<int>(k)] = list[k].joint;
+            out.weights[v][static_cast<int>(k)] = list[k].weight / total;
+        }
+    }
+}
+
+// Converts every animation whose channels name a joint. Times become seconds. Channels for nodes that are not joints are reported.
+void convert_clips(const aiScene& scene, const SkeletonSource& skeleton, ModelPayload& model, std::vector<std::string>& notes) {
+    for (unsigned int a = 0; a < scene.mNumAnimations; ++a) {
+        const aiAnimation& animation = *scene.mAnimations[a];
+        const double ticks_per_second = animation.mTicksPerSecond > 0.0 ? animation.mTicksPerSecond : 25.0;
+        ModelClip clip;
+        clip.name = animation.mName.length > 0 ? std::string(animation.mName.C_Str()) : "clip" + std::to_string(a);
+        float last_time = 0.0f;
+        std::size_t skipped = 0;
+        for (unsigned int c = 0; c < animation.mNumChannels; ++c) {
+            const aiNodeAnim& source = *animation.mChannels[c];
+            const auto joint = skeleton.index_of.find(source.mNodeName.C_Str());
+            if (joint == skeleton.index_of.end()) {
+                ++skipped;
+                continue;
+            }
+            ModelChannel channel;
+            channel.joint = joint->second;
+            const auto seconds = [ticks_per_second](double ticks) { return static_cast<float>(ticks / ticks_per_second); };
+            for (unsigned int k = 0; k < source.mNumPositionKeys; ++k) {
+                const aiVectorKey& key = source.mPositionKeys[k];
+                channel.translation.push_back({seconds(key.mTime), glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z)});
+            }
+            for (unsigned int k = 0; k < source.mNumRotationKeys; ++k) {
+                const aiQuatKey& key = source.mRotationKeys[k];
+                channel.rotation.push_back({seconds(key.mTime), glm::vec4(key.mValue.x, key.mValue.y, key.mValue.z, key.mValue.w)});
+            }
+            for (unsigned int k = 0; k < source.mNumScalingKeys; ++k) {
+                const aiVectorKey& key = source.mScalingKeys[k];
+                channel.scale.push_back({seconds(key.mTime), glm::vec3(key.mValue.x, key.mValue.y, key.mValue.z)});
+            }
+            for (const auto& key : channel.translation) {
+                last_time = std::max(last_time, key.time);
+            }
+            for (const auto& key : channel.rotation) {
+                last_time = std::max(last_time, key.time);
+            }
+            for (const auto& key : channel.scale) {
+                last_time = std::max(last_time, key.time);
+            }
+            clip.channels.push_back(std::move(channel));
+        }
+        clip.duration = std::max(static_cast<float>(animation.mDuration / ticks_per_second), last_time);
+        if (!(clip.duration > 0.0f)) {
+            notes.push_back("animation '" + clip.name + "' has no duration and is skipped");
+            continue;
+        }
+        if (skipped > 0) {
+            notes.push_back("animation '" + clip.name + "' has " + std::to_string(skipped) +
+                            " channel(s) for nodes that are not skinned joints; they are skipped");
+        }
+        model.clips.push_back(std::move(clip));
+    }
+}
+
 // Converts one Assimp mesh. Its skinning, extra UV sets, colors, morph targets, and non-triangle faces are reported and
 // left out. A mesh with no triangles, or none left after cooking, is dropped, and the function returns nothing for it.
 // Cooking (US-023) runs last, so the tangents above are computed from the source triangles.
 Result<std::optional<ModelMesh>, std::string> convert_mesh(const aiMesh& mesh, unsigned int index, Format format,
-                                                           std::vector<std::string>& notes) {
+                                                           const SkeletonSource& skeleton, std::vector<std::string>& notes) {
     const std::string label = label_for(mesh, index);
     if (mesh.mVertices == nullptr || mesh.mNumVertices == 0) {
         notes.push_back(label + " has no vertices and is skipped");
@@ -351,9 +493,8 @@ Result<std::optional<ModelMesh>, std::string> convert_mesh(const aiMesh& mesh, u
     if (mesh.GetNumColorChannels() > 0) {
         notes.push_back(label + " has vertex colors; they are not imported yet");
     }
-    if (mesh.HasBones()) {
-        notes.push_back(label + " has skinning data for " + std::to_string(mesh.mNumBones) +
-                        " bone(s); skinning is not imported (US-022)");
+    if (mesh.HasBones() && !skeleton.joints.empty()) {
+        fill_skin(mesh, skeleton, out);
     }
     if (mesh.mNumAnimMeshes > 0) {
         notes.push_back(label + " has " + std::to_string(mesh.mNumAnimMeshes) + " morph target(s); they are not imported");
@@ -411,9 +552,10 @@ Result<ImportOutput, std::string> import_model(std::string_view source, double s
         model.materials.push_back(convert_material(*scene->mMaterials[i], format, output.unsupported));
     }
 
+    const SkeletonSource skeleton = build_skeleton(*scene);
     std::vector<std::int32_t> mesh_map(scene->mNumMeshes, -1);
     for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
-        auto converted = convert_mesh(*scene->mMeshes[i], i, format, output.unsupported);
+        auto converted = convert_mesh(*scene->mMeshes[i], i, format, skeleton, output.unsupported);
         if (!converted.ok()) {
             return failure(converted.error());
         }
@@ -423,9 +565,6 @@ Result<ImportOutput, std::string> import_model(std::string_view source, double s
         }
     }
 
-    if (scene->mNumAnimations > 0) {
-        output.unsupported.push_back(std::to_string(scene->mNumAnimations) + " animation(s) are not imported (US-022)");
-    }
     if (scene->mNumCameras > 0) {
         output.unsupported.push_back(std::to_string(scene->mNumCameras) + " camera(s) are not imported");
     }
@@ -445,6 +584,13 @@ Result<ImportOutput, std::string> import_model(std::string_view source, double s
     }
     const auto factor = static_cast<float>(unit_factor * scale);
     add_node(*scene->mRootNode, -1, glm::scale(glm::mat4(1.0f), glm::vec3(factor)), mesh_map, model, true);
+    // The skeleton and the clips (US-022). Joint nodes were numbered in the same pre-order that add_node used.
+    model.joints = skeleton.joints;
+    if (!skeleton.joints.empty()) {
+        convert_clips(*scene, skeleton, model, output.unsupported);
+    } else if (scene->mNumAnimations > 0) {
+        output.unsupported.push_back(std::to_string(scene->mNumAnimations) + " animation(s) animate no skinned joint and are not imported");
+    }
 
     // A source Assimp accepts but that has no geometry (plain text, for example) is not a model.
     if (model.meshes.empty()) {
@@ -464,7 +610,7 @@ public:
         return "model";
     }
     [[nodiscard]] int version() const noexcept override {
-        return 2;  // US-023: LOD chains, bounds, and meshlets
+        return 3;  // US-022: skeleton, skin weights, and clips
     }
 
     [[nodiscard]] Result<std::string, std::string> canonical_settings(std::string_view settings_json) const override {

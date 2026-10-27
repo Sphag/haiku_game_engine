@@ -43,6 +43,8 @@ void remap_all(ModelMesh& mesh, const std::vector<std::uint32_t>& remap, std::si
     remap_vertices(mesh.normals, remap, new_count);
     remap_vertices(mesh.tangents, remap, new_count);
     remap_vertices(mesh.uvs, remap, new_count);
+    remap_vertices(mesh.joints, remap, new_count);
+    remap_vertices(mesh.weights, remap, new_count);
 }
 
 template <typename Vector>
@@ -133,7 +135,9 @@ Result<MeshCookReport, std::string> cook_mesh(ModelMesh& mesh, std::vector<std::
     }
     if ((!mesh.normals.empty() && mesh.normals.size() != source_vertices) ||
         (!mesh.tangents.empty() && mesh.tangents.size() != source_vertices) ||
-        (!mesh.uvs.empty() && mesh.uvs.size() != source_vertices)) {
+        (!mesh.uvs.empty() && mesh.uvs.size() != source_vertices) ||
+        (!mesh.joints.empty() && mesh.joints.size() != source_vertices) ||
+        (!mesh.weights.empty() && mesh.weights.size() != source_vertices)) {
         return failure(std::string("an attribute array does not have one entry per vertex"));
     }
     for (std::uint32_t index : triangles) {
@@ -166,6 +170,8 @@ Result<MeshCookReport, std::string> cook_mesh(ModelMesh& mesh, std::vector<std::
         mesh.normals.clear();
         mesh.tangents.clear();
         mesh.uvs.clear();
+        mesh.joints.clear();
+        mesh.weights.clear();
         mesh.bounds = MeshBounds{};
         return success(report);
     }
@@ -177,6 +183,8 @@ Result<MeshCookReport, std::string> cook_mesh(ModelMesh& mesh, std::vector<std::
     add_stream(streams, mesh.normals);
     add_stream(streams, mesh.tangents);
     add_stream(streams, mesh.uvs);
+    add_stream(streams, mesh.joints);
+    add_stream(streams, mesh.weights);
     std::vector<std::uint32_t> remap(source_vertices);
     const std::size_t unique = meshopt_generateVertexRemapMulti(remap.data(), kept.data(), kept.size(), source_vertices,
                                                                 streams.data(), streams.size());
