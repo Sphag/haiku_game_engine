@@ -218,3 +218,58 @@ says so. State: `sonnet` branch, all Windows suites green on DX12 and Vulkan.
 6. **Editor:** no OS cursor shapes, no redraw during a window resize drag, no gizmo drag test in the UI script. The X11 path was not
    re-reviewed for the mouse-message issues fixed on Win32.
 7. **Not run:** the full acceptance benchmark, native Linux Vulkan GPU, FSR 2, Linux GCC 11, ASan/UBSan on the new code.
+
+---
+
+# Third pass: feature completeness, the editor review, and the inspector
+
+You asked for the unfinished items to be built, an editor usability review, and a redesigned inspector, with feature completeness first.
+State: `sonnet` branch, all suites green. The usability review is its own document: [docs/editor-usability-review.md](docs/editor-usability-review.md).
+
+## Results
+
+| Check | Result |
+|---|---|
+| `engine_tests --suite unit` / `integration` / `editor` (Release) | 1038 / 149 / 110 cases pass |
+| `ctest --preset win-release-unit` | 29 of 29 |
+| GPU, DX12 / Vulkan (SDK 1.4.363 layer) | 73 of 73 / 74 of 74, validation on |
+| Editor suite on a real device, DX12 / Vulkan | 111 of 111 each |
+| Linux (WSL, clang 10, Debug, `-Werror`) | 30 of 30 (the build caught three unused leftovers from my inspector rewrite, now removed) |
+| `tools/ui_tests/editor_ui_test.ps1` (real mouse and keyboard) | 0 failed checks: native folder chooser, open a scene, rename an entity in the inspector, save and read the file back, duplicate, undo, redo, delete, Play, stop |
+| The packaged showcase in a window, DX12 and Vulkan | Draws terrain, cooked models, a skinned animated arm, particles, shadows, a HUD with a button and a slider |
+
+## Feature completeness: what was missing and is now done
+
+Every built-in component now has a system behind it (table in [docs/components.md](docs/components.md)).
+
+| Item | What I did |
+|---|---|
+| Runtime meshes were primitives | The model payload reader moved to `engine/model` (the converter and the runtime both link it). The runtime draws cooked models with their materials and node transforms. The sample has real `cube.obj`, `sphere.obj`, and a tree |
+| Skinned playback | `bind_animators` builds a state machine over a model's skeleton and clips, named for scripts; the renderer skins the mesh with the pose. The sample's arm waves and slides under a graph and a Lua script. Play in the editor and the game share this code |
+| Terrain | The cooked `.terrain` is uploaded tile by tile and drawn with its splat weights |
+| Particles | A CPU-simulated pool per emitter, drawn as small boxes |
+| Game UI | A new `engine.ui_layout` format (`ui_layout.hpp`, strict parser, unit tests); the runtime builds the UI from it with the shipped font, runs the layout's Lua callbacks on click and slider change, and blends the result over the picture. Build Game ships `fonts/ui.ttf` |
+| Character controller | Driven by `GameWorld`: the first character is the player (WASD or arrows, Space), gravity and ground collision for all. Tested: it falls to the ground, walks three meters in a second, jumps and lands |
+| Kinematic bodies, audio emitters | Earlier in this session |
+| Entity names | A new `String` field kind in reflection (UTF-8, length and control-character checks), a `name` on `engine.name_tag` and on the animator |
+| Skeleton and clip import | Earlier in this session |
+
+## The editor, from the review
+
+Details and the remaining list are in the review. Highlights:
+
+- **A blocker found only with a real keyboard:** no text could be typed anywhere (the message pump never translated key presses). Fixed.
+- **No more pasted paths:** native folder and file choosers (Windows `IFileOpenDialog`; zenity or kdialog on Linux), Open project / New project buttons, a recent-projects list, File > Open scene and Open scene from file, a scene picker and Browse button in Build Game, `--scene` on the command line.
+- **Inspector redesign:** an editable name, a transform grid, component cards with remove buttons and plain-language titles, sliders for bounded values, color swatches, drop-down lists for choices, searchable asset pickers that show file names, a searchable Add Component. Components declare how a field should look through a `hint`, so game code gets the same widgets.
+- **Hierarchy** shows names (prefab instances show their prefab) and has its own dock.
+- **Play runs the game's systems:** bodies, scripts with entity access, animators, characters, audio.
+
+## What is still not done
+
+1. **The edit viewport does not show the scene.** It draws entity markers and a gizmo; the real picture appears only in a running game. The renderer exists, so the fix is to draw the viewport with `GameRenderer` into a texture. This is R1 in the review and the biggest remaining usability gap.
+2. **Textures and material graphs are not applied when drawing** (model material factors and the component tint are). Material graph compilation needs a cooked form that does not need the shader compiler at run time.
+3. **Particles are boxes, not sprites; the terrain has four fixed layer colors**, not material textures.
+4. **Windowed runtime:** no resize or fullscreen, no configurable input mapping (WASD and Space are fixed), no gamepad, no game menu beyond the HUD.
+5. **Editor polish** (the review's R3 to R12): context menus and inline rename in the hierarchy, a folder view in Assets, an unsaved marker in the title, cursor shapes, redraw during a resize drag, settings. The X11 path was not re-checked for the mouse and focus fixes made on Windows.
+6. **Not run:** the full acceptance benchmark, native Linux Vulkan GPU, FSR 2, Linux GCC 11, ASan and UBSan on the new code, and a Windows Debug rebuild after the last changes (the previous Debug run passed).
+7. One editor-suite case failed once during the inspector work and passed on every rerun; I could not reproduce it, so I am noting it as a possible flaky test.

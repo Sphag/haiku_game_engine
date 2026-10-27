@@ -100,7 +100,6 @@ constexpr const char* kAssetPayload = "ASSET_GUID";
 constexpr const char* kAssetsTitle = "Assets";
 constexpr float kHierarchyIndent = 14.0f;
 constexpr const char* kUnsavedTitle = "Unsaved changes";
-constexpr ImVec4 kOkColor(0.55f, 0.9f, 0.55f, 1.0f);
 
 void draw_entry(const ConsoleEntry& entry) {
     const std::string level(core::to_string(entry.level));

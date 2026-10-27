@@ -113,8 +113,6 @@ private:
     std::array<char, 256> name_text_{};      // the new project's name
     std::array<char, 1024> scene_text_{};    // the scene file to open or save
     std::array<char, 128> search_text_{};    // the hierarchy filter
-    std::array<char, 40> guid_text_{};       // the text of the Guid field being edited
-    std::string guid_key_;                   // which Guid field guid_text_ belongs to
     std::string scene_status_;               // the last scene command's error, or empty
     std::string dialog_status_;              // the last error in the unsaved-changes dialog
     std::array<char, 260> entity_name_text_{}; // the entity name being edited in the inspector
@@ -123,7 +121,6 @@ private:
     std::string picker_key_;                 // which picker is open
     bool new_project_open_ = false;          // the New project dialog was asked for
     std::string new_project_status_;         // why the last Create failed
-    int add_component_index_ = 0;            // the Add component combo's choice
     int level_filter_ = 0;                   // Console: 0 all, 1 info and up, 2 warnings and up, 3 errors only
     bool orbit_captured_ = false;            // a right-button press began over the viewport and is still held
     bool pan_captured_ = false;              // a middle-button press began over the viewport and is still held
