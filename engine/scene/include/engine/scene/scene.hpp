@@ -172,6 +172,13 @@ public:
     [[nodiscard]] const ecs::Registry& registry() const noexcept {
         return graph_->registry();
     }
+    // The same registry, writable, for systems that change components in place (scripts, physics). A transform changed this way must be
+    // re-applied with set_transform() so the scene graph marks it and its descendants dirty.
+    [[nodiscard]] ecs::Registry& mutable_registry() noexcept {
+        return graph_->registry();
+    }
+    // Every entity's GUID in GUID order, including the entities a prefab instance expanded into.
+    [[nodiscard]] std::vector<core::Guid> entity_guids() const;
     // The registry handle of a scene entity. Nullopt for an entity that is not in the scene.
     [[nodiscard]] std::optional<ecs::EntityHandle> handle(const core::Guid& entity) const;
 

@@ -85,6 +85,9 @@ public:
     [[nodiscard]] const ecs::Registry& registry() const noexcept {
         return registry_;
     }
+    [[nodiscard]] ecs::Registry& registry() noexcept {
+        return registry_;
+    }
 
 private:
     struct Hierarchy {

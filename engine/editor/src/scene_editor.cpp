@@ -1,5 +1,7 @@
 #include "engine/editor/scene_editor.hpp"
 
+#include "engine/gameplay/components.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -103,6 +105,12 @@ void append_tree(const Children& children, const std::map<core::Guid, const scen
 }  // namespace
 
 SceneEditor::SceneEditor(std::shared_ptr<Console> console) : console_(std::move(console)) {
+    // The built-in components make the Add Component list useful from the first launch, and a scene saved here loads in the runtime.
+    if (auto registered = gameplay::register_builtin_components(catalog_); !registered.ok() && console_ != nullptr) {
+        for (const auto& error : registered.error()) {
+            console_->add(core::LogLevel::Error, "scene", "built-in component: " + error.message);
+        }
+    }
     saved_text_ = scene::serialize_scene(scene::SceneDocument{});
 }
 

@@ -10,7 +10,7 @@ target_link_libraries(engine_runtime PUBLIC engine_core)
 engine_configure_first_party(engine_runtime)
 
 add_executable(game_runtime src/game_main.cpp)
-target_link_libraries(game_runtime PRIVATE engine_runtime engine_pack engine_assets engine_scene engine_core)
+target_link_libraries(game_runtime PRIVATE engine_runtime engine_pack engine_assets engine_scene engine_gameplay engine_core)
 engine_configure_first_party(game_runtime)
 
 # FR-03 check at configure time: walk the transitive link graph of the runtime and stop the configure step if it reaches the

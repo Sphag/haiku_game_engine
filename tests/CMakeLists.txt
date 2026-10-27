@@ -133,6 +133,7 @@ add_executable(engine_tests
   src/editor_asset_tests.cpp
   src/editor_imgui_tests.cpp
   src/editor_renderer_gpu_tests.cpp
+  src/showcase_tests.cpp
 )
 # The Vulkan mapping tests include the backend's private headers and the vendored Vulkan-Headers, which stay system includes.
 target_include_directories(engine_tests PRIVATE ../engine/rhi/src)
@@ -148,12 +149,12 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_include_directories(engine_tests PRIVATE ../engine/platform/src/x11)
   target_link_libraries(engine_tests PRIVATE ${CMAKE_DL_LIBS})
 endif()
-target_link_libraries(engine_tests PRIVATE engine_benchmark engine_material_graph engine_editor engine_runtime engine_platform engine_ecs engine_scene engine_assets engine_converter engine_shader engine_render engine_animation engine_gi engine_physics engine_script engine_audio engine_ui engine_world engine_save engine_pack engine_rhi engine_core Catch2::Catch2)
+target_link_libraries(engine_tests PRIVATE engine_benchmark engine_material_graph engine_gameplay engine_editor engine_runtime engine_platform engine_ecs engine_scene engine_assets engine_converter engine_shader engine_render engine_animation engine_gi engine_physics engine_script engine_audio engine_ui engine_world engine_save engine_pack engine_rhi engine_core Catch2::Catch2)
 engine_configure_first_party(engine_tests)
 # Checked-in fixtures (Cyrillic file names and contents) for the file IO tests and the converter project.
 # Build Game tests package the standalone runtime, so they need it built first.
 add_dependencies(engine_tests game_runtime)
-target_compile_definitions(engine_tests PRIVATE ENGINE_TEST_GAME_RUNTIME="$<TARGET_FILE:game_runtime>" ENGINE_TEST_PACK_PROJECT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/pack/project")
+target_compile_definitions(engine_tests PRIVATE ENGINE_TEST_GAME_RUNTIME="$<TARGET_FILE:game_runtime>" ENGINE_TEST_PACK_PROJECT="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/pack/project" ENGINE_SHOWCASE_DIR="${PROJECT_SOURCE_DIR}/samples/showcase")
 target_compile_definitions(engine_tests PRIVATE ENGINE_TEST_FONT_PATH="${PROJECT_SOURCE_DIR}/third_party/roboto/src/hinted/Roboto-Regular.ttf")
 target_compile_definitions(engine_tests PRIVATE ENGINE_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 target_compile_definitions(engine_tests PRIVATE ENGINE_TEST_BENCH_MANIFEST="${PROJECT_SOURCE_DIR}/benchmarks/manifest.json")

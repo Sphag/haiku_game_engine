@@ -556,6 +556,15 @@ const Scene::Node* Scene::find_node(const core::Guid& entity) const {
     return found == nodes_.end() ? nullptr : &found->second;
 }
 
+std::vector<core::Guid> Scene::entity_guids() const {
+    std::vector<core::Guid> guids;
+    guids.reserve(nodes_.size());
+    for (const auto& entry : nodes_) {
+        guids.push_back(entry.first);
+    }
+    return guids;
+}
+
 std::optional<ecs::EntityHandle> Scene::handle(const core::Guid& entity) const {
     const Node* node = find_node(entity);
     if (node == nullptr) {

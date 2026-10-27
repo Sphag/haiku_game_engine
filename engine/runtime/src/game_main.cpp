@@ -4,6 +4,7 @@
 
 #include "engine/assets/cooked_container.hpp"
 #include "engine/core/path.hpp"
+#include "engine/gameplay/components.hpp"
 #include "engine/pack/pack.hpp"
 #include "engine/runtime/lifecycle.hpp"
 #include "engine/runtime/runtime_options.hpp"
@@ -89,14 +90,33 @@ int main(int argc, char** argv) {
         return load_failed("start scene " + options.start_scene.to_string() + ": " + text.error());
     }
 
-    // No component types are registered in this build, so a scene that names any component is rejected here, not loaded
-    // partly. The catalog is the place a game adds its types.
-    const engine::scene::ComponentCatalog catalog;
+    // The built-in components are registered, so a scene authored in the editor loads. A scene that names a type the catalog does
+    // not hold is rejected here, not loaded partly. The catalog is the place a game adds its own types.
+    engine::scene::ComponentCatalog catalog;
+    if (!engine::gameplay::register_builtin_components(catalog).ok()) {
+        return load_failed("the built-in components could not be registered");
+    }
     auto document = engine::scene::parse_scene(text.value(), catalog);
     if (!document.ok()) {
         return load_failed("start scene " + options.start_scene.to_string() + ": " + document.error().message);
     }
-    const engine::scene::PrefabLibrary prefabs(catalog);
+    // A scene may instantiate prefabs, which the packs carry as assets: the library holds every one of them before the scene loads.
+    engine::scene::PrefabLibrary prefabs(catalog);
+    for (const auto& pack : packs) {
+        for (const auto& pack_entry : pack.entries()) {
+            auto cooked = engine::assets::read_cooked_container(pack.payload(pack_entry));
+            if (!cooked.ok() || cooked.value().find("\"engine.prefab\"") == std::string::npos) {
+                continue;
+            }
+            auto prefab = engine::scene::parse_prefab(cooked.value(), catalog);
+            if (!prefab.ok()) {
+                return load_failed("prefab " + pack_entry.guid.to_string() + ": " + prefab.error().message);
+            }
+            if (!prefabs.add(pack_entry.guid, std::move(prefab).value()).ok()) {
+                return load_failed("prefab " + pack_entry.guid.to_string() + " could not be added to the library");
+            }
+        }
+    }
     engine::scene::Scene scene(catalog, prefabs);
     auto loaded = scene.load(document.value(), known_assets);
     if (!loaded.ok()) {

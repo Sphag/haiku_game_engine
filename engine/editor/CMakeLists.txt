@@ -36,7 +36,7 @@ add_library(engine_editor STATIC
 target_include_directories(engine_editor PUBLIC include)
 # nlohmann/json is a system include, so its warnings stay out of the first-party -Werror policy (as in engine_save).
 target_include_directories(engine_editor SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/nlohmann_json/single_include)
-target_link_libraries(engine_editor PUBLIC engine_core engine_platform engine_rhi engine_assets engine_scene engine_physics engine_script engine_audio engine_imgui engine_converter engine_material_graph engine_animation engine_world engine_pack)
+target_link_libraries(engine_editor PUBLIC engine_core engine_platform engine_rhi engine_assets engine_scene engine_physics engine_script engine_audio engine_imgui engine_converter engine_material_graph engine_animation engine_world engine_pack engine_gameplay)
 
 # Build Game (US-073) copies the runtime, the shaders, and the notices into the package. The runtime's path is a generator expression, so
 # game_editor and engine_tests must depend on game_runtime to have it built first (tools/game_editor and tests/CMakeLists.txt do).
