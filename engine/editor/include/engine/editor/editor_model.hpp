@@ -11,6 +11,7 @@
 #include "engine/editor/asset_browser.hpp"
 #include "engine/editor/console.hpp"
 #include "engine/editor/play_session.hpp"
+#include "engine/gameplay/game_world.hpp"
 #include "engine/editor/project.hpp"
 #include "engine/editor/scene_editor.hpp"
 #include "engine/editor/viewport.hpp"
@@ -154,6 +155,10 @@ private:
     void report_play_errors();
     // The asset GUIDs of the open project's registry; empty when no project is open.
     [[nodiscard]] std::unordered_set<core::Guid> known_assets() const;
+    // Parses every .prefab asset of the open project into the scene editor's library. Called when a project opens.
+    void load_project_prefabs();
+    // Reads a script asset's text from the open project, for Play.
+    [[nodiscard]] gameplay::ScriptSource script_reader() const;
     // Points the asset browser at the open project, or closes it when none is open.
     void open_asset_browser();
     // Rescans the project and refreshes the browser and the scene's known assets.

@@ -12,6 +12,7 @@
 #include "engine/core/path.hpp"
 #include "engine/editor/distribution.hpp"
 #include "engine/editor/editor_model.hpp"
+#include "engine/editor/world_editor.hpp"
 #include "engine/gameplay/components.hpp"
 #include "engine/gameplay/game_world.hpp"
 #include "engine/material_graph/graph.hpp"
@@ -174,6 +175,38 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
     CHECK(end_height > -0.5);
 }
 
+TEST_CASE("The editor opens the showcase, opens its scene with prefabs, plays it, and stops", "[integration][showcase][editor]") {
+    const fs::path scratch = fs::temp_directory_path() / "engine_showcase_editor";
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+    auto console = std::make_shared<engine::editor::Console>();
+    engine::editor::EditorModel model(console, path_of((scratch / "workspace.json").string()));
+    model.startup("");
+    REQUIRE(model.open_project(kShowcase).ok());
+    CHECK(model.project().state() == engine::editor::ProjectState::Open);
+
+    auto opened = model.scene().open(path_of(kShowcase + "/assets/scenes/main.scene"));
+    if (!opened.ok()) {
+        FAIL("the editor cannot open main.scene: " << opened.error().message);
+    }
+    CHECK(model.scene().scene().size() > 15);
+    CHECK(model.scene().scene().missing_references().empty());
+
+    REQUIRE(model.play());
+    auto* session = model.play_session();
+    REQUIRE(session != nullptr);
+    for (int frame = 0; frame < 120; ++frame) {
+        model.tick_play(1.0 / 60.0);
+    }
+    for (const std::string& error : session->take_errors()) {
+        FAIL_CHECK("play error: " << error);
+    }
+    CHECK(session->fixed_steps() > 100);
+    model.stop();
+    CHECK(model.play_state() == engine::editor::PlayState::Edit);
+    fs::remove_all(scratch);
+}
+
 TEST_CASE("The showcase animation graph builds a state machine, and its parameters steer it", "[integration][showcase]") {
     const std::string text = read_text(path_of(kShowcase + "/assets/animation/hero.animgraph.json"));
     auto graph = engine::animation::parse_state_graph(text);
@@ -223,6 +256,23 @@ TEST_CASE("The showcase terrain and audio load through the engine readers", "[in
     auto audio = engine::audio::AudioEngine::create_offline();
     CHECK(audio->load_clip(path_of(kShowcase + "/assets/audio/tone.wav")).ok());
     CHECK(audio->load_clip(path_of(kShowcase + "/assets/audio/ambience.ogg")).ok());
+}
+
+TEST_CASE("The showcase world partition opens, with its cells, objects, and always-loaded layer", "[integration][showcase]") {
+    auto opened = engine::editor::WorldEditor::open(path_of(kShowcase + "/world"));
+    if (!opened.ok()) {
+        FAIL("world: " << opened.error());
+    }
+    const auto& world = opened.value().world();
+    CHECK(world.cells.size() == 9);
+    std::size_t objects = 0;
+    for (const auto& cell : world.cells) {
+        objects += cell.objects.size();
+        CHECK_FALSE(cell.assets.empty());
+    }
+    CHECK(objects == 27);
+    CHECK(world.layer.objects.size() == 1);
+    CHECK_FALSE(opened.value().dirty());
 }
 
 TEST_CASE("Build Game packages the showcase, imports every asset type it reaches, and the package launches", "[integration][showcase][editor]") {
@@ -279,6 +329,7 @@ TEST_CASE("Every feature area has a showcase asset", "[integration][showcase]") 
         {"audio (ogg)", "audio/ambience.ogg"},
         {"terrain", "terrain/island.terrain"},
         {"global illumination probes", "gi/probes.gi.json"},
+        {"ui assets", "textures/coin_icon.png"},
     };
     for (const Area& area : areas) {
         INFO(area.feature << ": " << area.asset);

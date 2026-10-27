@@ -32,6 +32,23 @@ namespace engine::gameplay {
 // Reads the text of a script asset by GUID. The editor reads the project folder; the runtime reads the packs.
 using ScriptSource = std::function<core::Result<std::string, std::string>(const core::Guid&)>;
 
+// What binding a scene to its systems produced: the dynamic bodies whose poses are written back, and the entities that carry a script.
+struct SceneBindings {
+    std::vector<std::pair<core::Guid, ecs::EntityHandle>> dynamic_bodies;  // scene GUID and body entity of each dynamic body
+    std::vector<core::Guid> scripted;  // scene GUIDs of entities that carry an attached script
+    std::size_t bodies = 0;
+};
+
+// Creates a physics body for every rigid body component and attaches every enabled script component. A script that cannot be read or
+// does not compile is added to `errors` and the others still run; a body the physics world refuses fails the call. The same function serves
+// GameWorld and the editor's Play session, so a scene behaves the same in both.
+[[nodiscard]] core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics::PhysicsWorld& physics, script::ScriptRunner& runner,
+                                                                 const ScriptSource& read_script, std::vector<std::string>& errors);
+
+// Writes each dynamic body's pose to its entity and re-applies the transform of every scripted entity, so the scene graph marks them
+// dirty (scripts write transforms in place), then updates the scene's world matrices.
+void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const SceneBindings& bindings);
+
 struct GameWorldStats {
     std::size_t bodies = 0;
     std::size_t scripts = 0;           // attached instances
@@ -79,8 +96,7 @@ private:
     std::unique_ptr<audio::AudioEngine> audio_;
     std::unique_ptr<script::ScriptEngine> scripts_;
     std::unique_ptr<script::ScriptRunner> runner_;
-    std::vector<core::Guid> scripted_;  // scene GUIDs of entities that carry a script, re-applied each frame so their moves reach the graph
-    std::vector<std::pair<core::Guid, ecs::EntityHandle>> dynamic_bodies_;  // scene GUID and body entity of each dynamic body
+    SceneBindings bindings_;
     std::vector<std::string> errors_;
     double accumulator_ = 0.0;
     GameWorldStats stats_;

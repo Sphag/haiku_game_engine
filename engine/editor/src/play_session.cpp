@@ -40,7 +40,8 @@ PlaySession::~PlaySession() {
 core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(const scene::ComponentCatalog& catalog,
                                                                            const scene::PrefabLibrary& prefabs,
                                                                            const scene::SceneDocument& document,
-                                                                           const std::unordered_set<core::Guid>& known_assets) {
+                                                                           const std::unordered_set<core::Guid>& known_assets,
+                                                                           gameplay::ScriptSource read_script) {
     std::unique_ptr<PlaySession> session(new PlaySession());
 
     session->scene_ = std::make_unique<scene::Scene>(catalog, prefabs);
@@ -59,11 +60,19 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
 
     session->scripts_ = std::make_unique<script::ScriptEngine>();
     script::ScriptServices services;
+    services.registry = &session->scene_->mutable_registry();
     services.physics = session->physics_.get();
     services.audio = session->audio_.get();
     services.animators = &session->animators_;
     session->scripts_->bind(services);
     session->runner_ = std::make_unique<script::ScriptRunner>(*session->scripts_, session->scene_->registry());
+
+    // The scene's rigid bodies and scripts start with it. A script that fails to load is reported and does not stop Play.
+    auto bound = gameplay::bind_scene(*session->scene_, *session->physics_, *session->runner_, read_script, session->errors_);
+    if (!bound.ok()) {
+        return core::failure(bound.error());
+    }
+    session->bindings_ = std::move(bound.value());
 
     return core::success(std::move(session));
 }
@@ -99,7 +108,7 @@ void PlaySession::advance(double frame_seconds) {
         accumulator_ = 0.0;
     }
     runner_->update(frame_seconds);
-    scene_->update();
+    gameplay::sync_scene(*scene_, *physics_, bindings_);
 }
 
 bool PlaySession::step() {
@@ -112,7 +121,7 @@ bool PlaySession::step() {
     run_fixed_step();
     physics_->set_paused(true);
     runner_->update(physics::kFixedStep);
-    scene_->update();
+    gameplay::sync_scene(*scene_, *physics_, bindings_);
     return true;
 }
 

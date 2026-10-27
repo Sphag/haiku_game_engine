@@ -18,6 +18,8 @@
 #include "engine/scene/scene.hpp"
 #include "engine/scene/scene_format.hpp"
 
+#include "engine/gameplay/game_world.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -54,7 +56,8 @@ public:
     [[nodiscard]] static core::Result<std::unique_ptr<PlaySession>, std::string> create(const scene::ComponentCatalog& catalog,
                                                                                        const scene::PrefabLibrary& prefabs,
                                                                                        const scene::SceneDocument& document,
-                                                                                       const std::unordered_set<core::Guid>& known_assets);
+                                                                                       const std::unordered_set<core::Guid>& known_assets,
+                                                                                       gameplay::ScriptSource read_script = {});
 
     // Sessions alive in the process. Stop must bring it back to zero, so tests can check that no session outlives its Stop.
     [[nodiscard]] static std::size_t live_count() noexcept;
@@ -117,6 +120,7 @@ private:
     animation::AnimatorSet animators_;
     std::unique_ptr<script::ScriptEngine> scripts_;
     std::unique_ptr<script::ScriptRunner> runner_;
+    gameplay::SceneBindings bindings_;  // the bodies and scripts the scene's components produced
     std::vector<std::string> errors_;
     double accumulator_ = 0.0;
     std::uint64_t fixed_steps_ = 0;

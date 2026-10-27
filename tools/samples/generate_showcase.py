@@ -390,6 +390,33 @@ def referenced_guids(value, known):
     return found
 
 
+def write_world(a):
+    """A partitioned world beside the project (not inside assets): a 3 x 3 grid of 64 m cells with scattered props and an always-loaded
+    layer. The formats are in engine/world/src/partition.cpp and engine/editor/src/world_editor.cpp."""
+    out = OUT / "world"
+    cell_size = 64
+    origin = -96
+    write_json(out / "world.json", {"format": "engine.world_desc", "version": 1, "origin": [origin, origin], "cell_size": cell_size})
+    prop = a["props"].guid
+    marker = a["marker"].guid
+    layer_id = guid("world/layer/sun")
+    write_text(out / "layer.world", "engine.world_layer 1\nobject %s %s 0 0 0 Sun marker\nend\n" % (layer_id, marker))
+    for cz in range(3):
+        for cx in range(3):
+            coord = (cx, cz)
+            cell_id = guid("world/cell/%d/%d" % coord)
+            lines = ["engine.world_cell 1", "cell %s %d %d" % (cell_id, coord[0], coord[1]), "asset %s" % prop]
+            base_x = origin + coord[0] * cell_size
+            base_z = origin + coord[1] * cell_size
+            for index in range(3):
+                oid = guid("world/object/%d/%d/%d" % (coord + (index,)))
+                x = base_x + 10 + index * 18
+                z = base_z + 12 + ((index * 7) % 5) * 9
+                lines.append("object %s %s %d 0 %d Tree %d.%d" % (oid, prop, x, z, cx * 3 + cz, index))
+            lines.append("end")
+            write_text(out / ("%s.cell" % cell_id), "\n".join(lines) + "\n")
+
+
 # --- main -----------------------------------------------------------------------------------------------------------------------
 
 def main():
@@ -471,6 +498,7 @@ def main():
     for entry in REGISTRY.values():
         write_sidecar(entry)
 
+    write_world(a)
     write_json(OUT / "project.json", {"format": "engine.project", "version": 1, "name": "Showcase"})
     write_json(OUT / "start.json", {"start_scene": REGISTRY["scenes/main.scene"].guid, "backend": "dx12", "profile": "native"})
     print("wrote %d assets to %s" % (len(REGISTRY), OUT))

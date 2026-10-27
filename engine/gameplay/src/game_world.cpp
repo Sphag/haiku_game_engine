@@ -84,6 +84,70 @@ bool has_component(const scene::Scene& scene, const core::Guid& entity, const ch
 
 }  // namespace
 
+core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics::PhysicsWorld& physics, script::ScriptRunner& runner,
+                                                    const ScriptSource& read_script, std::vector<std::string>& errors) {
+    SceneBindings bindings;
+    for (const core::Guid& guid : scene.entity_guids()) {
+        const auto handle = scene.handle(guid);
+        const scene::Transform* transform = scene.transform(guid);
+        if (!handle || transform == nullptr) {
+            continue;
+        }
+        if (has_component(scene, guid, kRigidBodyId)) {
+            const RigidBody body = read_body(scene, guid);
+            auto added = physics.add_body(body_desc(*handle, body, *transform));
+            if (!added.ok()) {
+                return core::failure(std::string("a rigid body was refused by the physics world"));
+            }
+            if (to_motion(body.motion) == physics::BodyMotion::Dynamic) {
+                bindings.dynamic_bodies.emplace_back(guid, *handle);
+            }
+            ++bindings.bodies;
+        }
+        if (has_component(scene, guid, kScriptId)) {
+            const bool enabled = read<bool>(scene, guid, kScriptId, "enabled", true);
+            const core::Guid source_guid = read<core::Guid>(scene, guid, kScriptId, "script", core::Guid{});
+            if (!enabled || source_guid.is_nil()) {
+                continue;
+            }
+            auto source = read_script ? read_script(source_guid)
+                                      : core::Result<std::string, std::string>(core::failure(std::string("no script reader")));
+            if (!source.ok()) {
+                errors.push_back("script " + source_guid.to_string() + ": " + source.error());
+                continue;
+            }
+            auto attached = runner.attach(*handle, source_guid.to_string(), source.value());
+            if (!attached.ok()) {
+                errors.push_back("script " + source_guid.to_string() + ": " + attached.error().message);
+                continue;
+            }
+            bindings.scripted.push_back(guid);
+        }
+    }
+    return core::success(std::move(bindings));
+}
+
+void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const SceneBindings& bindings) {
+    for (const auto& [guid, entity] : bindings.dynamic_bodies) {
+        const auto pose = physics.step_transform(entity);
+        const scene::Transform* current = scene.transform(guid);
+        if (pose && current != nullptr) {
+            scene::Transform next = *current;
+            next.position = pose->position;
+            next.rotation = glm::dquat(pose->rotation.w, pose->rotation.x, pose->rotation.y, pose->rotation.z);
+            static_cast<void>(scene.set_transform(guid, next));
+        }
+    }
+    // A script writes its entity's transform in place. Applying it again through the scene marks the node dirty, so the world matrices
+    // follow. An entity inside a prefab instance takes its transform from the prefab and is skipped by the scene, which is its rule.
+    for (const core::Guid& guid : bindings.scripted) {
+        if (const scene::Transform* current = scene.transform(guid)) {
+            static_cast<void>(scene.set_transform(guid, *current));
+        }
+    }
+    scene.update();
+}
+
 core::Result<std::unique_ptr<GameWorld>, std::string> GameWorld::create(scene::Scene& scene, ScriptSource read_script,
                                                                   const script::ScriptServices& extra) {
     std::unique_ptr<GameWorld> world(new GameWorld());
@@ -103,45 +167,14 @@ core::Result<std::unique_ptr<GameWorld>, std::string> GameWorld::create(scene::S
     world->scripts_->bind(services);
     world->runner_ = std::make_unique<script::ScriptRunner>(*world->scripts_, scene.registry());
 
-    // Bodies and scripts: every entity that carries the component. A script that cannot be read or compiled is reported, and the others
-    // still run; a body the physics world refuses fails the build.
-    for (const core::Guid& guid : scene.entity_guids()) {
-        const auto handle = scene.handle(guid);
-        const scene::Transform* transform = scene.transform(guid);
-        if (!handle || transform == nullptr) {
-            continue;
-        }
-        if (has_component(scene, guid, kRigidBodyId)) {
-            const RigidBody body = read_body(scene, guid);
-            auto added = world->physics_->add_body(body_desc(*handle, body, *transform));
-            if (!added.ok()) {
-                return core::failure(std::string("a rigid body was refused by the physics world"));
-            }
-            if (to_motion(body.motion) == physics::BodyMotion::Dynamic) {
-                world->dynamic_bodies_.emplace_back(guid, *handle);
-            }
-            ++world->stats_.bodies;
-        }
-        if (has_component(scene, guid, kScriptId)) {
-            const bool enabled = read<bool>(scene, guid, kScriptId, "enabled", true);
-            const core::Guid source_guid = read<core::Guid>(scene, guid, kScriptId, "script", core::Guid{});
-            if (!enabled || source_guid.is_nil()) {
-                continue;
-            }
-            auto source = read_script ? read_script(source_guid)
-                                      : core::Result<std::string, std::string>(core::failure(std::string("no script reader")));
-            if (!source.ok()) {
-                world->errors_.push_back("script " + source_guid.to_string() + ": " + source.error());
-                continue;
-            }
-            auto attached = world->runner_->attach(*handle, source_guid.to_string(), source.value());
-            if (!attached.ok()) {
-                world->errors_.push_back("script " + source_guid.to_string() + ": " + attached.error().message);
-                continue;
-            }
-            world->scripted_.push_back(guid);
-        }
+    std::vector<std::string> bind_errors;
+    auto bound = bind_scene(scene, *world->physics_, *world->runner_, read_script, bind_errors);
+    if (!bound.ok()) {
+        return core::failure(bound.error());
     }
+    world->bindings_ = std::move(bound.value());
+    world->errors_ = std::move(bind_errors);
+    world->stats_.bodies = world->bindings_.bodies;
     return core::success(std::move(world));
 }
 
@@ -179,25 +212,7 @@ void GameWorld::advance(double frame_seconds) {
     }
     runner_->update(frame_seconds);
 
-    // Dynamic bodies drive their entity's pose. The scene owns the transform; setting it here marks the world matrices dirty.
-    for (const auto& [guid, entity] : dynamic_bodies_) {
-        const auto pose = physics_->step_transform(entity);
-        const scene::Transform* current = scene_->transform(guid);
-        if (pose && current != nullptr) {
-            scene::Transform next = *current;
-            next.position = pose->position;
-            next.rotation = glm::dquat(pose->rotation.w, pose->rotation.x, pose->rotation.y, pose->rotation.z);
-            static_cast<void>(scene_->set_transform(guid, next));
-        }
-    }
-    // A script writes its entity's transform in place. Applying it again through the scene marks the node dirty, so the world matrices
-    // follow. An entity inside a prefab instance takes its transform from the prefab and is skipped by the scene, which is its rule.
-    for (const core::Guid& guid : scripted_) {
-        if (const scene::Transform* current = scene_->transform(guid)) {
-            static_cast<void>(scene_->set_transform(guid, *current));
-        }
-    }
-    scene_->update();
+    sync_scene(*scene_, *physics_, bindings_);
     stats_.seconds += frame_seconds;
 }
 

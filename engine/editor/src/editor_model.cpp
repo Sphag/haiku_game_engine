@@ -53,9 +53,57 @@ core::Result<core::Unit, ProjectError> EditorModel::open_project(std::string_vie
     if (project_.scan_error()) {
         note(core::LogLevel::Warning, "assets: " + project_.scan_error()->message);
     }
+    load_project_prefabs();
     scene_.set_known_assets(known_assets());
     open_asset_browser();
     return core::success();
+}
+
+void EditorModel::load_project_prefabs() {
+    // A scene names prefab instances by asset GUID, so every prefab the project holds is in the library before a scene opens.
+    const assets::ProjectScan* scan = project_.scan();
+    if (scan == nullptr || !project_.info()) {
+        return;
+    }
+    const auto assets_root = project_.info()->root.join(std::string(kProjectAssetsFolder));
+    if (!assets_root.ok()) {
+        return;
+    }
+    for (const assets::AssetRecord* record : scan->registry.records()) {
+        if (!record->source_path.str().ends_with(".prefab") || scene_.prefabs().find(record->guid) != nullptr) {
+            continue;
+        }
+        const auto file = assets_root.value().join(record->source_path.str());
+        const auto text = file.ok() ? core::read_text_file(file.value()) : core::IoResult<std::string>(core::failure(core::IoError{}));
+        if (!text.ok()) {
+            note(core::LogLevel::Warning, "prefab " + record->source_path.str() + " cannot be read");
+            continue;
+        }
+        auto prefab = scene::parse_prefab(text.value(), scene_.catalog());
+        if (!prefab.ok()) {
+            note(core::LogLevel::Warning, "prefab " + record->source_path.str() + ": " + prefab.error().message);
+            continue;
+        }
+        static_cast<void>(scene_.prefabs().add(record->guid, std::move(prefab).value()));
+    }
+}
+
+gameplay::ScriptSource EditorModel::script_reader() const {
+    // Script assets are read from the project's assets folder, so Play runs the file as it is on disk, saved or not in any other tool.
+    return [this](const core::Guid& guid) -> core::Result<std::string, std::string> {
+        const assets::ProjectScan* scan = project_.scan();
+        const assets::AssetRecord* record = scan != nullptr ? scan->registry.find(guid) : nullptr;
+        if (record == nullptr || !project_.info()) {
+            return core::failure(std::string("not an asset of the open project"));
+        }
+        const auto file = project_.info()->root.join(std::string(kProjectAssetsFolder));
+        const auto path = file.ok() ? file.value().join(record->source_path.str()) : file;
+        auto text = path.ok() ? core::read_text_file(path.value()) : core::IoResult<std::string>(core::failure(core::IoError{}));
+        if (!text.ok()) {
+            return core::failure("cannot read " + record->source_path.str());
+        }
+        return core::success(std::move(text.value()));
+    };
 }
 
 core::Result<core::Unit, ProjectError> EditorModel::create_project(std::string_view parent_text, std::string_view name) {
@@ -280,7 +328,7 @@ bool EditorModel::play() {
     if (play_ != nullptr) {
         return false;
     }
-    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets());
+    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets(), script_reader());
     if (!created.ok()) {
         note(core::LogLevel::Error, "cannot play the scene: " + created.error());
         return false;
