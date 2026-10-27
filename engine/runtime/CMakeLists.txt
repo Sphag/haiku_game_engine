@@ -9,8 +9,18 @@ target_include_directories(engine_runtime PUBLIC include)
 target_link_libraries(engine_runtime PUBLIC engine_core)
 engine_configure_first_party(engine_runtime)
 
+# The windowed game: GameRenderer (the scene through SceneRenderer, presented by a buffer copy) and the window loop. Kept apart from
+# engine_runtime so the option parser and lifecycle tests do not link the renderer.
+add_library(engine_game_render STATIC
+  src/game_renderer.cpp
+  src/windowed_game.cpp
+)
+target_include_directories(engine_game_render PUBLIC include)
+target_link_libraries(engine_game_render PUBLIC engine_runtime engine_render engine_rhi engine_platform engine_gameplay engine_scene engine_core)
+engine_configure_first_party(engine_game_render)
+
 add_executable(game_runtime src/game_main.cpp)
-target_link_libraries(game_runtime PRIVATE engine_runtime engine_pack engine_assets engine_scene engine_gameplay engine_core)
+target_link_libraries(game_runtime PRIVATE engine_runtime engine_game_render engine_pack engine_assets engine_scene engine_gameplay engine_core)
 engine_configure_first_party(game_runtime)
 
 # FR-03 check at configure time: walk the transitive link graph of the runtime and stop the configure step if it reaches the

@@ -9,12 +9,14 @@
 #include "engine/pack/pack.hpp"
 #include "engine/runtime/lifecycle.hpp"
 #include "engine/runtime/runtime_options.hpp"
+#include "engine/runtime/windowed_game.hpp"
 #include "engine/scene/reflection.hpp"
 #include "engine/scene/scene.hpp"
 #include "engine/scene/scene_format.hpp"
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -166,6 +168,20 @@ int main(int argc, char** argv) {
         }
     };
     report_errors();
+    if (options.window) {
+        // Shaders ship in a folder beside the executable (Build Game copies them there).
+        const std::string shader_dir = (std::filesystem::absolute(std::filesystem::path(argv[0])).parent_path() / "shaders").string();
+        const int windowed = engine::runtime::run_windowed_game(scene, *world.value(), options, shader_dir);
+        world.value().reset();
+        if (windowed != kExitOk) {
+            return windowed;
+        }
+        if (!lifecycle.stop().ok()) {
+            return load_failed("runtime lifecycle could not stop");
+        }
+        std::printf("game_runtime: stopped\n");
+        return exit_code;
+    }
     for (std::uint32_t frame = 0; frame < options.frames; ++frame) {
         world.value()->advance(1.0 / 60.0);
     }

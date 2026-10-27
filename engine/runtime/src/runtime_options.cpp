@@ -27,6 +27,9 @@ std::string runtime_usage_text() {
            "  --start-scene <guid> the scene to start; it must be a root of one of the packs (required)\n"
            "  --backend <name>    dx12 or vulkan (default: dx12 on Windows, vulkan elsewhere)\n"
            "  --profile <name>    native or full (default: native)\n"
+           "  --frames <n>        run n frames at 60 Hz, then stop (default: 60 headless, until closed with a window)\n"
+           "  --window            open a window and draw the scene (the package launcher passes it)\n"
+           "  --headless          simulate on the CPU with no window (the default)\n"
            "  -h, --help          show this help\n"
            "\n"
            "Exit codes: 0 started and stopped, 1 a pack or the scene could not be loaded, 2 usage error.\n";
@@ -42,6 +45,10 @@ core::Result<RuntimeOptions, std::string> parse_runtime_options(const std::vecto
         if (arg == "-h" || arg == "--help") {
             options.help = true;
             return core::success(std::move(options));
+        }
+        if (arg == "--window" || arg == "--headless") {
+            options.window = arg == "--window";  // the last one given wins, so a launcher's --window can be overridden
+            continue;
         }
         if (arg != "--pack" && arg != "--start-scene" && arg != "--backend" && arg != "--profile" && arg != "--frames") {
             return core::failure("unknown argument: " + arg);
@@ -79,6 +86,7 @@ core::Result<RuntimeOptions, std::string> parse_runtime_options(const std::vecto
                 return core::failure("--frames requires a whole number, got '" + value + "'");
             }
             options.frames = static_cast<std::uint32_t>(frames);
+            options.frames_given = true;
         } else {
             if (value != kProfileNative && value != kProfileFull) {
                 return core::failure("invalid profile '" + value + "'");

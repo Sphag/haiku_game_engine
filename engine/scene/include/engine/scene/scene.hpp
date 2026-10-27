@@ -172,6 +172,10 @@ public:
     [[nodiscard]] const ecs::Registry& registry() const noexcept {
         return graph_->registry();
     }
+    // The scene graph, for render extraction (extract_frame refreshes dirty transforms through it).
+    [[nodiscard]] SceneGraph& graph() noexcept {
+        return *graph_;
+    }
     // The same registry, writable, for systems that change components in place (scripts, physics). A transform changed this way must be
     // re-applied with set_transform() so the scene graph marks it and its descendants dirty.
     [[nodiscard]] ecs::Registry& mutable_registry() noexcept {

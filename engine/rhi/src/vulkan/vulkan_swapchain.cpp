@@ -237,7 +237,7 @@ RhiStatus VulkanSwapchain::build(VkSwapchainKHR previous) {
     info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     info.imageExtent = VkExtent2D{extent_width, extent_height};
     info.imageArrayLayers = 1;
-    info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.preTransform = caps.currentTransform;
     info.compositeAlpha = pick_composite_alpha(caps.supportedCompositeAlpha);
@@ -274,7 +274,7 @@ RhiStatus VulkanSwapchain::build(VkSwapchainKHR previous) {
         desc.height = height_;
         desc.mip_levels = 1;
         desc.format = format_;
-        desc.usage = TextureUsage::RenderTarget | TextureUsage::CopySource;
+        desc.usage = TextureUsage::RenderTarget | TextureUsage::CopySource | TextureUsage::CopyDestination;
         desc.debug_name = "swapchain back buffer " + std::to_string(index);
         RhiResult<TextureHandle> handle = device_.adopt_back_buffer(images[index], desc);
         if (!handle.ok()) {

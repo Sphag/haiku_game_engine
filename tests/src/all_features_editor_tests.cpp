@@ -233,11 +233,11 @@ TEST_CASE("The combined scene edits scene, material, animation, and terrain, und
     const fs::path published = root / "output" / "AllFeatures";
 #ifdef _WIN32
     const std::string launcher = "run_game.bat";
-    const std::string command = "cd /d \"" + published.string() + "\" && \".\\" + launcher + "\" > \"" + (root / "relaunch.log").string() +
+    const std::string command = "cd /d \"" + published.string() + "\" && \".\\" + launcher + "\" --headless > \"" + (root / "relaunch.log").string() +
                                 "\" 2>&1";
 #else
     const std::string launcher = "run_game.sh";
-    const std::string command = "cd '" + published.string() + "' && sh './" + launcher + "' > '" + (root / "relaunch.log").string() +
+    const std::string command = "cd '" + published.string() + "' && sh './" + launcher + "' --headless > '" + (root / "relaunch.log").string() +
                                 "' 2>&1";
 #endif
     CHECK(fs::exists(published / launcher));

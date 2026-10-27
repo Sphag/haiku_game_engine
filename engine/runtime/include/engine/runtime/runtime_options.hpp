@@ -29,6 +29,8 @@ struct RuntimeOptions {
     std::string backend;
     std::string profile = std::string(kProfileNative);
     std::uint32_t frames = 60;       // simulated frames at 60 Hz before the runtime stops; this build has no window yet
+    bool frames_given = false;       // --frames was on the command line; a window runs until closed otherwise
+    bool window = false;             // --window: open a window and draw; --headless (the default) simulates on the CPU only
     bool help = false;
 };
 

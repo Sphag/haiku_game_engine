@@ -118,12 +118,12 @@ std::string launcher_text(const std::string& guid, const std::string& backend, c
 #ifdef _WIN32
     return "@echo off\r\n"
            "\"%~dp0" + std::string(kRuntimeName) + "\" --pack \"%~dp0" + std::string(kRuntimeDir) + "\\" + std::string(kPackFile) +
-           "\" --start-scene " + guid + " --backend " + backend + " --profile " + profile + " %*\r\n";
+           "\" --start-scene " + guid + " --backend " + backend + " --profile " + profile + " --window %*\r\n";
 #else
     return "#!/bin/sh\n"
            "dir=$(cd \"$(dirname \"$0\")\" && pwd)\n"
            "exec \"$dir/" + std::string(kRuntimeName) + "\" --pack \"$dir/" + std::string(kRuntimeDir) + "/" + std::string(kPackFile) +
-           "\" --start-scene " + guid + " --backend " + backend + " --profile " + profile + " \"$@\"\n";
+           "\" --start-scene " + guid + " --backend " + backend + " --profile " + profile + " --window \"$@\"\n";
 #endif
 }
 

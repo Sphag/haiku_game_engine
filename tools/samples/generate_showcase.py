@@ -316,20 +316,20 @@ def build_scene(a, prefab):
             "engine.environment": comp(gi_probes=a["gi"].guid, fog_density=0.01, ray_traced_shadows=False),
         }),
         entity("sun", xform((0, 10, 0), sun_rotation), {
-            "engine.light": comp(kind=0, intensity=3.0, color=[1.0, 0.95, 0.85], cast_shadows=True),
+            "engine.light": comp(kind=0, intensity=1.1, color=[1.0, 0.95, 0.85], cast_shadows=True),
         }),
         entity("lamp", xform((3, 2.5, -2)), {
-            "engine.light": comp(kind=1, intensity=40.0, range=12.0, color=[1.0, 0.7, 0.4]),
+            "engine.light": comp(kind=1, intensity=6.0, range=12.0, color=[1.0, 0.7, 0.4]),
             "engine.mesh_renderer": comp(mesh=a["marker"].guid, material=a["crate_mat"].guid, cast_shadows=False),
         }),
         entity("spot", xform((-4, 4, 2), about_x(-45)), {
-            "engine.light": comp(kind=2, intensity=80.0, range=15.0, cone_angle_degrees=40.0),
+            "engine.light": comp(kind=2, intensity=10.0, range=15.0, cone_angle_degrees=40.0),
         }),
         entity("camera", xform((0, 4, 10), about_x(-10)), {
             "engine.camera": comp(vertical_fov_degrees=65.0, far_plane=500.0, primary=True),
         }),
         entity("ground", xform((0, -0.5, 0), scale=(20, 1, 20)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, receive_shadows=True),
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, receive_shadows=True, tint=[0.30, 0.50, 0.26, 1.0]),
             "engine.rigid_body": comp(motion=0, shape=0, size=[40.0, 1.0, 40.0], friction=0.8),
         }),
         entity("terrain", xform((-64, -6, -64)), {
@@ -344,15 +344,15 @@ def build_scene(a, prefab):
             "engine.audio_emitter": comp(clip=a["tone"].guid, volume=0.6, looping=False, spatial=True, play_on_start=False),
         }),
         entity("hero_hand", xform((0.4, 1.0, 0)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[1.0, 0.8, 0.2, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.8, 0.55, 0.12, 1.0]),
         }, parent=hero),
         entity("campfire", xform((-3, 0.2, -1)), {
             "engine.particle_emitter": comp(rate=120.0, lifetime=1.5, speed=1.8, size=0.08, color=[1.0, 0.55, 0.2, 1.0], max_particles=4096),
-            "engine.light": comp(kind=1, intensity=25.0, range=8.0, color=[1.0, 0.5, 0.2], cast_shadows=False),
+            "engine.light": comp(kind=1, intensity=4.0, range=8.0, color=[1.0, 0.5, 0.2], cast_shadows=False),
             "engine.audio_emitter": comp(clip=a["ambience"].guid, volume=0.4, looping=True, spatial=True, play_on_start=True),
         }),
         entity("platform", xform((6, 0.5, 0), scale=(3, 0.3, 3)), {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid),
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["ground_mat"].guid, tint=[0.55, 0.55, 0.6, 1.0]),
             "engine.rigid_body": comp(motion=1, shape=0, size=[3.0, 0.3, 3.0]),
             "engine.script": comp(script=a["spinner_lua"].guid),
         }),
@@ -420,6 +420,7 @@ def write_world(a):
 # --- main -----------------------------------------------------------------------------------------------------------------------
 
 def main():
+    readme = (OUT / "README.md").read_bytes() if (OUT / "README.md").exists() else None  # hand-written, kept across runs
     if OUT.exists():
         shutil.rmtree(OUT)
     ASSETS.mkdir(parents=True)
@@ -467,12 +468,12 @@ def main():
     crate_root = guid("prefab/crate/root")
     prefab_doc = {"format": "engine.prefab", "version": 1, "entities": [
         {"guid": crate_root, "parent": None, "transform": xform(), "components": {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid),
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.62, 0.42, 0.25, 1.0]),
             "engine.rigid_body": comp(motion=2, shape=0, size=[1.0, 1.0, 1.0], mass=1.0, friction=0.6),
             "engine.script": comp(script=a["crate_lua"].guid),
         }},
         {"guid": guid("prefab/crate/lid"), "parent": crate_root, "transform": xform((0, 0.55, 0), scale=(1.0, 0.1, 1.0)), "components": {
-            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.9, 0.9, 0.6, 1.0]),
+            "engine.mesh_renderer": comp(mesh=a["props"].guid, material=a["crate_mat"].guid, tint=[0.55, 0.38, 0.22, 1.0]),
         }},
     ]}
     write_json(ASSETS / "prefabs" / "crate.prefab", prefab_doc)
@@ -499,6 +500,8 @@ def main():
         write_sidecar(entry)
 
     write_world(a)
+    if readme is not None:
+        (OUT / "README.md").write_bytes(readme)
     write_json(OUT / "project.json", {"format": "engine.project", "version": 1, "name": "Showcase"})
     write_json(OUT / "start.json", {"start_scene": REGISTRY["scenes/main.scene"].guid, "backend": "dx12", "profile": "native"})
     print("wrote %d assets to %s" % (len(REGISTRY), OUT))

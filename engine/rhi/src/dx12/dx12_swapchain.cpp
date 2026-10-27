@@ -57,7 +57,7 @@ RhiStatus Dx12Swapchain::adopt_buffers() {
         desc.height = height_;
         desc.mip_levels = 1;
         desc.format = format_ == DXGI_FORMAT_R8G8B8A8_UNORM ? Format::R8G8B8A8Unorm : Format::B8G8R8A8Unorm;
-        desc.usage = TextureUsage::RenderTarget | TextureUsage::CopySource;
+        desc.usage = TextureUsage::RenderTarget | TextureUsage::CopySource | TextureUsage::CopyDestination;
         desc.debug_name = "swapchain back buffer " + std::to_string(index);
         RhiResult<TextureHandle> handle = device_.adopt_back_buffer(std::move(resource), desc);
         if (!handle.ok()) {

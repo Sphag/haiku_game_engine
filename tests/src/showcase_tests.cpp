@@ -17,10 +17,13 @@
 #include "engine/gameplay/game_world.hpp"
 #include "engine/material_graph/graph.hpp"
 #include "engine/scene/scene.hpp"
+#include "engine/rhi/device.hpp"
+#include "engine/runtime/game_renderer.hpp"
 #include "engine/scene/scene_format.hpp"
 #include "engine/world/terrain_edit.hpp"
 
 #include "asset_converter/importer.hpp"
+#include "gpu_test_options.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -314,7 +317,7 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     options.backend = "vulkan";
     options.profile = "native";
     options.runtime_exe = ENGINE_TEST_GAME_RUNTIME;
-    options.shader_dir = (scratch / "shaders").string();
+    options.shader_dir = ENGINE_TEST_SHADER_DIR;  // the real shaders, so the package can open a window and draw
     options.notices_file = (scratch / "NOTICES.txt").string();
 
     engine::editor::BuildProgress progress;
@@ -331,9 +334,9 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     const fs::path published = scratch / "output" / "Showcase";
     const fs::path log = scratch / "relaunch.log";
 #ifdef _WIN32
-    const std::string command = "cd /d \"" + published.string() + "\" && \".\\run_game.bat\" --frames 120 > \"" + log.string() + "\" 2>&1";
+    const std::string command = "cd /d \"" + published.string() + "\" && \".\\run_game.bat\" --headless --frames 120 > \"" + log.string() + "\" 2>&1";
 #else
-    const std::string command = "cd '" + published.string() + "' && sh './run_game.sh' --frames 120 > '" + log.string() + "' 2>&1";
+    const std::string command = "cd '" + published.string() + "' && sh './run_game.sh' --headless --frames 120 > '" + log.string() + "' 2>&1";
 #endif
     CHECK(std::system(command.c_str()) == 0);
     const std::string output = read_text(path_of(log.string()));
@@ -341,6 +344,10 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     CHECK(output.find("simulated 120 frames") != std::string::npos);
     CHECK(output.find("bodies=7") != std::string::npos);
     CHECK(output.find("scripts=5") != std::string::npos);
+    // Keep a copy of the package for running by hand: build/win-dev/showcase_package/run_game.bat opens the game.
+    std::error_code ignored;
+    fs::remove_all(ENGINE_SHOWCASE_PACKAGE_OUT, ignored);
+    fs::copy(published, ENGINE_SHOWCASE_PACKAGE_OUT, fs::copy_options::recursive, ignored);
     fs::remove_all(scratch);
 }
 
@@ -372,4 +379,62 @@ TEST_CASE("Every feature area has a showcase asset", "[integration][showcase]") 
         INFO(area.feature << ": " << area.asset);
         CHECK(scan.registry.find_by_path(path_of(area.asset)) != nullptr);
     }
+}
+
+namespace {
+
+// Draws the showcase scene on a real device and checks the picture: a camera was found, the lights and the meshes reached the renderer,
+// and the image is not empty (the sky is cleared, the ground and the objects are lit and have distinct pick ids).
+void render_showcase_on(engine::rhi::Backend backend) {
+    LoadedScene loaded;
+    engine::rhi::DeviceDesc desc;
+    desc.backend = backend;
+    desc.debug_layers = true;
+    desc.allow_software_adapter = engine::tests::allow_software_adapters();
+    auto device = engine::rhi::create_device(desc);
+    if (!device.ok()) {
+        FAIL("device: " << device.error().message);
+    }
+    auto renderer = engine::runtime::GameRenderer::create(*device.value(), backend, ENGINE_TEST_SHADER_DIR, 1280, 720);
+    if (!renderer.ok()) {
+        FAIL("renderer: " << renderer.error());
+    }
+    auto drawn = renderer.value()->render(*loaded.scene);
+    if (!drawn.ok()) {
+        FAIL("render: " << drawn.error());
+    }
+    CHECK(drawn.value().camera);
+    CHECK(drawn.value().lights >= 4);
+    CHECK(drawn.value().items >= 8);
+
+    const auto& image = renderer.value()->image();
+    REQUIRE(image.width == 1280);
+    REQUIRE(image.height == 720);
+    std::size_t lit = 0;
+    std::set<std::uint32_t> objects;
+    for (std::size_t i = 0; i < image.color.size(); ++i) {
+        if (image.color[i][0] != 0 || image.color[i][1] != 0 || image.color[i][2] != 0) {
+            ++lit;
+        }
+        if (image.pick_ids[i] != 0) {
+            objects.insert(image.pick_ids[i]);
+        }
+    }
+    INFO("lit pixels " << lit << " of " << image.color.size());
+    CHECK(lit > image.color.size() / 10);
+    CHECK(objects.size() >= 4);
+    // Drawing again after the scene moved still works and keeps the same objects visible.
+    auto again = renderer.value()->render(*loaded.scene);
+    REQUIRE(again.ok());
+    CHECK(again.value().items == drawn.value().items);
+}
+
+}  // namespace
+
+TEST_CASE("DX12: the showcase scene draws through GameRenderer", "[gpu][dx12][showcase]") {
+    render_showcase_on(engine::rhi::Backend::Dx12);
+}
+
+TEST_CASE("Vulkan: the showcase scene draws through GameRenderer", "[gpu][vulkan][showcase]") {
+    render_showcase_on(engine::rhi::Backend::Vulkan);
 }
