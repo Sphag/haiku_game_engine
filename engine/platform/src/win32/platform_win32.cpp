@@ -129,6 +129,15 @@ struct Platform::Impl {
         }
     }
 
+    [[nodiscard]] bool any_mouse_button_down() const {
+        for (std::size_t i = 0; i < static_cast<std::size_t>(MouseButton::Count); ++i) {
+            if (live_input.mouse_down(static_cast<MouseButton>(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Releases every key and mouse button of `id`. Called when the window loses focus, so no key stays down after
     // the window goes inactive and the key-up message is never delivered.
     void release_held_input(WindowId id) {
@@ -458,11 +467,73 @@ struct Platform::Impl {
                 }
                 const auto* raw = reinterpret_cast<const RAWINPUT*>(buffer.data());
                 if (raw->header.dwType == RIM_TYPEMOUSE) {
+                    // Only relative motion comes from here. Raw Input follows keyboard focus instead of the window under the
+                    // cursor, so a click on a window that overlaps this one, or the click that activates this one, would be
+                    // reported wrongly. Buttons and the wheel come from the window messages below.
                     for (InputEvent& event : win32::raw_mouse_events(raw->data.mouse, id)) {
-                        queue_input(std::move(event));
+                        if (std::holds_alternative<MouseMoved>(event.data)) {
+                            queue_input(std::move(event));
+                        }
                     }
                 }
                 break;
+            }
+
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONUP:
+            case WM_XBUTTONDOWN:
+            case WM_XBUTTONUP: {
+                MouseButton button = MouseButton::Left;
+                bool down = false;
+                switch (message) {
+                    case WM_LBUTTONDOWN: button = MouseButton::Left; down = true; break;
+                    case WM_LBUTTONUP: button = MouseButton::Left; break;
+                    case WM_RBUTTONDOWN: button = MouseButton::Right; down = true; break;
+                    case WM_RBUTTONUP: button = MouseButton::Right; break;
+                    case WM_MBUTTONDOWN: button = MouseButton::Middle; down = true; break;
+                    case WM_MBUTTONUP: button = MouseButton::Middle; break;
+                    default:
+                        button = GET_XBUTTON_WPARAM(wparam) == XBUTTON1 ? MouseButton::X1 : MouseButton::X2;
+                        down = message == WM_XBUTTONDOWN;
+                        break;
+                }
+                if (down) {
+                    // The window keeps the mouse while a button is held, so a drag that leaves the client area still ends
+                    // with its release here instead of being lost.
+                    SetCapture(hwnd);
+                    queue_input(InputEvent{id, MouseButtonPressed{button}});
+                } else {
+                    queue_input(InputEvent{id, MouseButtonReleased{button}});
+                    if (!any_mouse_button_down()) {
+                        ReleaseCapture();
+                    }
+                }
+                // The X button messages ask for TRUE to say they were handled.
+                return (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP) ? TRUE : 0;
+            }
+
+            case WM_CAPTURECHANGED:
+                // Capture taken away while a button is held (a system dialog, Alt+Tab): the release will never arrive.
+                for (InputEvent& release : live_input.release_held(id)) {
+                    if (std::holds_alternative<MouseButtonReleased>(release.data)) {
+                        queue_input(std::move(release));
+                    }
+                }
+                return 0;
+
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                const double notches = static_cast<double>(GET_WHEEL_DELTA_WPARAM(wparam)) / WHEEL_DELTA;
+                if (message == WM_MOUSEWHEEL) {
+                    queue_input(InputEvent{id, MouseWheelScrolled{0.0, notches}});
+                } else {
+                    queue_input(InputEvent{id, MouseWheelScrolled{notches, 0.0}});
+                }
+                return 0;
             }
 
             case WM_KEYDOWN:

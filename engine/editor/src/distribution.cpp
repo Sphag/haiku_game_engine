@@ -131,7 +131,7 @@ std::string launcher_text(const std::string& guid, const std::string& backend, c
 // not run. The arguments are built here from GUIDs, fixed names, and checked values, so none needs quoting.
 int run_runtime(const fs::path& dir, const std::string& arguments, const fs::path& log) {
 #ifdef _WIN32
-    const std::string command = "cd /d \"" + utf8(dir) + "\" && \"" + kRuntimeName + "\" " + arguments + " > \"" + utf8(log) +
+    const std::string command = "cd /d \"" + utf8(dir) + "\" && \".\\" + std::string(kRuntimeName) + "\" " + arguments + " > \"" + utf8(log) +
                                 "\" 2>&1";
     return std::system(command.c_str());
 #else

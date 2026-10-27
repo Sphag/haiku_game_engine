@@ -27,6 +27,7 @@ using engine::platform::KeyReleased;
 using engine::platform::Key;
 using engine::platform::MouseButton;
 using engine::platform::MouseButtonPressed;
+using engine::platform::MouseButtonReleased;
 using engine::platform::MouseMoved;
 using engine::platform::MouseWheelScrolled;
 using engine::platform::Platform;
@@ -129,6 +130,59 @@ TEST_CASE("WM_CHAR delivers UTF-8 text, joins surrogate pairs, and drops control
         }
     }
     CHECK(typed == std::string("\xF0\x9F\x98\x80\xC3\xA9"));
+}
+
+TEST_CASE("Mouse buttons and the wheel come from window messages, so the activating click is not lost", "[integration]") {
+    auto platform = make_platform();
+    const WindowId id = platform->create_window(WindowDesc{}).value();
+    const HWND hwnd = hwnd_of(*platform, id);
+    drain_input(*platform);
+
+    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_RBUTTONUP, 0, MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_XBUTTONDOWN, MAKEWPARAM(MK_XBUTTON2, XBUTTON2), MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_XBUTTONUP, MAKEWPARAM(0, XBUTTON2), MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_MOUSEWHEEL, MAKEWPARAM(0, -2 * WHEEL_DELTA), MAKELPARAM(10, 10));
+    SendMessageW(hwnd, WM_MOUSEHWHEEL, MAKEWPARAM(0, WHEEL_DELTA), MAKELPARAM(10, 10));
+
+    const std::vector<InputEvent> events = drain_input(*platform);
+    REQUIRE(events.size() == 8);
+    REQUIRE(std::holds_alternative<MouseButtonPressed>(events[0].data));
+    CHECK(std::get<MouseButtonPressed>(events[0].data).button == MouseButton::Left);
+    REQUIRE(std::holds_alternative<MouseButtonReleased>(events[1].data));
+    CHECK(std::get<MouseButtonReleased>(events[1].data).button == MouseButton::Left);
+    CHECK(std::get<MouseButtonPressed>(events[2].data).button == MouseButton::Right);
+    CHECK(std::get<MouseButtonReleased>(events[3].data).button == MouseButton::Right);
+    CHECK(std::get<MouseButtonPressed>(events[4].data).button == MouseButton::X2);
+    CHECK(std::get<MouseButtonReleased>(events[5].data).button == MouseButton::X2);
+    REQUIRE(std::holds_alternative<MouseWheelScrolled>(events[6].data));
+    CHECK(std::get<MouseWheelScrolled>(events[6].data).notches_y == -2.0);
+    CHECK(std::get<MouseWheelScrolled>(events[7].data).notches_x == 1.0);
+    for (const InputEvent& event : events) {
+        CHECK(event.window == id);
+    }
+}
+
+TEST_CASE("Losing mouse capture while a button is held releases the button once", "[integration]") {
+    auto platform = make_platform();
+    const WindowId id = platform->create_window(WindowDesc{}).value();
+    const HWND hwnd = hwnd_of(*platform, id);
+    drain_input(*platform);
+
+    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
+    SendMessageW(hwnd, WM_CAPTURECHANGED, 0, 0);
+    SendMessageW(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(5, 5));  // the late release adds nothing
+
+    std::size_t pressed = 0;
+    std::size_t released = 0;
+    for (const InputEvent& event : drain_input(*platform)) {
+        pressed += std::holds_alternative<MouseButtonPressed>(event.data) ? 1 : 0;
+        released += std::holds_alternative<MouseButtonReleased>(event.data) ? 1 : 0;
+    }
+    CHECK(pressed == 1);
+    CHECK(released == 1);
 }
 
 TEST_CASE("Focus loss releases held keys once, and the later key-up adds no second release", "[integration]") {

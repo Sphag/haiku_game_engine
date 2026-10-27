@@ -48,6 +48,7 @@ private:
 
     void dock_space();
     void history_shortcuts();
+    void editor_shortcuts();
     void menu_bar();
     void project_panel();
     void console_panel();

@@ -15,6 +15,54 @@ std::optional<ImGuiKey> map_run(int value, int first_platform, int count, ImGuiK
     return static_cast<ImGuiKey>(static_cast<int>(first_imgui) + (value - first_platform));
 }
 
+// Dear ImGui reads io.KeyCtrl and the other modifier flags from the ImGuiMod_* keys, not from the left and right keys, so a backend sends
+// both. A modifier is down while either of its two keys is.
+struct ModifierState {
+    ImGuiContext* context = nullptr;
+    bool ctrl[2] = {};
+    bool shift[2] = {};
+    bool alt[2] = {};
+    bool super[2] = {};
+};
+
+ModifierState& modifiers() {
+    static ModifierState state;
+    if (state.context != ImGui::GetCurrentContext()) {
+        state = ModifierState{};
+        state.context = ImGui::GetCurrentContext();
+    }
+    return state;
+}
+
+void send_modifier(ImGuiKey key, bool down) {
+    ModifierState& state = modifiers();
+    ImGuiIO& io = ImGui::GetIO();
+    const auto update = [&io](bool (&held)[2], ImGuiKey left, ImGuiKey key_, ImGuiKey mod, bool is_down) {
+        held[key_ == left ? 0 : 1] = is_down;
+        io.AddKeyEvent(mod, held[0] || held[1]);
+    };
+    switch (key) {
+        case ImGuiKey_LeftCtrl:
+        case ImGuiKey_RightCtrl:
+            update(state.ctrl, ImGuiKey_LeftCtrl, key, ImGuiMod_Ctrl, down);
+            break;
+        case ImGuiKey_LeftShift:
+        case ImGuiKey_RightShift:
+            update(state.shift, ImGuiKey_LeftShift, key, ImGuiMod_Shift, down);
+            break;
+        case ImGuiKey_LeftAlt:
+        case ImGuiKey_RightAlt:
+            update(state.alt, ImGuiKey_LeftAlt, key, ImGuiMod_Alt, down);
+            break;
+        case ImGuiKey_LeftSuper:
+        case ImGuiKey_RightSuper:
+            update(state.super, ImGuiKey_LeftSuper, key, ImGuiMod_Super, down);
+            break;
+        default:
+            break;
+    }
+}
+
 }  // namespace
 
 std::optional<ImGuiKey> to_imgui_key(platform::Key key) noexcept {
@@ -85,10 +133,12 @@ void handle_imgui_input(const platform::InputEvent& event) {
     if (const auto* pressed = std::get_if<platform::KeyPressed>(&event.data)) {
         if (const auto key = to_imgui_key(pressed->key)) {
             io.AddKeyEvent(*key, true);
+            send_modifier(*key, true);
         }
     } else if (const auto* released = std::get_if<platform::KeyReleased>(&event.data)) {
         if (const auto key = to_imgui_key(released->key)) {
             io.AddKeyEvent(*key, false);
+            send_modifier(*key, false);
         }
     } else if (const auto* text = std::get_if<platform::TextInput>(&event.data)) {
         io.AddInputCharactersUTF8(text->utf8.c_str());
@@ -111,6 +161,10 @@ void set_imgui_pointer(std::optional<platform::PointerPosition> position) {
 }
 
 void set_imgui_focused(bool focused) {
+    if (!focused) {
+        modifiers() = ModifierState{};  // the platform releases held keys on focus loss; so does ImGui
+        modifiers().context = ImGui::GetCurrentContext();
+    }
     ImGui::GetIO().AddFocusEvent(focused);
 }
 

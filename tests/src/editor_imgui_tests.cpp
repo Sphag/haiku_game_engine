@@ -129,3 +129,61 @@ TEST_CASE("A shell frame builds with every panel hidden and no layout", "[unit][
     REQUIRE(ImGui::GetDrawData() != nullptr);
     CHECK(ImGui::GetDrawData()->Valid);
 }
+
+namespace {
+
+// Runs one shell frame with the given keys held, then releases them in the next, the way a key press reaches the editor.
+void press_key_for_frame(engine::editor::EditorUi& ui, Key key) {
+    engine::editor::handle_imgui_input(event(engine::platform::KeyPressed{key}));
+    ImGui::NewFrame();
+    ui.build();
+    ImGui::Render();
+    engine::editor::handle_imgui_input(event(engine::platform::KeyReleased{key}));
+    ImGui::NewFrame();
+    ui.build();
+    ImGui::Render();
+}
+
+}  // namespace
+
+TEST_CASE("W, E, and R choose the gizmo while no text field has the keyboard", "[unit][editor]") {
+    using engine::editor::GizmoMode;
+    Scratch scratch;
+    EditorModel model(std::make_shared<engine::editor::Console>(), scratch.path.join("workspace.json").value());
+    ImGuiScope scope;
+    engine::editor::EditorUi ui(model);
+    ui.apply_saved_layout();
+    engine::editor::set_imgui_focused(true);
+
+    press_key_for_frame(ui, Key::E);
+    CHECK(model.viewport().mode() == GizmoMode::Rotate);
+    press_key_for_frame(ui, Key::R);
+    CHECK(model.viewport().mode() == GizmoMode::Scale);
+    press_key_for_frame(ui, Key::W);
+    CHECK(model.viewport().mode() == GizmoMode::Translate);
+
+    // With Control held the same key is not a gizmo shortcut.
+    engine::editor::handle_imgui_input(event(engine::platform::KeyPressed{Key::LeftControl}));
+    press_key_for_frame(ui, Key::E);
+    CHECK(model.viewport().mode() == GizmoMode::Translate);
+    engine::editor::handle_imgui_input(event(engine::platform::KeyReleased{Key::LeftControl}));
+}
+
+TEST_CASE("A click uses the pointer position set before it, not the one from the previous frame", "[unit][editor]") {
+    ImGuiScope scope;
+    engine::editor::begin_imgui_frame(800.0f, 600.0f, 1.0f / 60.0f);
+    engine::editor::set_imgui_focused(true);
+    engine::editor::set_imgui_pointer(engine::platform::PointerPosition{10.0, 10.0});
+    ImGui::NewFrame();
+    ImGui::EndFrame();
+
+    // The cursor moved and clicked within one frame: the position goes in first, then the button.
+    engine::editor::set_imgui_pointer(engine::platform::PointerPosition{300.0, 200.0});
+    engine::editor::handle_imgui_input(event(engine::platform::MouseButtonPressed{engine::platform::MouseButton::Left}));
+    ImGui::NewFrame();
+    const ImGuiIO& io = ImGui::GetIO();
+    CHECK(io.MousePos.x == 300.0f);
+    CHECK(io.MousePos.y == 200.0f);
+    CHECK(io.MouseDown[0]);
+    ImGui::EndFrame();
+}

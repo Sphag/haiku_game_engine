@@ -222,6 +222,7 @@ TEST_CASE("The combined scene edits scene, material, animation, and terrain, und
     BuildProgress progress;
     const auto importers = engine::converter::ImporterRegistry::builtin();
     auto report = engine::editor::build_game(options, progress, importers);
+    INFO("build_game error: " << (report.ok() ? std::string() : report.error()));
     REQUIRE(report.ok());
     CHECK(report.value().verified);
     CHECK(report.value().pack_entries == 2);
@@ -232,7 +233,7 @@ TEST_CASE("The combined scene edits scene, material, animation, and terrain, und
     const fs::path published = root / "output" / "AllFeatures";
 #ifdef _WIN32
     const std::string launcher = "run_game.bat";
-    const std::string command = "cd /d \"" + published.string() + "\" && \"" + launcher + "\" > \"" + (root / "relaunch.log").string() +
+    const std::string command = "cd /d \"" + published.string() + "\" && \".\\" + launcher + "\" > \"" + (root / "relaunch.log").string() +
                                 "\" 2>&1";
 #else
     const std::string launcher = "run_game.sh";

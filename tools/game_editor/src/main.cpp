@@ -297,11 +297,7 @@ int main(int argc, char** argv) {
                 model.set_dpi_scale(dpi->dpi_scale);
             }
         }
-        for (const platform::InputEvent& input : platform->drain_input_events()) {
-            if (input.window == window) {
-                editor::handle_imgui_input(input);
-            }
-        }
+        const std::vector<platform::InputEvent> inputs = platform->drain_input_events();
 
         auto current = platform->window_info(window);
         if (!current.ok()) {
@@ -314,18 +310,30 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        // The pointer is polled: it is inside the window only while the window has focus and the position is within its bounds.
+        // The pointer is polled: it is inside the window only while the window has focus and the position is within its bounds. A drag
+        // that started inside keeps its position outside the bounds, so a slider, a splitter, or a gizmo handle follows the cursor.
         std::optional<platform::PointerPosition> pointer;
         if (info.focused) {
             if (auto position = platform->pointer_position(window); position.ok()) {
                 const double width = static_cast<double>(info.framebuffer_size.width);
                 const double height = static_cast<double>(info.framebuffer_size.height);
-                if (position.value().x >= 0.0 && position.value().y >= 0.0 && position.value().x < width && position.value().y < height) {
+                const bool inside = position.value().x >= 0.0 && position.value().y >= 0.0 && position.value().x < width &&
+                                    position.value().y < height;
+                if (inside || ImGui::IsAnyMouseDown()) {
                     pointer = position.value();
                 }
             }
         }
+        // The position goes in before the buttons, so a click lands where the cursor is now and not where it was last frame.
         editor::set_imgui_pointer(pointer);
+        for (const platform::InputEvent& input : inputs) {
+            if (input.window == window) {
+                editor::handle_imgui_input(input);
+            }
+        }
+        if (!info.focused) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));  // an editor in the background does not need a full frame rate
+        }
 
         const auto now = Clock::now();
         const float delta = std::chrono::duration<float>(now - previous).count();

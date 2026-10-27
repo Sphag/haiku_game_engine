@@ -78,6 +78,7 @@ TEST_CASE("Build Game writes a package that launches from a clean folder", "[edi
     const auto importers = engine::converter::ImporterRegistry::builtin();
     BuildProgress progress;
     const auto result = build_game(options_for(scratch, "Sample"), progress, importers);
+    INFO("build_game error: " << (result.ok() ? std::string() : result.error()));
     REQUIRE(result.ok());
     CHECK(result.value().verified);
     CHECK(result.value().pack_entries == 2);

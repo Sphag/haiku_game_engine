@@ -132,6 +132,44 @@ void EditorUi::history_shortcuts() {
         static_cast<void>(io.KeyShift ? scene.redo() : scene.undo());
     } else if (ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
         static_cast<void>(scene.redo());
+    } else if (ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+        static_cast<void>(save_scene());
+    } else if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+        if (const auto selected = scene.selected()) {
+            static_cast<void>(scene.duplicate(*selected));
+        }
+    }
+}
+
+void EditorUi::editor_shortcuts() {
+    const ImGuiIO& io = ImGui::GetIO();
+    // Keys typed into a field, held with a modifier, or used by a drag in the viewport belong to something else.
+    if (io.WantTextInput || io.KeyCtrl || io.KeyAlt || ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+        return;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+        if (model_.play_state() == PlayState::Edit) {
+            static_cast<void>(model_.play());
+        } else {
+            model_.stop();
+        }
+        return;
+    }
+    if (!model_.scene_editable()) {
+        return;
+    }
+    EditorViewport& viewport = model_.viewport();
+    if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+        viewport.set_mode(GizmoMode::Translate);
+    } else if (ImGui::IsKeyPressed(ImGuiKey_E, false)) {
+        viewport.set_mode(GizmoMode::Rotate);
+    } else if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
+        viewport.set_mode(GizmoMode::Scale);
+    } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+        SceneEditor& scene = model_.scene();
+        if (const auto selected = scene.selected()) {
+            static_cast<void>(scene.remove(*selected));
+        }
     }
 }
 
@@ -143,6 +181,7 @@ void EditorUi::build() {
     model_.tick_play(static_cast<double>(ImGui::GetIO().DeltaTime));
     model_.tick_assets();
     history_shortcuts();
+    editor_shortcuts();
     dock_space();
     // The dialog is opened and drawn outside the host window, so its popup ID is the same in both calls.
     unsaved_dialog();
@@ -227,7 +266,7 @@ void EditorUi::menu_bar() {
         if (ImGui::MenuItem("New scene")) {
             request(PendingAction::NewScene);
         }
-        if (ImGui::MenuItem("Save scene")) {
+        if (ImGui::MenuItem("Save scene", "Ctrl+S")) {
             static_cast<void>(save_scene());
         }
         ImGui::Separator();
@@ -257,6 +296,16 @@ void EditorUi::menu_bar() {
         if (ImGui::MenuItem(redo.c_str(), "Ctrl+Y", false, scene.can_redo() && model_.scene_editable())) {
             static_cast<void>(scene.redo());
         }
+        ImGui::Separator();
+        const bool has_selection = scene.selected().has_value() && model_.scene_editable();
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, has_selection)) {
+            static_cast<void>(scene.duplicate(*scene.selected()));
+        }
+        if (ImGui::MenuItem("Delete", "Del", false, has_selection)) {
+            static_cast<void>(scene.remove(*scene.selected()));
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("W / E / R: move, rotate, scale   F5: play / stop");
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {

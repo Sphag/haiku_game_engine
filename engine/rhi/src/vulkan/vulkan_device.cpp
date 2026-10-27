@@ -2546,7 +2546,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debug_callback(VkDebugUtilsMessageS
                                                             VkDebugUtilsMessageTypeFlagsEXT /*types*/,
                                                             const VkDebugUtilsMessengerCallbackDataEXT* data, void* user) {
     auto* self = static_cast<VulkanDevice*>(user);
-    if (self != nullptr && data != nullptr) {
+    // A validation layer older than the headers the engine builds against cannot parse the newer feature structures and reports each as
+    // "unknown VkStructureType". That is a stale layer, not an engine error, so only that message class is dropped.
+    const bool stale_layer = data != nullptr && data->pMessage != nullptr && std::strstr(data->pMessage, "unknown VkStructureType") != nullptr;
+    if (self != nullptr && data != nullptr && !stale_layer) {
         self->record_message((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0, data->pMessage);
     }
     return VK_FALSE;

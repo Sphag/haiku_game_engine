@@ -1,0 +1,89 @@
+# Iteration 1303 Log
+
+## Metadata
+
+- **Task ID**: US-081
+- **Task Title**: Documentation and Final Release
+- **Description**: As an engine user, I want a clear, working package so that I can build the engine and release a sample game.
+- **Status**: completed
+- **Task Completed**: No
+- **Promise Detected**: No
+- **Started At**: 2026-10-27T00:13:35.222Z
+- **Ended At**: 2026-10-27T00:37:04.993Z
+- **Duration**: 23m 29s
+- **Input Tokens**: 152
+- **Output Tokens**: 7346
+- **Total Tokens**: 7498
+- **Agent**: claude
+- **Model**: claude-haiku-5-5
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Bash][0m Inspect repo root, docs, and progress log $ tail -c 1500 .ralph-tui/progress.md 2>/dev/null
+[94m[Bash][0m List tasks, benchmarks, and PRD section headings $ grep -n "^## \|^### " tasks/prd-open-world-engine.md | head -120
+[94m[Bash][0m Run vendor validation and list presets and artifacts $ ls artifacts | head
+[94m[Bash][0m Run Linux configure, debug build, and unit tests $ echo "EXIT=$?" >> /tmp/us081/linux-gates.log
+[94m[Bash][0m Read the acceptance checklist document $ sed -n 1,200p docs/acceptance.md | head -150
+[94m[Monitor][0m Wait for Linux gate run to finish $ tail -15 /tmp/us081/linux-gates.log
+[94m[Monitor][0m Wait for Linux gate run to finish (re-armed) $ tail -15 /tmp/us081/linux-gates.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check progress of Linux gate log $ grep -c "" /tmp/us081/linux-gates.log
+[94m[Bash][0m Check whether the gate process is running $ tail -5 /tmp/claude-1000/-mnt-d-dev-haiku-game-engine/e1ed652f-8464-4301-99ce-c42133971747/tasks/bsi...
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check gate log tail and active build processes $ pgrep -fa "cmake --|ctest|ninja|make" | grep -v pgrep | head -5
+[94m[Bash][0m Inspect stuck cmake configure process $ date +%T
+[94m[Bash][0m Check configure process elapsed time and state $ tail -c 600 /tmp/us081/linux-gates.log
+[94m[Monitor][0m Wait for Linux gate run completion marker $ tail -20 /tmp/us081/linux-gates.log
+[94m[ScheduleWakeup][0m
+[94m[Bash][0m Check gate log and configure process status $ ps -o pid,etime,args -p 3266 | cut -c1-80
+The Linux gate run is still going, so I can't report a result yet. I haven't changed any files in this pass.
+
+**Where US-081 stands**
+
+- **Documentation:** The README and `docs/` already cover the acceptance items: architecture, schemas, vendor manifest, benchmarks, capability matrix, and the feature-to-test map in `docs/acceptance.md`. I didn't edit any of them.
+- **Vendor validation:** `cmake -P cmake/ValidateVendor.cmake` passed again on Linux (26 dependencies, 8542 files).
+- **Linux gates, in progress:** A background run is doing `cmake --preset linux-dev`, then `cmake --build --preset linux-debug`, then `ctest --preset linux-unit`. Output goes to `/tmp/us081/linux-gates.log`. The configure step is slow on the `/mnt/d` filesystem, and the log has no output yet.
+- **Still open, per `docs/acceptance.md`:**
+  - No native Linux Vulkan GPU report (WSL has no usable Vulkan device).
+  - The full acceptance benchmark has not run to completion.
+  - FSR 2 permutations are missing from the vendored tree.
+  - `linux-gcc` cannot build Jolt with the local GCC 9.4.
+  - The visual editor smoke test is launch-only on Windows and not run on native Linux.
+  - There is no LICENSE file.
+
+I'm not emitting the COMPLETE signal. Several acceptance items need hardware or user decisions, so the story can't be signed off in this session.
+
+I'll check the gate log again when the background run finishes. If the Linux gates pass, I'll update the Linux rows in `docs/acceptance.md` with the actual results.
+[94m[Bash][0m Read the Linux gate log results $ tail -25 /tmp/us081/linux-gates.log
+[94m[Bash][0m Append the Linux gate rerun result to the progress log $ allow several minutes before expecting log output.   - Stop: US-081 is not signed off. No COMPLETE s...
+The Linux gates pass on the current tree, but US-081 is not signed off, so I am not emitting COMPLETE.
+
+**Linux gate results**
+- `cmake -P cmake/ValidateVendor.cmake`: passed (26 dependencies, 8542 files), run earlier in this pass.
+- `cmake --preset linux-dev`: exit 0.
+- `cmake --build --preset linux-debug`: exit 0.
+- `ctest --preset linux-unit --output-on-failure --no-tests=error`: 30 of 30 passed (1 unit, 29 integration).
+
+The full log is at `/tmp/us081/linux-gates.log`, outside the repo. The Linux rows in `docs/acceptance.md` already record these results, so I made no documentation changes. I appended a progress entry to `.ralph-tui/progress.md`.
+
+**Still open (per `docs/acceptance.md`)**
+- No native Linux Vulkan GPU report; WSL has no usable Vulkan device.
+- The full acceptance benchmark has not run to completion, and the render, streaming, and physics scenes don't yet produce GPU timestamps.
+- FSR 2 permutation headers are missing from the vendored tree.
+- `linux-gcc` cannot build Jolt with the local GCC 9.4.
+- The visual editor smoke test is launch-only on Windows and not run on native Linux.
+- There is no LICENSE file, which is a user decision.
+
+I did not re-run the Windows gates in this pass. Their results in `docs/acceptance.md` come from earlier runs.
+This notification is the Monitor that watched the same Linux gate log. It shows the result I already reported: 30 of 30 tests passed and `EXIT=0`. Nothing changed, so there is no new work to do.
+
+US-081 stays unsigned. The open items are the ones listed in my last message. I'm not emitting COMPLETE.
+This is a second notification for the same Linux gate run. It reports the same result: 30 of 30 tests passed and `EXIT=0`. I have no new work to do.
+
+US-081 remains unsigned, with the open items from my earlier report. I'm not emitting COMPLETE.
+This is the third notification for the same Linux gate run, and it reports the same result: 30 of 30 tests passed, `EXIT=0`. Nothing new to act on.
+
+US-081 is still unsigned for the reasons in my earlier report. I'm not emitting COMPLETE, and I'll stop acknowledging these repeat notifications unless something changes.
+Nothing actionable: the Linux gate run is finished, the remaining US-081 items need hardware or your decisions, and this repo has no PR to maintain. Stopping the loop.
+[94m[ScheduleWakeup][0m
+Quiet tick: nothing to act on, so I've stopped the loop. US-081 stays unsigned until the open items in `docs/acceptance.md` are resolved.
