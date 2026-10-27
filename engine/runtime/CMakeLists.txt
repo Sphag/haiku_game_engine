@@ -12,7 +12,6 @@ engine_configure_first_party(engine_runtime)
 # The windowed game: GameRenderer (the scene through SceneRenderer, presented by a buffer copy) and the window loop. Kept apart from
 # engine_runtime so the option parser and lifecycle tests do not link the renderer.
 add_library(engine_game_render STATIC
-  src/animation_binding.cpp
   src/game_renderer.cpp
   src/windowed_game.cpp
 )

@@ -18,7 +18,7 @@
 #include "engine/material_graph/graph.hpp"
 #include "engine/scene/scene.hpp"
 #include "engine/rhi/device.hpp"
-#include "engine/runtime/animation_binding.hpp"
+#include "engine/gameplay/animation_binding.hpp"
 #include "engine/runtime/game_renderer.hpp"
 #include "engine/scene/scene_format.hpp"
 #include "engine/world/terrain_edit.hpp"
@@ -181,8 +181,8 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
     auto created = engine::gameplay::GameWorld::create(*loaded.scene, read_script, services, resolve_audio);
     REQUIRE(created.ok());
     auto world = std::move(created).value();
-    const engine::runtime::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
-    const auto animators = engine::runtime::bind_animators(*loaded.scene, reader, world->animators());
+    const engine::gameplay::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
+    const auto animators = engine::gameplay::bind_animators(*loaded.scene, reader, world->animators());
     for (const std::string& problem : animators.problems) {
         FAIL_CHECK("animator: " << problem);
     }
@@ -429,9 +429,9 @@ void render_showcase_on(engine::rhi::Backend backend) {
     if (!device.ok()) {
         FAIL("device: " << device.error().message);
     }
-    const engine::runtime::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
+    const engine::gameplay::AssetReader reader = [&loaded](const Guid& guid) { return showcase_asset_bytes(loaded.scan, guid); };
     engine::animation::AnimatorSet animators;
-    const auto binding = engine::runtime::bind_animators(*loaded.scene, reader, animators);
+    const auto binding = engine::gameplay::bind_animators(*loaded.scene, reader, animators);
     for (const std::string& problem : binding.problems) {
         FAIL_CHECK("animator: " << problem);
     }

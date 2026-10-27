@@ -42,7 +42,8 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
                                                                            const scene::SceneDocument& document,
                                                                            const std::unordered_set<core::Guid>& known_assets,
                                                                            gameplay::ScriptSource read_script,
-                                                                           gameplay::AudioPath resolve_audio) {
+                                                                           gameplay::AudioPath resolve_audio,
+                                                                           gameplay::AssetReader read_asset) {
     std::unique_ptr<PlaySession> session(new PlaySession());
 
     session->scene_ = std::make_unique<scene::Scene>(catalog, prefabs);
@@ -75,6 +76,11 @@ core::Result<std::unique_ptr<PlaySession>, std::string> PlaySession::create(cons
         return core::failure(bound.error());
     }
     session->bindings_ = std::move(bound.value());
+
+    // The scene's animators: the state machines scripts steer by name. A problem is reported and does not stop Play.
+    for (std::string& problem : gameplay::bind_animators(*session->scene_, read_asset, session->animators_).problems) {
+        session->errors_.push_back(std::move(problem));
+    }
 
     return core::success(std::move(session));
 }

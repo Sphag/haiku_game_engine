@@ -18,6 +18,7 @@
 #include "engine/scene/scene.hpp"
 #include "engine/scene/scene_format.hpp"
 
+#include "engine/gameplay/animation_binding.hpp"
 #include "engine/gameplay/game_world.hpp"
 
 #include <cstddef>
@@ -58,7 +59,8 @@ public:
                                                                                        const scene::SceneDocument& document,
                                                                                        const std::unordered_set<core::Guid>& known_assets,
                                                                                        gameplay::ScriptSource read_script = {},
-                                                                                       gameplay::AudioPath resolve_audio = {});
+                                                                                       gameplay::AudioPath resolve_audio = {},
+                                                                                       gameplay::AssetReader read_asset = {});
 
     // Sessions alive in the process. Stop must bring it back to zero, so tests can check that no session outlives its Stop.
     [[nodiscard]] static std::size_t live_count() noexcept;

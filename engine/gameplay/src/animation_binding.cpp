@@ -1,4 +1,4 @@
-#include "engine/runtime/animation_binding.hpp"
+#include "engine/gameplay/animation_binding.hpp"
 
 #include "engine/animation/state_graph.hpp"
 #include "engine/gameplay/components.hpp"
@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <variant>
 
-namespace engine::runtime {
+namespace engine::gameplay {
 
 namespace {
 
@@ -93,19 +93,19 @@ std::optional<ModelAnimation> animation_from_payload(const converter::ModelPaylo
 AnimatorBinding bind_animators(const scene::Scene& scene, const AssetReader& reader, animation::AnimatorSet& animators) {
     AnimatorBinding binding;
     for (const core::Guid& guid : scene.entity_guids()) {
-        if (!has_component(scene, guid, gameplay::kAnimatorId)) {
+        if (!has_component(scene, guid, kAnimatorId)) {
             continue;
         }
-        std::string name = read<std::string>(scene, guid, gameplay::kAnimatorId, "name", std::string());
+        std::string name = read<std::string>(scene, guid, kAnimatorId, "name", std::string());
         if (name.empty()) {
-            name = read<std::string>(scene, guid, gameplay::kNameId, "name", std::string());
+            name = read<std::string>(scene, guid, kNameId, "name", std::string());
         }
         if (name.empty()) {
             name = guid.to_string();
         }
         const auto problem = [&](const std::string& text) { binding.problems.push_back("animator " + name + ": " + text); };
 
-        const core::Guid model_asset = read<core::Guid>(scene, guid, gameplay::kAnimatorId, "model", core::Guid{});
+        const core::Guid model_asset = read<core::Guid>(scene, guid, kAnimatorId, "model", core::Guid{});
         const std::optional<std::string> model_bytes = reader && !model_asset.is_nil() ? reader(model_asset) : std::nullopt;
         if (!model_bytes) {
             problem("its model is not in the packs");
@@ -122,7 +122,7 @@ AnimatorBinding bind_animators(const scene::Scene& scene, const AssetReader& rea
             continue;
         }
 
-        const core::Guid graph_asset = read<core::Guid>(scene, guid, gameplay::kAnimatorId, "graph", core::Guid{});
+        const core::Guid graph_asset = read<core::Guid>(scene, guid, kAnimatorId, "graph", core::Guid{});
         std::string graph_text;
         if (const std::optional<std::string> text = reader && !graph_asset.is_nil() ? reader(graph_asset) : std::nullopt) {
             graph_text = *text;
@@ -150,4 +150,4 @@ AnimatorBinding bind_animators(const scene::Scene& scene, const AssetReader& rea
     return binding;
 }
 
-}  // namespace engine::runtime
+}  // namespace engine::gameplay

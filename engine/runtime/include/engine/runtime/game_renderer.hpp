@@ -14,7 +14,7 @@
 
 #include "engine/animation/state_machine.hpp"
 #include "engine/core/guid.hpp"
-#include "engine/runtime/animation_binding.hpp"
+#include "engine/gameplay/animation_binding.hpp"
 #include "engine/core/result.hpp"
 #include "engine/render/scene_image.hpp"
 #include "engine/rhi/device.hpp"
@@ -28,6 +28,8 @@
 #include <string>
 
 namespace engine::runtime {
+
+using gameplay::AssetReader;
 
 struct RenderStats {
     std::uint32_t items = 0;       // drawn

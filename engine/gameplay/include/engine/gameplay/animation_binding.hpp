@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace engine::runtime {
+namespace engine::gameplay {
 
 // The importer payload of an asset (a model's OWMD bytes, a terrain's OWTR bytes, a graph's JSON text), or nothing when it is not available.
 using AssetReader = std::function<std::optional<std::string>(const core::Guid&)>;
@@ -39,4 +39,4 @@ struct AnimatorBinding {
 // component has none). The graph is the component's graph asset; without one, the model's first clip plays on a loop.
 [[nodiscard]] AnimatorBinding bind_animators(const scene::Scene& scene, const AssetReader& reader, animation::AnimatorSet& animators);
 
-}  // namespace engine::runtime
+}  // namespace engine::gameplay

@@ -3,7 +3,7 @@
 #include "asset_converter/model_format.hpp"
 #include "engine/animation/clip.hpp"
 #include "engine/animation/skeleton.hpp"
-#include "engine/runtime/animation_binding.hpp"
+#include "engine/gameplay/animation_binding.hpp"
 #include "engine/core/file_io.hpp"
 #include "engine/core/path.hpp"
 #include "engine/gameplay/components.hpp"
@@ -228,7 +228,7 @@ const CachedModel& GameRenderer::Impl::model(const core::Guid& asset, std::vecto
             }
             out.parts.push_back({uploaded.value(), material_of(payload.meshes[m].material)});
         }
-        if (auto built = animation_from_payload(payload)) {
+        if (auto built = gameplay::animation_from_payload(payload)) {
             out.skeleton = std::move(built->skeleton);
             out.clips = std::move(built->clips);
         }

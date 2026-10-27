@@ -4,6 +4,8 @@
 #include "engine/scene/reflection.hpp"
 
 #include <unordered_set>
+#include "asset_converter/importer.hpp"
+
 #include <algorithm>
 #include <utility>
 #include <variant>
@@ -97,6 +99,39 @@ void EditorModel::load_project_prefabs() {
         }
         static_cast<void>(scene_.prefabs().add(record->guid, std::move(prefab).value()));
     }
+}
+
+gameplay::AssetReader EditorModel::asset_reader() const {
+    // An asset's importer payload, as the packed game reads it: a model goes through the model importer, anything else is its file.
+    return [this](const core::Guid& guid) -> std::optional<std::string> {
+        const assets::ProjectScan* scan = project_.scan();
+        const assets::AssetRecord* record = scan != nullptr ? scan->registry.find(guid) : nullptr;
+        if (record == nullptr || !project_.info()) {
+            return std::nullopt;
+        }
+        const auto root = project_.info()->root.join(std::string(kProjectAssetsFolder));
+        const auto path = root.ok() ? root.value().join(record->source_path.str()) : root;
+        if (!path.ok()) {
+            return std::nullopt;
+        }
+        auto bytes = core::read_file(path.value());
+        if (!bytes.ok()) {
+            return std::nullopt;
+        }
+        if (record->importer != "model") {
+            return std::move(bytes.value());
+        }
+        const auto importer = converter::make_model_importer();
+        auto settings = importer->canonical_settings(record->importer_settings);
+        if (!settings.ok()) {
+            return std::nullopt;
+        }
+        auto imported = importer->import(bytes.value(), settings.value());
+        if (!imported.ok()) {
+            return std::nullopt;
+        }
+        return std::move(imported.value().payload);
+    };
 }
 
 gameplay::AudioPath EditorModel::audio_resolver() const {
@@ -356,7 +391,7 @@ bool EditorModel::play() {
     if (play_ != nullptr) {
         return false;
     }
-    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets(), script_reader(), audio_resolver());
+    auto created = PlaySession::create(scene_.catalog(), scene_.prefabs(), scene_.scene().to_document(), known_assets(), script_reader(), audio_resolver(), asset_reader());
     if (!created.ok()) {
         note(core::LogLevel::Error, "cannot play the scene: " + created.error());
         return false;

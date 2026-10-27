@@ -1116,8 +1116,18 @@ void EditorUi::hierarchy_panel() {
                 }
                 kinds += type.starts_with("engine.") ? type.substr(7) : type;
             }
-            std::string label = row.prefab_instance ? "[prefab] " : "";
-            if (!name.empty()) {
+            std::string label;
+            if (row.prefab_instance) {
+                // An instance is named after its prefab asset's file.
+                std::string prefab_name = "prefab";
+                if (const auto prefab = scene.scene().prefab_of(row.guid)) {
+                    if (const CatalogEntry* asset = model_.assets().find(prefab->to_string()); asset != nullptr && asset->registered()) {
+                        const std::size_t slash = asset->source.find_last_of('/');
+                        prefab_name = slash == std::string::npos ? asset->source : asset->source.substr(slash + 1);
+                    }
+                }
+                label = (name.empty() ? prefab_name : name) + "  (" + short_guid(row.guid) + ")";
+            } else if (!name.empty()) {
                 label += name;
             } else {
                 label += (kinds.empty() ? std::string("Entity") : kinds) + "  " + short_guid(row.guid);
@@ -1272,9 +1282,11 @@ void EditorUi::inspector_panel() {
                 entity_name_key_ = key;
                 copy_text(entity_name_text_, current_name);
             }
-            ImGui::BeginDisabled(interior);
+            // A prefab instance takes its name from its prefab, so its name is read-only here.
+            ImGui::BeginDisabled(interior || prefab_instance);
             ImGui::SetNextItemWidth(-FLT_MIN);
-            ImGui::InputTextWithHint("##entity_name", "Entity name", entity_name_text_.data(), entity_name_text_.size());
+            ImGui::InputTextWithHint("##entity_name", prefab_instance ? "Prefab instance" : "Entity name", entity_name_text_.data(),
+                                     entity_name_text_.size());
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 const auto types = scene.scene().component_types(entity);
                 if (std::find(types.begin(), types.end(), gameplay::kNameId) == types.end() && !prefab_instance) {

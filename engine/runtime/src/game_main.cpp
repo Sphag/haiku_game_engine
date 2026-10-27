@@ -7,7 +7,7 @@
 #include "engine/gameplay/components.hpp"
 #include "engine/gameplay/game_world.hpp"
 #include "engine/pack/pack.hpp"
-#include "engine/runtime/animation_binding.hpp"
+#include "engine/gameplay/animation_binding.hpp"
 #include "engine/runtime/lifecycle.hpp"
 #include "engine/runtime/runtime_options.hpp"
 #include "engine/runtime/windowed_game.hpp"
@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
     };
 
     // Any asset's importer payload by GUID: models, terrain, and graphs for the renderer.
-    const engine::runtime::AssetReader read_asset = [&packs](const Guid& guid) -> std::optional<std::string> {
+    const engine::gameplay::AssetReader read_asset = [&packs](const Guid& guid) -> std::optional<std::string> {
         for (const auto& pack : packs) {
             if (const auto* found = pack.find(guid)) {
                 auto cooked = engine::assets::read_cooked_container(pack.payload(*found));
@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     }
     int exit_code = kExitOk;
     // Animators: the state machines scripts steer by name. Headless and windowed runs bind the same ones.
-    const engine::runtime::AnimatorBinding animators = engine::runtime::bind_animators(scene, read_asset, world.value()->animators());
+    const engine::gameplay::AnimatorBinding animators = engine::gameplay::bind_animators(scene, read_asset, world.value()->animators());
     for (const std::string& problem : animators.problems) {
         std::fprintf(stderr, "game_runtime: %s\n", problem.c_str());
         exit_code = kExitLoadFailed;
