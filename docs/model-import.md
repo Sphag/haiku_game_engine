@@ -58,3 +58,20 @@ The tests in `tests/src/converter_model_tests.cpp` also cover the payload format
 ## Vendoring note
 
 The vendored Assimp tree needs its root `CMakeLists.txt`, `assimp.pc.in`, and `cmake-modules/` to configure. These are listed in `tools/vendor/vendor.py` and recorded in `third_party/manifest.json` with their hashes. Re-vendor with `python3 -I tools/vendor/vendor.py --download-dir <new empty dir> --only Assimp`.
+
+## Skeleton, skin weights, and clips (US-022)
+
+A model with skinned meshes or animations is written as payload version 3 (a static model is still version 2, and both read the same).
+
+- **Joints.** Every node a mesh names as a bone becomes a joint, in node order so parents come first. A joint's parent is its nearest
+  ancestor that is also a joint. `inverse_bind` is the bone's offset matrix.
+- **Skin.** Each vertex of a skinned mesh keeps its four strongest influences, scaled to sum to one. A vertex with no influence follows
+  joint 0. The cooker remaps the joints and weights with the other vertex attributes, so the reordering keeps every vertex's skin.
+- **Clips.** Each animation becomes a clip with times in seconds and channels for the joints it animates (translation, rotation as
+  x, y, z, w, and scale keys). Channels for nodes that are not joints are skipped and reported. A clip's duration covers its last key.
+- **Checks.** The reader and the importer refuse a joint index out of range, weights that are negative or do not sum to one, a parent that
+  is not an earlier joint, key times that are out of order or outside the clip, and a channel for a joint that does not exist.
+
+`tests/fixtures/models/skinned_arm.gltf` (made by `generate_skinned.py`) is a two-joint arm with a "wave" and a "slide" clip, and
+`converter_model_tests.cpp` checks its import. Reading the payload at run time (the runtime cannot link the converter) and playing the
+clips on a skinned mesh are the next steps; the data is ready for them.

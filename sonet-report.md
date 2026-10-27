@@ -159,3 +159,62 @@ New: `engine/gameplay/` (components, `GameWorld`), `samples/showcase/`, `tools/s
 Changed: `engine/platform/src/win32/platform_win32.cpp`, `engine/editor/src/{imgui_input,editor_ui,editor_model,play_session,scene_editor,distribution}.cpp`,
 `engine/runtime/src/{game_main,runtime_options}.cpp`, `engine/scene` (two accessors), `engine/rhi/src/vulkan/vulkan_device.cpp`,
 `tools/game_editor/src/main.cpp`, tests, CMake wiring, and the docs (`editor.md`, `schemas.md`, `runtime-packs.md`, `acceptance.md`, `README.md`).
+
+---
+
+# Second pass (production-readiness follow-up)
+
+You asked for the open items to be turned into working code, with tests, once the desktop was unlocked, the Vulkan SDK was installed, MIT was
+chosen as the license, and the model importer was to be extended. This section replaces the "still not production ready" list above where it
+says so. State: `sonnet` branch, all Windows suites green on DX12 and Vulkan.
+
+## Results
+
+| Check | Result |
+|---|---|
+| `engine_tests --suite unit` / `integration` (Release) | 1037 / 148 cases pass; Debug passed earlier |
+| `ctest --preset win-release-unit` | 29 of 29 |
+| `engine_tests --suite gpu --backend dx12` | **73 of 73** (43 942 assertions), RTX 5080, validation on |
+| `engine_tests --suite gpu --backend vulkan` | **74 of 74** (43 954 assertions) with the SDK 1.4.363 layer (`VK_LAYER_PATH`). The earlier failures were only the old 1.3.224 layer |
+| `engine_tests --suite editor --backend dx12` / `vulkan` | 111 of 111 on both |
+| `tools/ui_tests/editor_ui_test.ps1` (real mouse and keyboard on the real window) | 0 failed checks |
+| The packaged showcase, started with its own launcher in a window, DX12 and Vulkan | Draws the lit, shadowed scene; the kinematic platform turns between frames |
+| Linux (WSL, clang 10, Debug, `-Werror`) | Passed 30 of 30 on the previous commit; a rerun on the final commit is noted at the end of this report |
+
+## What I did
+
+1. **Unlocked-desktop editor testing found the real input bug.** Typed text never reached any text field: the Win32 message pump dispatched
+   `WM_KEYDOWN` but never called `TranslateMessage`, so no `WM_CHAR` was ever produced. Earlier headless tests sent `WM_CHAR` by hand and
+   hid it. Fixed. This bug also affected any game built on the platform layer.
+2. **Editor usability**, from screenshots of the real window: scenes can now be opened from **File > Open scene** and by double click in
+   Assets (before, you had to type an absolute path into a box in the Hierarchy tab); hierarchy rows say what each entity is instead of
+   showing a bare GUID prefix; the left dock is wider; `--log <file>` mirrors the console for scripts.
+3. **A real-input UI test** (`tools/ui_tests/editor_ui_test.ps1`): launches the editor, types a path, double-clicks a scene, selects,
+   Ctrl+D / Ctrl+Z / Ctrl+Y / Delete / Ctrl+S, F5 twice, wheel, asserts on the log, saves screenshots to `artifacts/ui/`. Run it on an
+   unlocked Windows desktop.
+4. **Drawing in the runtime.** `game_runtime --window` (the package launcher passes it) opens a window and draws the scene through
+   `SceneRenderer`: primary camera, directional/point/spot lights with shadows, tinted meshes, the environment's sky color. A new
+   `GameRenderer` reads the built-in components and presents by copying the image into the swapchain, so there is one path for DX12 and
+   Vulkan and no new shader. Swapchains gained the copy-destination usage on both backends. Tests: a GPU case per backend renders the showcase
+   and checks the camera, lights, items, lit pixel share, and distinct objects; the package test runs the real launcher headless.
+5. **Model importer: skeleton, skin weights, clips** (payload version 3; static models stay version 2). Per-vertex joints and weights
+   survive the mesh cooker's vertex reordering. A new skinned, animated glTF fixture and generator are covered by import, round-trip,
+   determinism, and rejection tests (bad joint index, weights, parents, key times, channel joints, truncation).
+6. **Gameplay systems:** kinematic bodies now follow their entity, and audio emitters start playing in Play; both are tested on the showcase.
+7. **License:** MIT (`LICENSE`), with a note that `third_party/` keeps its own licenses. **Build docs:** MSVC 14.51 and the
+   same-Visual-Studio rule are stated. **Vulkan docs:** the SDK and `VK_LAYER_PATH` setup is in `docs/vulkan.md`.
+
+## What is still not done
+
+1. **Meshes in the runtime are primitives** (a box, or a sphere for a sphere body), tinted by the component. The cooked model payload reader
+   lives in the converter, which the runtime must not link. The next step is to move `read_model_payload` into a runtime library and feed
+   `MeshProvider`. The same step gives skinned playback, because the importer now writes the skeleton and clips.
+2. **Textures and material graphs are not applied** when drawing: the renderer's default PBR material is used with the component tint.
+   Material graph compilation needs the shader compiler at run time, so a cooked material form is needed first.
+3. **Components without a system yet:** animator, particle emitter, terrain, UI canvas (their libraries exist and have GPU tests).
+4. **No resize, fullscreen, or gamepad-driven menu in the runtime window**; the picture is placed at the top-left at multiples of 64 pixels
+   of width. No game input mapping is bound to scripts in the windowed loop (the platform layer and action map exist).
+5. **Entity names:** the reflection system has no string field kind, so entities cannot be named; the hierarchy shows components instead.
+6. **Editor:** no OS cursor shapes, no redraw during a window resize drag, no gizmo drag test in the UI script. The X11 path was not
+   re-reviewed for the mouse-message issues fixed on Win32.
+7. **Not run:** the full acceptance benchmark, native Linux Vulkan GPU, FSR 2, Linux GCC 11, ASan/UBSan on the new code.

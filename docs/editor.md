@@ -216,3 +216,12 @@ loads every `.prefab` asset of the open project into its prefab library, so scen
 and attaches Lua scripts from the scene's components, reading script sources from the project's `assets/` folder.
 
 The sample project is `samples/showcase` (see its README).
+
+## Opening scenes, the hierarchy, and the UI test
+
+- **File > Open scene** lists the project's scenes. A double click on a scene in the Assets panel opens it. Both ask about unsaved changes.
+- Hierarchy rows say what an entity is (its components, then its GUID prefix), because entities have no name field yet.
+- `game_editor --log <file>` appends every console line to a file.
+- **`tools/ui_tests/editor_ui_test.ps1`** drives the real window with real mouse and keyboard input (typing a path, a double click, Ctrl+D,
+  Ctrl+Z, Ctrl+Y, Delete, Ctrl+S, F5) on a copy of the showcase, checks the editor's log, and saves screenshots to `artifacts/ui/`.
+  It needs an unlocked Windows desktop. Its first run found that typed text never arrived: the message pump did not call `TranslateMessage`.

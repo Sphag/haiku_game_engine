@@ -68,5 +68,5 @@ After the packs and the start scene load, the runtime registers the built-in com
 from the packs. The runtime then steps the world at 60 Hz for `--frames <n>` frames (default 60) and prints
 `game_runtime: simulated <n> frames bodies=<b> scripts=<s> fixed_steps=<f>`. A script that fails to load or raises makes the runtime exit 1.
 
-This build's runtime opens no window and draws nothing: the render, audio-emitter, animator, particle, terrain, and UI systems exist as
-libraries but are not yet driven from the components.
+With `--window` the runtime opens a window and draws the scene (see [components.md](components.md#drawing)); the package launcher passes it.
+Without it (`--headless`, the default of the executable) it only simulates, which is what the tests and the package verification use.

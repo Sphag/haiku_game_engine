@@ -32,7 +32,10 @@ Every numeric field has a range, so the inspector and the loader refuse a value 
 |---|---|
 | `engine.rigid_body` | `GameWorld` creates a Jolt body (box, sphere, or capsule; static, kinematic, or dynamic; trigger) |
 | `engine.script` | `GameWorld` attaches the Lua source, and the runner drives `create`, `start`, `fixed_update`, `update`, `destroy` |
-| the rest | stored, edited, saved, packed, and loaded. Their systems (render, audio emitters, animator, particles, terrain, environment, UI) are in the engine as libraries and are not yet driven from the components |
+| a kinematic `engine.rigid_body` | it follows its entity: a script or scene move becomes the body's target each frame |
+| `engine.audio_emitter` | in the editor's Play, an emitter with `play_on_start` loads its clip from the project and starts a voice |
+| `engine.camera`, `engine.light`, `engine.mesh_renderer`, `engine.environment` | `GameRenderer` (`engine/runtime`) draws them: the primary camera is the view, lights become scene lights, each visible mesh renderer a box (a sphere for a sphere body) with its tint, and the environment's sky color is the background |
+| the rest | stored, edited, saved, packed, and loaded. Their systems (animator, particles, terrain, UI canvas) are in the engine as libraries and are not yet driven from the components |
 
 ## GameWorld
 
@@ -47,3 +50,14 @@ world matrices stay correct.
 
 `game_runtime --frames <n>` runs a packed scene through `GameWorld` for n frames at 60 Hz (default 60) and reports bodies, scripts, and
 fixed steps. It exits 1 if a script fails.
+
+## Drawing
+
+`game_runtime --window` opens a window and draws the scene every frame: the world steps, then `GameRenderer` renders the scene through the
+engine's `SceneRenderer` (lighting, shadows, PBR) on DX12 or Vulkan, and the image is copied into the swapchain back buffer. The package
+launcher passes `--window`; `--headless` (the default of the executable) is the CPU simulation the tests use. Escape or the close button
+ends the game; `--frames n` ends it after n frames.
+
+Meshes are placeholders until the runtime can read cooked model payloads: the converter owns that reader and the runtime must not link the
+converter, so the next step is to move the payload reader into a runtime library. `MeshProvider` in `game_renderer.hpp` is the hook.
+`tests/src/showcase_tests.cpp` has a GPU case per backend that renders the showcase and checks the picture.

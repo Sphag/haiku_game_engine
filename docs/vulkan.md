@@ -77,3 +77,18 @@ Verified 2026-10-22:
 
 - Windows (RTX 5080, Khronos validation layer 1.3.224 from the VulkanSDK, `VK_LAYER_PATH` set): `engine_tests --suite gpu --backend dx12` passed (8 cases, 71 assertions); `--backend vulkan` passed (9 cases, 80 assertions), with no validation errors.
 - Linux (this WSL host): `--suite gpu --backend vulkan` exits 3 `unsupported`. No usable Vulkan device exists here, so the native Linux GPU report is still outstanding.
+
+## Validation layer version (2026-10-27)
+
+The GPU suite needs a validation layer at least as new as the vendored headers (Vulkan 1.4.363). `third_party/vulkan_validation_layers`
+holds the build scripts only, so the layer comes from the Vulkan SDK: install SDK 1.4.363 or newer and point `VK_LAYER_PATH` at its `Bin`
+folder before running the suite:
+
+```
+set VK_LAYER_PATH=C:\VulkanSDK\1.4.363.0\Bin
+engine_tests --suite gpu --backend vulkan
+```
+
+With SDK 1.4.363 on the RTX 5080 host: `--suite gpu --backend vulkan` 74 of 74 cases, `--suite editor --backend vulkan` 111 of 111.
+With the older SDK 1.3.224 layer, 14 cases fail on VUIDs for features that layer predates (mutable descriptor types, mesh shaders); the
+debug callback ignores only the "unknown VkStructureType" message class, which means the layer is older than the headers.
