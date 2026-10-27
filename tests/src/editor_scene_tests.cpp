@@ -561,3 +561,31 @@ TEST_CASE("A rejected edit records nothing, and opening a scene clears the histo
     CHECK_FALSE(editor.can_redo());
     CHECK_FALSE(editor.dirty());
 }
+
+TEST_CASE("The history lists its commands and can move to any point in it", "[unit][editor]") {
+    auto console = std::make_shared<Console>();
+    SceneEditor editor(console);
+    CHECK(editor.history_labels().empty());
+
+    const Guid a = editor.create_entity().value();
+    const Guid b = editor.create_entity().value();
+    const Guid c = editor.create_entity().value();
+    REQUIRE(editor.history_labels().size() == 3);
+    CHECK(editor.history_position() == 3);
+
+    // Back to the first command: only `a` exists, and the other two are redo steps.
+    REQUIRE(editor.go_to_history_position(1));
+    CHECK(editor.history_position() == 1);
+    CHECK(editor.scene().size() == 1);
+    CHECK(editor.can_redo());
+    // Forward again, all the way, and past the end is clamped.
+    REQUIRE(editor.go_to_history_position(99));
+    CHECK(editor.history_position() == 3);
+    CHECK(editor.scene().size() == 3);
+    // Start: nothing.
+    REQUIRE(editor.go_to_history_position(0));
+    CHECK(editor.scene().size() == 0);
+    static_cast<void>(a);
+    static_cast<void>(b);
+    static_cast<void>(c);
+}

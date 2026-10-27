@@ -101,3 +101,30 @@ TEST_CASE("Panel visibility defaults show the shell panels and hide the workspac
     CHECK(defaults.viewport);
     CHECK_FALSE(defaults.workspace);
 }
+
+TEST_CASE("The theme and the UI scale are optional, round trip, and are checked", "[unit][editor]") {
+    // A file without them loads as dark at scale 1, and a default workspace does not write them.
+    const WorkspaceSettings defaults;
+    const std::string text = engine::editor::serialize_workspace(defaults);
+    CHECK(text.find("theme") == std::string::npos);
+    CHECK(text.find("ui_scale") == std::string::npos);
+    const auto plain = engine::editor::parse_workspace(text);
+    REQUIRE(plain.ok());
+    CHECK(plain.value().theme == "dark");
+    CHECK(plain.value().ui_scale == 1.0f);
+
+    WorkspaceSettings chosen = sample_settings();
+    chosen.theme = "light";
+    chosen.ui_scale = 1.5f;
+    const auto parsed = engine::editor::parse_workspace(engine::editor::serialize_workspace(chosen));
+    REQUIRE(parsed.ok());
+    CHECK(parsed.value() == chosen);
+
+    for (const char* bad : {R"("theme": "neon")", R"("theme": 3)", R"("ui_scale": 9)", R"("ui_scale": 0.1)", R"("ui_scale": "big")"}) {
+        std::string broken = engine::editor::serialize_workspace(defaults);
+        broken.insert(broken.find('{') + 1, std::string(bad) + ",");
+        const auto result = engine::editor::parse_workspace(broken);
+        INFO(bad);
+        CHECK_FALSE(result.ok());
+    }
+}

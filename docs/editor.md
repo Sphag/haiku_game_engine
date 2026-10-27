@@ -231,11 +231,12 @@ The sample project is `samples/showcase` (see its README).
 - **Scene view.** The Viewport panel shows the scene drawn by the game's renderer (`GameRenderer`), not markers: the editor camera in Edit, the
   scene's own camera in Play. The editor host draws the picture into the back buffer first and the UI over it, so it needs the game shaders
   beside the editor (`--shader-dir`); without them the panel falls back to the grid and markers. Lights, cameras, emitters, and the selection
-  keep a marker and the gizmo.
+  keep a marker and the gizmo. The picture has the exact size of the panel, and particles show in Edit.
 - **Hierarchy.** Right-click a row for Rename, Duplicate, Add child, Move to root, and Delete. F2 or a double click renames in place (Enter
   keeps, Escape cancels). Drag a row onto another to reparent.
 - **Assets.** A folder tree; typing in the search box shows a flat list with full paths.
 - **Tools menu.** Material graph, animation graph, terrain, world, and Build game; the same buttons are in the Project panel.
+- **History and Settings** (Edit menu). History lists every undo step; click one to jump there. Settings chooses the theme (Dark, Light, Classic) and the UI scale; both are saved in the workspace file.
 - **Window.** The title shows the scene file and `*` while there are unsaved changes. The pointer changes shape over text fields, splitters,
   and links (Windows). The window keeps redrawing while it is dragged or resized (Windows modal tick).
 

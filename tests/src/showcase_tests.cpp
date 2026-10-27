@@ -534,6 +534,7 @@ void render_showcase_on(engine::rhi::Backend backend) {
     if (!renderer.ok()) {
         FAIL("renderer: " << renderer.error());
     }
+    const std::size_t entities_before = loaded.scene->to_document().entities.size();
     for (const std::string& problem : renderer.value()->bind_scene(*loaded.scene, binding.names)) {
         FAIL_CHECK("renderer: " << problem);
     }
@@ -550,6 +551,7 @@ void render_showcase_on(engine::rhi::Backend backend) {
     CHECK(drawn.value().skinned >= 1);         // the arm is skinned
     CHECK(drawn.value().terrain_tiles == 4);   // the 2 x 2 tile island
     CHECK(drawn.value().particles > 0);        // the campfire
+    CHECK(loaded.scene->to_document().entities.size() == entities_before);   // the particles are not entities: a saved scene never sees them
     CHECK(drawn.value().materials >= 2);       // the crate and the ground material instances
     CHECK(drawn.value().textures >= 3);        // the checker, the grass, and the shared normal map
     CHECK(drawn.value().camera);
@@ -578,7 +580,7 @@ void render_showcase_on(engine::rhi::Backend backend) {
     CHECK(again.value().items > 0);
 
     // The editor sizes the picture to its panel: a larger target needs a larger cluster grid, a smaller one a smaller grid.
-    for (const auto& [width, height] : {std::pair<std::uint32_t, std::uint32_t>{1856, 871}, {320, 200}}) {
+    for (const auto& [width, height] : {std::pair<std::uint32_t, std::uint32_t>{1856, 871}, {333, 201}, {320, 200}}) {
         REQUIRE(renderer.value()->resize(width, height).ok());
         auto resized = renderer.value()->render(*loaded.scene, &animators, 1.0 / 60.0);
         REQUIRE(resized.ok());

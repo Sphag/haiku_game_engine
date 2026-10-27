@@ -209,6 +209,8 @@ says so. State: `sonnet` branch, all Windows suites green on DX12 and Vulkan.
 - **The Viewport shows the scene** (R1), drawn by `GameRenderer`. It crashed the editor at first. The cause was in the renderer: `SceneRenderer::resize` rebuilt the targets but not the cluster lighting buffer, whose size depends on the target size, so a larger target overran it. It is fixed and the showcase GPU test now resizes up and down on both backends.
 - **R3 to R9**: right-click menus, F2 and double-click rename, a folder tree in Assets, the unsaved marker in the title, pointer shapes, redraw while dragging or resizing the window, and a Tools menu with Editors buttons. The platform got `set_window_title` and `set_cursor_shape`.
 - Tests added: a GPU resize case, a Win32 title and cursor case, and an editor case for F2 rename (Enter and Escape).
+- **R10, R11, R13, R14**: a Settings window (theme and UI scale, saved in the workspace), a History window that jumps to any undo step, the scene view at the exact panel size (the 64 pixel rule was only in `GameRenderer`), and particles in Edit (pools draw through transform-graph nodes, so a saved scene never contains them).
+- Tests added for these: workspace theme and scale (round trip, bad values), history navigation, the style change from the workspace, odd render sizes, and "particles are not entities".
 - `editor_ui_test.ps1` was not re-run after these changes.
 
 ## What is still not done
@@ -274,8 +276,8 @@ Details and the remaining list are in the review. Highlights:
 ## What is still not done
 
 1. **Textures and material graphs** are applied through material instances mapped onto the fixed PBR model. Arithmetic nodes are not evaluated, mip 0 only, and the terrain ignores materials.
-2. **Particles are boxes, not sprites; the terrain has four fixed layer colors**, not material textures. In Edit the viewport shows no particles.
+2. **Particles are boxes, not sprites; the terrain has four fixed layer colors**, not material textures. 
 4. **Windowed runtime:** no resize or fullscreen, no configurable input mapping (WASD and Space are fixed), no gamepad, no game menu beyond the HUD.
-5. **Editor polish left** (the review's R10 to R14): settings (theme, UI scale), an undo history list, the 64 pixel width step of the scene view, X11 pointer shapes. The X11 path was not re-checked for the mouse and focus fixes made on Windows.
+5. **Editor polish left** (the review's R12): X11 pointer shapes. The X11 path was not re-checked for the mouse and focus fixes made on Windows.
 6. **Not run:** the full acceptance benchmark, native Linux Vulkan GPU, FSR 2, Linux GCC 11, ASan and UBSan on the new code, and a Windows Debug rebuild after the last changes (the previous Debug run passed).
 7. One editor-suite case failed once during the inspector work and passed on every rerun; I could not reproduce it, so I am noting it as a possible flaky test.

@@ -138,6 +138,13 @@ public:
     [[nodiscard]] std::string_view redo_label() const noexcept;
     [[nodiscard]] bool undo();
     [[nodiscard]] bool redo();
+    // The history as a list, oldest first: the label of each command. history_position() is how many of them are applied (the rest are
+    // redo steps). undo_to_position moves there by undoing or redoing; it stops early when a step is rejected and says whether it arrived.
+    [[nodiscard]] std::vector<std::string> history_labels() const;
+    [[nodiscard]] std::size_t history_position() const noexcept {
+        return cursor_;
+    }
+    bool go_to_history_position(std::size_t position);
 
     // A gesture is a gizmo drag or a value edited in the inspector. Consecutive edits to the same target inside one gesture merge
     // into the command that began it, so the whole drag is one undo step. end_gesture closes the merge, so a later gesture on the

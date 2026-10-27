@@ -86,8 +86,8 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
     }
     std::unique_ptr<rhi::Swapchain> swapchain = std::move(swapchain_result).value();
 
-    // The renderer's width is a multiple of 64 so its readback rows are tight; the picture is placed at the window's top-left corner.
-    const std::uint32_t render_width = std::max<std::uint32_t>(64, fb_width / 64 * 64);
+    // The picture has the size of the window's framebuffer and is placed at its top-left corner.
+    const std::uint32_t render_width = std::max<std::uint32_t>(1, fb_width);
     auto renderer_result = GameRenderer::create(*device, device_desc.backend, shader_dir, render_width, fb_height, reader);
     if (!renderer_result.ok()) {
         return failed(renderer_result.error());

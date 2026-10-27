@@ -75,7 +75,7 @@ characters. Scripts that moved an entity raised an error. Play now runs the same
 The console and the Errors panel exist and every command reports its outcome there, which is good. Added `--log <file>` so the same text can
 be read by scripts. A failed rename or field edit shows its reason under the inspector.
 
-## Fixed in the third round
+## Fixed in the third and fourth rounds
 
 | # | Issue | What changed |
 |---|---|---|
@@ -86,17 +86,17 @@ be read by scripts. A failed rename or field edit shows its reason under the ins
 | R6 | No unsaved marker | The window title is `Game Editor - <scene file> *` |
 | R7 | Cursor never changed | `Platform::set_cursor_shape`; the editor passes ImGui's requested shape (text, resize, hand, not allowed). Windows only: X11 keeps the default pointer |
 | R8 | No redraw while resizing or moving | The editor frame runs as the platform's modal tick too, so the window redraws during a drag on Windows. X11 has no modal loop and did not need it |
+| R10 | No theme or UI scale choice | Edit > Settings: Dark, Light, or Classic theme and a 0.5 to 3 UI scale on top of the display's DPI scale. Saved in the workspace (`theme`, `ui_scale`, both optional) |
+| R11 | No undo history list | Edit > History lists every command; click a row to go there (rows after the current one are redo steps) |
+| R13 | Scene view width rounded to 64 pixels | Any size works: `SceneRenderer` already padded its readback rows, only `GameRenderer` refused. The picture now fills the panel |
+| R14 | No particles in Edit | Particle pools draw through nodes of the scene's transform graph, not entities, so the scene document and the dirty flag never see them |
 | R9 | Tool windows hidden in View | A Tools menu, and Editors buttons in the Project panel (material graph, animation graph, terrain, world, Build game) |
 
 ## Remaining issues
 
 | # | Severity | Issue | Suggested fix |
 |---|---|---|---|
-| R10 | Polish | No dark/light choice, no UI scale control (it follows the display's DPI), and the font is fixed | Settings panel |
-| R11 | Polish | No undo history list | History panel |
 | R12 | Polish | Linux: the folder chooser needs zenity or kdialog; the X11 path was not re-checked for the mouse and focus fixes made on Windows, and the pointer shape is not applied | Test on a native Linux desktop; bind XCreateFontCursor |
-| R13 | Polish | The scene view width is rounded down to a multiple of 64 pixels (a renderer limit), leaving a strip at the right edge of the panel | Lift the limit in `SceneRenderer` |
-| R14 | Polish | In Edit the viewport shows no particles (they are drawn only in Play) | Bind pools without adding entities |
 
 ## How this was checked
 - Screenshots of the real window at each step: `artifacts/ui/` after a run of `tools/ui_tests/editor_ui_test.ps1`.

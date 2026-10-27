@@ -184,6 +184,94 @@ void EditorUi::editor_shortcuts() {
     }
 }
 
+void EditorUi::apply_look() {
+    WorkspaceSettings& settings = model_.workspace();
+    ImGuiStyle& style = ImGui::GetStyle();
+    if (!base_style_) {
+        base_style_ = style;
+    }
+    if (settings.theme == applied_theme_ && settings.ui_scale == applied_scale_) {
+        return;
+    }
+    // Sizes come from the style at startup, scaled once, so moving the slider does not compound. The theme sets the colors only.
+    style = *base_style_;
+    style.ScaleAllSizes(settings.ui_scale);
+    style.FontScaleMain = settings.ui_scale;
+    if (settings.theme == "light") {
+        ImGui::StyleColorsLight(&style);
+    } else if (settings.theme == "classic") {
+        ImGui::StyleColorsClassic(&style);
+    } else {
+        ImGui::StyleColorsDark(&style);
+    }
+    applied_theme_ = settings.theme;
+    applied_scale_ = settings.ui_scale;
+}
+
+void EditorUi::history_window() {
+    if (!history_open_) {
+        return;
+    }
+    SceneEditor& scene = model_.scene();
+    if (ImGui::Begin("History", &history_open_)) {
+        ImGui::BeginDisabled(!model_.scene_editable());
+        const std::vector<std::string> labels = scene.history_labels();
+        const std::size_t position = scene.history_position();
+        if (labels.empty()) {
+            ImGui::TextDisabled("Nothing has been changed yet.");
+        }
+        // The first row is the scene as opened; a row is the scene after that command. Click a row to go there; rows after the
+        // current one are redo steps.
+        if (!labels.empty() && ImGui::Selectable("Start##history_start", position == 0)) {
+            static_cast<void>(scene.go_to_history_position(0));
+        }
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            const std::string row = labels[i] + "##history_" + std::to_string(i);
+            if (i >= position) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            }
+            if (ImGui::Selectable(row.c_str(), position == i + 1)) {
+                static_cast<void>(scene.go_to_history_position(i + 1));
+            }
+            if (i >= position) {
+                ImGui::PopStyleColor();
+            }
+        }
+        ImGui::EndDisabled();
+    }
+    ImGui::End();
+}
+
+void EditorUi::settings_window() {
+    if (!settings_open_) {
+        return;
+    }
+    WorkspaceSettings& settings = model_.workspace();
+    if (ImGui::Begin("Settings", &settings_open_, ImGuiWindowFlags_AlwaysAutoResize)) {
+        static constexpr const char* kThemes[] = {"dark", "light", "classic"};
+        static constexpr const char* kThemeNames[] = {"Dark", "Light", "Classic"};
+        int current = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (settings.theme == kThemes[i]) {
+                current = i;
+            }
+        }
+        if (ImGui::Combo("Theme", &current, kThemeNames, 3)) {
+            settings.theme = kThemes[current];
+        }
+        float scale = settings.ui_scale;
+        if (ImGui::SliderFloat("UI scale", &scale, 0.5f, 3.0f, "%.2f")) {
+            settings.ui_scale = std::round(scale * 20.0f) / 20.0f;
+        }
+        if (ImGui::Button("Reset")) {
+            settings.theme = "dark";
+            settings.ui_scale = 1.0f;
+        }
+        ImGui::TextDisabled("The scale multiplies the display's own scale. Saved with the workspace.");
+    }
+    ImGui::End();
+}
+
 void EditorUi::build() {
     scene_view_.reset();
     if (exit_requested_) {
@@ -194,7 +282,10 @@ void EditorUi::build() {
     model_.tick_assets();
     history_shortcuts();
     editor_shortcuts();
+    apply_look();
     dock_space();
+    history_window();
+    settings_window();
     // The dialog is opened and drawn outside the host window, so its popup ID is the same in both calls.
     unsaved_dialog();
 }
@@ -353,6 +444,9 @@ void EditorUi::menu_bar() {
         if (ImGui::MenuItem("Delete", "Del", false, has_selection)) {
             static_cast<void>(scene.remove(*scene.selected()));
         }
+        ImGui::Separator();
+        ImGui::MenuItem("History", nullptr, &history_open_);
+        ImGui::MenuItem("Settings", nullptr, &settings_open_);
         ImGui::Separator();
         ImGui::TextDisabled("W / E / R: move, rotate, scale   F5: play / stop");
         ImGui::EndMenu();

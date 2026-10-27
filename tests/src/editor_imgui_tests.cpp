@@ -239,3 +239,30 @@ TEST_CASE("F2 renames the selected hierarchy row in place and Enter keeps the na
     frame(ui);
     CHECK(name_of(model, entity) == "Boss");
 }
+
+TEST_CASE("The theme and UI scale in the workspace change the ImGui style, and Reset undoes them", "[unit][editor]") {
+    Scratch scratch;
+    EditorModel model(std::make_shared<engine::editor::Console>(), scratch.path.join("workspace.json").value());
+    ImGuiScope scope;
+    engine::editor::EditorUi ui(model);
+    ui.apply_saved_layout();
+    frame(ui);
+    const ImVec4 dark_background = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+    const float padding = ImGui::GetStyle().FramePadding.x;
+    CHECK(ImGui::GetStyle().FontScaleMain == 1.0f);
+
+    model.workspace().theme = "light";
+    model.workspace().ui_scale = 2.0f;
+    frame(ui);
+    CHECK(ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x > dark_background.x + 0.3f);
+    CHECK(ImGui::GetStyle().FontScaleMain == 2.0f);
+    CHECK(ImGui::GetStyle().FramePadding.x == padding * 2.0f);
+
+    // Changing the scale again starts from the startup size, so it does not compound.
+    model.workspace().ui_scale = 1.0f;
+    frame(ui);
+    CHECK(ImGui::GetStyle().FramePadding.x == padding);
+    model.workspace().theme = "dark";
+    frame(ui);
+    CHECK(ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x == dark_background.x);
+}

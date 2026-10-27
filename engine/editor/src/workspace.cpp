@@ -58,6 +58,8 @@ core::Result<WorkspaceSettings, WorkspaceError> parse_workspace(std::string_view
     // recent_projects is optional, so a workspace written before it existed still loads.
     nlohmann::json required = document;
     required.erase("recent_projects");
+    required.erase("theme");
+    required.erase("ui_scale");
     if (!has_exactly_keys(required, {"format", "version", "last_project", "layout", "panels"})) {
         return core::failure(make_error(WorkspaceErrorCode::Malformed, "the workspace file needs exactly the keys of engine.editor_workspace"));
     }
@@ -91,6 +93,20 @@ core::Result<WorkspaceSettings, WorkspaceError> parse_workspace(std::string_view
             }
             settings.recent_projects.push_back(item.get<std::string>());
         }
+    }
+    if (document.contains("theme")) {
+        const auto& theme = document["theme"];
+        if (!theme.is_string() || (theme.get<std::string>() != "dark" && theme.get<std::string>() != "light" && theme.get<std::string>() != "classic")) {
+            return core::failure(make_error(WorkspaceErrorCode::Malformed, "theme must be \"dark\", \"light\", or \"classic\""));
+        }
+        settings.theme = theme.get<std::string>();
+    }
+    if (document.contains("ui_scale")) {
+        const auto& scale = document["ui_scale"];
+        if (!scale.is_number() || scale.get<double>() < 0.5 || scale.get<double>() > 3.0) {
+            return core::failure(make_error(WorkspaceErrorCode::Malformed, "ui_scale must be a number from 0.5 to 3"));
+        }
+        settings.ui_scale = static_cast<float>(scale.get<double>());
     }
     settings.last_project = document["last_project"].get<std::string>();
     settings.layout = document["layout"].get<std::string>();
@@ -138,6 +154,12 @@ std::string serialize_workspace(const WorkspaceSettings& settings) {
     document["layout"] = settings.layout;
     if (!settings.recent_projects.empty()) {
         document["recent_projects"] = settings.recent_projects;
+    }
+    if (settings.theme != "dark") {
+        document["theme"] = settings.theme;
+    }
+    if (settings.ui_scale != 1.0f) {
+        document["ui_scale"] = settings.ui_scale;
     }
     document["panels"] = std::move(panels);
     return document.dump(2, ' ', false, nlohmann::json::error_handler_t::strict) + "\n";

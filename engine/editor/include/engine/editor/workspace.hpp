@@ -49,9 +49,12 @@ struct WorkspaceSettings {
     std::vector<std::string> recent_projects;  // most recent first, at most kMaxRecentProjects; optional in the file
     std::string layout;        // ImGui ini text of the docking layout, or empty for the default layout
     PanelVisibility panels;
+    std::string theme = "dark";  // "dark", "light", or "classic"; optional in the file
+    float ui_scale = 1.0f;       // 0.5 to 3, on top of the display's DPI scale; optional in the file
 
     friend bool operator==(const WorkspaceSettings& lhs, const WorkspaceSettings& rhs) noexcept {
-        return lhs.last_project == rhs.last_project && lhs.recent_projects == rhs.recent_projects && lhs.layout == rhs.layout && lhs.panels == rhs.panels;
+        return lhs.last_project == rhs.last_project && lhs.recent_projects == rhs.recent_projects && lhs.layout == rhs.layout && lhs.panels == rhs.panels &&
+               lhs.theme == rhs.theme && lhs.ui_scale == rhs.ui_scale;
     }
     friend bool operator!=(const WorkspaceSettings& lhs, const WorkspaceSettings& rhs) noexcept {
         return !(lhs == rhs);

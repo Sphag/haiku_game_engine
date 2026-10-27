@@ -367,6 +367,30 @@ std::string_view SceneEditor::redo_label() const noexcept {
     return can_redo() ? std::string_view(history_[cursor_].label) : std::string_view{};
 }
 
+std::vector<std::string> SceneEditor::history_labels() const {
+    std::vector<std::string> labels;
+    labels.reserve(history_.size());
+    for (const Command& command : history_) {
+        labels.push_back(command.label);
+    }
+    return labels;
+}
+
+bool SceneEditor::go_to_history_position(std::size_t position) {
+    position = std::min(position, history_.size());
+    while (cursor_ > position) {
+        if (!undo()) {
+            return false;
+        }
+    }
+    while (cursor_ < position) {
+        if (!redo()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SceneEditor::undo() {
     if (!can_undo()) {
         return false;

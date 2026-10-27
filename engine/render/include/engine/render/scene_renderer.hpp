@@ -221,7 +221,7 @@ struct RayTracedSettings {
 };
 
 struct SceneRendererDesc {
-    std::uint32_t width = 64;  // every target is this size; a multiple of 64 keeps the readback rows tight
+    std::uint32_t width = 64;  // every target is this size; any size works, the readback rows are padded to the copy pitch
     std::uint32_t height = 64;
     std::uint32_t max_items = 1024;  // one frame holds at most this many items
     LightingSettings lighting;

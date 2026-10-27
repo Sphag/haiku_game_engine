@@ -52,6 +52,9 @@ private:
     // Opens a scene asset of the project (a path relative to its assets folder), asking about unsaved changes first.
     void open_scene_asset(const std::string& relative);
     void editor_shortcuts();
+    void apply_look();
+    void history_window();
+    void settings_window();
     void begin_rename(const core::Guid& entity, const std::string& current);
     void commit_rename(const core::Guid& entity);
     void menu_bar();
@@ -121,6 +124,11 @@ private:
     TerrainPanel terrain_;
     bool world_open_ = false;                // the world window; not saved in the workspace
     WorldPanel world_;
+    bool history_open_ = false;               // the History window; not saved in the workspace
+    bool settings_open_ = false;              // the Settings window; not saved in the workspace
+    std::optional<ImGuiStyle> base_style_;    // the style at startup (DPI-scaled, scale 1), which the UI scale is applied to
+    std::string applied_theme_ = "dark";
+    float applied_scale_ = 1.0f;
     bool build_open_ = false;                // the Build Game window; not saved in the workspace
     GameBuilder game_build_;                 // runs the build on a worker
     std::array<char, 1024> build_output_{};  // the folder that receives the package

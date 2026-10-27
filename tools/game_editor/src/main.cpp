@@ -443,9 +443,9 @@ int main(int argc, char** argv) {
         std::uint32_t view_y = 0;
         if (scene_renderer != nullptr && ui.scene_view()) {
             const auto& view = *ui.scene_view();
-            const auto width = static_cast<std::uint32_t>(view.width) / 64 * 64;
+            const auto width = static_cast<std::uint32_t>(view.width);
             const auto height = static_cast<std::uint32_t>(view.height);
-            if (width >= 64 && height >= 32 && view.x >= 0.0f && view.y >= 0.0f) {
+            if (width >= 16 && height >= 16 && view.x >= 0.0f && view.y >= 0.0f) {
                 editor::PlaySession* play = model.play_session();
                 const bool playing = play != nullptr;
                 scene::Scene& drawn_scene = playing ? play->scene() : model.scene().render_scene();
@@ -460,7 +460,7 @@ int main(int argc, char** argv) {
                         edit_animator_names = gameplay::bind_animators(drawn_scene, model.asset_reader(), edit_animators).names;
                     }
                     const auto& names = playing ? play->animator_names() : edit_animator_names;
-                    for (const std::string& problem : scene_renderer->bind_scene(drawn_scene, names, playing)) {
+                    for (const std::string& problem : scene_renderer->bind_scene(drawn_scene, names)) {
                         console->add(core::LogLevel::Warning, "viewport", problem);
                     }
                     bound_entities = drawn_scene.size();

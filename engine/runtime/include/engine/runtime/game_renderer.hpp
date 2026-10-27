@@ -63,7 +63,7 @@ struct PresentOptions {
 
 class GameRenderer {
 public:
-    // `width` must be a multiple of 64 (the readback rows stay tight). Shaders are read from `shader_dir` as scene_*.dxil or scene_*.spv.
+    // Any positive size works. Shaders are read from `shader_dir` as scene_*.dxil or scene_*.spv.
     [[nodiscard]] static core::Result<std::unique_ptr<GameRenderer>, std::string> create(rhi::Device& device, rhi::Backend backend,
                                                                                        const std::string& shader_dir, std::uint32_t width,
                                                                                        std::uint32_t height, AssetReader reader = {});
@@ -73,8 +73,8 @@ public:
 
     // Reads the scene's assets once: uploads terrain and creates the pool of every particle emitter. `animator_names` says which entity
     // owns which machine of the animator set (bind_animators returns it), so a skinned mesh finds its pose. Problems are returned as
-    // text and do not stop the others. Calling it again is cheap and loads only what is new. Particle pools are entities added to the scene, so
-    // a host that must not change the scene (the editor in Edit) passes `particles` false.
+    // text and do not stop the others. Calling it again is cheap and loads only what is new. Particle pools draw through nodes of the scene's
+    // transform graph, not through entities, so the scene document is never changed; `particles` false leaves them out.
     [[nodiscard]] std::vector<std::string> bind_scene(scene::Scene& scene, const std::map<core::Guid, std::string>& animator_names,
                                                      bool particles = true);
 
@@ -86,7 +86,7 @@ public:
     // cached. Call it before binding a different scene, as the editor does when Play starts or stops.
     void reset_scene();
 
-    // Changes the picture's size. `width` must be a multiple of 64.
+    // Changes the picture's size (any positive size).
     [[nodiscard]] core::Result<core::Unit, std::string> resize(std::uint32_t width, std::uint32_t height);
     [[nodiscard]] std::uint32_t width() const noexcept;
     [[nodiscard]] std::uint32_t height() const noexcept;

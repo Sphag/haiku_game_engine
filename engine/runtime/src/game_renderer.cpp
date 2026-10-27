@@ -96,7 +96,8 @@ struct Particle {
 
 struct Pool {
     core::Guid emitter;
-    std::vector<core::Guid> entities;  // scene entities the particles are drawn through
+    std::uint32_t count = 0;                        // particles in the pool
+    std::vector<ecs::EntityHandle> nodes;           // graph nodes the particles are drawn through (not entities: a saved scene never sees them)
     std::vector<Particle> particles;
     double carry = 0.0;
     std::uint32_t seed = 1;
@@ -391,8 +392,8 @@ GameRenderer::~GameRenderer() {
 core::Result<std::unique_ptr<GameRenderer>, std::string> GameRenderer::create(rhi::Device& device, rhi::Backend backend,
                                                                               const std::string& shader_dir, std::uint32_t width,
                                                                               std::uint32_t height, AssetReader reader) {
-    if (width == 0 || height == 0 || width % 64 != 0) {
-        return core::failure(std::string("the render width must be a positive multiple of 64"));
+    if (width == 0 || height == 0) {
+        return core::failure(std::string("the render size must be positive"));
     }
     std::string problem;
     render::SceneShaders shaders;
@@ -486,16 +487,8 @@ std::vector<std::string> GameRenderer::bind_scene(scene::Scene& scene, const std
             Pool pool;
             pool.emitter = guid;
             const std::uint32_t wanted = read<std::uint32_t>(scene, guid, gameplay::kParticleEmitterId, "max_particles", 64u);
-            const std::uint32_t count = std::min(wanted, kMaxPoolParticles);
-            for (std::uint32_t i = 0; i < count; ++i) {
-                auto added = scene.add_entity(scene::Transform{});
-                if (!added.ok()) {
-                    problems.push_back("particles " + guid.to_string() + ": " + added.error().message);
-                    break;
-                }
-                pool.entities.push_back(added.value());
-            }
-            pool.particles.resize(pool.entities.size());
+            pool.count = std::min(wanted, kMaxPoolParticles);
+            pool.particles.resize(pool.count);
             pool.seed = 2166136261u ^ static_cast<std::uint32_t>(impl_->pools.size() + 1) * 16777619u;
             impl_->pools.push_back(std::move(pool));
         }
@@ -510,8 +503,8 @@ void GameRenderer::reset_scene() {
 }
 
 core::Result<core::Unit, std::string> GameRenderer::resize(std::uint32_t width, std::uint32_t height) {
-    if (width == 0 || height == 0 || width % 64 != 0) {
-        return core::failure(std::string("the render width must be a positive multiple of 64"));
+    if (width == 0 || height == 0) {
+        return core::failure(std::string("the render size must be positive"));
     }
     if (width == impl_->width && height == impl_->height) {
         return core::success();
@@ -544,11 +537,23 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
     std::deque<render::SkinPose> poses;  // stays valid until extract_frame has copied the palettes
     std::uint32_t light_id = 1;
 
-    // Particles first: they move their pool entities, which the loop below then draws like any other mesh.
+    // Particles first: they move their pool nodes, which are drawn like any other mesh. The nodes live in the scene's transform graph and
+    // nowhere else, so an editor scene is not changed by them; a scene that was rebuilt (an edit, an undo) loses them and they are made again.
     for (Pool& pool : impl_->pools) {
         const glm::dmat4* emitter_world = scene.world_matrix(pool.emitter);
         if (emitter_world == nullptr) {
             continue;
+        }
+        if (pool.nodes.size() != pool.count || (!pool.nodes.empty() && !scene.graph().alive(pool.nodes.front()))) {
+            pool.nodes.clear();
+            for (std::uint32_t i = 0; i < pool.count; ++i) {
+                auto node = scene.graph().create(scene::Transform{});
+                if (!node.ok()) {
+                    break;
+                }
+                pool.nodes.push_back(node.value());
+            }
+            pool.particles.assign(pool.count, Particle{});
         }
         const glm::dvec3 origin((*emitter_world)[3]);
         const float rate = read<float>(scene, pool.emitter, gameplay::kParticleEmitterId, "rate", 50.0f);
@@ -583,7 +588,9 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
             pose.position = particle.position;
             const double shrink = particle.alive ? std::max(0.2, 1.0 - static_cast<double>(particle.age / lifetime)) : 0.0;
             pose.scale = glm::dvec3(std::max(static_cast<double>(size) * shrink, 1.0e-4));
-            static_cast<void>(scene.set_transform(pool.entities[i], pose));
+            if (i < pool.nodes.size()) {
+                static_cast<void>(scene.graph().set_local(pool.nodes[i], pose));
+            }
         }
         pool.carry = std::min(pool.carry, 4.0);
     }
@@ -698,17 +705,19 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
 
     // The particle pool: a live particle is a small box tinted by its emitter.
     for (const Pool& pool : impl_->pools) {
+        if (!scene.handle(pool.emitter)) {
+            continue;  // the emitter was deleted
+        }
         const auto color = read<std::array<float, 4>>(scene, pool.emitter, gameplay::kParticleEmitterId, "color", {1.0f, 0.8f, 0.4f, 1.0f});
         for (std::size_t i = 0; i < pool.particles.size(); ++i) {
             if (!pool.particles[i].alive) {
                 continue;
             }
-            const auto handle = scene.handle(pool.entities[i]);
-            if (!handle) {
+            if (i >= pool.nodes.size()) {
                 continue;
             }
             render::RenderableRef item;
-            item.node = *handle;
+            item.node = pool.nodes[i];
             item.mesh = impl_->box_mesh;
             item.color = glm::vec4(color[0], color[1], color[2], 1.0f);
             renderables.push_back(item);
