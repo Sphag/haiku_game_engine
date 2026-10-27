@@ -185,13 +185,6 @@ function create(entity)
   events.on('hud.reset', function() speed = 0 end)
 end
 
-function fixed_update(entity, dt)
-  local move = try(input.value, 'move_forward') or 0
-  speed = move * walk_speed
-  local t = transform.get(entity)
-  transform.set(entity, { position = { t.position[1], t.position[2], t.position[3] - speed * dt } })
-end
-
 function update(entity, dt)
   try(animation.set_float, 'hero', 'speed', math.abs(speed))
   if try(input.pressed, 'jump') then
@@ -265,6 +258,21 @@ ARM_GRAPH = {
          "conditions": [{"when": "float", "parameter": "excite", "op": ">", "value": 0.5}]},
         {"from": "slide", "to": "wave", "duration": 0.3, "priority": 1,
          "conditions": [{"when": "float", "parameter": "excite", "op": "<=", "value": 0.5}]},
+    ],
+}
+
+HUD_LAYOUT = {
+    "format": "engine.ui_layout", "version": 1, "reference": [1280, 720],
+    "elements": [
+        {"kind": "panel", "anchor": "TopLeft", "x": 16, "y": 16, "w": 330, "h": 150, "color": [10, 14, 24, 170], "blocks_pointer": True},
+        {"kind": "text", "anchor": "TopLeft", "x": 30, "y": 24, "w": 300, "h": 36, "label": "Showcase", "text_color": [255, 255, 255, 255],
+         "text_size": 28, "align": "start"},
+        {"kind": "text", "anchor": "TopLeft", "x": 30, "y": 62, "w": 300, "h": 26, "label": "Привет! Press the button or drag the slider.",
+         "text_color": [200, 215, 235, 255], "text_size": 18, "align": "start"},
+        {"kind": "button", "anchor": "TopLeft", "x": 30, "y": 100, "w": 130, "h": 40, "label": "Say hello", "color": [60, 110, 200, 255],
+         "text_color": [255, 255, 255, 255], "text_size": 20, "on_click": "on_play"},
+        {"kind": "slider", "anchor": "TopLeft", "x": 176, "y": 108, "w": 150, "h": 24, "value": 0.8, "min": 0, "max": 1, "step": 0.1,
+         "color": [70, 80, 100, 255], "text_color": [120, 190, 255, 255], "on_change": "on_volume"},
     ],
 }
 
@@ -403,7 +411,7 @@ def build_scene(a, prefab):
             "engine.rigid_body": comp(motion=2, shape=1, size=[0.8, 0.8, 0.8], mass=2.0, restitution=0.6),
         }),
         entity("hud", xform(), {
-            "engine.ui_canvas": comp(layout=a["hud_lua"].guid, visible=True),
+            "engine.ui_canvas": comp(layout=a["hud_ui"].guid, script=a["hud_lua"].guid, visible=True),
         }),
     ]
     for index, position in enumerate(((-2, 0.5, -3), (-2, 1.5, -3), (-1, 0.5, -3))):
@@ -546,6 +554,8 @@ def main():
     a["hero_graph"] = asset("animation/hero.animgraph.json", "json")
     write_json(ASSETS / "animation" / "arm.animgraph.json", ARM_GRAPH)
     a["arm_graph"] = asset("animation/arm.animgraph.json", "json")
+    write_json(ASSETS / "ui" / "hud.ui.json", HUD_LAYOUT)
+    a["hud_ui"] = asset("ui/hud.ui.json", "json")
     write_text(ASSETS / "scripts" / "arm.lua", ARM_LUA)
     a["arm_lua"] = asset("scripts/arm.lua", "text")
 
@@ -581,10 +591,10 @@ def main():
     # A second, empty-ish scene so the start scene is a choice and scene switching has a target.
     credits = {"format": "engine.scene", "version": 1, "entities": [
         entity("credits_camera", xform((0, 1, 5)), {"engine.camera": comp()}),
-        entity("credits_ui", xform(), {"engine.ui_canvas": comp(layout=a["hud_lua"].guid)}),
+        entity("credits_ui", xform(), {"engine.ui_canvas": comp(layout=a["hud_ui"].guid, script=a["hud_lua"].guid)}),
     ]}
     write_json(ASSETS / "scenes" / "credits.scene", credits)
-    asset("scenes/credits.scene", "json", deps=[a["hud_lua"].guid])
+    asset("scenes/credits.scene", "json", deps=[a["hud_lua"].guid, a["hud_ui"].guid])
 
     # Prefab and scene dependencies cover everything their entities name.
     REGISTRY["prefabs/crate.prefab"].deps = sorted(referenced_guids(prefab_doc, known))

@@ -116,6 +116,7 @@ void PlaySession::advance(double frame_seconds) {
         accumulator_ = 0.0;
     }
     runner_->update(frame_seconds);
+    gameplay::step_characters(*scene_, *physics_, bindings_, glm::vec2(0.0f), false, frame_seconds);  // characters stand and fall in Play
     gameplay::sync_scene(*scene_, *physics_, bindings_);
 }
 

@@ -66,6 +66,7 @@ struct GameBuildOptions {
     std::string runtime_exe;   // the game_runtime built for this host
     std::string shader_dir;    // the compiled shaders, copied into shaders/
     std::string notices_file;  // the notices text, copied as NOTICES.txt
+    std::string font_file;     // the font the game UI draws with, copied as fonts/ui.ttf; empty ships none
     bool verify = true;        // launch the staged package from a clean copy before it is published
 };
 

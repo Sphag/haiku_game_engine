@@ -3,12 +3,18 @@
 #include "engine/platform/platform.hpp"
 #include "engine/rhi/device.hpp"
 #include "engine/rhi/swapchain.hpp"
+#include "engine/gameplay/components.hpp"
+#include "engine/runtime/game_hud.hpp"
 #include "engine/runtime/game_renderer.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <cstdio>
 #include <memory>
+#include <set>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -82,14 +88,57 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
 
     // The renderer's width is a multiple of 64 so its readback rows are tight; the picture is placed at the window's top-left corner.
     const std::uint32_t render_width = std::max<std::uint32_t>(64, fb_width / 64 * 64);
-    auto renderer_result = GameRenderer::create(*device, device_desc.backend, shader_dir, render_width, fb_height, std::move(reader));
+    auto renderer_result = GameRenderer::create(*device, device_desc.backend, shader_dir, render_width, fb_height, reader);
     if (!renderer_result.ok()) {
         return failed(renderer_result.error());
     }
+    const AssetReader reader_copy = reader;
     std::unique_ptr<GameRenderer> renderer = std::move(renderer_result).value();
     for (const std::string& problem : renderer->bind_scene(scene, animator_names)) {
         std::fprintf(stderr, "game_runtime: %s\n", problem.c_str());
     }
+
+    // The HUD: the first visible UI canvas. Its font ships beside the shaders; a game without one still runs, without its UI.
+    std::unique_ptr<GameHud> hud;
+    {
+        for (const core::Guid& guid : scene.entity_guids()) {
+            const auto types = scene.component_types(guid);
+            if (std::find(types.begin(), types.end(), gameplay::kUiCanvasId) == types.end()) {
+                continue;
+            }
+            const auto visible = scene.field(guid, gameplay::kUiCanvasId, "visible");
+            if (visible && std::holds_alternative<bool>(*visible) && !std::get<bool>(*visible)) {
+                continue;
+            }
+            const auto asset_text = [&](const char* field) -> std::string {
+                const auto value = scene.field(guid, gameplay::kUiCanvasId, field);
+                if (value && std::holds_alternative<core::Guid>(*value) && !std::get<core::Guid>(*value).is_nil() && reader_copy) {
+                    return reader_copy(std::get<core::Guid>(*value)).value_or(std::string());
+                }
+                return {};
+            };
+            const std::string layout_text = asset_text("layout");
+            if (layout_text.empty()) {
+                continue;
+            }
+            const std::filesystem::path font_path = std::filesystem::path(shader_dir).parent_path() / "fonts" / "ui.ttf";
+            std::ifstream font_file(font_path, std::ios::binary);
+            const std::vector<std::uint8_t> font_bytes((std::istreambuf_iterator<char>(font_file)), std::istreambuf_iterator<char>());
+            if (font_bytes.empty()) {
+                std::fprintf(stderr, "game_runtime: the UI needs %s, which is missing; the game runs without its UI\n", font_path.string().c_str());
+                break;
+            }
+            auto created = GameHud::create(world.scripts(), layout_text, asset_text("script"), font_bytes, fb_width, fb_height);
+            if (!created.ok()) {
+                std::fprintf(stderr, "game_runtime: %s\n", created.error().c_str());
+                break;
+            }
+            hud = std::move(created).value();
+            break;
+        }
+    }
+
+    std::set<platform::Key> held;  // keys down now: WASD or the arrows walk the player, Space jumps
 
     using Clock = std::chrono::steady_clock;
     Clock::time_point previous = Clock::now();
@@ -103,7 +152,15 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
                 running = false;
             }
         }
-        for (const platform::InputEvent& input : platform->drain_input_events()) {
+        const std::vector<platform::InputEvent> inputs = platform->drain_input_events();
+        bool jump = false;
+        for (const platform::InputEvent& input : inputs) {
+            if (const auto* pressed = std::get_if<platform::KeyPressed>(&input.data)) {
+                held.insert(pressed->key);
+                jump = jump || pressed->key == platform::Key::Space;
+            } else if (const auto* released = std::get_if<platform::KeyReleased>(&input.data)) {
+                held.erase(released->key);
+            }
             if (const auto* key = std::get_if<platform::KeyPressed>(&input.data); key != nullptr && key->key == platform::Key::Escape) {
                 running = false;
             }
@@ -122,11 +179,27 @@ int run_windowed_game(scene::Scene& scene, gameplay::GameWorld& world, const Run
         // A long pause (a drag of the window, a breakpoint) is not simulated in one step.
         const double delta = std::min(std::chrono::duration<double>(now - previous).count(), 0.1);
         previous = now;
+        const auto down = [&held](platform::Key a, platform::Key b) { return held.count(a) > 0 || held.count(b) > 0; };
+        world.set_player_input(glm::vec2((down(platform::Key::D, platform::Key::Right) ? 1.0f : 0.0f) - (down(platform::Key::A, platform::Key::Left) ? 1.0f : 0.0f),
+                                         (down(platform::Key::W, platform::Key::Up) ? 1.0f : 0.0f) - (down(platform::Key::S, platform::Key::Down) ? 1.0f : 0.0f)),
+                               jump);
         world.advance(delta);
         for (const std::string& error : world.take_errors()) {
             std::fprintf(stderr, "game_runtime: %s\n", error.c_str());
         }
 
+        if (hud != nullptr) {
+            float pointer_x = -1.0f;
+            float pointer_y = -1.0f;
+            if (current.value().focused) {
+                if (auto pointer = platform->pointer_position(window); pointer.ok()) {
+                    pointer_x = static_cast<float>(pointer.value().x);
+                    pointer_y = static_cast<float>(pointer.value().y);
+                }
+            }
+            hud->update(pointer_x, pointer_y, inputs);
+            renderer->set_overlay(hud->render());
+        }
         auto drawn = renderer->render(scene, &world.animators(), delta);
         if (!drawn.ok()) {
             exit_code = failed(drawn.error());

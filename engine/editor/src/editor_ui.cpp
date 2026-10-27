@@ -735,6 +735,7 @@ void EditorUi::build_game_window() {
                 options.runtime_exe = ENGINE_GAME_RUNTIME_EXE;
                 options.shader_dir = ENGINE_BUILD_SHADER_DIR;
                 options.notices_file = ENGINE_NOTICES_FILE;
+                options.font_file = ENGINE_DEFAULT_UI_FONT;
                 auto started = game_build_.start(options);
                 build_status_ = started.ok() ? "Building..." : started.error();
             }
@@ -1223,6 +1224,9 @@ bool asset_suits(std::string_view kind, const CatalogEntry& entry) {
     }
     if (kind == "script") {
         return source.ends_with(".lua");
+    }
+    if (kind == "uilayout") {
+        return source.ends_with(".ui.json");
     }
     if (kind == "audio") {
         return ends_with_any(source, {".wav", ".ogg", ".mp3", ".flac"});

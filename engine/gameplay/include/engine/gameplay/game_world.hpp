@@ -15,10 +15,13 @@
 #include "engine/audio/audio_engine.hpp"
 #include "engine/core/guid.hpp"
 #include "engine/core/result.hpp"
+#include "engine/physics/character.hpp"
 #include "engine/physics/physics_world.hpp"
 #include "engine/scene/scene.hpp"
 #include "engine/script/script_engine.hpp"
 #include "engine/script/script_runner.hpp"
+
+#include <glm/glm.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +42,15 @@ using ScriptSource = std::function<core::Result<std::string, std::string>(const 
 // and its audio emitters are reported and stay silent.
 using AudioPath = std::function<std::optional<core::Path>(const core::Guid&)>;
 
+// A character controller component made live: its capsule, and how fast it walks.
+struct CharacterBinding {
+    core::Guid guid;                          // the scene entity; its position is the capsule's bottom
+    physics::CharacterController controller;
+    float move_speed = 4.0f;
+};
+
 struct SceneBindings {
+    std::vector<CharacterBinding> characters;
     std::vector<std::pair<core::Guid, ecs::EntityHandle>> kinematic_bodies;  // follow their entity: its pose becomes the body's target each frame
     std::size_t voices = 0;                                                  // audio emitters that started playing
     std::vector<std::pair<core::Guid, ecs::EntityHandle>> dynamic_bodies;  // scene GUID and body entity of each dynamic body
@@ -57,6 +68,12 @@ struct SceneBindings {
 // Writes each dynamic body's pose to its entity and re-applies the transform of every scripted entity, so the scene graph marks them
 // dirty (scripts write transforms in place), then updates the scene's world matrices.
 void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const SceneBindings& bindings);
+
+// Moves every character one frame against the physics world, then writes its position to its entity. The first character is the player:
+// `move` is its walk direction in the ground plane (x to the right, y toward -z, each -1..1, scaled by its move_speed) and `jump` starts
+// a jump. The others stand, with gravity and ground collision. Poses are written to the scene; call sync_scene afterwards to update it.
+void step_characters(scene::Scene& scene, physics::PhysicsWorld& physics, SceneBindings& bindings, glm::vec2 move, bool jump,
+                     double frame_seconds);
 
 struct GameWorldStats {
     std::size_t bodies = 0;
@@ -84,6 +101,12 @@ public:
 
     // Advances by frame_seconds: fixed steps for physics and scripts, then the frame update.
     void advance(double frame_seconds);
+
+    // The player's input for the next advance(): a walk direction (x right, y forward, each -1..1) and a jump. The jump is used once.
+    void set_player_input(glm::vec2 move, bool jump) {
+        player_move_ = move;
+        player_jump_ = player_jump_ || jump;
+    }
 
     [[nodiscard]] GameWorldStats stats() const;
     // Errors raised since the last call: physics, script attach, and script callbacks.
@@ -113,6 +136,8 @@ private:
     std::unique_ptr<script::ScriptEngine> scripts_;
     std::unique_ptr<script::ScriptRunner> runner_;
     SceneBindings bindings_;
+    glm::vec2 player_move_{0.0f};
+    bool player_jump_ = false;
     std::vector<std::string> errors_;
     double accumulator_ = 0.0;
     GameWorldStats stats_;

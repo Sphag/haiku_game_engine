@@ -360,6 +360,18 @@ core::Result<GameBuildReport, std::string> build_game(const GameBuildOptions& op
         return core::failure(failed);
     }
     make_executable(core::to_native_path(runtime_out));
+    if (!options.font_file.empty()) {
+        const auto font_path = Path::from_utf8(options.font_file);
+        if (!font_path.ok()) {
+            return core::failure("the font path is not valid UTF-8: " + options.font_file);
+        }
+        std::error_code font_ec;
+        fs::create_directories(core::to_native_path(child(staging, "fonts")), font_ec);
+        if (auto failed = copy_one(core::to_native_path(font_path.value()), core::to_native_path(child(staging, "fonts/ui.ttf")));
+            !failed.empty()) {
+            return core::failure(failed);
+        }
+    }
     if (auto failed = copy_one(core::to_native_path(notices_path.value()), core::to_native_path(child(staging, kNoticesFile)));
         !failed.empty()) {
         return core::failure(failed);

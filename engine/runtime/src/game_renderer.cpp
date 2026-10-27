@@ -130,6 +130,9 @@ struct GameRenderer::Impl {
     rhi::FenceHandle fence;
     std::uint64_t fence_value = 0;
     std::array<std::uint8_t, 3> sky{115, 158, 217};  // the environment's sky_color in RGB 0..255
+    std::vector<std::uint8_t> overlay;                // RGBA, straight alpha
+    std::uint32_t overlay_width = 0;
+    std::uint32_t overlay_height = 0;
 
     std::map<core::Guid, CachedModel> models;
     std::map<core::Guid, TerrainEntry> terrains;  // by terrain entity
@@ -611,6 +614,12 @@ core::Result<RenderStats, std::string> GameRenderer::render(scene::Scene& scene,
     return core::success(stats);
 }
 
+void GameRenderer::set_overlay(const ui::Surface& surface) {
+    impl_->overlay = surface.pixels();
+    impl_->overlay_width = surface.width();
+    impl_->overlay_height = surface.height();
+}
+
 core::Result<core::Unit, std::string> GameRenderer::present(rhi::TextureHandle back_buffer, std::uint32_t buffer_width,
                                                            std::uint32_t buffer_height) {
     const render::SceneImage& image = impl_->renderer->image();
@@ -644,6 +653,25 @@ core::Result<core::Unit, std::string> GameRenderer::present(rhi::TextureHandle b
             row[x * 4 + 1] = sky ? impl_->sky[1] : texel[1];
             row[x * 4 + 2] = sky ? impl_->sky[0] : texel[0];
             row[x * 4 + 3] = 255;
+        }
+    }
+    // The UI over the picture: source-over blend of the overlay's straight-alpha pixels.
+    if (!impl_->overlay.empty()) {
+        const std::uint32_t overlay_w = std::min(impl_->overlay_width, buffer_width);
+        const std::uint32_t overlay_h = std::min(impl_->overlay_height, buffer_height);
+        for (std::uint32_t y = 0; y < overlay_h; ++y) {
+            std::uint8_t* row = packed.data() + y * pitch;
+            const std::uint8_t* source = impl_->overlay.data() + static_cast<std::size_t>(y) * impl_->overlay_width * 4;
+            for (std::uint32_t x = 0; x < overlay_w; ++x) {
+                const unsigned alpha = source[x * 4 + 3];
+                if (alpha == 0) {
+                    continue;
+                }
+                const unsigned inverse = 255 - alpha;
+                row[x * 4 + 0] = static_cast<std::uint8_t>((source[x * 4 + 2] * alpha + row[x * 4 + 0] * inverse) / 255);
+                row[x * 4 + 1] = static_cast<std::uint8_t>((source[x * 4 + 1] * alpha + row[x * 4 + 1] * inverse) / 255);
+                row[x * 4 + 2] = static_cast<std::uint8_t>((source[x * 4 + 0] * alpha + row[x * 4 + 2] * inverse) / 255);
+            }
         }
     }
     if (auto uploaded = impl_->device->upload_buffer(impl_->staging, 0, packed.size(), packed.data()); !uploaded.ok()) {

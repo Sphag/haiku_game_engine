@@ -19,6 +19,7 @@
 #include "engine/render/scene_image.hpp"
 #include "engine/rhi/device.hpp"
 #include "engine/scene/scene.hpp"
+#include "engine/ui/surface.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -61,6 +62,9 @@ public:
                                                                double dt = 1.0 / 60.0);
 
     [[nodiscard]] const render::SceneImage& image() const;
+
+    // The UI drawn over the picture on the next present(): a viewport-sized RGBA surface with straight alpha, as Ui::render() returns.
+    void set_overlay(const ui::Surface& surface);
 
     // Copies the last image into `back_buffer` (in the Present state), at the top-left, with the sky behind it, and leaves it in Present.
     // The swapchain format must be B8G8R8A8Unorm. The call waits for the copy, so the staging buffer can be reused.

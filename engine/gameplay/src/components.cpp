@@ -146,6 +146,8 @@ core::Result<core::Unit, std::vector<scene::ReflectionError>> register_builtin_c
 
     ComponentBuilder<UiCanvas> canvas(kUiCanvasId, 1);
     canvas.field<&UiCanvas::layout>("layout", core::Guid{});
+    canvas.hint("asset:uilayout");
+    canvas.field<&UiCanvas::script>("script", core::Guid{});
     canvas.hint("asset:script");
     canvas.field<&UiCanvas::visible>("visible", true);
     add(catalog, canvas, errors);

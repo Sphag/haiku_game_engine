@@ -132,7 +132,8 @@ struct Environment {
 };
 
 struct UiCanvas {
-    core::Guid layout;  // a UI layout asset
+    core::Guid layout;  // a UI layout asset (engine.ui_layout)
+    core::Guid script;  // the Lua source whose functions the layout's on_click and on_change name
     bool visible = true;
 };
 

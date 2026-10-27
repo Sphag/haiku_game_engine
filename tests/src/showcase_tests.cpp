@@ -19,7 +19,10 @@
 #include "engine/scene/scene.hpp"
 #include "engine/rhi/device.hpp"
 #include "engine/gameplay/animation_binding.hpp"
+#include "engine/runtime/game_hud.hpp"
 #include "engine/runtime/game_renderer.hpp"
+#include "engine/script/script_engine.hpp"
+#include "engine/ui/ui_layout.hpp"
 #include "engine/scene/scene_format.hpp"
 #include "engine/world/terrain_edit.hpp"
 
@@ -27,6 +30,10 @@
 #include "gpu_test_options.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+
+extern "C" {
+#include "lua.h"
+}
 
 #include <cstdlib>
 #include <filesystem>
@@ -232,6 +239,31 @@ TEST_CASE("The showcase scene is simulated: bodies fall, scripts run, and no scr
     const double end_height = loaded.scene->transform(ball_guid)->position.y;
     CHECK(end_height < start_height - 3.0);
     CHECK(end_height > -0.5);
+
+    // The hero is a character controller: it fell from y = 1 onto the ground (feet at the ground's top, y = 0) and stands there.
+    Guid hero;
+    for (const Guid& guid : loaded.scene->entity_guids()) {
+        if (loaded.scene->field(guid, engine::gameplay::kCharacterId, "move_speed")) {
+            hero = guid;
+        }
+    }
+    REQUIRE_FALSE(hero.is_nil());
+    CHECK(std::abs(loaded.scene->transform(hero)->position.y) < 0.1);
+    // Player input walks it: forward is -z at the component's move speed (3 m/s), so a second of walking covers about three meters.
+    const double z_before = loaded.scene->transform(hero)->position.z;
+    world->set_player_input(glm::vec2(0.0f, 1.0f), false);
+    for (int frame = 0; frame < 60; ++frame) {
+        world->advance(1.0 / 60.0);
+    }
+    CHECK(z_before - loaded.scene->transform(hero)->position.z > 2.0);
+    world->set_player_input(glm::vec2(0.0f), true);  // a jump leaves the ground, then gravity brings it back
+    double highest = 0.0;
+    for (int frame = 0; frame < 90; ++frame) {
+        world->advance(1.0 / 60.0);
+        highest = std::max(highest, loaded.scene->transform(hero)->position.y);
+    }
+    CHECK(highest > 0.5);
+    CHECK(loaded.scene->transform(hero)->position.y < 0.2);
 }
 
 TEST_CASE("The editor opens the showcase, opens its scene with prefabs, plays it, and stops", "[integration][showcase][editor]") {
@@ -352,6 +384,7 @@ TEST_CASE("Build Game packages the showcase, imports every asset type it reaches
     options.profile = "native";
     options.runtime_exe = ENGINE_TEST_GAME_RUNTIME;
     options.shader_dir = ENGINE_TEST_SHADER_DIR;  // the real shaders, so the package can open a window and draw
+    options.font_file = ENGINE_TEST_FONT_PATH;     // and the font, so its HUD has text
     options.notices_file = (scratch / "NOTICES.txt").string();
 
     engine::editor::BuildProgress progress;
@@ -489,4 +522,85 @@ TEST_CASE("DX12: the showcase scene draws through GameRenderer", "[gpu][dx12][sh
 
 TEST_CASE("Vulkan: the showcase scene draws through GameRenderer", "[gpu][vulkan][showcase]") {
     render_showcase_on(engine::rhi::Backend::Vulkan);
+}
+
+TEST_CASE("A UI layout parses, and a typo is an error and not a silent default", "[unit]") {
+    const auto good = engine::ui::parse_ui_layout(
+        R"({"format":"engine.ui_layout","version":1,"reference":[1920,1080],"elements":[
+            {"kind":"button","anchor":"BottomRight","x":-20,"y":-20,"w":120,"h":40,"label":"Go","on_click":"go"},
+            {"kind":"slider","w":100,"h":20,"value":0.5,"min":0,"max":2,"on_change":"changed"}]})");
+    REQUIRE(good.ok());
+    CHECK(good.value().reference_width == 1920.0f);
+    REQUIRE(good.value().elements.size() == 2);
+    CHECK(good.value().elements[0].on_click == "go");
+    CHECK(good.value().elements[0].spec.label == "Go");
+    CHECK(good.value().elements[1].spec.maximum == 2.0f);
+
+    const auto bad = [](const char* text) { return engine::ui::parse_ui_layout(text); };
+    CHECK_FALSE(bad("not json").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.scene","version":1,"elements":[]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":2,"elements":[]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"dial","w":1,"h":1}]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"text","w":1,"h":1,"colour":[0,0,0,0]}]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"text","w":0,"h":1}]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"text","anchor":"Middle","w":1,"h":1}]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"text","w":1,"h":1,"color":[0,0,300,0]}]})").ok());
+    CHECK_FALSE(bad(R"({"format":"engine.ui_layout","version":1,"elements":[{"kind":"slider","w":1,"h":1,"min":1,"max":1}]})").ok());
+}
+
+TEST_CASE("The showcase HUD draws, and its button and slider run the canvas's Lua functions", "[integration][showcase]") {
+    const std::string layout = read_text(path_of(kShowcase + "/assets/ui/hud.ui.json"));
+    const std::string script_text = read_text(path_of(kShowcase + "/assets/scripts/hud.lua"));
+    auto font = engine::core::read_file(path_of(ENGINE_TEST_FONT_PATH));
+    REQUIRE(font.ok());
+    const std::vector<std::uint8_t> font_bytes(font.value().begin(), font.value().end());
+
+    engine::script::ScriptEngine scripts;
+    auto created = engine::runtime::GameHud::create(scripts, layout, script_text, font_bytes, 1280, 720);
+    if (!created.ok()) {
+        FAIL("hud: " << created.error());
+    }
+    auto& hud = *created.value();
+    CHECK(hud.element_count() == 5);
+
+    // The panel, the text, the button, and the slider put pixels on the surface.
+    const auto surface = hud.render();
+    REQUIRE(surface.width() == 1280);
+    std::size_t covered = 0;
+    for (std::size_t i = 3; i < surface.pixels().size(); i += 4) {
+        covered += surface.pixels()[i] != 0 ? 1 : 0;
+    }
+    CHECK(covered > 20000);
+
+    using engine::platform::InputEvent;
+    using engine::platform::MouseButton;
+    const auto click = [&hud](float x, float y) {
+        std::vector<InputEvent> events;
+        events.push_back(InputEvent{engine::platform::WindowId{}, engine::platform::MouseButtonPressed{MouseButton::Left}});
+        events.push_back(InputEvent{engine::platform::WindowId{}, engine::platform::MouseButtonReleased{MouseButton::Left}});
+        hud.update(x, y, {});         // the pointer moves first
+        hud.update(x, y, events);     // then the press and release
+    };
+    const auto global_number = [&scripts](const char* name) {
+        lua_State* state = scripts.state();
+        lua_getglobal(state, name);
+        const double value = lua_tonumber(state, -1);
+        lua_pop(state, 1);
+        return value;
+    };
+    REQUIRE(global_number("presses") == 0.0);
+    click(95.0f, 120.0f);  // the "Say hello" button
+    CHECK(global_number("presses") == 1.0);
+    click(95.0f, 120.0f);
+    CHECK(global_number("presses") == 2.0);
+    CHECK(scripts.take_errors().empty());
+
+    // A click on empty canvas outside every element does nothing.
+    click(900.0f, 600.0f);
+    CHECK(global_number("presses") == 2.0);
+
+    // A layout that names a function the script does not define is refused at start.
+    engine::script::ScriptEngine other;
+    auto missing = engine::runtime::GameHud::create(other, layout, "-- no functions here\n", font_bytes, 1280, 720);
+    CHECK_FALSE(missing.ok());
 }

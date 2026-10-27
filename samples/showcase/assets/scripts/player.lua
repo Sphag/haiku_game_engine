@@ -13,13 +13,6 @@ function create(entity)
   events.on('hud.reset', function() speed = 0 end)
 end
 
-function fixed_update(entity, dt)
-  local move = try(input.value, 'move_forward') or 0
-  speed = move * walk_speed
-  local t = transform.get(entity)
-  transform.set(entity, { position = { t.position[1], t.position[2], t.position[3] - speed * dt } })
-end
-
 function update(entity, dt)
   try(animation.set_float, 'hero', 'speed', math.abs(speed))
   if try(input.pressed, 'jump') then

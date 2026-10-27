@@ -12,9 +12,12 @@ add_library(engine_ui STATIC
   src/font.cpp
   src/surface.cpp
   src/ui.cpp
+  src/ui_layout.cpp
 )
 target_include_directories(engine_ui PUBLIC include)
 target_include_directories(engine_ui PRIVATE src src/native)
 target_link_libraries(engine_ui PUBLIC engine_core engine_platform)
+# nlohmann/json is a system include: its warnings stay out of the first-party -Werror policy. Only ui_layout.cpp includes it.
+target_include_directories(engine_ui SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/nlohmann_json/single_include)
 target_link_libraries(engine_ui PRIVATE engine_ui_native)
 engine_configure_first_party(engine_ui)

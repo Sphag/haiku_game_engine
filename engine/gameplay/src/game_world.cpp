@@ -107,6 +107,22 @@ core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics
             }
             ++bindings.bodies;
         }
+        if (has_component(scene, guid, kCharacterId)) {
+            physics::CharacterDesc desc;
+            const float radius = read<float>(scene, guid, kCharacterId, "radius", 0.35f);
+            const float height = read<float>(scene, guid, kCharacterId, "height", 1.8f);
+            desc.position = transform->position;
+            desc.radius = radius;
+            desc.half_height = std::max(0.05f, (height - 2.0f * radius) * 0.5f);
+            desc.jump_speed = read<float>(scene, guid, kCharacterId, "jump_speed", 5.0f);
+            auto created = physics::CharacterController::create(desc);
+            if (!created.ok()) {
+                errors.push_back("character " + guid.to_string() + ": the capsule is not valid");
+            } else {
+                bindings.characters.push_back(
+                    CharacterBinding{guid, std::move(created).value(), read<float>(scene, guid, kCharacterId, "move_speed", 4.0f)});
+            }
+        }
         if (audio != nullptr && resolve_audio && has_component(scene, guid, kAudioEmitterId) &&
             read<bool>(scene, guid, kAudioEmitterId, "play_on_start", true)) {
             const core::Guid clip_guid = read<core::Guid>(scene, guid, kAudioEmitterId, "clip", core::Guid{});
@@ -147,6 +163,21 @@ core::Result<SceneBindings, std::string> bind_scene(scene::Scene& scene, physics
         }
     }
     return core::success(std::move(bindings));
+}
+
+void step_characters(scene::Scene& scene, physics::PhysicsWorld& physics, SceneBindings& bindings, glm::vec2 move, bool jump,
+                     double frame_seconds) {
+    bool first = true;
+    for (CharacterBinding& character : bindings.characters) {
+        const glm::vec3 walk = first ? glm::vec3(move.x, 0.0f, -move.y) * character.move_speed : glm::vec3(0.0f);
+        static_cast<void>(character.controller.update(physics, walk, first && jump, frame_seconds));
+        first = false;
+        if (const scene::Transform* current = scene.transform(character.guid)) {
+            scene::Transform next = *current;
+            next.position = character.controller.position();
+            static_cast<void>(scene.set_transform(character.guid, next));
+        }
+    }
 }
 
 void sync_scene(scene::Scene& scene, physics::PhysicsWorld& physics, const SceneBindings& bindings) {
@@ -243,6 +274,8 @@ void GameWorld::advance(double frame_seconds) {
         accumulator_ = 0.0;  // the catch-up limit was reached; the rest of the frame's time is dropped, as physics drops it
     }
     runner_->update(frame_seconds);
+    step_characters(*scene_, *physics_, bindings_, player_move_, player_jump_, frame_seconds);
+    player_jump_ = false;
     animators_.update(static_cast<float>(frame_seconds));
 
     sync_scene(*scene_, *physics_, bindings_);

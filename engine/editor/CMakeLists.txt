@@ -40,10 +40,13 @@ target_link_libraries(engine_editor PUBLIC engine_core engine_platform engine_rh
 
 # Build Game (US-073) copies the runtime, the shaders, and the notices into the package. The runtime's path is a generator expression, so
 # game_editor and engine_tests must depend on game_runtime to have it built first (tools/game_editor and tests/CMakeLists.txt do).
+# The font Build Game ships for the game UI: the bundled Roboto, which has the Cyrillic range.
+set(ENGINE_EDITOR_FONT_FILE "${PROJECT_SOURCE_DIR}/third_party/roboto/src/hinted/Roboto-Regular.ttf")
 target_compile_definitions(engine_editor PRIVATE
   ENGINE_GAME_RUNTIME_EXE="$<TARGET_FILE:game_runtime>"
   ENGINE_BUILD_SHADER_DIR="${CMAKE_BINARY_DIR}/shaders"
-  ENGINE_NOTICES_FILE="${CMAKE_BINARY_DIR}/distribution/NOTICES.txt")
+  ENGINE_NOTICES_FILE="${CMAKE_BINARY_DIR}/distribution/NOTICES.txt"
+  ENGINE_DEFAULT_UI_FONT="${ENGINE_EDITOR_FONT_FILE}")
 
 # The package's NOTICES.txt is generated at configure time from third_party/manifest.json: each pinned dependency's name, version,
 # license, and source, followed by its license text when the manifest names a license file. The manifest is a configure dependency.
