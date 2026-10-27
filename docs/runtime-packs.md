@@ -60,3 +60,13 @@ incomplete file is refused as a whole.
 - Compression of payloads (the PRD lists zstd for pack compression; this format stores payloads uncompressed).
 - The runtime does not open a window or start a frame loop. The lifecycle and the scene load are the parts this story
   covers.
+
+## Running the scene (`--frames`)
+
+After the packs and the start scene load, the runtime registers the built-in components, loads every prefab the packs hold, and starts a
+`GameWorld` ([components.md](components.md)): rigid body components become physics bodies, and script components attach the Lua source read
+from the packs. The runtime then steps the world at 60 Hz for `--frames <n>` frames (default 60) and prints
+`game_runtime: simulated <n> frames bodies=<b> scripts=<s> fixed_steps=<f>`. A script that fails to load or raises makes the runtime exit 1.
+
+This build's runtime opens no window and draws nothing: the render, audio-emitter, animator, particle, terrain, and UI systems exist as
+libraries but are not yet driven from the components.
